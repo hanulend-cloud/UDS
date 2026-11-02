@@ -1,5 +1,5 @@
 // P4 단계 실행기(가짜 io): node test/mech3d-autodesign.mjs
-import { runAutoDesign, shapeScore, halving, smoothU, halvingTotal, sameDesign, screenShapeVars, shapeTotal, pickVariant, refineShapeCurve, curveDirection, shapeSize } from '../src/engine/mech3d/autodesign.js';
+import { pickLateral, runAutoDesign, shapeScore, halving, smoothU, halvingTotal, sameDesign, screenShapeVars, shapeTotal, pickVariant, refineShapeCurve, curveDirection, shapeSize } from '../src/engine/mech3d/autodesign.js';
 import { shapeVarRanges, gridCandidates, curveAt } from '../src/engine/mech3d/shape-opt.js';
 import { candidateGrid } from '../src/engine/mech3d/basis.js';
 import { milkyRows } from '../src/engine/mech3d/milky-search.js';
@@ -313,11 +313,38 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   const io = { progress() {}, cancelled: () => false, verify: async (d) => ({ stats: { Ulen: d.wCenter === -12 ? 0.9 : 0.55, Uwid: 0.9 }, eff: 0.2 }),
     evalLateral: async (d, cs) => cs.map((c) => ({ cand: { wCenter: c }, ok: true, eff: 0.2, stats: { Ulen: 0.5, Uwid: gain[c] } })),   // 폭 위치 = 폭 균일도로 고름
     basis: async (d) => { seenW.push(d.wCenter); const cand = candidateGrid(line, { sStep: 2, wOffsets: [d.wCenter ?? 0] }); return { cand, emitted: 1, gaps: [], sMargin: 0, maps: cand.map(({ s }) => Float32Array.from({ length: 100 }, (_, i) => Math.exp(-((i + 0.5 - s) ** 2) / 72))) }; } };
-  const r = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.7, targetWid: 0 }, current: { milky: 1, count: 5, pitch: 0 }, G, line, nMax: 20, lateral: [0, -6, -12, -14] }, io);
+  const r = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.7, targetWid: 0.7 }, current: { milky: 1, count: 5, pitch: 0 }, G, line, nMax: 20, lateral: [0, -6, -12, -14] }, io);
   const lat = r.steps.find((x) => x.stage === 'ledsLateral');
-  ok(lat?.pick === -12 && seenW[0] === -12 && r.best.positions?.every((q) => q.w === -12) && r.best.wCenter === -12, `폭 위치: 고름 ${lat?.pick} (−14 는 잡음 수준이라 덜 옮긴 −12) · 배치 w ${[...new Set(r.best.positions?.map((q) => q.w))]}`);
+  ok(lat?.pick === -12 && seenW[0] === -12 && r.best.positions?.every((q) => q.w === -12) && r.best.wCenter === -12, `폭 위치: 고름 ${lat?.pick} (목표를 넘는 후보 중 가장 덜 옮김) · 배치 w ${[...new Set(r.best.positions?.map((q) => q.w))]}`);
   const r0 = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.7, targetWid: 0 }, current: { milky: 1, count: 5, pitch: 0 }, G, line, nMax: 20 }, { ...io, basis: async (d) => io.basis({ ...d, wCenter: 0 }) });
   ok(!r0.steps.some((x) => x.stage === 'ledsLateral'), '이동 후보가 없으면 폭 위치 단계 없음(기존과 같음)');
+}
+{ // 폭 위치 고르기: 부족한 방향으로만, 필요한 만큼만
+  const R = (o) => Object.entries(o).map(([c, Uwid]) => ({ cand: { wCenter: +c }, ok: true, stats: { Ulen: 0.5, Uwid } })), O = { targetLen: 0.8, targetWid: 0.7 };
+  ok(pickLateral(R({ 0: 0.74, '-6': 0.9 }), O) === 0, '폭이 이미 통과 = 옮기지 않음');
+  ok(pickLateral(R({ 0: 0.6, '-6': 0.75, '-12': 0.9 }), O) === -6, '폭 부족 = 목표를 넘는 후보 중 가장 덜 옮김');
+  ok(pickLateral(R({ 0: 0.5, '-6': 0.62, '-12': 0.615 }), O) === -6 && pickLateral(R({ 0: 0.5, '-6': 0.55, '-12': 0.62 }), O) === -12, '아무것도 못 넘으면 최고값(잡음 수준이면 덜 옮김)');
+  ok(pickLateral([], O) === null, '후보 없음 = null');
+}
+{ // ② 정밀 재계산 미달 → 1열로 LED 를 하나씩 늘려 목표에 닿는 가장 적은 개수(2026-11-02) — 기저는 7개로 통과라 하지만 실제로는 10개부터 통과
+  const G = { ns: 100, nw: 1, ds: 1, cell: 1, w0: -0.5, L: 100, closed: false, winS: 10, area: new Float64Array(100).fill(1), valid: new Uint8Array(100).fill(1) }, line = { length: 100, closed: false };
+  const cand = candidateGrid(line, { sStep: 2 }), maps = cand.map(({ s }) => Float32Array.from({ length: 100 }, (_, i) => Math.exp(-((i + 0.5 - s) ** 2) / 200))), B = { cand, maps, emitted: 1, gaps: [], sMargin: 0 };
+  const run = async (Ufn, cur = { milky: 1, count: 5, pitch: 0, rows: 1 }, curU = 0.5, nMax = 30) => { const seen = []; const r = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0.5 }, current: cur, G, line, nMax, rowsOptions: [1] },
+    { basis: async () => B, progress() {}, cancelled: () => false, verify: async (d) => { if (d === undefined || d.positions == null) return { stats: st(curU, 0.9), eff: 0.5 }; seen.push(d.positions.length); return { stats: Ufn(d.positions.length), eff: 0.5 }; } }); return { r, seen }; };
+  const a = await run((n) => st(n >= 10 ? 0.82 : 0.6 + n * 0.01, 0.9));
+  ok(a.r.feasible && a.r.best.positions.length === 10 && new Set(a.r.best.positions.map((q) => q.w)).size === 1 && a.seen.at(-1) === 10 && a.seen.every((n, i) => !i || n > a.seen[i - 1]), `미달 → 하나씩 늘려 10개에서 통과 (재확인 ${a.seen.join('→')})`);
+  const b = await run((n) => st(0.9, 0.4));   // 폭 부족 = 개수로 안 오름 → 두 번 만에 멈추고 적은 쪽 · 한계 문구
+  ok(!b.r.feasible && b.seen.length <= b.seen[0] + 4 && /한계: 폭 방향 확산 부족/.test(b.r.reason) && b.r.best.positions.length === b.seen[0], `폭 부족: ${b.seen.join('→')} 에서 멈춤 · 가장 적은 ${b.r.best.positions?.length}개`);
+  const c = await run((n) => st(n >= 12 ? 0.85 : 0.6, 0.9), { milky: 1, count: 8, pitch: 0, rows: 1 }, 0.82);   // 지금 8개가 이미 통과 → 지금보다 많아지는 안은 시험도 안 함
+  ok(c.r.unchanged && c.seen.every((n) => n <= 8), `지금 통과면 개수를 늘리지 않음 (재확인 ${c.seen.join('→') || '없음'})`);
+}
+{ // ② 폭은 개수로 못 닿음: 길이가 통과하는 가장 적은 개수까지만 늘림 — 현재안 유지로 묻히지 않고, 폭 한계를 알림
+  const G = { ns: 100, nw: 2, ds: 1, cell: 1, w0: -1, L: 100, closed: false, winS: 10, area: new Float64Array(200).fill(1), valid: new Uint8Array(200).fill(1) }, line = { length: 100, closed: false };
+  const cand = candidateGrid(line, { sStep: 2 }), maps = cand.map(({ s: c }) => { const a = new Float32Array(200); for (let i = 0; i < 100; i++) { const v = Math.exp(-((i + 0.5 - c) ** 2) / 72); a[2 * i] = v; a[2 * i + 1] = 0.5 * v; } return a; });
+  const seen = [], cur = { milky: 1, count: 5, pitch: 0, rows: 1 };
+  const r0 = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0.95 }, current: cur, G, line, nMax: 40, rowsOptions: [1] }, { basis: async () => ({ cand, maps, emitted: 1, gaps: [], sMargin: 0 }), progress() {}, cancelled: () => false,
+    verify: async (d) => { if (!d.positions) return { stats: st(0.7, 0.6), eff: 0.5 }; seen.push(d.positions.length); return { stats: st(d.positions.length >= seen[0] + 2 ? 0.82 : 0.75, 0.61), eff: 0.5 }; } });
+  ok(!r0.unchanged && !r0.feasible && r0.best.positions.length === seen[0] + 2 && seen.length === 3 && /길이 목표는 LED \d+개로 통과/.test(r0.reason) && /한계: 폭 방향 확산 부족/.test(r0.reason), `폭 한계: ${seen.join('→')} 에서 길이 통과 · ${r0.reason}`);
 }
 { // ② 1열만(cfg.rowsOptions [1], 재료비) — 2열이 더 나아도 1열 배치만
   const G = { ns: 100, nw: 1, ds: 1, cell: 1, w0: -0.5, L: 100, closed: false, winS: 10, area: new Float64Array(100).fill(1), valid: new Uint8Array(100).fill(1) }, line = { length: 100, closed: false };

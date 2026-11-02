@@ -42,10 +42,11 @@ function layoutText0(r) {
   return `${head} ${r.kind === 'endCompress' ? '끝 압축' : '자유 배치'} ${c ?? '–'}→${e ?? '–'} mm${r.rows === 2 ? ` (열 간격 ±${r.rowGap.toFixed(1)} mm)` : ''}`;
 }
 
-// 반환 { feasible, n, rows, rowGap, total, positions:[{s,w}], kind, pitch, endMargin, ratio, stats, eff, margin, reason, alts:[…], evals }
+// 반환 { feasible, n, rows, rowGap, total, positions:[{s,w}], kind, pitch, endMargin, ratio, stats, eff, margin, reason, alts:[…], evals, atCount(n) = 1열 n 개 최선 배치 | null(정밀 재계산 미달 때 개수 늘리기), limit = 'wid'(폭은 어떤 개수로도 못 닿음) | null }
 // safety = 통과 판정 여유(기저 추정은 광자 잡음이 있어 검증에서 0 근처 통과가 뒤집힘 — 이만큼 넘는 배치만 통과로 봄)
 // wCenter = 열 배치 기준 폭 위치(기준 LED 대비 mm, 2026-10-30) — 1열 = wCenter, 2열 = wCenter ± g. 후보 격자에 그 w 줄들이 있어야 함
-export function solveLayout({ G, obs, line, cand, maps, rowsOptions = [1, 2], gaps = [], nMax, emitted = 1, minGap = 2, pitchRange = null, timeBudget = 20000, now = () => Date.now(), safety = 0, sMargin = 0, wCenter = 0 }) {
+export function solveLayout(args) {
+  const { G, obs, line, cand, maps, rowsOptions = [1, 2], gaps = [], nMax, emitted = 1, minGap = 2, pitchRange = null, timeBudget = 20000, now = () => Date.now(), safety = 0, sMargin = 0, wCenter = 0, inner = false } = args;
   const sm = line.closed ? 0 : Math.max(0, sMargin);   // 끝 여유: 첫·끝 LED 중심 ≥ sm(몸체가 끝벽에 닿지 않게)
   const L = line.length, closed = !!line.closed, nCell = G.ns * G.nw, t0 = now(), RO = [...new Set(rowsOptions)].sort((a, b) => a - b);
   const gMin = Math.max(minGap, pitchRange?.min ?? 0);
@@ -130,11 +131,24 @@ export function solveLayout({ G, obs, line, cand, maps, rowsOptions = [1, 2], ga
     else if (found) spare.push(...atT);
   }
   const strip = ({ ss, ...r }) => r;
-  if (found) return { feasible: true, ...strip(found), reason: '', alts: [...pass, ...spare].slice(0, 2).map(strip), evals };
-  const b0 = nearestRow(miss.map((r) => ({ ...r, nRow: r.n, n: r.total, j: r.rows - 1 })), obs, nMax);
-  if (b0.nRow == null) return { feasible: false, n: nMax, rows: 1, rowGap: 0, total: nMax, positions: [], kind: 'uniform', pitch: 0, stats: null, eff: NaN, margin: -Infinity, reason: '평가할 수 있는 배치가 없음 — 관측면·LED 를 확인하세요', alts: [], evals };
+  const atCount = (n) => { const r = RO.includes(1) ? solveN(n, 1, 0) : null; return r ? strip(r) : null; };
+  if (found) return { feasible: true, ...strip(found), reason: '', alts: [...pass, ...spare].slice(0, 2).map(strip), evals, atCount };
+  // 폭이 어떤 개수로도 못 닿으면(limit 'wid') 폭을 빼고 다시 풂 — 여유(낮은 쪽)가 폭에 묶이면 길이를 못 맞추고, 안 오르는 폭 때문에 개수만 잔뜩 늘어남(2026-11-02)
+  const best = (k) => Math.max(...miss.map((r) => r.stats[k] ?? Infinity)), limit = inner || !miss.length ? null : best('Uwid') < (obs.targetWid ?? -Infinity) + safety ? 'wid' : null;
+  if (limit) {
+    const q = solveLayout({ ...args, inner: true, obs: { ...obs, targetWid: null } });
+    if (q.positions?.length) {
+      const { feasible, reason: _r, alts, evals: e2, atCount: at2, limit: _l, ...b } = q, s = b.stats;
+      return { feasible: false, ...b, margin: margin(s, obs), reason: `LED 개수를 늘려도 폭 목표에 못 닿음 — 길이가 가장 적게 통과하는 ${layoutText(b)}: 길이 균일도 ${s.Ulen.toFixed(2)}${s.Uwid == null ? '' : ` · 폭 균일도 ${s.Uwid.toFixed(2)}`} — 폭 방향 확산 부족: ③ 형상 또는 Milky 상향 권장`, alts: [], evals: evals + e2, atCount: at2, limit };
+    }
+  }
+  // 안쪽 풀이가 못 닿으면 가장 가까운 안(차이가 작으면 적은 개수)
+  const top = inner && miss.length ? Math.max(...miss.map((r) => r.margin)) : -Infinity, near = miss.filter((r) => r.margin >= top - 0.01);
+  const fewest = () => { const T = Math.min(...near.map((r) => r.total)); return near.filter((r) => r.total === T).reduce((a, r) => (better(r, a) ? r : a)); };
+  const b0 = inner && near.length ? { ...fewest(), nRow: fewest().n } : nearestRow(miss.map((r) => ({ ...r, nRow: r.n, n: r.total, j: r.rows - 1 })), obs, nMax);
+  if (b0.nRow == null) return { feasible: false, n: nMax, rows: 1, rowGap: 0, total: nMax, positions: [], kind: 'uniform', pitch: 0, stats: null, eff: NaN, margin: -Infinity, reason: '평가할 수 있는 배치가 없음 — 관측면·LED 를 확인하세요', alts: [], evals, atCount };
   const b = strip({ ...b0, n: b0.nRow }); delete b.nRow; delete b.j;
   const st = b.stats, wid = st?.Uwid != null && st.Uwid - obs.targetWid < st.Ulen - obs.targetLen;
   const reason = `${timedOut ? '시간 제한 안에서' : `LED 총 ${nMax}개까지`} 배치를 바꿔도 목표 미달 — 가장 가까운 ${layoutText(b)}: 길이 균일도 ${st.Ulen.toFixed(2)}${st.Uwid == null ? '' : ` · 폭 균일도 ${st.Uwid.toFixed(2)}`} — ${wid ? '폭 방향 확산 부족: ③ 형상 또는 Milky 상향 권장' : '길이 방향 리플·끝 어두움: Milky 상향 또는 LED–커버 거리 확대 권장'}`;
-  return { feasible: false, ...b, reason, alts: [], evals };
+  return { feasible: false, ...b, reason, alts: [], evals, atCount, limit: null };
 }

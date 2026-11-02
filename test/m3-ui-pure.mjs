@@ -105,7 +105,7 @@ ok(judgeText(0.8004, 0.8009).cls === 'ok' && judgeText(0.7999, 0.8).cls === 'bad
   const cg = compareHtml({ cur: { count: 6, pitch: 0, stepOrig: false, milky: 2, Ulen: 0.6, Uwid: 0.7, eff: 0.5 }, best: { count: 5, pitch: 0, stepOrig: false, milky: 2, Ulen: 0.8, Uwid: 0.7, eff: 0.5 }, feasible: true, reason: '', shape: null, stepLeds: 6 });
   ok(cv.includes('<td>LED STEP 현재 10개</td>') && cv.includes('8개 피치 14') && cg.includes('6개 균등') && cg.includes('5개 균등'), '비교표: LED STEP 원래 → 가상 개수·피치(0 = 균등)');
   const cu = compareHtml({ cur: { count: 5, pitch: 0, milky: 3, Ulen: 0.75, Uwid: 0.9, eff: 0.6 }, best: { count: 5, pitch: 0, milky: 3, Ulen: 0.75, Uwid: 0.9, eff: 0.6 }, feasible: false, reason: '현재안보다 나은 설계를 찾지 못함 — 현재안 유지', shape: null, unchanged: true });
-  ok(cu.includes('현재안 유지') && /data-ad="apply"[^>]*disabled/.test(cu) && !/data-ad="apply"[^>]*disabled/.test(c), '비교표: 현재안 유지 → 사유 표시 · 적용 비활성'); }
+  ok(cu.includes('현재안 유지') && !cu.includes('data-ad="apply"') && !/data-ad="apply"[^>]*disabled/.test(c), '비교표: 현재안 유지 → 사유 표시 · 적용 단추 없음'); }
 { // Milky 상한 기본: ① 만 = 9.9 · ② 함께 = max(현재, 5) · 카드 값도 같음
   const a = { milky: { ok: true }, leds: { ok: true }, shape: { ok: false } };
   ok(capDefault({ milky: true }, a, 3) === 9.9 && capDefault({ milky: true, leds: true }, a, 3) === 5 && capDefault({ milky: true, leds: true }, a, 6) === 6 && capDefault({ milky: true, leds: true }, { ...a, leds: { ok: false } }, 3) === 9.9, 'Milky 상한 기본: ① 만 9.9 · ② 함께 5');
@@ -348,7 +348,7 @@ done();
   const ok5 = (c, m) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) process.exitCode = 1; };
   const base = { unchanged: true, feasible: true, cur: { Ulen: 0.83, Uwid: 0.8 }, best: { Ulen: 0.83, Uwid: 0.8 }, targets: { len: 0.8, wid: 0.8 } };
   const a = resultLineHtml({ ...base, alt: { design: { milky: 2.47 }, milky: 2.47, Ulen: 0.84, Uwid: 0.8 } }), b = resultLineHtml(base);
-  ok5(/data-ad="apply" disabled/.test(a) && a.includes('data-ad="applyAlt"') && a.includes('그래도 적용 (Milky 2.47) · 0.84/0.80') && !b.includes('applyAlt'), '현재안 유지 + 찾은 후보 → [그래도 적용]'); }
+  ok5(!a.includes('data-ad="apply"') && a.includes('data-ad="applyAlt"') && a.includes('후보로 바꾸기 (Milky 2.47) · 0.84/0.80') && a.includes('유지를 추천') && !b.includes('applyAlt'), '현재안 유지 + 찾은 후보 → 단추는 [후보로 바꾸기] 하나 · 이유 한 줄'); }
 { const { etaText } = await import('../src/ui/m3/opt-dash.js');
   const H = [{ ph: 1e6, t: 0, noise: 0.1 }, { ph: 2e6, t: 5000, noise: 0.07 }, { ph: 3e6, t: 10000, noise: 0.0577 }];
   const e = etaText(H, 0.02);

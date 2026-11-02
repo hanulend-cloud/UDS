@@ -52,4 +52,23 @@ const gapsOk = (r, g) => ss(r).every((x, i, a) => i === 0 || x - a[i - 1] >= g -
     && r2.feasible && r2.positions.every((q) => q.w === c - 3 || q.w === c + 3) && layoutText(r2).includes('폭 위치 −12.0 mm') && !layoutText({ ...r1, wCenter: 0 }).includes('폭 위치'),
     `폭 위치 이동: ${layoutText(r1)} / ${layoutText(r2)}`);
 }
+{ // atCount(n): 정한 개수의 1열 최선 배치 — 개수 늘리기용 · minGap 아래로 좁히지 않음
+  const r = solveLayout({ G, obs: { targetLen: 0.5, targetWid: 0 }, line, cand, maps: mk(0), rowsOptions: [1], nMax: 40 });
+  const e = r.atCount(r.n + 2), p = (x) => x.positions.map((q) => q.s).sort((a, b) => a - b);
+  ok(e.n === r.n + 2 && e.rows === 1 && new Set(e.positions.map((q) => q.w)).size === 1 && e.margin >= r.margin - 0.05, `atCount(${r.n + 2}) = 1열 ${e.n}개`);
+  const t = solveLayout({ G, obs: { targetLen: 0.5, targetWid: 0 }, line, cand, maps: mk(0), rowsOptions: [1], nMax: 40, minGap: 30 });
+  const q = t.atCount(3), w = t.atCount(5);
+  ok(q && p(q).every((v, i, a) => !i || v - a[i - 1] >= 30 - 1e-9) && w === null, 'minGap 30: 3개는 간격 지킴 · 5개는 배치 없음(null)');
+}
+
+{ // 폭은 어떤 개수로도 못 닿음 → limit 'wid' · 길이를 통과하는 가장 적은 개수(폭 때문에 개수를 잔뜩 늘리지 않음)
+  const G2 = { ...G, nw: 2, w0: -1, area: new Float64Array(200).fill(1), valid: new Uint8Array(200).fill(1) };
+  const m2 = cand.map(({ s: c }) => { const a = new Float32Array(200); for (let i = 0; i < 100; i++) { const v = Math.exp(-((i + 0.5 - c) ** 2) / 72); a[2 * i] = v; a[2 * i + 1] = 0.5 * v; } return a; });
+  const pass = solveLayout({ G: G2, obs: { targetLen: 0.8, targetWid: 0.3 }, line, cand, maps: m2, rowsOptions: [1], nMax: 40 });
+  const r = solveLayout({ G: G2, obs: { targetLen: 0.8, targetWid: 0.95 }, line, cand, maps: m2, rowsOptions: [1], nMax: 40 });
+  ok(pass.feasible && !r.feasible && r.limit === 'wid' && r.n === pass.n && r.stats.Ulen >= 0.8, `폭 못 닿음: 길이 통과 최소 ${r.n}개 (폭 조건 없을 때 ${pass.n}개) · limit ${r.limit}`);
+  const both = solveLayout({ G: G2, obs: { targetLen: 1.5, targetWid: 0.95 }, line, cand, maps: m2, rowsOptions: [1], nMax: 40 });
+  ok(!both.feasible && both.limit === 'wid' && both.positions.length > 0, `양쪽 다 못 닿음: 가장 가까운 안 ${both.n}개`);
+}
+
 done();

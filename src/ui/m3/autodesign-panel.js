@@ -116,7 +116,7 @@ const progHtml = (running) => {
 // state = { avail, sel, running, names, milkyPart, housingMat } → { on, html }(html = 스위치 + 설정, 쓸 수 없으면 이유)
 // 화면의 기구 최적화 = 3 항목: ① Milky · ② 기구 위치(= 엔진 ② LED 배치 + ⑤ LED 높이) · ③ 기구 형상. 케이스 반사율(④)은 부품 속성에서 직접
 export const AD_ITEMS = [['position', '① 위치', ['leds', 'height']], ['housing', '② 케이스 면', ['housing']], ['shape', '③ 형상', ['shape']], ['milky', '④ Milky', ['milky']]];   // 계산 순서(2026-10-30)
-export const TILE_NOTE = { position: 'LED 개수·피치·열과 LED–커버 거리(높이)', milky: 'Milky 값을 바꿔 균일도 최고점을 찾음(밝기는 줄어듦)', leds: 'LED 개수·피치·열을 바꿈', shape: '도광판 아랫면 형상(두께·끝단·가장자리)', housing: '케이스 반사율(소재 상한 안)', height: 'LED–커버 거리' };
+export const TILE_NOTE = { position: '부족한 방향으로 LED 를 옮기고, 그래도 모자라면 개수를 늘려 피치를 줄임', milky: 'Milky 값을 바꿔 균일도 최고점을 찾음(밝기는 줄어듦)', leds: 'LED 개수·피치·열을 바꿈', shape: '도광판 아랫면 형상(두께·끝단·가장자리)', housing: '케이스 반사율(소재 상한 안)', height: 'LED–커버 거리' };
 export function tileConfigHtml(k, { avail, sel, running, names = [], milkyPart = null, housingMat = null, path = null }) {
   const pname = (i) => esc(names[i] ?? `부품 ${i + 1}`), dis = running ? ' disabled' : '';
   const pct = (i) => (path ? ` · 빛 ${Math.round((path.shares?.[i] ?? 0) * 100)}%` : '');
@@ -124,7 +124,7 @@ export function tileConfigHtml(k, { avail, sel, running, names = [], milkyPart =
   if (k === 'position') {   // ② 기구 위치 = LED 배치 + LED 높이(쓸 수 있는 것만)
     const okL = !!avail.leds?.ok, okH = !!avail.height?.ok;
     if (!okL && !okH) { const why = avail.leds?.why ?? avail.height?.why ?? ''; return { on: false, box: '<input type="checkbox" data-ad="position" disabled aria-label="① 위치 사용">', opt: '', why, html: `<label class="od-sw off"><input type="checkbox" data-ad="position" disabled> 사용 안 함</label><div class="od-why mut">${esc(why)}</div>` }; }
-    const on = !!(sel.leds || sel.height), why = `${okL ? 'LED 개수·피치·열' : ''}${okL && okH ? ' + ' : ''}${okH ? 'LED–커버 거리(높이)' : ''}${okL && avail.leds.note ? ` · ${avail.leds.note}` : ''}`;
+    const on = !!(sel.leds || sel.height), why = `${okL ? '부족한 방향으로 LED 이동 → 모자라면 개수 추가(피치 줄임)' : ''}${okL && okH ? ' + ' : ''}${okH ? 'LED–커버 거리(높이)' : ''}`;
     const opt = okL ? `<label class="od-opt" title="LED 를 한 줄로만 배치(PCB·LED 재료비 ↓) — 폭 균일도는 마지막 Milky 단계가 올려 맞춤"><input type="checkbox" data-ad="oneRow"${sel.oneRow !== false ? ' checked' : ''}${dis}> 1열만(재료비 ↓)</label>` : '';
     return { on, box: `<input type="checkbox" data-ad="position"${on ? ' checked' : ''}${dis} aria-label="① 위치 사용">`, opt, why, html: `<label class="od-sw"><input type="checkbox" data-ad="position"${on ? ' checked' : ''}${dis}> ${on ? '사용' : '사용 안 함'}</label><div class="od-why mut">${esc(why)}</div>` };
   }
@@ -215,7 +215,7 @@ export function compareHtml(r) {
     <table class="m3-cmp"><tr><th></th><th>현재</th><th>최적</th></tr>
       ${cmpRows(r)}
     </table>${twoRow}${effDrop}${profileSvg(cur.profile, best.profile)}${screen ? `<div class="m3-row mut">${esc(screenSummary(screen))}</div>` : ''}
-    <div class="m3-row"><button type="button" data-ad="apply"${unchanged ? ' disabled title="현재안과 같음"' : r.clash > 0 ? ' disabled title="LED 몸체가 부품과 겹침"' : ''}>적용</button>${altBtn(r)}<button type="button" data-ad="cancel">취소</button>${shape ? '<button type="button" data-ad="step">STEP 내보내기</button>' : ''}${canRevert ? '<button type="button" data-ad="revert">되돌리기</button>' : ''}</div>`;
+    ${altNote(r)}<div class="m3-row">${applyBtn(r, 'LED 몸체가 부품과 겹침')}${altBtn(r)}<button type="button" data-ad="cancel">취소</button>${shape ? '<button type="button" data-ad="step">STEP 내보내기</button>' : ''}${canRevert ? '<button type="button" data-ad="revert">되돌리기</button>' : ''}</div>`;
 }
 // 적용 뒤에도 남는 요약(이전 → 적용 후) — applied = 적용한 결과(compareHtml 인자와 같은 꼴) + at(시각 문구)
 export function appliedHtml(applied) {
@@ -226,8 +226,10 @@ export function appliedHtml(applied) {
 
 // el 에 카드를 그리고 이벤트를 h 로 넘긴다. state = { avail, sel, running, result, names, canRevert, noLine, milkyPart }
 // 실행 중 카드 구조가 같으면 진행 막대·문구만 바꿈(갱신마다 innerHTML 을 다시 만들지 않게)
-// '현재안 유지'인데 시험한 후보가 있으면(차이가 잡음 수준) [그래도 적용] — 후보 값을 함께 보임
-const altBtn = (r) => (r.unchanged && r.alt ? `<button type="button" data-ad="applyAlt" title="찾은 후보가 현재안보다 계산 잡음 수준만큼만 나아 '현재안 유지'로 판정됨 — 그래도 바꾸려면">그래도 적용${r.alt.milky != null ? ` (Milky ${(+r.alt.milky).toFixed(2)})` : ''} · ${f2(r.alt.Ulen)}/${f2(r.alt.Uwid)}</button>` : '');
+// '현재안 유지'인데 시험한 후보가 있으면(차이가 잡음 수준·더 나쁨) [후보로 바꾸기] — 후보 값을 함께 보임. [적용] = 추천안이 있을 때만, 이때는 숨김(같은 뜻의 단추 둘로 헷갈림, 2026-11-02)
+const altBtn = (r) => (r.unchanged && r.alt ? `<button type="button" data-ad="applyAlt" title="추천은 지금 설계 유지 — 그래도 찾은 후보로 바꾸려면 누름">후보로 바꾸기${r.alt.milky != null ? ` (Milky ${(+r.alt.milky).toFixed(2)})` : ''} · ${f2(r.alt.Ulen)}/${f2(r.alt.Uwid)}</button>` : '');
+const altNote = (r) => (r.unchanged && r.alt ? `<div class="m3-rlim">찾은 후보 길이 ${f2(r.alt.Ulen)} · 폭 ${f2(r.alt.Uwid)} (지금 ${f2(r.cur?.Ulen)} · ${f2(r.cur?.Uwid)}) — 지금보다 뚜렷이 낫지 않아 지금 설계 유지를 추천</div>` : '');
+const applyBtn = (r, clashTitle) => (r.unchanged ? '' : `<button type="button" data-ad="apply"${r.clash > 0 ? ` disabled title="${clashTitle}"` : ''}>적용</button>`);
 // Milky 조정 표(2026-10-29) — 마지막 ① Milky 단계 기록(뒤에서부터 연속 'milky' 단계, ② 기준 'ledsRef' 제외)의 Milky 별 길이 균일도·폭 균일도·광 효율.
 // 같은 Milky 는 나중(정밀) 값 · 믿는(trusted) 행만 · Milky 오름차순. Milky 가 마지막 단계라 최종안의 다른 인자 그대로의 추정 — 순수
 export function milkyTable(steps = []) {
@@ -263,13 +265,13 @@ export function resultLineHtml(r) {
     <table class="m3-cmp m3-cmp-s"><tr><th></th><th>지금</th><th>최적 후보</th></tr>${rows}</table>${clash}
     ${lim ? `<div class="m3-rlim">💡 한계: ${esc(lim)}</div>` : ''}
     ${milkyTableHtml(r.milkyRows, r.best?.milky, r.targets ?? {})}
-    <div class="m3-rbtn"><button type="button" data-ad="apply"${r.unchanged ? ' disabled title="현재안이 이미 최선(차이 없음)"' : r.clash > 0 ? ' disabled title="LED 몸체가 부품과 겹침"' : ''}>적용</button>${altBtn(r)}<button type="button" data-ad="cancel">취소</button>${r.clash > 0 ? '' : `<button type="button" data-ad="continue" title="${r.unchanged ? '지금 설계 그대로' : '이 안을 적용한 뒤'}, 체크했지만 이번에 돌리지 않은 항목(예: 위치·Milky)을 그 위에서 이어서 최적화">이 안에서 이어서 ▸</button>`}<span class="m3-ad-sp"></span><button type="button" data-ad="view" title="프로파일 비교·사유 전문">자세히 ▸</button></div></div>`;
+    ${altNote(r)}<div class="m3-rbtn">${applyBtn(r, 'LED 몸체가 부품과 겹침')}${altBtn(r)}<button type="button" data-ad="cancel">취소</button>${r.clash > 0 ? '' : `<button type="button" data-ad="continue" title="${r.unchanged ? '지금 설계 그대로' : '이 안을 적용한 뒤'}, 체크했지만 이번에 돌리지 않은 항목(예: 위치·Milky)을 그 위에서 이어서 최적화">이 안에서 이어서 ▸</button>`}<span class="m3-ad-sp"></span><button type="button" data-ad="view" title="프로파일 비교·사유 전문">자세히 ▸</button></div></div>`;
 }
 // el 에 그리고 이벤트를 h 로 넘김. state = { avail, sel, running, result, resultOpen, … } — 결과가 있으면 한 줄 + (열림) 결과 창
 export function renderAutoPanel(el, state, h) {
   const r = state.result, full = r ? compareHtml({ ...r, canRevert: state.canRevert, ...(state.catalog ? { catalog: state.catalog } : {}) }) : '';
   const html = r ? `${resultLineHtml(r)}${state.resultOpen ? `<div class="m3-rmodal" role="dialog" aria-modal="true" aria-label="기구 최적화 결과"><div class="m3-rmodal-in"><div class="m3-rmodal-hd"><b>기구 최적화 결과</b><span class="m3-ad-sp"></span><button type="button" data-ad="hide">닫기 (결과는 남음)</button></div>
-      <div class="m3-rverdict ${r.unchanged ? '' : r.feasible ? 'ok' : 'bad'}">${r.unchanged ? `현재 설계보다 나은 안을 찾지 못함 — 현재안 유지${r.alt ? ' (찾은 후보와 차이가 계산 잡음 수준 — 원하면 [그래도 적용])' : ''}` : r.feasible ? '✓ 목표 통과' : '✕ 목표 미달 — 가장 가까운 안'}</div>${full}</div></div>` : ''}` : autoCardHtml(state);
+      <div class="m3-rverdict ${r.unchanged ? '' : r.feasible ? 'ok' : 'bad'}">${r.unchanged ? `현재 설계보다 나은 안을 찾지 못함 — 현재안 유지${r.alt ? ' (찾은 후보가 뚜렷이 낫지 않음 — 원하면 [후보로 바꾸기])' : ''}` : r.feasible ? '✓ 목표 통과' : '✕ 목표 미달 — 가장 가까운 안'}</div>${full}</div></div>` : ''}` : autoCardHtml(state);
   const key = r ? html : autoCardHtml({ ...state, running: state.running ? { frac: 0, text: '' } : null });
   const bar = state.running && !r && el._adKey === key ? el.querySelector('.m3-ad-prog .bar') : null;
   if (bar) {

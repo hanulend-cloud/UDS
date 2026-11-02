@@ -269,9 +269,24 @@ function ledAlternatives(r, two) {
 }
 // 상한: ① 탐색 = cfg.milkyMax ?? 9.9 · ② 기준 Milky = cfg.milkyMax ?? max(현재, 5)(계산 시간) — spec §2.1a
 export const MILKY_SEARCH_MAX = 9.9;
+// 폭 위치 고르기(2026-11-02, 순수) — 균일도가 부족한 방향으로만, 필요한 만큼만 옮김: 지금 위치가 이미 통과면 그대로 ·
+// 목표 + 여유(후보 값은 광자가 적어 재계산에서 내려갈 수 있음)를 넘는 후보 중 가장 덜 옮긴 것 · 그런 후보가 없으면 최고값(잡음 수준이면 덜 옮긴 쪽).
+// 점수 = 폭 균일도(폭 판정 없으면 길이) — 폭 위치는 주로 폭 분포를 바꾸고 길이는 뒤의 개수·간격이 맞춤
+export const LATERAL_MARGIN = 0.03;
+export function pickLateral(res, obs) {
+  const wid = (x) => x.stats?.Uwid, sc = (x) => (wid(x) ?? x.stats?.Ulen ?? -Infinity), okR = (res ?? []).filter((x) => x.ok);
+  if (!okR.length) return null;
+  const need = (x) => (wid(x) != null ? obs.targetWid ?? -Infinity : obs.targetLen), least = (L) => L.reduce((a, x) => (Math.abs(x.cand.wCenter) < Math.abs(a.cand.wCenter) ? x : a)).cand.wCenter;
+  const pass = okR.filter((x) => sc(x) >= need(x) + LATERAL_MARGIN);
+  if (pass.length) return least(pass);
+  const top = okR.reduce((a, x) => (sc(x) > sc(a) ? x : a));
+  return least(okR.filter((x) => sc(x) >= sc(top) - SCORE_EPS));
+}
+// 정밀 재계산이 미달일 때 1열 개수를 하나씩 늘리는 한도 — 시간 · 나아짐이 이만큼도 없으면 두 번 만에 멈춤(폭 부족은 개수로 안 올라감)
+export const LADDER_MS = 150000, LADDER_GAIN = 0.005;
 export async function runAutoDesign(cfg, io) {
   const { stages, obs } = cfg, steps = [], mCap = cfg.milkyMax ?? Math.max(cfg.current?.milky ?? 0, 5), sCap = cfg.milkyMax ?? MILKY_SEARCH_MAX;
-  let d = { ...cfg.current }, feasible = true, reason = '', hint = null, ledAlts = null;
+  let d = { ...cfg.current }, feasible = true, reason = '', hint = null, ledAlts = null, ledMore = null, ledLimit = null;
   const stop = () => io.cancelled?.();
   if (stop()) return { cancelled: true };
   io.progress?.('current', 0, '현재안 계산');   // 비교표 '현재' 열 — 최종안과 같은 추정기(io.verify). 수렴한 점진 결과가 있으면 재사용
@@ -297,11 +312,7 @@ export async function runAutoDesign(cfg, io) {
       io.progress?.('leds', 0, `LED 폭 위치 후보 ${cfg.lateral.length}개 비교`);
       const res = await io.evalLateral(d, cfg.lateral);
       if (stop()) return { cancelled: true };
-      // 점수 = 폭 균일도(폭 판정 없으면 길이) — 폭 위치는 주로 폭 분포를 바꾸고 길이는 아래 개수·간격이 맞춤. 길이·폭 중 낮은 쪽으로 고르면
-      // 지금 배치의 길이 한계(끝단)에 묻혀 폭에 유리한 위치를 놓쳤음(1열: −10 대신 −12 가 폭 0.74 → 0.85, 2026-10-30)
-      const sc = (x) => (x.stats?.Uwid ?? x.stats?.Ulen ?? -Infinity);
-      const okR = (res ?? []).filter((x) => x.ok), top = okR.reduce((a, x) => (!a || sc(x) > sc(a) ? x : a), null);
-      const pick = top ? okR.filter((x) => sc(x) >= sc(top) - SCORE_EPS).reduce((a, x) => (Math.abs(x.cand.wCenter) < Math.abs(a.cand.wCenter) ? x : a)).cand.wCenter : null;
+      const pick = pickLateral(res, obs);
       steps.push({ stage: 'ledsLateral', pick, results: (res ?? []).map((x) => ({ wCenter: x.cand.wCenter, ok: x.ok, Ulen: x.stats?.Ulen ?? null, Uwid: x.stats?.Uwid ?? null, eff: x.eff })) });
       if (pick != null) d = { ...d, wCenter: pick };
     }
@@ -309,9 +320,9 @@ export async function runAutoDesign(cfg, io) {
     const B = await io.basis(d);
     if (stop()) return { cancelled: true };
     // 후보가 {s, w} 면 (s, w) 격자 — 열 수·열 간격까지(searchLeds2, nMax = 총수 상한), 숫자면 1열(기존)
-    const two = typeof B.cand[0] === 'object', a = { G: cfg.G, obs, line: cfg.line, cand: B.cand, maps: B.maps, pitchRange: cfg.pitchRange ?? null, nMax: cfg.nMax, emitted: B.emitted };
+    const two = typeof B.cand[0] === 'object', a = { G: cfg.G, obs, line: cfg.line, cand: B.cand, maps: B.maps, pitchRange: cfg.pitchRange ?? null, nMax: cfg.nMax, emitted: B.emitted, ...(B.minGap ? { minGap: B.minGap } : {}) };   // minGap = 이웃 LED 몸체가 겹치지 않는 최소 피치
     // (s, w) 격자 = 배치 Solver(같은 피치+끝 여백 → 끝 압축 → 자유 위치, spec 2026-10-20 led-layout-solver) · 숫자 격자 = 1열 기존 탐색
-    const r = two ? solveLayout({ ...a, wCenter: d.wCenter ?? 0, rowsOptions: cfg.rowsOptions ?? [1, 2], gaps: cfg.rowsOptions && !cfg.rowsOptions.includes(2) ? [] : B.gaps ?? [],   // rowsOptions [1] = 1열만(재료비)
+    const { atCount, limit, ...r } = two ? solveLayout({ ...a, wCenter: d.wCenter ?? 0, rowsOptions: cfg.rowsOptions ?? [1, 2], gaps: cfg.rowsOptions && !cfg.rowsOptions.includes(2) ? [] : B.gaps ?? [],   // rowsOptions [1] = 1열만(재료비)
        sMargin: B.sMargin ?? 0, timeBudget: cfg.layoutBudget ?? 20000, safety: cfg.layoutSafety ?? 0.02 }) : searchLeds({ ...a, spare: 1 });
     steps.push({ stage: 'leds', ...r });
     if (two) io.trace?.('leds', [r, ...(r.alts ?? [])].filter((e) => e.positions?.length).map((e, i) => ({ label: `${i ? '대안 ' : ''}${layoutText(e)}`, Ulen: e.stats?.Ulen, Uwid: e.stats?.Uwid, ok: true })));   // 대시보드: 배치 Solver 최선안·대안(기저 추정)
@@ -320,6 +331,8 @@ export async function runAutoDesign(cfg, io) {
       : { count: e.n, pitch: e.pitch, rows: 1, rowGap: 0, positions: null, layoutKind: null, layoutText: null };
     d = { ...d, ...lay(r), stepVirt: !!cfg.stepMode };
     ledAlts = (two ? r.alts ?? [] : ledAlternatives(r, false)).map(lay);   // cfg.stepMode = LED STEP(② 는 기준 LED 복사 배치를 점수 매김)
+    ledLimit = limit ?? null;
+    if (atCount) ledMore = (n) => { const e = atCount(n); return e?.positions?.length ? lay(e) : null; };
     if (!r.feasible) { feasible = false; reason = r.reason; }
   }
   const evalV = (cands, N, ms) => io.evalVariants(d, cands, N, ms), uText = (s) => `길이 균일도 ${s.Ulen.toFixed(2)}${s.Uwid == null ? '' : ` · 폭 균일도 ${s.Uwid.toFixed(2)}`}`;
@@ -436,23 +449,53 @@ export async function runAutoDesign(cfg, io) {
     return { feasible: feasible && okCur, best: { ...cfg.current }, steps, reason: why, verified: currentVerified, current: currentVerified, unchanged: true, cancelled: false, hint };
   }
   let verified = await io.verify(d);
-  if (ledAlts?.length && margin(verified.stats, obs) < 0) {   // ② 재확인: 정밀 검증 미달이면 기저 순위의 다음 후보(같은 총수 → 다음 총수) 최대 2개 — 다른 필드(①③⑤④ 결과)는 그대로
+  // 개수로 고칠 수 있는 방향만 본 여유 — 폭이 어떤 개수로도 못 닿으면(ledLimit) 길이로 판정
+  const mgFix = (s) => (ledLimit ? s.Ulen - obs.targetLen : margin(s, obs));
+  if ((ledAlts?.length || ledMore) && mgFix(verified.stats) < 0) {   // ② 재확인: 정밀 검증 미달이면 기저 순위의 다음 후보(같은 총수 → 다음 총수) 최대 2개 — 다른 필드(①③⑤④ 결과)는 그대로
     const tried = [{ design: d, verified }], scV = (v) => shapeScore({ ok: !v.stats.empty, stats: v.stats, eff: v.eff }, obs);
     for (const [i, L] of ledAlts.slice(0, 2).entries()) {
       if (stop()) return { cancelled: true };
       io.progress?.('verify', (i + 1) / 3, `② 후보 재확인 (${i + 2}/3)`);
       const e = { ...d, ...L }, v = await io.verify(e);
       tried.push({ design: e, verified: v });
-      if (margin(v.stats, obs) >= 0) break;
+      if (mgFix(v.stats) >= 0) break;
+    }
+    // 그래도 미달 = 1열로 LED 를 하나씩 늘려(피치를 조금씩 줄여) 목표에 닿는 가장 적은 개수까지(2026-11-02). 지금 설계가 이미 통과면 지금보다 적은 개수까지만
+    const mgOf = (t) => mgFix(t.verified.stats);
+    let more = false;
+    if (ledMore && !tried.some((t) => mgOf(t) >= 0)) {
+      const cap = mgFix(currentVerified.stats) >= 0 ? Math.min(cfg.nMax, totalLeds(cfg.current) - 1) : cfg.nMax, t0 = Date.now();
+      let n = Math.max(...tried.map((t) => totalLeds(t.design))) + 1, top = Math.max(...tried.map(mgOf)), stall = 0;
+      while (n <= cap && stall < 2 && Date.now() - t0 < (cfg.ladderMs ?? LADDER_MS)) {
+        if (stop()) return { cancelled: true };
+        const L = ledMore(n);
+        if (L) {
+          io.progress?.('verify', 0.5, `목표 미달 — LED ${n}개로 늘려 재확인`);
+          const e = { ...d, ...L }, v = await io.verify(e);
+          tried.push({ design: e, verified: v }); more = true;
+          const mg = margin(v.stats, obs);
+          if (mg >= 0) break;
+          stall = mg - top < LADDER_GAIN ? stall + 1 : 0; top = Math.max(top, mg);
+        }
+        n++;
+      }
     }
     steps.push({ stage: 'ledsVerify', tried });
-    const pick = tried.find((t) => margin(t.verified.stats, obs) >= 0) ?? tried.reduce((a, b) => (scV(b.verified) > scV(a.verified) ? b : a));
+    const near = () => { const top = Math.max(...tried.map(mgOf)); return tried.filter((t) => mgOf(t) >= top - SCORE_EPS).reduce((a, b) => (totalLeds(b.design) < totalLeds(a.design) ? b : a)); };   // 못 닿으면 가장 가까운 안 — 차이가 잡음 수준이면 적은 개수
+    const pick = tried.find((t) => mgOf(t) >= 0) ?? (more ? near() : tried.reduce((a, b) => (scV(b.verified) > scV(a.verified) ? b : a)));
     d = pick.design; verified = pick.verified;
+    if (more && mgOf(pick) < 0) {
+      const s = verified.stats, wid = s.Uwid != null && s.Uwid - obs.targetWid < s.Ulen - obs.targetLen;
+      reason = `LED 1열 ${Math.max(...tried.map((t) => totalLeds(t.design)))}개까지 늘려도 목표 미달 — ${uText(s)} · 한계: ${wid ? '폭 방향 확산 부족(LED 개수로는 안 오름) — Milky·형상으로 보완' : '길이 방향 끝 어두움 — Milky·LED 높이·형상으로 보완'}`;
+    }
   }
+  if (ledLimit && margin(verified.stats, obs) < 0 && mgFix(verified.stats) >= 0) reason = `길이 목표는 LED ${totalLeds(d)}개로 통과, 폭은 미달 — ${uText(verified.stats)} · 한계: 폭 방향 확산 부족(LED 개수로는 안 오름) — Milky·형상으로 보완`;
   // 잡음 방어(①②③ 공통): 검증값이 현재안보다 SCORE_EPS 이상 낫지 않으면 현재안 유지. 둘 다 통과면 총 LED 수(rows·count) 감소도 이득
   const sc = (v) => shapeScore({ ok: !v.stats.empty, stats: v.stats, eff: v.eff }, obs);
   const fewer = margin(verified.stats, obs) >= 0 && margin(currentVerified.stats, obs) >= 0 && totalLeds(d) < totalLeds(cfg.current);
-  if (!fewer && !(sc(verified) - sc(currentVerified) >= SCORE_EPS)) {
+  // 폭이 못 닿을 때: 길이가 새로 통과했거나 같은 통과에 개수가 줄면 이득(폭이 나빠지지 않을 때만) — 점수는 낮은 쪽(폭)에 묶여 안 변함
+  const fixGain = !!ledLimit && mgFix(verified.stats) >= 0 && (mgFix(currentVerified.stats) < 0 || totalLeds(d) < totalLeds(cfg.current)) && verified.stats.Uwid >= currentVerified.stats.Uwid - SCORE_EPS;
+  if (!fewer && !fixGain && !(sc(verified) - sc(currentVerified) >= SCORE_EPS)) {
     steps.push({ stage: 'guard', tried: d, triedVerified: verified, triedReason: reason });
     return { feasible: margin(currentVerified.stats, obs) >= 0, best: { ...cfg.current }, steps, reason: `현재안보다 나은 설계를 찾지 못함 — 현재안 유지${reason ? ` (${reason})` : ''}`, verified: currentVerified, current: currentVerified, unchanged: true, cancelled: false, hint };
   }

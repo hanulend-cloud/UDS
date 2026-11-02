@@ -919,7 +919,7 @@ async function adRun(opt = {}) {
       const r = await R.traceEach(adJob(Md, parts, ctx, { emitters: sets[0] }), sets, { N: 12000, maxMs: 60000, minN: 3000, onProgress: (i, n) => progress('leds', i / n, `LED 위치 후보 시험 ${i}/${n}`) });
       // 간섭 방지: LED 몸체 반폭 + 0.3 mm 만큼 라인 끝에서 떨어지게(끝벽), 2열 간격도 반폭만큼 안쪽(측벽)
       const m = ledHalf + 0.3, gapsOk = gaps.filter((g) => !(line.width > 0) || g + m <= line.width / 2 + 1e-9);
-      return { cand, maps: r.maps, emitted: r.emitted, gaps: gapsOk, sMargin: m };
+      return { cand, maps: r.maps, emitted: r.emitted, gaps: gapsOk, sMargin: m, minGap: Math.max(2, 2 * ledHalf + 0.2) };
     },
     async evalShapes(d, cands, N, maxMs = 2500) {   // 단계별 광자·시간 제한은 halving 일정(6만/20만/60만 · 2.5/4/6초)
       const out = [], base = adBaseMesh(sp, ctx), H = heightsFor(base, shapeFrame(base, line), 0.5);
@@ -1057,7 +1057,6 @@ function adApply() {
   A.hist?.release();
   renderAuto();
 }
-// [그래도 적용] — '현재안 유지'(차이가 잡음 수준)여도 찾은 후보로 바꿈
 // 이 안에서 이어서(2026-10-30) — 결과를 적용한 뒤, 체크했지만 이번 실행에서 돌리지 않은 항목만 그 위에서 최적화(예: ③ 형상 결과 → ② 위치·① Milky).
 // 적용한 형상·배치는 장면(getMech3d)에 들어가 다음 실행의 출발점이 됨. 적용은 [되돌리기] 로 취소 가능
 async function adContinue() {
@@ -1082,6 +1081,7 @@ function adApplyMilky(v) {
   Object.assign(r, { design: { ...r.design, milky: row.milky }, unchanged: false, best: { ...r.best, milky: row.milky, Ulen: row.Ulen, Uwid: row.Uwid, eff: row.eff } });
   adApply();
 }
+// [후보로 바꾸기] — '현재안 유지'(뚜렷이 낫지 않음)여도 찾은 후보로 바꿈
 function adApplyAlt() {
   const r = adState().result, a = r?.alt;
   if (!a) return;

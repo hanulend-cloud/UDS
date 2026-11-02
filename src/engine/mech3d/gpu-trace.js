@@ -336,6 +336,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
 }
 `;
 
+const GPU_WAIT_MS = 20000;   // 슬라이스 하나의 목표는 수십 ms — 이만큼 답이 없으면 멈춘 것
 // GPU 를 찾아 추적기를 만든다. GPU 가 없거나 실패하면 null. 반환 { name, trace(S, opts) → Promise<{ rec, ms }>, lost }
 export async function createGpuTracer() {
   const gpu = globalThis.navigator?.gpu;
@@ -346,7 +347,10 @@ export async function createGpuTracer() {
   const lim = adapter.limits, info = adapter.info ?? {};
   const device = await adapter.requestDevice({ requiredLimits: { maxStorageBufferBindingSize: lim.maxStorageBufferBindingSize, maxBufferSize: lim.maxBufferSize } });
   let dead = false;
-  device.lost.then(() => { dead = true; });
+  // GPU 가 멈추면(드라이버 재설정 — DXGI_ERROR_DEVICE_HUNG 등) 완료 알림이 영영 안 올 수 있음 → 소실·시간 초과 때 실패로 끝내 청크가 CPU 로 넘어가게(2026-11-02)
+  const lost = device.lost.then(() => { dead = true; throw new Error('GPU 장치를 잃음'); });
+  lost.catch(() => {});
+  const guarded = (p) => { let id; const late = new Promise((_, rej) => { id = setTimeout(() => { dead = true; rej(new Error(`GPU 응답 없음 (${GPU_WAIT_MS / 1000}초)`)); }, GPU_WAIT_MS); }); return Promise.race([p, lost, late]).finally(() => clearTimeout(id)); };
   const mod = device.createShaderModule({ code: WGSL });
   const ci = await mod.getCompilationInfo?.();
   const errs = ci?.messages?.filter((m) => m.type === 'error') ?? [];
@@ -419,13 +423,13 @@ export async function createGpuTracer() {
         enc.copyBufferToBuffer(out, 0, rb, base * REC * 4, n * REC * 4);
         const ts = performance.now();
         device.queue.submit([enc.finish()]);
-        await device.queue.onSubmittedWorkDone();
+        await guarded(device.queue.onSubmittedWorkDone());
         if (dead) throw new Error('GPU 장치를 잃음');
         const ms = performance.now() - ts;
         base += n;
         if (n >= slice) slice = slice0 = Math.max(1024, Math.min(1 << 20, Math.round(n * targetMs / Math.max(1, ms))));   // 다 찬 슬라이스로만 잼
       }
-      await rb.mapAsync(GPUMapMode.READ);
+      await guarded(rb.mapAsync(GPUMapMode.READ));
       const rec = new Float32Array(rb.getMappedRange().slice(0));
       rb.unmap();
       for (let p = 0; p < N; p++) { const o = p * REC; if (rec[o + 1] >= 0) for (let k = 0; k < 3; k++) rec[o + 3 + k] += sc.c[k]; }
