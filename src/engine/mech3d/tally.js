@@ -41,7 +41,13 @@ export function tallyGeometry(line, obs) {
     area[si * nw + wj] += pa;
   }
   const valid = new Uint8Array(ns * nw);
-  for (let k = 0; k < valid.length; k++) if (area[k] >= 0.5 * ds * cell) valid[k] = 1;
+  // 유효 = 가장자리 제외 뒤 남은 길이(sLen) 기준 면적 절반 이상(2026-11-02) — 칸 전체 기준이면 끝 칸이 화질에 따라 빠져 균일도가 갈렸음(예: 1 mm 칸만 어두운 끝 구간을 건너뜀).
+  // 남은 길이가 칸의 25% 미만인 끝 조각은 뺌(면적이 작아 잡음만 큼)
+  for (let i = 0; i < ns; i++) {
+    const sLen = line.closed ? ds : Math.min((i + 1) * ds, L - edge) - Math.max(i * ds, edge);
+    if (sLen < 0.25 * ds - 1e-9) continue;
+    for (let j = 0; j < nw; j++) { const k = i * nw + j; if (area[k] > 0 && area[k] >= 0.5 * sLen * cell) valid[k] = 1; }
+  }
   const validAll = new Uint8Array(ns * nw);
   for (let k = 0; k < validAll.length; k++) if (areaAll[k] >= 0.1 * ds * cell) validAll[k] = 1;   // 면이 칸의 10% 이상 걸치면 값을 냄(더 작은 조각은 잡음만 큼)
   // pixOk: 집계 가능한 래스터 픽셀(마스크 안, 경계에서 edgeExcl 이상, 열린 라인이면 끝 제외) — 집계기가 래스터 없이(Worker) 쓰도록 G 에 담음

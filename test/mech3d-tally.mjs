@@ -133,4 +133,13 @@ ok(S.counted === nV && S.noiseWarn === false, `집계 셀 ${S.counted}, 잡음 �
   const wr = [...jj].sort((x, y) => x - y), w0 = GF.w0 + wr[0] * GF.cell, w1 = GF.w0 + (wr[wr.length - 1] + 1) * GF.cell;
   ok(w1 - w0 >= 6 - 1e-9, `면 전체 유효 칸: 폭 ${w0}~${w1} mm(면 폭 6 mm 를 덮음)`);
 }
+{ // 끝 칸 규칙(2026-11-02): 화질마다 판정 구간이 달라지면 안 됨 — 가장자리 제외 뒤 남은 길이 기준으로 면적 절반 이상이면 유효. 남은 길이가 칸의 25% 미만인 조각은 뺌
+  const rows = (cellS) => { const g = tallyGeometry(line, { ...obs, cellS, cellW: 1.5, edgeExcl: 0.5 }), r = []; for (let i = 0; i < g.ns; i++) { let v = false; for (let j = 0; j < g.nw; j++) if (g.valid[i * g.nw + j]) v = true; if (v) r.push(i); } return { g, a: r[0], b: r[r.length - 1] }; };
+  const m = rows(1.25), h = rows(0.5), f = rows(0.625);   // 1.25: 첫 칸 남은 0.75 · 0.5: 첫 칸 남은 0(뺌) · 0.625: 첫 칸 남은 0.125 = 20%(뺌)
+  ok(m.a === 0 && m.b === m.g.ns - 1, `끝 칸: 1.25 mm 칸 — 첫·끝 칸 포함(${m.a}, ${m.b}/${m.g.ns - 1})`);
+  ok(h.a === 1 && h.b === h.g.ns - 2 && f.a === 1 && f.b === f.g.ns - 2, `끝 칸: 남은 길이 없거나 너무 짧으면 뺌(0.5 mm: ${h.a}, 0.625 mm: ${f.a})`);
+  const half = tallyGeometry(line, { ...obs, cellS: 2, cellW: 1.5, edgeExcl: 1.5 });   // 첫 칸 남은 0.5 = 25% → 포함(면적 25% 라 예전 규칙이면 빠짐)
+  let v0 = false; for (let j = 0; j < half.nw; j++) if (half.valid[j]) v0 = true;
+  ok(v0, '끝 칸: 칸의 25% 남은 끝 칸도 판정에 포함');
+}
 done();
