@@ -134,6 +134,95 @@ export async function refineShapeField(start, evalFn, obs, { G, ns, nw, iters = 
   }
   return done();
 }
+// ③ 형상 모드(2026-11-02) — LED 한 칸 위상 기준 입광면 모양들. 균일 구조에서는 형상도 LED 간격으로 반복(균일 피치 원칙), 양 끝만 따로. 폭 w 와 곱한 모드로 길이·폭을 함께 푼다.
+// ledPhase = LED 번호 단위 위상(LED 사이 선형, 바깥은 끝 간격으로 연장) — 간격이 불규칙해도 LED 를 따라감
+export function ledPhase(s, ledS, L = 0, closed = false) {
+  const n = ledS.length, S = closed ? [ledS[n - 1] - L, ...ledS, ledS[0] + L] : ledS, off = closed ? -1 : 0, m = S.length;
+  let k = 0; while (k < m - 2 && s >= S[k + 1]) k++;
+  return k + off + (s - S[k]) / (S[k + 1] - S[k]);
+}
+export function shapeModes(ledS, L, W, closed, ns, nw) {
+  const dS = L / (ns - (closed ? 0 : 1)), p = (ledS.at(-1) - ledS[0]) / (ledS.length - 1), c = (f) => Math.cos(2 * Math.PI * f), n = (f) => Math.sin(2 * Math.PI * f);
+  const defs = [
+    ['물결 cos', (f) => c(f)], ['물결 sin', (f) => n(f)], ['물결2 cos', (f) => c(2 * f)], ['물결2 sin', (f) => n(2 * f)],
+    ['폭 기울기', (f, x) => x], ['폭 곡률', (f, x) => x * x - 1 / 3],
+    ['물결 cos×폭', (f, x) => c(f) * x], ['물결 sin×폭', (f, x) => n(f) * x], ['물결 cos×폭 곡률', (f, x) => c(f) * (x * x - 1 / 3)],
+    ...(closed ? [] : [['시작 끝단', (f, x, s) => Math.exp(-s / p)], ['마지막 끝단', (f, x, s) => Math.exp(-(L - s) / p)]]),
+  ];
+  return defs.map(([name, fn]) => {
+    const v = new Array(ns * nw);
+    for (let i = 0; i < ns; i++) { const s = i * dS, f = ledPhase(s, ledS, L, closed); for (let j = 0; j < nw; j++) v[i * nw + j] = fn(f, -1 + (2 * j) / (nw - 1), s); }
+    const pk = Math.max(...v.map(Math.abs)) || 1;
+    return { name, v: v.map((x) => x / pk) };
+  });
+}
+// 판정 지도를 잡음이 작은 벡터로 — 가운데 구간은 LED 위상으로 접어(nP 칸 × 폭 nB 칸), 양 끝(1.5 피치)은 길이 칸 평균. 값 = ln(광량/전체 평균). 칸 13개를 겹치므로 잡음 ↓
+export function foldMap(stats, G, ledS, W, { nP = 8, nB = 4 } = {}) {
+  const p = (ledS.at(-1) - ledS[0]) / (ledS.length - 1), end = G.closed ? 0 : Math.min(1.5 * p, G.L / 4), nE = G.closed ? 0 : 6, n = nP * nB + 2 * nE, t = new Float64Array(n), c = new Float64Array(n);
+  let sum = 0, cnt = 0;
+  for (let i = 0; i < G.ns; i++) {
+    const s = (i + 0.5) * G.ds;
+    for (let j = 0; j < G.nw; j++) {
+      const k = i * G.nw + j; if (!G.valid[k]) continue;
+      const v = stats.map[k]; sum += v; cnt++;
+      let b;
+      if (nE && s < end) b = nP * nB + Math.min(nE - 1, Math.floor((s / end) * nE));
+      else if (nE && s > G.L - end) b = nP * nB + nE + Math.min(nE - 1, Math.floor(((G.L - s) / end) * nE));
+      else { const f = ledPhase(s, ledS, G.L, G.closed), q = Math.min(nP - 1, Math.floor((f - Math.floor(f)) * nP)), w = G.w0 + (j + 0.5) * G.cell, r = Math.max(0, Math.min(nB - 1, Math.floor(((w + W) / (2 * W)) * nB))); b = q * nB + r; }
+      t[b] += v; c[b]++;
+    }
+  }
+  const m = cnt ? sum / cnt : 0;
+  return Array.from(t, (v, b) => (c[b] && m > 0 && v > 0 ? Math.log(v / c[b] / m) : NaN));
+}
+// 박스 제약 능선 최소제곱(순수) — min ‖y + R·c‖² + λ‖c‖², |c| ≤ cmax. R[m] = 모드 m 의 응답(NaN 칸 무시). 투영 경사(가속 없음, 충분히 반복)
+export function solveBox(R, y, { lam = 0.003, cmax = Infinity, iters = 2000 } = {}) {
+  const m = R.length, ok = y.map((v, i) => Number.isFinite(v) && R.every((r) => Number.isFinite(r[i]))), dot = (a, b) => { let t = 0; a.forEach((v, i) => { if (ok[i]) t += v * b[i]; }); return t; };
+  const G = R.map((a) => R.map((b) => dot(a, b))), g0 = R.map((a) => dot(a, y)), tr = G.reduce((t, r, i) => t + r[i], 0) + lam * m, c = new Array(m).fill(0);
+  if (!(tr > 0)) return c;
+  for (let it = 0; it < iters; it++) for (let a = 0; a < m; a++) {   // 좌표 하강 — 박스 제약에 단순하고 안정적
+    let g = g0[a]; for (let b = 0; b < m; b++) if (b !== a) g += G[a][b] * c[b];
+    const d = G[a][a] + lam; c[a] = d > 0 ? Math.max(-cmax, Math.min(cmax, -g / d)) : 0;
+  }
+  return c;
+}
+// ③ 응답 행렬로 입광면 풀기 — 모드마다 한 번씩 계산해 관측면 응답을 재고, 길이·폭을 함께 최소제곱으로 풂(살두께·간섭은 evalFn). 풀이 후 0.5·1 배 후보를 실제로 계산, 최선에서 같은 응답으로 다시 풂.
+// 반환 { best, tried, modes:[{name,ok,gain,c}], pred:{rms0,rmsP}, passes } — pred = 응답대로라면 형상으로 갈 수 있는 곳(상한 가늠, 실제 계산 전 값)
+export async function solveShapeModes(start, evalFn, obs, { G, ns, nw, W, ledS, a = 1.5, cmax = 1.6, lam = 0.003, passes = 2, limit = 0.8, N, maxMs, cancelled = () => false } = {}) {
+  let cur = start;
+  const tried = [], modes = shapeModes(ledS, G.L, W, !!G.closed, ns, nw), zero = new Array(ns * nw).fill(0), base = () => (cur.cand.kF?.v?.length === ns * nw ? cur.cand.kF.v : zero), rd = (v) => Math.round(v * 1e3) / 1e3;
+  const withC = (b, list, c) => ({ ...cur.cand, kF: { ns, nw, v: b.map((v, n) => rd(v + list.reduce((t, md, m) => t + c[m] * md.v[n], 0))) } });
+  const rms = (y) => { const f = y.filter(Number.isFinite), m = f.reduce((t, v) => t + v, 0) / (f.length || 1); return Math.sqrt(f.reduce((t, v) => t + (v - m) ** 2, 0) / (f.length || 1)); };
+  const info = { best: cur, tried, modes: [], pred: null, passes: 0, limited: false };
+  if (margin(cur.stats, obs) >= 0 || cancelled()) return info;
+  const y0 = foldMap(cur.stats, G, ledS, W), b0 = base(), res = await evalFn(modes.map((md) => withC(b0, [md], [a])), N, maxMs);
+  tried.push(...res); if (cancelled()) return info;
+  const use = [], R = [];
+  res.forEach((r, i) => {
+    const row = { name: modes[i].name, ok: !!r?.ok, why: r?.why ?? null, Ulen: r?.stats?.Ulen ?? null, Uwid: r?.stats?.Uwid ?? null, gain: 0, c: 0 };
+    info.modes.push(row);
+    if (!r?.ok) return;
+    const d = foldMap(r.stats, G, ledS, W).map((v, k) => (v - y0[k]) / a);
+    row.gain = rms(d); use.push(i); R.push(d);
+  });
+  if (!use.length) return info;
+  const list = use.map((i) => modes[i]);
+  const c0 = solveBox(R, y0, { lam, cmax });
+  c0.forEach((v, k) => { info.modes[use[k]].c = v; });
+  info.pred = { rms0: rms(y0), rmsP: rms(y0.map((v, k) => v + R.reduce((t, r, m) => t + c0[m] * r[k], 0))) };
+  // 응답대로 끝까지 풀어도 불균일이 얼마 안 줄면 형상으로는 못 감 — 금형을 복잡하게 만들 이유가 없으니 후보를 만들지 않음(실측: 굴곡 확산판 Milky 1.5 에서 14%)
+  if (info.pred.rmsP > limit * info.pred.rms0) { info.limited = true; return info; }
+  let c = c0;
+  for (let it = 0; it < passes && !cancelled(); it++) {
+    const b = base(), out = await evalFn([0.5, 1].map((f) => withC(b, list, c.map((v) => f * v))), N, maxMs); tried.push(...out); info.passes++;
+    const top = out.filter((r) => r.ok).sort((x, y) => shapeScore(y, obs) - shapeScore(x, obs))[0];
+    if (!top || !(shapeScore(top, obs) > shapeScore(cur, obs) + 0.002)) break;
+    cur = top; info.best = cur;
+    if (margin(cur.stats, obs) >= 0) break;
+    c = solveBox(R, foldMap(cur.stats, G, ledS, W), { lam, cmax });
+  }
+  return info;
+}
 // 단계별 평가 후보 수 합(진행률 분모) — 실제로는 통과 후보가 적으면 더 적음
 export const halvingTotal = (n, schedule = SHAPE_SCHEDULE) => schedule.reduce((s, [keep], i) => { const k = i === 0 ? n : Math.min(keep, s.last); return { sum: s.sum + k, last: k }; }, { sum: 0, last: n }).sum;
 export async function halving(cands, evalFn, obs, schedule = SHAPE_SCHEDULE, cancelled = () => false) {
@@ -426,20 +515,22 @@ export async function runAutoDesign(cfg, io) {
   const nCurve = cfg.curve === false ? 0 : 6 * (cfg.curve?.iters ?? 3);   // 곡선 다듬기 평가 수(진행률 분모)
   if (stages.shape && cfg.shapeField) {   // ③ 입광면 보정
     const f = cfg.shapeField, s0 = cfg.shapeStart ?? {}, st = { dt: s0.dt ?? 0, h: s0.h ?? 0, R: s0.R ?? 1, e: s0.e ?? 0, c: s0.c ?? 0, ...(s0.kL ? { kL: s0.kL } : {}), ...(s0.kW ? { kW: s0.kW } : {}), ...(s0.kF ? { kF: s0.kF } : {}) };
-    io.shapePlan?.({ screen: 0, grid: 0, total: 2 + 3 * (f.iters ?? 4) });
+    io.shapePlan?.({ screen: 0, grid: 0, total: 16 });
     io.progress?.('shape', 0, '입광면 보정 — 광량 지도 측정');
     const [r0] = await io.evalShapes(d, [st], f.N, f.maxMs);
     if (stop()) return { cancelled: true };
     if (!r0?.ok) { feasible = false; reason = '제약(살두께·간섭)을 만족하는 형상 후보가 없음 — 범위를 줄이세요'; }
     else {
-      const r = await refineShapeField(r0, (cands, n, t) => io.evalShapes(d, cands, n, t), obs, { ...f, G: cfg.G, cancelled: stop });
+      const ledS = f.ledSOf?.(d) ?? [], ev = (cands, n, t) => io.evalShapes(d, cands, n, t);
+      const r = ledS.length >= 4 ? await solveShapeModes(r0, ev, obs, { ...f, ledS, G: cfg.G, cancelled: stop }) : await refineShapeField(r0, ev, obs, { ...f, G: cfg.G, cancelled: stop });   // LED 가 적으면 반복 구조가 아니라 측정 오차로 직접 보정
       if (stop()) return { cancelled: true };
       const b = r.best, c = b.cand, none = ['dt', 'h', 'e', 'c'].every((k) => !(c[k] ?? 0)) && !hasCurve(c) && !hasField(c);
-      steps.push({ stage: 'shapeField', passes: r.passes, sens: r.sens, tried: r.tried.map((x) => ({ ok: x.ok, why: x.why ?? null, Ulen: x.stats?.Ulen ?? null, Uwid: x.stats?.Uwid ?? null, peak: Math.max(0, ...(x.cand.kF?.v ?? []).map(Math.abs)) })) });
+      steps.push({ stage: 'shapeField', passes: r.passes, sens: r.sens ?? null, modes: r.modes ?? null, pred: r.pred ?? null, limited: !!r.limited, tried: r.tried.map((x) => ({ ok: x.ok, why: x.why ?? null, Ulen: x.stats?.Ulen ?? null, Uwid: x.stats?.Uwid ?? null, peak: Math.max(0, ...(x.cand.kF?.v ?? []).map(Math.abs)) })) });
       steps.push({ stage: 'shape', best: b });
       d = { ...d, shape: none ? null : { part: cfg.shapePart, ...c } };
       if (margin(b.stats, obs) < 0) { feasible = false; reason = `형상 최적안도 목표 미달 — 길이 균일도 ${b.stats.Ulen.toFixed(2)}${b.stats.Uwid == null ? '' : ` · 폭 균일도 ${b.stats.Uwid.toFixed(2)}`}`; }
       else { feasible = true; reason = ''; }
+      if (r.limited) reason = `형상으로 줄일 수 있는 불균일이 약 ${Math.max(0, Math.round((1 - r.pred.rmsP / r.pred.rms0) * 100))}% 뿐 — 형상은 그대로 둠`;
     }
   }
   if (stages.shape && cfg.shapeRanges) {   // ③ 1단계 선별 → 2단계 격자 (cfg.shapeCands 만 있으면 아래 기존 경로)

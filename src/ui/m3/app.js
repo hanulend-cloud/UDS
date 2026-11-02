@@ -864,7 +864,7 @@ function adHeightInfo(M0, line, rt) {
 // ④ 케이스 면(표면 처리) → ⑤ LED 높이(기구 치수) → ④+⑤ → ② LED 배치(PCB·LED 수) → ②+④ → ②+④+⑤. 처음 통과한 안에서 멈춤.
 // 체크한 항목만의 결과는 base 로 결과 위에 남기고, 보완 실행이 실패·중지되면 직전 결과를 다시 보여 줌. 적용은 사용자가 정함
 const BOOST_SETS = [['housing'], ['height'], ['housing', 'height'], ['leds'], ['leds', 'housing'], ['leds', 'housing', 'height']];
-const BOOST_LABEL = { housing: '④ 케이스 면', height: '⑤ LED 높이', leds: '② LED 배치' };
+const BOOST_LABEL = { housing: '④ 케이스 면', height: '⑤ LED 높이', leds: '② LED 배치', milky: '① Milky' };
 // 최적화 대시보드 — 실행 시작 때 체크한 항목으로 초기화, 끝나면 결과 표시
 function dashReset(only = null) {   // only = 이번에 돌릴 단계(이어서 최적화) — 없으면 체크 상태
   const st = adState(), avail = adAvail(A.store.mspec), O = A.store.mspec.observe;
@@ -885,7 +885,22 @@ async function adRunBoost() {
   const st = adState();
   dashReset();
   let r = await adRun();
-  if (!r || r.feasible || st.sel.boost === false || !st.result) return;
+  if (!r || r.feasible || !st.result) return;
+  if (r.stages.shape) {   // ③ 형상으로 목표에 못 닿으면 Milky → LED 개수 순서로 보완(2026-11-02) — LED 는 부품이 늘어 뒤로. 결과는 적용 전 보완 내용과 함께 보여 줌(몰래 바꾸지 않음)
+    const b = st.result, base = { Ulen: b.best.Ulen, Uwid: b.best.Uwid, milky: b.best.milky, reason: b.reason, unchanged: b.unchanged }, av = adAvail(A.store.mspec), keep = { ...r.stages, shape: !b.shapeLimited && !b.unchanged };
+    const sets = [['milky'], ['milky', 'leds']].map((set) => set.filter((k) => !r.stages[k] && av[k]?.ok)).filter((set, i, all) => set.length && all.findIndex((x) => x.join() === set.join()) === i);
+    let good = b;
+    for (const [i, set] of sets.entries()) {
+      const added = set.map((k) => BOOST_LABEL[k]);
+      A.optDash?.addStages({ milky: set.includes('milky'), position: set.includes('leds') }, `보완 ${i + 1}/${sets.length}: ${added.join(' + ')}`);
+      r = await adRun({ stages: { ...keep, ...Object.fromEntries(set.map((k) => [k, true])) }, added, base, step: `${i + 1}/${sets.length}` });
+      if (!r) { if (A && !st.running) { st.result = { ...good, note: `보완(${added.join(' + ')}) 계산이 끝나지 못함 — 직전 결과를 표시` }; A.meshShown = null; renderView(); renderAuto(); } return; }
+      good = st.result;
+      if (r.feasible) return;
+    }
+    return;
+  }
+  if (st.sel.boost === false) return;
   const b0 = st.result, base = { Ulen: b0.best.Ulen, Uwid: b0.best.Uwid, milky: b0.best.milky, reason: b0.reason, unchanged: b0.unchanged };
   const avail = adAvail(A.store.mspec), checked = r.stages;
   const sets = BOOST_SETS.filter((set) => set.every((k) => !checked[k] && avail[k]?.ok));
@@ -939,7 +954,7 @@ async function adRun(opt = {}) {
   const minWall = { ...defaultChecks(), ...(M0.checks ?? {}) }.minWall, t0 = performance.now();
   // ③ 변수 범위(Δt·h·R·e·c) — 엔진이 선별 → 격자 → 압축. 진행률 분모는 io.shapePlan 으로 받음(격자 크기 모르는 선별 중엔 최대 격자 27 로 어림)
   // ③ 입광면 보정 지도 — 길이 절점 간격 = LED 피치의 ⅛(2~6 mm, LED 물결을 잡게), 폭 7 절점. 광자 = 압축 마지막 단계 예산(광 효율 반비례)
-  const shapeField = stages.shape ? (() => { const pitch = cur.count > 1 ? (cur.pitch > 0 ? cur.pitch : line.length / cur.count) : line.length, ds = Math.min(6, Math.max(2, pitch / 8)), sb = shapeBudget(currentVerified?.eff ?? snap0.photometry?.eff).schedule.at(-1); return { ns: Math.ceil(line.length / ds) + (line.closed ? 0 : 1), nw: 7, N: sb[1], maxMs: sb[2] }; })() : null;
+  const shapeField = stages.shape ? (() => { const pitch = cur.count > 1 ? (cur.pitch > 0 ? cur.pitch : line.length / cur.count) : line.length, ds = Math.min(6, Math.max(2, pitch / 8)), sb = shapeBudget(currentVerified?.eff ?? snap0.photometry?.eff).schedule.at(-1); return { ns: Math.ceil(line.length / ds) + (line.closed ? 0 : 1), nw: 7, N: sb[1], maxMs: sb[2], W: line.width / 2, ledSOf: (d) => { try { const q = L.currentEmitters(designScene(d, ctx).M, line).map((e) => line.toSW(...line.to2D(e.pos))[0]).sort((a, b) => a - b); return q.filter((v, i) => !i || v - q[i - 1] > 1e-6); } catch { return []; } } }; })() : null;
   let shapeI = 0, shapeScr = 0, shapeTot = 1;
   const progress = (stage, frac, text) => {   // 전체 진행률(단계 무게) + 남은 시간
     if (A !== a || R.stopped) return;
@@ -1025,7 +1040,7 @@ async function adRun(opt = {}) {
     },
     async verify(d) {   // 정밀 재판정(현재안·최종안): 250만 광자(최소 150만, 20초까지) — 광자가 적으면 균일도(최저÷최고)가 잡음 때문에 낮게 나옴(6초 제한 때 0.69 vs 실제 0.78)
       const { M: Md, parts } = designScene(d, ctx);
-      const eff0 = currentVerified?.eff ?? snap0.photometry?.eff, r = await R.trace(adJob(Md, parts, ctx), { N: Math.ceil(Math.min(1e7, 2.5e6 * Math.max(1, 0.5 / (eff0 > 0 ? eff0 : 0.5)))), maxMs: d.shape?.kF ? 60000 : 20000, minN: 1.5e6, batches: 10 });   // 효율이 낮으면 관측면에 닿는 빛이 적어 광자를 더. 입광면 보정 메쉬는 추적이 느려 같은 시간이면 잡음이 커져 현재안과 공정하게 비교가 안 됨 → 시간 더
+      const eff0 = currentVerified?.eff ?? snap0.photometry?.eff, r = await R.trace(adJob(Md, parts, ctx), { N: Math.ceil(Math.min(1.5e7, 5e6 * Math.max(1, 0.5 / (eff0 > 0 ? eff0 : 0.5)))), maxMs: d.shape?.kF ? 60000 : 45000, minN: 1.5e6, batches: 10 });   // 효율이 낮으면 관측면에 닿는 빛이 적어 광자를 더. 실측: 20 초(잡음 2%) 판정 0.73~0.76 vs 수렴값 0.78~0.79 — 잡음이 칸 최소·최대를 벌려 낮게 나오므로 시간을 늘림(2026-11-03). 입광면 보정 메쉬는 추적이 느려 같은 시간이면 잡음이 커져 현재안과 공정하게 비교가 안 됨 → 시간 더
       const stt = tallyStats(G, r.batches, obs);
       A.optDash?.evals('final', [{ label: verifyLabel(d), Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty }]);
       return { stats: stt, eff: adEff(r) };
@@ -1055,7 +1070,7 @@ async function adRun(opt = {}) {
     let nStep = null; if (M0.light.kind === 'step') { try { nStep = L.currentEmitters(M0, line).length; } catch { nStep = 0; } }
     const smI = sp >= 0 && M0.parts[sp]?.shapeMod ? sp : M0.parts.findIndex((p) => p.shapeMod), sm = smI >= 0 ? M0.parts[smI].shapeMod : null;   // 비교표 '현재' 열 — 이미 적용된 형상(표시만)
     st.resultOpen = false;   // 끝나면 결과 카드(요약)만 — 자세한 결과 창은 [자세히]
-    st.result = { milkyRows: stages.milky ? milkyTable(res.steps ?? []) : null, targets: { len: obs.targetLen, wid: obs.targetWid }, design: res.best, feasible: res.feasible, reason: res.reason, hint: res.hint ?? null, shape: res.best.shape ?? null, screen: res.steps?.find((x) => x.stage === 'shapeScreen')?.gains ?? null, stepLeds: nStep, unchanged: !!res.unchanged, ctx, stages,
+    st.result = { shapeLimited: !!res.steps?.find((x) => x.stage === 'shapeField')?.limited, milkyRows: stages.milky ? milkyTable(res.steps ?? []) : null, targets: { len: obs.targetLen, wid: obs.targetWid }, design: res.best, feasible: res.feasible, reason: res.reason, hint: res.hint ?? null, shape: res.best.shape ?? null, screen: res.steps?.find((x) => x.stage === 'shapeScreen')?.gains ?? null, stepLeds: nStep, unchanged: !!res.unchanged, ctx, stages,
       added: opt.added ?? [], base: opt.base ?? null, clash: designClash(res.best, ctx, M0, rt, line),
       finish: stages.housing ? (() => { const c = { ...M0.parts[hp].finish, ...(M0.parts[hp].coating ? { coating: M0.parts[hp].coating } : {}) }; return { cur: c, best: res.best.finish ?? c }; })() : null, height: stages.height && hInfo ? { dz: res.best.dz ?? 0, gap: hInfo.gap } : null,
       cur: { ...cur, shape: sm ? { dt: sm.dt, h: sm.h, R: sm.R, e: sm.e ?? 0, c: sm.c ?? 0, kF: sm.kF ?? null } : null, Ulen: C?.stats?.Ulen, Uwid: C?.stats?.Uwid, eff: C?.eff ?? NaN, profile: C?.stats?.profile ?? null },

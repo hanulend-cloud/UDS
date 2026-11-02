@@ -1,5 +1,5 @@
 // P4 단계 실행기(가짜 io): node test/mech3d-autodesign.mjs
-import { pickLateral, runAutoDesign, shapeScore, halving, smoothU, halvingTotal, sameDesign, screenShapeVars, shapeTotal, pickVariant, refineShapeCurve, refineShapeField, fieldError, fieldResponse, curveDirection, shapeSize } from '../src/engine/mech3d/autodesign.js';
+import { pickLateral, runAutoDesign, shapeScore, halving, smoothU, halvingTotal, sameDesign, screenShapeVars, shapeTotal, pickVariant, refineShapeCurve, refineShapeField, fieldError, fieldResponse, ledPhase, shapeModes, foldMap, solveBox, solveShapeModes, curveDirection, shapeSize } from '../src/engine/mech3d/autodesign.js';
 import { shapeVarRanges, gridCandidates, curveAt } from '../src/engine/mech3d/shape-opt.js';
 import { candidateGrid } from '../src/engine/mech3d/basis.js';
 import { milkyRows } from '../src/engine/mech3d/milky-search.js';
@@ -375,4 +375,27 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   let calls = 0; const flat = { cand: z, ok: true, stats: { profile: new Array(ns).fill(1), Ulen: 1, Uwid: 0.5, empty: false }, eff: 0.5 };
   await refineShapeField(flat, async () => { calls++; return []; }, O, P);
   ok(calls === 0, '길이 방향이 이미 고르면 평가 없음'); }
+{ // ③ 형상 모드: LED 위상·모드·접기·박스 풀이
+  const ledS = [10, 30, 50, 70, 90];
+  ok(ledPhase(40, ledS) === 1.5 && ledPhase(0, ledS) === -0.5 && ledPhase(100, ledS) === 4.5, 'LED 위상(바깥은 끝 간격으로 연장)');
+  ok(Math.abs(ledPhase(95, ledS, 100, true) - 4.25) < 1e-9, '닫힌 라인 위상');
+  const M = shapeModes(ledS, 100, 5, false, 21, 5);
+  ok(M.length === 11 && M.every((m) => Math.abs(Math.max(...m.v.map(Math.abs)) - 1) < 1e-9), `모드 ${M.length}개, 최대 1`);
+  ok(M[0].v[Math.round(10 / 5) * 5] === 1 && Math.abs(M[4].v[0] + 1) < 1e-9, 'cos 모드 = LED 위에서 최대, 폭 기울기 = −W 에서 −1');
+  ok(shapeModes(ledS, 100, 5, true, 20, 5).length === 9, '닫힌 라인엔 끝단 모드 없음');
+  const c = solveBox([[1, 0], [0, 2]], [-0.5, 1], { lam: 0, cmax: 10 });
+  ok(Math.abs(c[0] - 0.5) < 1e-6 && Math.abs(c[1] + 0.5) < 1e-6, `최소제곱 풀이 (${c})`);
+  ok(solveBox([[1], [1]].map((r) => r), [-5, -5], { lam: 0, cmax: 1 }).every((v) => v <= 1), '박스 제약');
+  const nsG = 100, nwG = 4, G = { ns: nsG, nw: nwG, ds: 1, cell: 2.5, w0: -5, L: 100, closed: false, valid: new Uint8Array(nsG * nwG).fill(1) };
+  // 가짜 광학: ln 광량 = 물결 + 폭 기울기 − 0.05·(그 자리 이동). 물결은 LED 위 밝음, 폭은 +w 가 밝음 → 응답을 재서 둘 다 줄여야 함
+  const mapOf = (kF) => { const m = new Float64Array(nsG * nwG); for (let i = 0; i < nsG; i++) for (let j = 0; j < nwG; j++) { const s = i + 0.5, w = -5 + (j + 0.5) * 2.5, x = (s / 100) * 20, i0 = Math.min(19, Math.floor(x)), jj = Math.round(((w + 5) / 10) * 4), d = kF ? kF.v[i0 * 5 + jj] + (x - i0) * (kF.v[(i0 + 1) * 5 + jj] - kF.v[i0 * 5 + jj]) : 0; m[i * nwG + j] = Math.exp(0.1 * Math.cos(2 * Math.PI * ledPhase(s, ledS)) + 0.02 * w - 0.05 * d); } return m; };
+  const statsOf = (kF) => { const map = mapOf(kF), profile = Array.from({ length: nsG }, (_, i) => { let t = 0; for (let j = 0; j < nwG; j++) t += map[i * nwG + j]; return t / nwG; }), cols = Array.from({ length: nwG }, (_, j) => { let t = 0; for (let i = 0; i < nsG; i++) t += map[i * nwG + j]; return t / nsG; }); return { map, profile, Ulen: Math.min(...profile) / Math.max(...profile), Uwid: Math.min(...cols) / Math.max(...cols), empty: false }; };
+  const O = { targetLen: 0.97, targetWid: 0.97 }, st0 = { cand: { dt: 0, h: 0, R: 1, e: 0, c: 0 }, ok: true, stats: statsOf(null), eff: 0.5 };
+  const r = await solveShapeModes(st0, async (cands) => cands.map((cd) => ({ cand: cd, ok: true, stats: statsOf(cd.kF), eff: 0.5 })), O, { G, ns: 21, nw: 5, W: 5, ledS, cmax: 3, N: 1, maxMs: 1 });
+  ok(r.best.stats.Ulen > st0.stats.Ulen + 0.1 && r.best.stats.Uwid > st0.stats.Uwid + 0.1, `응답 행렬: 길이·폭 함께 ↑ (${st0.stats.Ulen.toFixed(2)}/${st0.stats.Uwid.toFixed(2)} → ${r.best.stats.Ulen.toFixed(2)}/${r.best.stats.Uwid.toFixed(2)})`);
+  ok(r.pred.rmsP < 0.5 * r.pred.rms0, `예측 잔차 감소 (${r.pred.rms0.toFixed(3)} → ${r.pred.rmsP.toFixed(3)})`);
+  let nEv = 0; const rL = await solveShapeModes(st0, async (cands) => { nEv += cands.length; return cands.map((cd) => ({ cand: cd, ok: true, stats: statsOf(null), eff: 0.5 })); }, O, { G, ns: 21, nw: 5, W: 5, ledS, N: 1, maxMs: 1 });
+  ok(rL.limited && rL.best === st0 && nEv === 11, `형상 응답이 없으면 모드만 재고 멈춤 (평가 ${nEv})`);
+  const rB = await solveShapeModes(st0, async (cands) => cands.map((cd) => ({ cand: cd, ok: false, why: '간섭' })), O, { G, ns: 21, nw: 5, W: 5, ledS, N: 1, maxMs: 1 });
+  ok(rB.best === st0 && rB.pred === null, '모든 모드가 제약 위반이면 그대로'); }
 done();
