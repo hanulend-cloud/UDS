@@ -1,5 +1,5 @@
 // ③ LGP 형상: node test/mech3d-shape-opt.mjs
-import { frameHeights, deformPart, refineForBumps, bump, minThickness, shapeCandidates, isWatertight, refinedFor, heightsFor, memoStats, pathFromLine, swOnPath, endW, lineVarH, shapeVarRanges, gridCandidates, ledEll, partFrame, curveAt, bottomAt, hasCurve, bumpCenters } from '../src/engine/mech3d/shape-opt.js';
+import { fieldAt, fieldThickness, clampField, hasField, FIELD_TAPER, frameHeights, deformPart, refineForBumps, bump, minThickness, shapeCandidates, isWatertight, refinedFor, heightsFor, memoStats, pathFromLine, swOnPath, endW, lineVarH, shapeVarRanges, gridCandidates, ledEll, partFrame, curveAt, bottomAt, hasCurve, bumpCenters } from '../src/engine/mech3d/shape-opt.js';
 import { meshVolume } from '../src/engine/mech3d/mesh.js';
 import { boxMesh, ok, done } from './mech3d-util.mjs';
 
@@ -141,4 +141,18 @@ ok(ledEll({ pitch: 7, count: 5, L: 100 }) === 7 && ledEll({ count: 5, L: 100 }) 
   const n = (prm) => refinedFor(box, F, bumpCenters(prm), 4, 0.5, 0).triangles.length / 3;
   ok(bumpCenters({ h: 0, centers: cs }).length === 0 && n({ h: 0, centers: cs }) === box.triangles.length / 3 && n({ h: 0.5, centers: cs }) > 10 * box.triangles.length / 3, `h 0 → 세분 없음(${n({ h: 0, centers: cs })}) · h 0.5 → ${n({ h: 0.5, centers: cs })}`);
 }
+{ // 입광면 보정 지도: 절점값 보간, 폭 밖 0, 닫힌 라인 주기, 얇은 칸은 덜 깎음
+  const kF = { ns: 3, nw: 3, v: [0, 0, 0, 1, 2, 3, 0, 0, 0] };
+  ok(fieldAt(kF, 50, 0, 100, 5) === 2 && fieldAt(kF, 25, 0, 100, 5) === 1 && fieldAt(kF, 50, -5, 100, 5) === 1 && fieldAt(kF, 50, 5, 100, 5) === 3, '지도 보간');
+  ok(fieldAt(kF, 50, 5 + FIELD_TAPER, 100, 5) === 0 && Math.abs(fieldAt(kF, 50, 5 + FIELD_TAPER / 2, 100, 5) - 1.5) < 1e-9, '폭 밖으로 0 까지 줄어듦');
+  const kC = { ns: 4, nw: 2, v: [1, 1, 2, 2, 3, 3, 4, 4] };
+  ok(fieldAt(kC, 87.5, 0, 100, 5, true) === 2.5 && fieldAt(kC, 100, 0, 100, 5, true) === 1, '닫힌 라인 주기');
+  const P = { path: [[0, 5], [40, 5]], halfW: 5, closed: false, L: 40 }, Hh = frameHeights(plate, frame, 0.5), th = fieldThickness(Hh, P, 5, 3);
+  ok(Math.abs(th[7] - 2) < 1e-6, `절점 두께 (${th[7]})`);
+  const cl = clampField({ ns: 5, nw: 3, v: new Array(15).fill(-5) }, th, 0.5, 3);
+  ok(Math.abs(cl.v[7] + 1.48) < 1e-9, `살두께까지만 깎음 (${cl.v[7]})`);
+  const prm = { dt: 0, h: 0, R: 1, centers: [], ...P, frame, kF: { ns: 5, nw: 3, v: new Array(15).fill(0.5) } }, m2 = deformPart(plate, frame, Hh, prm);
+  ok(lineVarH(prm) === 6 && hasField(prm) && !hasField({ kF: { v: [0] } }), '보정 지도가 있으면 세분');
+  let zmin = Infinity; for (let i = 2; i < m2.positions.length; i += 3) zmin = Math.min(zmin, m2.positions[i]);
+  ok(Math.abs(zmin + 0.5) < 1e-6, `아랫면만 이동 (${zmin})`); }
 done();

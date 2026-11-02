@@ -134,16 +134,28 @@ export function curveAt(k, t, closed = false) {
 }
 // 길이 곡선 kL(s/L) · 폭 곡선 kW(|w|/W½ — 가운데 0 → 가장자리 1) 중 0 아닌 값이 있는가
 export const hasCurve = (prm) => [prm?.kL, prm?.kW].some((k) => Array.isArray(k) && k.some((v) => v));
+// 입광면 보정 지도 kF(2026-11-02) — { ns, nw, v }: 길이 ns·폭 nw 절점의 아랫면(빛이 들어오는 면) 이동량(mm, v[i·nw+j]). 전역 변수·7점 곡선으로는 LED 피치 물결과 한쪽으로 치우친 분포를 못 잡았음.
+// 절점 s = L·i/(ns−1)(닫힌 라인 L·i/ns), w = −W…+W. 폭 범위 밖은 FIELD_TAPER 동안 0 으로 줄임(다리·가장자리는 그대로)
+export const FIELD_TAPER = 1.5;
+export const hasField = (prm) => !!prm?.kF?.v?.some((v) => v);
+export function fieldAt(kF, s, w, L, W, closed = false) {
+  const { ns, nw, v } = kF, aw = Math.abs(w), f = aw <= W ? 1 : aw >= W + FIELD_TAPER ? 0 : 1 - (aw - W) / FIELD_TAPER;
+  if (!f) return 0;
+  const x = closed ? (((s / L) % 1 + 1) % 1) * ns : Math.min(1, Math.max(0, s / L)) * (ns - 1), y = ((Math.min(W, Math.max(-W, w)) + W) / (2 * W)) * (nw - 1);
+  const i = closed ? Math.floor(x) % ns : Math.min(ns - 2, Math.floor(x)), j = Math.min(nw - 2, Math.floor(y)), a = closed ? x - Math.floor(x) : x - i, b = y - j, i1 = closed ? (i + 1) % ns : i + 1;
+  return f * ((1 - a) * ((1 - b) * v[i * nw + j] + b * v[i * nw + j + 1]) + a * ((1 - b) * v[i1 * nw + j] + b * v[i1 * nw + j + 1]));
+}
 // 아랫면 이동량 D = Δt − h·Σbump + e·endW(s) + c·min(1, (w/W½)²) + kL(s/L) + kW(|w|/W½). e·c·곡선이 없거나 경로가 없으면 (s,w) 생략(기존과 비트 동일)
 const disp = (x, y, prm) => {
   const { dt, h, R, centers } = prm; let b = 0;
   for (const c of centers) b += bump(Math.hypot(x - c[0], y - c[1]) / R);
   let D = dt - h * b;
-  const e = prm.e ?? 0, cc = prm.c ?? 0, cv = hasCurve(prm);
-  if ((e || cc || cv) && prm.path?.length) {
+  const e = prm.e ?? 0, cc = prm.c ?? 0, cv = hasCurve(prm), fd = hasField(prm);
+  if ((e || cc || cv || fd) && prm.path?.length) {
     const [s, w] = swOnPath(prm, x, y), L = pathIndex(prm.path, !!prm.closed).L;
     if (e) D += e * endW(s, L, prm.ell, prm.closed);
     if (cc) D += cc * Math.min(1, (w / prm.halfW) ** 2);
+    if (fd) D += fieldAt(prm.kF, s, w, L, prm.halfW, !!prm.closed);
     if (cv) { if (prm.kL?.length) D += curveAt(prm.kL, s / L, !!prm.closed); if (prm.kW?.length) D += curveAt(prm.kW, Math.min(1, Math.abs(w) / prm.halfW)); }
   }
   return D;
@@ -156,7 +168,28 @@ export function ledEll({ pitch = 0, count = 0, ss = null, L }) {
   return s.length > 1 && s.at(-1) > s[0] ? (s.at(-1) - s[0]) / (s.length - 1) : L / 4;
 }
 // e·c·곡선이 있으면 아랫면 세분 최대 변 max(R/2, 2 mm), 없으면 0(세분 안 함)
-export const lineVarH = (prm) => ((prm.e ?? 0) || (prm.c ?? 0) || hasCurve(prm) ? Math.max((prm.R ?? 0) / 2, 2) : 0);
+export const lineVarH = (prm) => (hasField(prm) ? Math.max(2, Math.min(6, prm.L / (prm.kF.ns - (prm.closed ? 0 : 1)))) : (prm.e ?? 0) || (prm.c ?? 0) || hasCurve(prm) ? Math.max((prm.R ?? 0) / 2, 2) : 0);
+
+// 보정 지도 절점별 하한 — 그 절점이 영향을 주는 칸의 가장 얇은 두께(얇은 다리·가장자리가 있어도 그 자리만 덜 깎고, 다른 곳은 그대로 깎게)
+export function fieldThickness(H, P, ns, nw) {
+  const { hf, cx, cy } = H, W = P.halfW, L = P.L, out = new Float64Array(ns * nw).fill(Infinity);
+  for (let j = 0; j < hf.ny; j++) for (let i = 0; i < hf.nx; i++) {
+    const k = j * hf.nx + i; if (!hf.mask[k]) continue;
+    const [s, w] = swOnPath(P, cx + hf.x0 + (i + 0.5) * hf.cell, cy + hf.y0 + (j + 0.5) * hf.cell);
+    if (Math.abs(w) >= W + FIELD_TAPER) continue;
+    const t = hf.zt[k] - hf.zb[k], x = P.closed ? (((s / L) % 1 + 1) % 1) * ns : Math.min(1, Math.max(0, s / L)) * (ns - 1), y = ((Math.min(W, Math.max(-W, w)) + W) / (2 * W)) * (nw - 1);
+    for (const a of [Math.floor(x), Math.floor(x) + 1]) for (const b of [Math.floor(y), Math.floor(y) + 1]) {
+      const ii = P.closed ? a % ns : Math.min(ns - 1, a), n = ii * nw + Math.min(nw - 1, b);
+      if (t < out[n]) out[n] = t;
+    }
+  }
+  return out;
+}
+// 절점값을 제약 안으로 — 살두께(minWall + 여유) 아래로 깎지 않고, 절댓값 ≤ Amax
+export function clampField(kF, thick, minWall, Amax = Infinity) {
+  const v = kF.v.map((x, n) => { const lo = Number.isFinite(thick[n]) ? Math.min(0, minWall + 0.02 - thick[n]) : -Amax; return Math.round(Math.min(Amax, Math.max(Math.max(lo, -Amax), x)) * 1e3) / 1e3; });
+  return { ...kF, v };
+}
 
 // 변형 메쉬(같은 삼각형·면 번호, 새 정점 위치). 부피는 다시 셈. 두께 하한 MIN_T(그 자리 D 를 자름)
 // 주의: zt·zb 는 높이맵 칸 값 — 기울어진 윗면은 칸 안 기울기만큼(≈ slope·cell/2t) 만 고정됨(평판 가정)
@@ -253,7 +286,8 @@ export function refineForBumps(mesh, F, centers, R, hMax, opts = {}) {
   const Q = [];   // 대표 정점별 관측 좌표(x, y)·윗면 여부
   const addQ = (c) => {
     const q = toFrame(F, [C[3 * c], C[3 * c + 1], C[3 * c + 2]]);
-    Q.push(q[0], q[1], opts.H && opts.H.at(q[0], q[1]).zt - q[2] < 1e-6 ? 1 : 0);
+    let top = 0; if (opts.H) { const { zt, zb } = opts.H.at(q[0], q[1]); top = zt - q[2] < Math.max(1e-6, 0.25 * (zt - zb)) ? 1 : 0; }   // 곡면 윗면도 윗면으로(칸 값과 정확히 같지 않음) — 전에는 세분돼 입광면 보정 메쉬가 62만 삼각형까지 늘었음
+    Q.push(q[0], q[1], top);
   };
   for (let c = 0; c < W.count; c++) addQ(c);
   const len2 = (a, b) => { const x = C[3 * a] - C[3 * b], y = C[3 * a + 1] - C[3 * b + 1], z = C[3 * a + 2] - C[3 * b + 2]; return x * x + y * y + z * z; };

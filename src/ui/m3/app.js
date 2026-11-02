@@ -46,7 +46,7 @@ import { candidateGrid } from '../../engine/mech3d/basis.js';
 import { ledAtS, clampRowGap, rowGapOptions } from '../../engine/mech3d/placement.js';
 import { virtualEmittersAt, stepRefEmitter } from '../../engine/mech3d/virtual-leds.js';
 import { rw4 } from '../../engine/mech3d/layout-solver.js';
-import { heightsFor, deformPart, refinedFor, minThickness, shapeVarRanges, pathFromLine, swOnPath, ledEll, lineVarH, splineInput, partFrame, bumpCenters } from '../../engine/mech3d/shape-opt.js';
+import { heightsFor, deformPart, refinedFor, minThickness, pathFromLine, swOnPath, ledEll, lineVarH, splineInput, partFrame, bumpCenters, fieldThickness, clampField } from '../../engine/mech3d/shape-opt.js';
 import { interferenceKeys, newInterference, travelDistance } from '../../engine/mech3d/clearance.js';
 import { scaleMoveMesh, isIdentityXform } from '../../engine/mech3d/xform.js';
 import { defaultChecks } from '../../engine/mech3d/defs.js';
@@ -669,7 +669,7 @@ const adPaths = new WeakMap();   // 라인·기준 좌표별 중심선 메모(�
 // ③ 형상 기준 좌표 = 대상 부품 윗면 방향(관측면이 기울거나 꺾여도 부품 두께를 바르게 — 2026-10-29). 원본 메쉬별 메모
 const SHAPE_F = new WeakMap();
 const shapeFrame = (base, line) => { let m = SHAPE_F.get(base); if (!m || m.line !== line) SHAPE_F.set(base, (m = { line, F: partFrame(base, line.frame) })); return m.F; };
-function shapeModFor({ dt, h, R, e = 0, c = 0, kL = null, kW = null }, M, line, F = line.frame) {   // kL·kW = 길이·폭 두께 곡선(제어점, mm)   // F = 형상 기준 좌표(shapeFrame — 대상 부품 윗면 방향)
+function shapeModFor({ dt, h, R, e = 0, c = 0, kL = null, kW = null, kF = null }, M, line, F = line.frame) {   // kL·kW = 길이·폭 두께 곡선(제어점, mm)   // F = 형상 기준 좌표(shapeFrame — 대상 부품 윗면 방향)
   const em = L.currentEmitters(M, line);
   const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
   const centers = em.map((x) => [dot(x.pos, F.u), dot(x.pos, F.v)]);
@@ -677,7 +677,7 @@ function shapeModFor({ dt, h, R, e = 0, c = 0, kL = null, kW = null }, M, line, 
   const fk = F.d.map((x) => x.toFixed(6)).join(); let P = PM.get(fk); if (!P) PM.set(fk, (P = pathFromLine(line, F)));   // 기준 좌표별
   const lv = M.light.kind === 'step' ? M.light.step?.virtual ?? null : null, lay = M.light.kind === 'manual' ? M.light.manual : lv && !lv.positions ? lv : null;   // 편집한 배치 = 발광점 간격으로
   const ell = ledEll({ pitch: lay?.pitch ?? 0, count: lay?.count ?? 0, ss: centers.map(([x, y]) => swOnPath(P, x, y)[0]), L: P.L });
-  return { frame: { u: F.u, v: F.v, d: F.d }, dt, h, R, e, c, ...(kL?.some((v) => v) ? { kL } : {}), ...(kW?.some((v) => v) ? { kW } : {}), centers, cell: 0.5, path: P.path, halfW: P.halfW, closed: P.closed, L: P.L, ell };
+  return { frame: { u: F.u, v: F.v, d: F.d }, dt, h, R, e, c, ...(kL?.some((v) => v) ? { kL } : {}), ...(kW?.some((v) => v) ? { kW } : {}), ...(kF?.v?.some((v) => v) ? { kF } : {}), centers, cell: 0.5, path: P.path, halfW: P.halfW, closed: P.closed, L: P.L, ell };
 }
 // 최종안의 LED 몸체가 기구 부품과 새로 겹치는 수(LED STEP) — 현재안에 이미 있던 겹침은 뺌. 0 = 없음
 function designClash(d, ctx, M0, rt, line) {
@@ -938,7 +938,8 @@ async function adRun(opt = {}) {
   const varTot = { height: (hInfo ? heightCandidates(hInfo.range, 7).length : 0) + 2, housing: (finishCands?.length ?? 0) + 2 }, varI = { height: 0, housing: 0 };   // 진행률 분모 = 1차 후보 + 정밀 2개
   const minWall = { ...defaultChecks(), ...(M0.checks ?? {}) }.minWall, t0 = performance.now();
   // ③ 변수 범위(Δt·h·R·e·c) — 엔진이 선별 → 격자 → 압축. 진행률 분모는 io.shapePlan 으로 받음(격자 크기 모르는 선별 중엔 최대 격자 27 로 어림)
-  const shapeRanges = stages.shape ? shapeVarRanges({ t0: (() => { const b = adBaseMesh(sp, ctx); return heightsFor(b, shapeFrame(b, line), 0.5).t0; })(), pitch: cur.count > 1 ? (cur.pitch > 0 ? cur.pitch : line.length / cur.count) : line.length, hasCenters: true }) : null;
+  // ③ 입광면 보정 지도 — 길이 절점 간격 = LED 피치의 ⅛(2~6 mm, LED 물결을 잡게), 폭 7 절점. 광자 = 압축 마지막 단계 예산(광 효율 반비례)
+  const shapeField = stages.shape ? (() => { const pitch = cur.count > 1 ? (cur.pitch > 0 ? cur.pitch : line.length / cur.count) : line.length, ds = Math.min(6, Math.max(2, pitch / 8)), sb = shapeBudget(currentVerified?.eff ?? snap0.photometry?.eff).schedule.at(-1); return { ns: Math.ceil(line.length / ds) + (line.closed ? 0 : 1), nw: 7, N: sb[1], maxMs: sb[2] }; })() : null;
   let shapeI = 0, shapeScr = 0, shapeTot = 1;
   const progress = (stage, frac, text) => {   // 전체 진행률(단계 무게) + 남은 시간
     if (A !== a || R.stopped) return;
@@ -977,6 +978,7 @@ async function adRun(opt = {}) {
     },
     async evalShapes(d, cands, N, maxMs = 2500) {   // 단계별 광자·시간 제한은 halving 일정(6만/20만/60만 · 2.5/4/6초)
       const out = [], base = adBaseMesh(sp, ctx), H = heightsFor(base, shapeFrame(base, line), 0.5);
+      let fieldT = null, t00 = null;
       const others = rt.parts.map((p, j) => (j === sp ? null : p)), lp = (M0.light.kind === 'step' && L.ledPartsNow(designScene(d, ctx).M, ctx.line)) || [];   // ② 가 바꾼 가상 배치 몸체 포함
       // 기준 겹침 = '변화 없음' 형상(같은 세분·변형 경로)의 겹침 — 원본 메쉬로 재면 케이스 벽에 닿아 있는 부품(접촉)은
       // 세분 메쉬가 늘 '새 간섭' 으로 잡혀 모든 후보가 탈락했음(2026-10-21)
@@ -985,8 +987,9 @@ async function adRun(opt = {}) {
       for (const c of cands) {
         if (R.stopped) break;
         progress('shape', Math.min(1, shapeI / shapeTot), shapeI < shapeScr ? `형상 변수 선별 ${shapeI + 1}/${shapeScr}` : `형상 후보 ${Math.min(shapeI + 1, shapeTot) - shapeScr}/${shapeTot - shapeScr}`); shapeI++;
+        if (c.kF) c.kF = clampField(c.kF, (fieldT ??= fieldThickness(H, shapeModFor({ dt: 0, h: 0, R: 1 }, designScene(d, ctx).M, line, shapeFrame(base, line)), c.kF.ns, c.kF.nw)), minWall, H.t0 / 2);   // 얇은 자리는 덜 깎음
         const { M: Md, parts } = designScene({ ...d, shape: { part: sp, ...c } }, ctx), mod = Md.parts[sp].shapeMod;
-        const thin = minThickness(H, mod) < minWall;   // 칸 중심 + LED 중심
+        const thin = minThickness(H, mod) < Math.min(minWall, (t00 ??= minThickness(H, { ...mod, dt: 0, h: 0, e: 0, c: 0, kL: null, kW: null, kF: null })) - 1e-3);   // 칸 중심 + LED 중심. 원래부터 얇은 자리(뾰족한 가장자리 등)는 더 얇아질 때만 탈락 — 전에는 변형 없는 안까지 탈락할 수 있었음
         const clash = !thin && newInterference(parts[sp], others, lp, before, 0.05) != null;   // 새 겹침 또는 기존보다 0.05 mm 넘게 깊어짐 — 찾는 즉시 멈춤(깊은 겹침도 빠르게)
         if (thin || clash) { out.push({ cand: c, ok: false, why: thin ? '살두께' : '간섭' }); A.optDash?.evals('shape', [{ label: shapeText(c), ok: false, why: thin ? '살두께' : '간섭' }]); continue; }
         // 같은 난수 비교(crn) — 형상 후보마다 같은 광자 난수(시드·청크·포트 고정)로 추적해 후보 차이만 남김(잡음 ↓). N 전부(시간 제한 없음)
@@ -1022,7 +1025,7 @@ async function adRun(opt = {}) {
     },
     async verify(d) {   // 정밀 재판정(현재안·최종안): 250만 광자(최소 150만, 20초까지) — 광자가 적으면 균일도(최저÷최고)가 잡음 때문에 낮게 나옴(6초 제한 때 0.69 vs 실제 0.78)
       const { M: Md, parts } = designScene(d, ctx);
-      const eff0 = currentVerified?.eff ?? snap0.photometry?.eff, r = await R.trace(adJob(Md, parts, ctx), { N: Math.ceil(Math.min(1e7, 2.5e6 * Math.max(1, 0.5 / (eff0 > 0 ? eff0 : 0.5)))), maxMs: 20000, minN: 1.5e6, batches: 10 });   // 효율이 낮으면 관측면에 닿는 빛이 적어 광자를 더
+      const eff0 = currentVerified?.eff ?? snap0.photometry?.eff, r = await R.trace(adJob(Md, parts, ctx), { N: Math.ceil(Math.min(1e7, 2.5e6 * Math.max(1, 0.5 / (eff0 > 0 ? eff0 : 0.5)))), maxMs: d.shape?.kF ? 60000 : 20000, minN: 1.5e6, batches: 10 });   // 효율이 낮으면 관측면에 닿는 빛이 적어 광자를 더. 입광면 보정 메쉬는 추적이 느려 같은 시간이면 잡음이 커져 현재안과 공정하게 비교가 안 됨 → 시간 더
       const stt = tallyStats(G, r.batches, obs);
       A.optDash?.evals('final', [{ label: verifyLabel(d), Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty }]);
       return { stats: stt, eff: adEff(r) };
@@ -1039,9 +1042,8 @@ async function adRun(opt = {}) {
   try {
     res = await runAutoDesign({
       stages, obs, G, line, current: cur, milkyMax: st.sel.milkyMax ?? null, housingProbe, finishText: (f) => finishText(f, reflCat()), nMax: Math.max(1, Math.min(60, Math.floor(line.length / 2))), pitchRange: null, stepMode: stp, currentIrregular: stages.leds && (() => { try { const q = pitchOf(L.currentEmitters(M0, line).map((e) => { const [s, w] = line.toSW(...line.to2D(e.pos)); return { s, w }; })); return !q.uniform; } catch { return false; } })(),
-      shapePart: sp, shapeRanges,
-      shapeStart: stages.shape && M0.parts[sp]?.shapeMod ? (({ dt, h, R, e, c, kL, kW }) => ({ dt, h, R, e, c, kL, kW }))(M0.parts[sp].shapeMod) : null,   // 이미 적용한 형상에서 이어서
-      ...(stages.shape ? (({ screen, schedule }) => ({ screen, schedule }))(shapeBudget(currentVerified?.eff ?? snap0.photometry?.eff)) : {}),   // ③ 광자 = 광 효율 반비례
+      shapePart: sp, shapeField,
+      shapeStart: stages.shape && M0.parts[sp]?.shapeMod ? (({ dt, h, R, e, c, kL, kW, kF }) => ({ dt, h, R, e, c, kL, kW, kF }))(M0.parts[sp].shapeMod) : null,   // 이미 적용한 형상에서 이어서
       lateral, rowsOptions: st.sel.oneRow ? [1] : [1, 2], currentVerified, heightRange: hInfo?.range ?? null, housingPart: hp, finishCands, ledsAtCurrentMilky: !!opt.added?.length,
     }, io);
   } catch (e) { if (A === a && !R.stopped) setStatus(`기구 최적화 실패: ${e.message}`); }
@@ -1056,7 +1058,7 @@ async function adRun(opt = {}) {
     st.result = { milkyRows: stages.milky ? milkyTable(res.steps ?? []) : null, targets: { len: obs.targetLen, wid: obs.targetWid }, design: res.best, feasible: res.feasible, reason: res.reason, hint: res.hint ?? null, shape: res.best.shape ?? null, screen: res.steps?.find((x) => x.stage === 'shapeScreen')?.gains ?? null, stepLeds: nStep, unchanged: !!res.unchanged, ctx, stages,
       added: opt.added ?? [], base: opt.base ?? null, clash: designClash(res.best, ctx, M0, rt, line),
       finish: stages.housing ? (() => { const c = { ...M0.parts[hp].finish, ...(M0.parts[hp].coating ? { coating: M0.parts[hp].coating } : {}) }; return { cur: c, best: res.best.finish ?? c }; })() : null, height: stages.height && hInfo ? { dz: res.best.dz ?? 0, gap: hInfo.gap } : null,
-      cur: { ...cur, shape: sm ? { dt: sm.dt, h: sm.h, R: sm.R, e: sm.e ?? 0, c: sm.c ?? 0 } : null, Ulen: C?.stats?.Ulen, Uwid: C?.stats?.Uwid, eff: C?.eff ?? NaN, profile: C?.stats?.profile ?? null },
+      cur: { ...cur, shape: sm ? { dt: sm.dt, h: sm.h, R: sm.R, e: sm.e ?? 0, c: sm.c ?? 0, kF: sm.kF ?? null } : null, Ulen: C?.stats?.Ulen, Uwid: C?.stats?.Uwid, eff: C?.eff ?? NaN, profile: C?.stats?.profile ?? null },
       best: { ...res.best, ...(stp ? { stepOrig: !res.best.stepVirt } : {}), Ulen: res.verified.stats.Ulen, Uwid: res.verified.stats.Uwid, eff: res.verified.eff, profile: res.verified.stats.profile ?? null } };
     const gd = res.unchanged ? res.steps?.find((x) => x.stage === 'guard') : null;   // 찾은 후보가 현재안보다 잡음 수준만큼만 나음 — 원하면 적용
     if (gd?.tried && gd.triedVerified?.stats) st.result.alt = { design: gd.tried, Ulen: gd.triedVerified.stats.Ulen, Uwid: gd.triedVerified.stats.Uwid, eff: gd.triedVerified.eff, milky: gd.tried.milky };

@@ -1,7 +1,7 @@
 // P4 자동설계 단계 실행기 — spec §1·§2. 순서 ② → ⑤ LED 높이 → ④ 케이스 면 → ① → ③(§2.3c), 체크 안 한 항목은 현재 값 고정. 계산은 io 가 맡는다(Worker / 시험 가짜).
 // ① 재가중 창은 기준 ±0.25(ESS 한계, spec §2.1). U(Milky) 는 단봉형(§2.1a) — 거친 탐색으로 최고점을 지나면 멈추고, 오르는 구간에서만 할선/이분으로 최소 통과 Milky. ② 는 기준(①·④ 함께면 거친 최고점 Milky ≤ 5·케이스 최고 등급, §2.2c)에서 최소 개수를 구한 뒤 ④·① 이 고른다.
 // io.milkyRows(d, ms, { precise }) — precise = 경계가 든 창의 재추적(광자 많이). 결과 { feasible, best(design), steps:[{stage, …}], reason, verified, current(현재안 io.verify), cancelled }
-import { hasCurve } from './shape-opt.js';
+import { hasCurve, hasField } from './shape-opt.js';
 import { milkyAxis } from './reweight.js';
 import { pickMilky, margin } from './milky-search.js';
 import { searchLeds } from './basis.js';
@@ -87,6 +87,53 @@ export async function refineShapeCurve(best, evalFn, obs, { nL = 7, nW = 3, A0 =
   }
   return { best: cur, tried };
 }
+// ③ 길이 방향 광량 오차(순수, 2026-11-02) — 절점 ns 의 (광량/평균 − 1), + = 밝음. 행 평균이라 칸 잡음이 작음. 빛이 안 닿는 절점 = 0
+export function fieldError(stats, G, ns) {
+  const p = Array.from(stats?.profile ?? []), f = p.filter(Number.isFinite), m = f.length ? f.reduce((x, y) => x + y, 0) / f.length : 0, out = new Array(ns).fill(0);
+  if (!(m > 0)) return out;
+  const dS = G.L / (ns - (G.closed ? 0 : 1)), sig = 0.75 * dS;
+  for (let i = 0; i < ns; i++) {
+    const x = i * dS; let wt = 0, val = 0;
+    p.forEach((v, r) => { if (!Number.isFinite(v)) return; let d = Math.abs((r + 0.5) * G.ds - x); if (G.closed) d = Math.min(d, G.L - d); if (d > 3 * sig) return; const g = Math.exp(-0.5 * (d / sig) ** 2); wt += g; val += g * (v / m - 1); });
+    if (wt > 1e-3) out[i] = val / wt;
+  }
+  return out;
+}
+// ③ 감도(순수) — 시험 이동(절점별 평균 dv) 전후 오차 변화의 회귀. slope < 0 = 두꺼우면 어두워짐, r = 상관(작으면 잡음). 실측 확산판: −2~3 %/mm
+export function fieldResponse(e0, e1, dv) {
+  const n = dv.length, y = e1.map((v, i) => v - e0[i]), mx = dv.reduce((t, v) => t + v, 0) / n, my = y.reduce((t, v) => t + v, 0) / n; let xx = 0, xy = 0, yy = 0;
+  for (let i = 0; i < n; i++) { xx += (dv[i] - mx) ** 2; xy += (dv[i] - mx) * (y[i] - my); yy += (y[i] - my) ** 2; }
+  return xx > 0 && yy > 0 ? { slope: xy / xx, r: xy / Math.sqrt(xx * yy) } : { slope: 0, r: 0 };
+}
+export const FIELD_MIN_R = 0.15;
+// ③ 입광면 보정(2026-11-02) — 측정한 길이 방향 광량대로 빛이 들어오는 면을 고침: 시험 이동 1회로 감도를 재고, 오차 ÷ 감도 × 배율 0.6·1·1.4 로 옮겨 다시 계산, 최선을 받아 반복.
+// 폭 방향은 보정하지 않음 — 폭 감도가 약하고(실측 1.6 %/mm, 구간마다 부호도 불안정) 넣으면 폭 균일도가 더 떨어졌음. 길이 보정도 크면(±3 mm) 폭이 떨어지므로 점수(길이·폭 중 낮은 쪽)로 크기가 정해짐.
+// 목표 도달 또는 두 번 연속 개선 없음이면 멈춤. evalFn(cands, N, ms) → [{ cand, ok, stats, eff }]. 반환 { best, tried, passes, sens }
+export async function refineShapeField(start, evalFn, obs, { G, ns, nw, iters = 4, A0 = 1.5, N, maxMs, cancelled = () => false } = {}) {
+  let cur = start, fails = 0, passes = 0, sens = null, scale = 1;
+  const tried = [], zero = new Array(ns * nw).fill(0), rd = (v) => Math.round(v * 1e3) / 1e3, baseOf = (c) => (c.kF?.v?.length === ns * nw ? c.kF.v : zero);
+  const make = (c, Er, g) => { const base = baseOf(c); return { ...c, kF: { ns, nw, v: base.map((v, n) => rd(v + g * Er[(n - (n % nw)) / nw])) } }; };
+  const take = (res) => { const ok = res.filter((r) => r.ok).sort((x, y) => shapeScore(y, obs) - shapeScore(x, obs))[0]; if (ok && shapeScore(ok, obs) > shapeScore(cur, obs) + 0.002) { cur = ok; fails = 0; return true; } fails++; return false; };
+  const done = () => ({ best: cur, tried, passes, sens });
+  if (margin(cur.stats, obs) >= 0 || cancelled()) return done();
+  const E0 = fieldError(cur.stats, G, ns), peak = Math.max(0, ...E0.map(Math.abs));
+  if (peak < 0.01) return done();
+  const [r] = await evalFn([make(cur.cand, E0, A0 / peak)], N, maxMs); tried.push(r); passes++;   // 시험 이동
+  if (!r?.ok) return done();
+  const b0 = baseOf(start.cand), rv = baseOf(r.cand), dv = E0.map((_, i) => { let t = 0; for (let j = 0; j < nw; j++) t += rv[i * nw + j] - b0[i * nw + j]; return t / nw; });
+  sens = fieldResponse(E0, fieldError(r.stats, G, ns), dv);
+  take([r]);
+  if (!(Math.abs(sens.r) >= FIELD_MIN_R) || !sens.slope) return done();
+  const gain = -1 / sens.slope;   // 오차 E 를 없애는 이동 = −E/slope
+  for (let it = 0; it < iters && !cancelled(); it++) {
+    if (margin(cur.stats, obs) >= 0 || fails >= 2) break;
+    const Er = fieldError(cur.stats, G, ns);
+    if (Math.max(0, ...Er.map(Math.abs)) < 0.01) break;
+    const res = await evalFn([0.6, 1, 1.4].map((f) => make(cur.cand, Er, f * scale * gain)), N, maxMs); tried.push(...res); passes++;
+    if (!take(res)) scale /= 2;
+  }
+  return done();
+}
 // 단계별 평가 후보 수 합(진행률 분모) — 실제로는 통과 후보가 적으면 더 적음
 export const halvingTotal = (n, schedule = SHAPE_SCHEDULE) => schedule.reduce((s, [keep], i) => { const k = i === 0 ? n : Math.min(keep, s.last); return { sum: s.sum + k, last: k }; }, { sum: 0, last: n }).sum;
 export async function halving(cands, evalFn, obs, schedule = SHAPE_SCHEDULE, cancelled = () => false) {
@@ -102,7 +149,7 @@ export async function halving(cands, evalFn, obs, schedule = SHAPE_SCHEDULE, can
   return last;
 }
 // 형상 변화 크기(mm) — 두께·포켓·끝단·가장자리 절댓값 + 곡선 최대 |값| (최소 변경 고르기용)
-export const shapeSize = (c) => ['dt', 'h', 'e', 'c'].reduce((t, k) => t + Math.abs(c?.[k] ?? 0), 0) + Math.max(0, ...(c?.kL ?? []).map(Math.abs)) + Math.max(0, ...(c?.kW ?? []).map(Math.abs));
+export const shapeSize = (c) => ['dt', 'h', 'e', 'c'].reduce((t, k) => t + Math.abs(c?.[k] ?? 0), 0) + Math.max(0, ...(c?.kL ?? []).map(Math.abs)) + Math.max(0, ...(c?.kW ?? []).map(Math.abs)) + Math.max(0, ...(c?.kF?.v ?? []).map(Math.abs));
 
 // 진행률 분모 — 선별 후보 수 + 압축 평가 수. 선별은 io.shapePlan?.({ screen, grid, total }) 로 먼저 알리고, 그 뒤 evalShapes 호출마다 후보 1개씩 센다
 export const shapeTotal = (nScreen, nGrid, schedule = SHAPE_SCHEDULE) => nScreen + halvingTotal(nGrid, schedule);
@@ -377,6 +424,24 @@ export async function runAutoDesign(cfg, io) {
   // 목표를 만족하는 가장 낮은 Milky 로 올림(결과 카드의 Milky 조정 표로 설계자가 효율과 맞바꿔 낮출 수 있음)
   let shapeCands = cfg.shapeCands, shapeNone = false, shapeZero = null;   // shapeZero = 선별의 '변경 없음' 결과(곡선 다듬기 출발점)
   const nCurve = cfg.curve === false ? 0 : 6 * (cfg.curve?.iters ?? 3);   // 곡선 다듬기 평가 수(진행률 분모)
+  if (stages.shape && cfg.shapeField) {   // ③ 입광면 보정
+    const f = cfg.shapeField, s0 = cfg.shapeStart ?? {}, st = { dt: s0.dt ?? 0, h: s0.h ?? 0, R: s0.R ?? 1, e: s0.e ?? 0, c: s0.c ?? 0, ...(s0.kL ? { kL: s0.kL } : {}), ...(s0.kW ? { kW: s0.kW } : {}), ...(s0.kF ? { kF: s0.kF } : {}) };
+    io.shapePlan?.({ screen: 0, grid: 0, total: 2 + 3 * (f.iters ?? 4) });
+    io.progress?.('shape', 0, '입광면 보정 — 광량 지도 측정');
+    const [r0] = await io.evalShapes(d, [st], f.N, f.maxMs);
+    if (stop()) return { cancelled: true };
+    if (!r0?.ok) { feasible = false; reason = '제약(살두께·간섭)을 만족하는 형상 후보가 없음 — 범위를 줄이세요'; }
+    else {
+      const r = await refineShapeField(r0, (cands, n, t) => io.evalShapes(d, cands, n, t), obs, { ...f, G: cfg.G, cancelled: stop });
+      if (stop()) return { cancelled: true };
+      const b = r.best, c = b.cand, none = ['dt', 'h', 'e', 'c'].every((k) => !(c[k] ?? 0)) && !hasCurve(c) && !hasField(c);
+      steps.push({ stage: 'shapeField', passes: r.passes, sens: r.sens, tried: r.tried.map((x) => ({ ok: x.ok, why: x.why ?? null, Ulen: x.stats?.Ulen ?? null, Uwid: x.stats?.Uwid ?? null, peak: Math.max(0, ...(x.cand.kF?.v ?? []).map(Math.abs)) })) });
+      steps.push({ stage: 'shape', best: b });
+      d = { ...d, shape: none ? null : { part: cfg.shapePart, ...c } };
+      if (margin(b.stats, obs) < 0) { feasible = false; reason = `형상 최적안도 목표 미달 — 길이 균일도 ${b.stats.Ulen.toFixed(2)}${b.stats.Uwid == null ? '' : ` · 폭 균일도 ${b.stats.Uwid.toFixed(2)}`}`; }
+      else { feasible = true; reason = ''; }
+    }
+  }
   if (stages.shape && cfg.shapeRanges) {   // ③ 1단계 선별 → 2단계 격자 (cfg.shapeCands 만 있으면 아래 기존 경로)
     const rg = cfg.shapeRanges, nScreen = 1 + 4 * Object.keys(rg).filter((k) => k !== 'R').length;
     io.shapePlan?.({ screen: nScreen, grid: null, total: null });

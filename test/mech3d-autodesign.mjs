@@ -1,5 +1,5 @@
 // P4 단계 실행기(가짜 io): node test/mech3d-autodesign.mjs
-import { pickLateral, runAutoDesign, shapeScore, halving, smoothU, halvingTotal, sameDesign, screenShapeVars, shapeTotal, pickVariant, refineShapeCurve, curveDirection, shapeSize } from '../src/engine/mech3d/autodesign.js';
+import { pickLateral, runAutoDesign, shapeScore, halving, smoothU, halvingTotal, sameDesign, screenShapeVars, shapeTotal, pickVariant, refineShapeCurve, refineShapeField, fieldError, fieldResponse, curveDirection, shapeSize } from '../src/engine/mech3d/autodesign.js';
 import { shapeVarRanges, gridCandidates, curveAt } from '../src/engine/mech3d/shape-opt.js';
 import { candidateGrid } from '../src/engine/mech3d/basis.js';
 import { milkyRows } from '../src/engine/mech3d/milky-search.js';
@@ -356,4 +356,23 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   const r1 = await run([1]);
   ok(r1.best.rows === 1 && r1.best.positions.every((q) => q.w === 0), `1열만: rows ${r1.best.rows}`);
 }
+{ // ③ 입광면 보정: 길이 오차 = 밝은 곳 +, 어두운 곳 −
+  const ns = 40, nw = 4, G = { ns, nw, ds: 1, cell: 1, w0: -2, L: 40, closed: false, valid: new Uint8Array(ns * nw).fill(1) };
+  const E = fieldError({ profile: Array.from({ length: ns }, (_, i) => (i < 20 ? 1.2 : 0.8)) }, G, 9);
+  ok(E[0] > 0.15 && E[8] < -0.15, `오차 부호 (${E[0].toFixed(3)}, ${E[8].toFixed(3)})`);
+  const R = fieldResponse([0.1, -0.1, 0.2, -0.2], [0.05, -0.05, 0.1, -0.1], [2, -2, 4, -4]);
+  ok(Math.abs(R.slope + 0.025) < 1e-9 && Math.abs(R.r + 1) < 1e-9, `감도 회귀 (${R.slope})`);
+  // 가짜 광학: 광량 = 기울기 − 0.1·이동. 밝은 곳을 두껍게(+) 해야 나아짐
+  const statsOf = (kF, k = 0.1) => { const profile = Array.from({ length: ns }, (_, i) => { const a = (i / (ns - 1)) * 8, i0 = Math.min(7, Math.floor(a)), v0 = kF?.v?.[i0 * 3 + 1] ?? 0, v1 = kF?.v?.[(i0 + 1) * 3 + 1] ?? 0; return 1.2 - (0.4 * i) / (ns - 1) - k * (v0 + (a - i0) * (v1 - v0)); }); return { profile, Ulen: Math.min(...profile) / Math.max(...profile), Uwid: 0.95, empty: false }; };
+  const ev = (k) => async (cands) => cands.map((c) => ({ cand: c, ok: true, stats: statsOf(c.kF, k), eff: 0.5 }));
+  const z = { dt: 0, h: 0, R: 1, e: 0, c: 0 }, st0 = { cand: z, ok: true, stats: statsOf(null), eff: 0.5 }, O = { targetLen: 0.9, targetWid: 0.6 }, P = { G, ns: 9, nw: 3, N: 1, maxMs: 1 };
+  const r = await refineShapeField(st0, ev(0.1), O, P);
+  ok(r.best.stats.Ulen > st0.stats.Ulen + 0.1 && r.best.cand.kF.v[1] > 0 && r.best.cand.kF.v[25] < 0 && r.sens.slope < 0, `보정: 밝은 곳 두껍게·어두운 곳 얇게로 균일도 ↑ (${st0.stats.Ulen.toFixed(2)} → ${r.best.stats.Ulen.toFixed(2)})`);
+  const rR = await refineShapeField(st0, ev(-0.1), O, P);
+  ok(rR.best.stats.Ulen > st0.stats.Ulen + 0.1 && rR.best.cand.kF.v[1] < 0 && rR.sens.slope > 0, `보정: 반대 부호도 찾음 (${rR.best.stats.Ulen.toFixed(2)})`);
+  const rN = await refineShapeField(st0, async (cands) => cands.map((c) => ({ cand: c, ok: false, why: '간섭' })), O, P);
+  ok(rN.best === st0 && rN.passes === 1, '시험 이동이 제약 위반이면 그대로');
+  let calls = 0; const flat = { cand: z, ok: true, stats: { profile: new Array(ns).fill(1), Ulen: 1, Uwid: 0.5, empty: false }, eff: 0.5 };
+  await refineShapeField(flat, async () => { calls++; return []; }, O, P);
+  ok(calls === 0, '길이 방향이 이미 고르면 평가 없음'); }
 done();

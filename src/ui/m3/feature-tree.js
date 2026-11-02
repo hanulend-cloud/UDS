@@ -28,7 +28,7 @@ export function treeNodes(M, S, lay, leds = []) {
   if (lightFree.length) { const g = { id: '_light', name: '광원으로 옮긴 부품', parts: lightFree, auto: true }; G.push(g); for (const i of lightFree) gOf.set(i, g); }
   const shown = new Set();
   // 도면에서 광원으로 옮긴 부품 = '→ 광원'(보기는 광원 그룹이 함) · 추적 제외 = '제외 ·' 접두
-  const partNode = (p, i, depth) => node(`part:${i}`, p.name, p.role === 'light' ? '→ 광원' : `${p.untrace ? '제외 · ' : ''}${partBadge(p)}`, true, p.role === 'light' ? 'led' : p.untrace ? 'off' : p.material.kind, p.role === 'light' ? undefined : hid.has(i) ? 'off' : 'on', { depth, strike: !!p.untrace });   // 빛 계산 제외 = 취소선
+  const partNode = (p, i, depth) => node(`part:${i}`, p.name, p.role === 'light' ? '→ 광원' : `${p.untrace ? '제외 · ' : ''}${p.shapeMod ? '형상 변경 · ' : ''}${partBadge(p)}`, true, p.role === 'light' ? 'led' : p.untrace ? 'off' : p.material.kind, p.role === 'light' ? undefined : hid.has(i) ? 'off' : 'on', { depth, strike: !!p.untrace });   // 빛 계산 제외 = 취소선
   if (!fold('parts')) M.parts.forEach((p, i) => {
     const g = gOf.get(i);
     if (!g) { partNode(p, i, 1); return; }
