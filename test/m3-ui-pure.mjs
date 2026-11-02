@@ -470,3 +470,7 @@ done();
   const { defaultEqual } = await import('../src/ui/m3/results-panel.js');
   const G = (L, nw, cell) => ({ L, nw, cell, ns: 1, w0: 0, valid: new Uint8Array(nw).fill(1) });
   console.log(defaultEqual(G(116, 11, 1.5)) === true && defaultEqual(G(400, 4, 1.1)) === false && defaultEqual(undefined) === true ? 'PASS 큰 창 2D 기본 비율' : (process.exitCode = 1, 'FAIL 큰 창 2D 기본 비율')); }
+{ // Excel 용 CSV(2026-11-02): 탭 → 쉼표, CRLF, 쉼표·따옴표 칸은 묶음, 빈칸 유지
+  const { toCsv } = await import('../src/ui/m3/results-panel.js');
+  const c = toCsv('# 이름 a,b\ns\t값\t\n1.5\t"x"\t2.00');
+  console.log(c === '"# 이름 a,b"\r\ns,값,\r\n1.5,"""x""",2.00' ? 'PASS CSV 변환' : (process.exitCode = 1, `FAIL CSV 변환 ${JSON.stringify(c)}`)); }

@@ -182,7 +182,12 @@ export function cropFinite(curves, x0, x1) {
   const dx = (x1 - x0) / n;
   return { curves: curves.map((c) => ({ ...c, ys: Array.from(c.ys).slice(a, b + 1) })), x0: x0 + a * dx, x1: x0 + (b + 1) * dx };
 }
-// 2D 분포 TXT(탭 구분) — 머리말(#) + 첫 줄 s 칸 중심(mm), 다음 줄부터 w 칸 중심(위 = +w 부터)과 값(최대 대비 %, 관측면 밖 = 빈칸) — 순수
+// 표 문자열(탭 구분) → Excel 용 CSV(쉼표 구분, 줄바꿈 CRLF, 쉼표·큰따옴표가 든 칸은 따옴표로 묶음) — 순수. BOM 은 저장할 때 붙임(더블클릭으로 한글·열이 바로 열림, 2026-11-02)
+export function toCsv(text) {
+  const q = (c) => (/[",\r\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c);
+  return text.split('\n').map((l) => l.split('\t').map(q).join(',')).join('\r\n');
+}
+// 2D 분포 표(탭 구분, 저장 때 toCsv) — 머리말(#) + 첫 줄 s 칸 중심(mm), 다음 줄부터 w 칸 중심(위 = +w 부터)과 값(최대 대비 %, 관측면 밖 = 빈칸) — 순수
 export function mapTxt(G, map, { name = '', quality = '', photons = null, noise = null } = {}) {
   let mx = 0; for (let k = 0; k < map.length; k++) if (G.valid[k] && map[k] > mx) mx = map[k];
   const V = mapViewG(G);   // 그림과 같은 w 범위(관측면 밖 빈 줄 뺌)
@@ -205,7 +210,7 @@ export function lineTxt(G, map, pin, { name = '', quality = '', photons = null }
   let mx = 0; for (let k = 0; k < map.length; k++) if (G.valid[k] && map[k] > mx) mx = map[k];
   const f = (v) => String(+v.toFixed(3)), val = (k) => (G.valid[k] && mx > 0 ? ((map[k] / mx) * 100).toFixed(2) : ''), V = mapViewG(G);
   const sC = (i + 0.5) * G.ds, wC = G.w0 + (j + 0.5) * G.cell;
-  const out = ['# UDS 선택 선 원자료 — 평활 없음 · 값 = 2D 최대 대비 %(2D TXT 와 같은 기준) · 빈칸 = 관측면 밖',
+  const out = ['# UDS 선택 선 원자료 — 평활 없음 · 값 = 2D 최대 대비 %(2D CSV 와 같은 기준) · 빈칸 = 관측면 밖',
     `# ${name ? `이름 ${name} · ` : ''}선택 점 s ${f(sC)} mm · w ${f(wC)} mm (칸 ${f(G.ds)} × ${f(G.cell)} mm)${quality ? ` · 화질 ${quality}` : ''}${photons ? ` · 광자 ${photons}` : ''}`,
     '', `# 길이 방향 — w = ${f(wC)} mm 줄`, 's (mm)\t값 (%)'];
   for (let a = 0; a < G.ns; a++) out.push(`${f((a + 0.5) * G.ds)}\t${val(a * G.nw + j)}`);
@@ -379,9 +384,9 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
   q('quality').onchange = (e) => onQuality?.(e.target.value);
   q('leak').onclick = () => onLeak?.();
   // 표시 = 원자료 그대로(2026-10-30) — 1D 평활은 LED 리플 높이를 깎아 그림이 TXT 와 달랐음(예: 76~100% → 81~96%). 2D 는 칸 중심 값 그대로, 칸 사이만 선형 보간
-  const saveTxt = (txt, tag) => {
-    const nm = String(fileName() ?? 'uds'), a = document.createElement('a'), url = URL.createObjectURL(new Blob(['\ufeff' + txt], { type: 'text/plain;charset=utf-8' }));
-    a.href = url; a.download = `${nm.replace(/[\\/:*?"<>|]/g, '_')}-${tag}.txt`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  const saveTxt = (txt, tag) => {   // 저장 형식 = Excel 용 CSV
+    const nm = String(fileName() ?? 'uds'), a = document.createElement('a'), url = URL.createObjectURL(new Blob(['\ufeff' + toCsv(txt)], { type: 'text/csv;charset=utf-8' }));
+    a.href = url; a.download = `${nm.replace(/[\\/:*?"<>|]/g, '_')}-${tag}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   const txt2D = () => {
     const sn = last?.snap, st = sn?.stats; if (!st || st.empty || !sn.G) return;
@@ -425,8 +430,8 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     const eq0 = defaultEqual(VIEW.map?.G);
     const ov = document.createElement('div');
     ov.className = 'm3-big'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', '광량 분포 2D·1D');
-    const cell = (k) => `<div class="m3-big-c" data-k="${k}"><div class="m3-big-ct"><b>${TITLE[k]}</b><span class="m3-big-sp"></span>${k === 'map' ? `<label class="m3-big-eq"><input type="checkbox" data-big-eq${eq0 ? ' checked' : ''}> 실제 비율</label>` : ''}<button type="button" data-big-txt="${k}" title="${k === 'map' ? '2D 분포 표(탭 구분, 최대 대비 %)' : `${TITLE[k]} 표(원자료 %, 지정 점 곡선 포함)`}">TXT</button><button type="button" data-big-one="${k}">⤢ 이 그림만</button></div><canvas class="m3-big-cv" data-big-cv="${k}"></canvas></div>`;
-    ov.innerHTML = `<div class="m3-big-in"><div class="m3-big-hd"><b>광량 분포 — 2D · 1D</b><span class="mut" style="font-size:12px">2D 클릭 = 그 점 기준 1D 곡선(주황)</span><span class="m3-big-sp"></span><button type="button" data-pin-txt title="2D 에서 고른 점을 지나는 길이·폭 방향 원자료(평활 없음, 2D 최대 대비 %)">선택 선 TXT</button><button type="button" data-big-close>닫기 (Esc)</button></div>
+    const cell = (k) => `<div class="m3-big-c" data-k="${k}"><div class="m3-big-ct"><b>${TITLE[k]}</b><span class="m3-big-sp"></span>${k === 'map' ? `<label class="m3-big-eq"><input type="checkbox" data-big-eq${eq0 ? ' checked' : ''}> 실제 비율</label>` : ''}<button type="button" data-big-txt="${k}" title="${k === 'map' ? '2D 분포 표(탭 구분, 최대 대비 %)' : `${TITLE[k]} 표(원자료 %, 지정 점 곡선 포함)`}">CSV</button><button type="button" data-big-one="${k}">⤢ 이 그림만</button></div><canvas class="m3-big-cv" data-big-cv="${k}"></canvas></div>`;
+    ov.innerHTML = `<div class="m3-big-in"><div class="m3-big-hd"><b>광량 분포 — 2D · 1D</b><span class="mut" style="font-size:12px">2D 클릭 = 그 점 기준 1D 곡선(주황)</span><span class="m3-big-sp"></span><button type="button" data-pin-txt title="2D 에서 고른 점을 지나는 길이·폭 방향 원자료(평활 없음, 2D 최대 대비 %)">선택 선 CSV</button><button type="button" data-big-close>닫기 (Esc)</button></div>
       <div class="m3-big-grid">${cell('map')}<div class="m3-big-row">${cell('prof')}${cell('wprof')}</div></div></div>`;
     document.body.appendChild(ov);
     const cvs = Object.fromEntries(KINDS.map((k) => [k, ov.querySelector(`[data-big-cv="${k}"]`)]));
@@ -492,7 +497,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     const FG = fullG(G), mapF = st.mapAll ?? st.map, pp = pin ? pointProfiles(FG, mapF, pi, pj) : null, ring = G.closed ? '원주' : '길이', rad = G.closed ? '반경(폭)' : '폭';
     VIEW.map = { G: FG, map: mapF, leds, pin, smooth: true };
     VIEW.prof = plotView([{ ys: Array.from(st.profile, (v) => v / pm), color: '#1f6fd1', name: '폭 평균', band: st.relNoise ?? 0 }, ...(pp ? [{ ys: Array.from(pp.along), color: PIN_COLOR, name: `지정 점 w=${pin.w.toFixed(1)}` }] : [])], observe.targetLen, { x0: 0, x1: G.L, xl: 's (mm)', leds: leds.map((p) => p.s) });
-    q('psub').innerHTML = `${pin ? `폭 평균 + 지정 점(주황, ${ring} 방향) · 같은 점 다시 클릭 = 해제 <button type="button" class="m3-pintxt" data-pin-txt title="고른 점을 지나는 길이·폭 방향 원자료(평활 없음, 2D 최대 대비 %)">선택 선 TXT</button>` : '폭 평균 · 2D 클릭 = 그 점 기준 곡선 추가'} · 옅은 띠 = 계산 잡음 범위`;
+    q('psub').innerHTML = `${pin ? `폭 평균 + 지정 점(주황, ${ring} 방향) · 같은 점 다시 클릭 = 해제 <button type="button" class="m3-pintxt" data-pin-txt title="고른 점을 지나는 길이·폭 방향 원자료(평활 없음, 2D 최대 대비 %)">선택 선 CSV</button>` : '폭 평균 · 2D 클릭 = 그 점 기준 곡선 추가'} · 옅은 띠 = 계산 잡음 범위`;
     paint('map', q('map')); paint('prof', q('prof'));
     gauge('ul', st.Ulen, observe.targetLen);
     if (pp && (st.Uwid == null || !st.win)) {   // 폭 판정이 없어도 지정 점의 폭(원형 = 반경) 방향 곡선은 보여 줌
