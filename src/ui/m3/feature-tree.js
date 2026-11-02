@@ -68,6 +68,13 @@ export function rangeSelect(order, from, to) {
   if (i < 0 || j < 0) return [to];
   return order.slice(Math.min(i, j), Math.max(i, j) + 1);
 }
+// 빛 계산 제외 메뉴 항목(순수) — ids = 대상 부품 번호. 광원으로 옮긴 부품은 뺌. 모두 제외돼 있으면 [다시 포함], 아니면 [제외](여러 개 = 한꺼번에)
+export function untraceItem(M, ids) {
+  const list = ids.filter((i) => M.parts[i] && M.parts[i].role !== 'light');
+  if (!list.length) return null;
+  const off = list.every((i) => M.parts[i].untrace), who = list.length > 1 ? `선택한 부품 ${list.length}개 ` : '';
+  return { k: 'untrace', label: off ? `${who}빛 계산에 다시 포함` : `${who}빛 계산에서 제외`, ids: list, on: !off };
+}
 // 트리 우클릭 메뉴 항목(순수) — S.multi·S.node(우클릭한 노드가 선택에 포함된 뒤) 기준. k: group | out | ungroup | rename | eye
 export function treeCtxItems(M, S, id) {
   const parts = [...new Set([...(S.multi ?? []), ...(S.node?.startsWith('part:') ? [S.node] : [])])].filter((x) => x.startsWith('part:')).map((x) => +x.slice(5));
@@ -79,15 +86,18 @@ export function treeCtxItems(M, S, id) {
   if (id.startsWith('group:') && id !== 'group:_light') out.push({ k: 'ungroup', label: '그룹 해제(부품은 그대로)' });
   if (id.startsWith('part:') || (id.startsWith('group:') && id !== 'group:_light')) out.push({ k: 'rename', label: '이름 바꾸기' });
   if (id.startsWith('part:') || id.startsWith('group:')) out.push({ k: 'eye', label: '보이기 / 숨기기' });
+  const ut = id.startsWith('part:') ? untraceItem(M, parts) : id.startsWith('group:') ? untraceItem(M, groupMembers(M, id.slice(6))) : null;
+  if (ut) out.push(ut);
   return out;
 }
 // 3D 우클릭 메뉴 항목(순수, 2026-11-02) — part = 누른 기구 부품 | null, isLed = LED 를 누름, selPart = 트리에서 고른 부품(숨겨져 있으면 [다시 보기])
-export function viewCtxItems({ part = null, isLed = false, ledRank = null, selPart = null, multi = [], hidden = [], hideLeds = false, hiddenLeds = [], names = [] }) {
+export function viewCtxItems({ part = null, isLed = false, ledRank = null, selPart = null, multi = [], hidden = [], hideLeds = false, hiddenLeds = [], names = [], untrace = null }) {
   const out = [], nm = (i) => names[i] ?? `부품 ${i + 1}`;
   if (part != null) {
     if (multi.length > 1 && multi.includes(part)) out.push({ k: 'hideSel', label: `선택한 부품 ${multi.length}개 숨기기` });
     else out.push({ k: 'hide', label: `${nm(part)} 숨기기` });
     out.push({ k: 'only', label: `${nm(part)}만 보기` });
+    if (untrace) out.push(untrace);
   }
   if (isLed && ledRank != null) out.push({ k: 'led1', label: `LED ${ledRank} 숨기기` });
   if (isLed) out.push({ k: 'led', label: ledRank != null ? 'LED 모두 숨기기' : 'LED 숨기기' });
@@ -173,6 +183,7 @@ export function renderFeatureTree(el, M, S, h, lay, leds) {
       showCtxMenu(el.ownerDocument, e.clientX, e.clientY, items, (k) => {
         if (k === 'rename') { const lb = [...el.querySelectorAll('[data-node]')].find((x) => x.dataset.node === id)?.querySelector('[data-lbl]'); if (lb) startRename(lb); }
         else if (k === 'eye') B.h?.onEye?.(id, false);
+        else if (k === 'untrace') B.h?.onUntrace?.(treeCtxItems(B.M, B.S, id).find((x) => x.k === 'untrace'));
         else B.h?.onTreeAct?.(k);
       }, el.closest('#mech3d-wrap') ?? el.ownerDocument.body);
     });

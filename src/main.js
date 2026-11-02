@@ -28,6 +28,7 @@ import { migrateMech3d } from './engine/mech3d/defs.js';
 import * as m3app from './ui/m3/app.js';
 import { mountMenubar } from './ui/menubar.js';
 import { APP_VERSION, APP_DATE } from './version.js';
+import { createProjectFile, projectFileLabel } from './ui/project-file.js';
 import { createTabLock, openChannel } from './ui/tab-lock.js';
 
 const LS_KEY = 'uds.spec.v11';
@@ -216,10 +217,10 @@ function clearShape() {
 }
 
 // ---- 상단 메뉴(파일·편집·보기·계산·설정·도움말) ----
-function resetAll() { spec = structuredClone(DEFAULT_SPEC); markSoloReset(); mount(); m3app.unmount(); m3app.resetWorkers(); applyMode(); schedule(); }
+function resetAll() { projFile?.clear(); spec = structuredClone(DEFAULT_SPEC); markSoloReset(); mount(); m3app.unmount(); m3app.resetWorkers(); applyMode(); schedule(); }
 function newProject() {
-  if (!confirm('지금 프로젝트를 닫고 예제 프로젝트로 새로 시작할까요?\n(저장하지 않은 변경은 사라집니다 — 먼저 [파일 › 프로젝트 저장] 권장)')) return;
-  m3app.unmount(); spec.mech3d = null; spec.mech3dPending = null; spec.mode = 'mech3d'; persist(); applyMode(); loadSampleProject(false);
+  if (!confirm('지금 프로젝트를 닫고 예제 프로젝트로 새로 시작할까요?\n(파일로 저장하지 않은 작업은 사라집니다 — 먼저 [파일 › 다른 이름으로 저장] 권장)')) return;
+  projFile?.clear(); m3app.unmount(); spec.mech3d = null; spec.mech3dPending = null; spec.mode = 'mech3d'; persist(); applyMode(); loadSampleProject(false);
 }
 const GUIDE = `사용 순서 (3D 기구 설계)
 1. 파일 › 3D 기구 STEP 불러오기 — 케이스·도광판·커버 등 모든 부품
@@ -227,7 +228,7 @@ const GUIDE = `사용 순서 (3D 기구 설계)
 3. 파일 › LED STEP 불러오기 → LED 하나의 발광면 클릭(편집 › LED 발광면 지정)
 4. 편집 › 관측면 지정 → 빛을 보는 면 클릭 — 계산이 시작됨
 5. 계산 › 기구 최적화 — 바꿀 항목을 체크하고 실행 → 결과 비교 후 [적용]
-6. 파일 › 프로젝트 저장(JSON)으로 작업을 보관`;
+6. 파일 › 다른 이름으로 저장 — 고른 파일에 이후 변경이 실시간 저장됨(되돌리기 Ctrl+Z)`;
 // 소재·표면 DB 꾸러미(실측 Milky · 반사 소재 · 투명 측정값의 사용자 항목) — 다른 PC 로 옮기기
 function exportMaterials() {
   const text = bundleJson({ milky: materialDb()?.exportJson('user'), reflect: reflectDb?.exportJson('user'), clear: loadClear() });
@@ -249,8 +250,9 @@ function setupMenubar() {
   const menus = [
     { label: '파일', items: [
       { id: 'new', label: '새 프로젝트 (예제에서 시작)' },
-      { id: 'open-json', label: '프로젝트 열기 (JSON)…' },
-      { id: 'save-json', label: '프로젝트 저장 (JSON 내보내기)' },
+      { id: 'open-json', label: '프로젝트 열기…' },
+      { id: 'save-json', label: '프로젝트 저장', key: 'Ctrl+S' },
+      { id: 'save-as', label: '다른 이름으로 저장…', key: 'Ctrl+Shift+S' },
       '-',
       { id: 'import-mech', label: '3D 기구 STEP 불러오기…' },
       { id: 'import-led', label: 'LED STEP 불러오기…', enabled: m3 },
@@ -263,6 +265,9 @@ function setupMenubar() {
       { id: 'reset', label: '기본값으로 초기화…' },
     ] },
     { label: '편집', items: [
+      { id: 'undo', label: '되돌리기', key: 'Ctrl+Z', enabled: () => m3app.canUndo() },
+      { id: 'redo', label: '다시 실행', key: 'Ctrl+Y', enabled: () => m3app.canRedo() },
+      '-',
       { id: 'deselect', label: '선택 해제', key: 'Esc', enabled: m3 },
       { id: 'led-pick', label: 'LED 발광면 지정', enabled: m3 },
       { id: 'obs-pick', label: '관측면 지정', enabled: m3 },
@@ -295,8 +300,9 @@ function setupMenubar() {
   ];
   const run = (id) => {
     if (id === 'new') return newProject();
-    if (id === 'open-json') return $('#file-import').click();
-    if (id === 'save-json') return exportJson();
+    if (id === 'open-json') return openProject();
+    if (id === 'save-json') { m3app.flush(); return projFile.save(); }
+    if (id === 'save-as') { m3app.flush(); return projFile.saveAs(); }
     if (id === 'mat-export') return exportMaterials();
     if (id === 'mat-import') return $('#file-materials').click();
     if (id === 'import-mech') return $('#file-mech3d').click();
@@ -773,21 +779,50 @@ function setupZoom() {
 
 // ---- 저장/불러오기 ----
 // 다른 탭에서 편집 중이면(tabLock 읽기 전용) 쓰지 않는다 — 3D 저장소의 디바운스 저장·flush 도 이 함수를 거친다
-function persist() { tabLock.write('spec', () => { try { localStorage.setItem(LS_KEY, JSON.stringify(spec)); } catch {} }); }
+function persist() { tabLock.write('spec', () => { try { localStorage.setItem(LS_KEY, JSON.stringify(spec)); } catch {} projFile?.touched(); }); }
 function load() { try { return JSON.parse(localStorage.getItem(LS_KEY)); } catch { return null; } }
-function exportJson() {
+function downloadJson(text, name) {
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(spec, null, 2)], { type: 'application/json' }));
-  a.download = 'uds-spec.json'; a.click(); URL.revokeObjectURL(a.href);
+  a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+  a.download = name; a.click(); URL.revokeObjectURL(a.href);
 }
-function importJson(e) {
+function applyProjectText(text) {
+  spec = JSON.parse(text); migrate(spec);
+  // 지금 메쉬와 다른 기구면 버리지 않고 보관(안내 띠) — 같은 기구 STEP 을 다시 불러오면 복원
+  if (spec.mech3d && !(getMech3d() && matchesPending(spec.mech3d, partInfo(getMech3d().raw.parts)))) shelveMech3d();
+  persist(); mount(); m3app.unmount(); applyMode(); schedule();
+}
+function importJson(e) {   // 파일 API 가 없는 브라우저 — 이름만 표시, 저장은 다운로드
   const f = e.target.files[0]; if (!f) return;
   const r = new FileReader();
-  r.onload = () => { try { spec = JSON.parse(r.result); migrate(spec);
-    // 지금 메쉬와 다른 기구면 버리지 않고 보관(안내 띠) — 같은 기구 STEP 을 다시 불러오면 복원
-    if (spec.mech3d && !(getMech3d() && matchesPending(spec.mech3d, partInfo(getMech3d().raw.parts)))) shelveMech3d();
-    persist(); mount(); m3app.unmount(); applyMode(); schedule(); } catch { alert('JSON 파싱 실패'); } };
+  r.onload = () => { try { applyProjectText(r.result); projFile?.opened(f.name); } catch { alert('JSON 파싱 실패'); } };
   r.readAsText(f);
+  e.target.value = '';
+}
+async function openProject() {
+  try { if (await projFile.open()) return; } catch { alert('JSON 파싱 실패'); return; }
+  $('#file-import').click();
+}
+// 프로젝트 파일 이름·저장 상태(머리) + 탭 제목
+let projFile = null;
+function renderProjFile(st) {
+  const el = $('#proj-file'); if (!el) return;
+  const d = projectFileLabel(st);
+  el.dataset.kind = d.kind; el.title = d.title ?? (st.hasFile ? '이 파일에 실시간 저장됨' : '파일 › 다른 이름으로 저장 — 고른 파일에 실시간 저장');
+  el.querySelector('[data-pf="name"]').textContent = d.name;
+  el.querySelector('[data-pf="st"]').textContent = d.status;
+  const b = el.querySelector('[data-pf="act"]'); b.hidden = !d.action; b.textContent = d.actionText ?? ''; b.onclick = () => { m3app.flush(); if (d.action === 'regrant') projFile.regrant(); else projFile.saveAs(); };
+  document.title = `${d.name} — Uniform Design Simulator`;
+}
+function setupProjectFile() {
+  const mechName = () => String(spec?.mech3d?.name ?? spec?.mech3dPending?.name ?? 'uds-project').replace(/\.(stp|step)$/i, '');
+  projFile = createProjectFile({ getText: () => JSON.stringify(spec, null, 2), onOpen: (text) => applyProjectText(text), onState: renderProjFile, suggest: () => `${mechName()}.json`, download: downloadJson });
+  window.addEventListener('keydown', (e) => {   // 어느 칸에 있어도(브라우저의 페이지 저장 대신)
+    if (!(e.ctrlKey || e.metaKey) || e.code !== 'KeyS') return;
+    e.preventDefault(); m3app.flush();
+    if (e.shiftKey) projFile.saveAs(); else projFile.save();
+  });
+  projFile.restore();
 }
 
 function mount() {
@@ -910,6 +945,7 @@ mount();
 setupZoom();
 setupHeatPick();
 setupMenubar();
+setupProjectFile();
 window.addEventListener('resize', schedule);
 // 3D 모드 디바운스 저장 마저 쓰기(탭 닫기·새로고침·모바일 백그라운드)
 window.addEventListener('pagehide', () => m3app.flush());

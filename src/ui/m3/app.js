@@ -5,6 +5,7 @@
 // 점진 계산 갱신(1초마다)은 store 알림 없이 결과 패널·상태 띠·색지도만 다시 그린다(입력 중 속성 패널이 다시 그려지지 않게).
 import { getMech3d, getLedMesh, setLedMesh, saveLedIDB, applyPartMods, redetectContacts } from '../../engine/mech3d/runtime.js';
 import { createMonitor } from './monitor.js';
+import { createHistory } from './history.js';
 import { mountSplit } from './pane-split.js';
 import { findLeds, supportPart, emitterFaceAway, autoLedGroup } from '../../engine/mech3d/led-detect.js';
 import { loadClear, saveClear, clearExportJson, clearImport, parseMaterialFile } from '../../model/material-io.js';
@@ -13,13 +14,13 @@ import { lineFromData, lightData, obsDirection } from '../../engine/mech3d/line.
 import { tallyGeometry, tallyStats, autoCells } from '../../engine/mech3d/tally.js';
 import { bounds } from '../../engine/mech3d/mesh.js';
 import { runGeomChecks, checkLeak } from '../../engine/mech3d/checks.js';
-import { createStore, PHYSICS, GEOM_CHECK } from './store.js';
+import { createStore, PHYSICS, GEOM_CHECK, PERSIST_TAGS } from './store.js';
 import { createProgressive } from './progressive.js';
 import { createPool } from './pool.js';
 import * as L from './leds.js';
 import { buildObsOverlay, cellColors, extractFaces } from './colormap.js';
 import { mountCommandBar } from './command-bar.js';
-import { renderFeatureTree, toggleVisibility, makeGroup, ungroup, groupMembers, rangeSelect, removeFromGroups, viewCtxItems, showCtxMenu, toggleLed, ledFoldDefault } from './feature-tree.js';
+import { renderFeatureTree, toggleVisibility, makeGroup, ungroup, groupMembers, rangeSelect, removeFromGroups, viewCtxItems, showCtxMenu, toggleLed, ledFoldDefault, untraceItem } from './feature-tree.js';
 import { mountSplitter, mountDockSplitter, mountFacSplitter } from './splitter.js';
 import { createOptDash, createSimDash } from './opt-dash.js';
 import { geomQuery, geomLimit, geomClash } from './geom-client.js';
@@ -94,10 +95,14 @@ export function command(id) {
     case 'calc': h.onToggleCalc(); break;
     case 'auto': adSetOpen(true); break;
     case 'export-mech': exportMechStep(); break;
+    case 'undo': histStep('undo'); break;
+    case 'redo': histStep('redo'); break;
     default: return false;
   }
   return true;
 }
+export const canUndo = () => !!A?.hist?.canUndo();
+export const canRedo = () => !!A?.hist?.canRedo();
 export const theme = () => { try { return localStorage.getItem('uds.m3.theme') === 'dark' ? 'dark' : 'light'; } catch { return 'light'; } };
 // 3D 기구 STEP 내보내기 — 지금 부품 메쉬(크기·위치·형상 수정 반영)를 부품마다 솔리드로(삼각형 근사 — 수정 안 한 부품은 원본 STEP 이 더 정확)
 let mechStepBusy = false;
@@ -188,6 +193,10 @@ export async function mount(ctx) {
   a.cmd = mountCommandBar($('#m3-cmd'), cmdHandlers());
   if (monitor?.isOpen()) $('#m3-cmd [data-c="opt"]')?.classList.add('on');
   a.unsub = store.subscribe(onChange);
+  // 되돌리기(Ctrl+Z): 저장 상태 + 보기 켜기/끄기 + 고정 항목 — 바뀐 때만 한 칸
+  rememberLedMesh();
+  a.hist = createHistory({ capture: histCapture, restore: histRestore });
+  a.unsubHist = store.subscribe((tag) => { if (HIST_TAGS.has(tag) && A === a) a.hist.note(); });
   a.keydown = onKey; window.addEventListener('keydown', onKey);
   const view = await getView();
   if (A !== a) return;   // 기다리는 사이 이탈
@@ -203,7 +212,7 @@ export function unmount() {
   const a = A; A = null;   // 먼저 비워서 cancel 의 onUpdate 가 그리지 않게
   a.ad?.runner?.cancel(); a.ad?.stepWorker?.terminate();
   $('#m3-auto').hidden = true;
-  a.prog.dispose(); a.unsub(); a.store.dispose();   // 풀은 유지(진행 중 청크는 ≤0.5초 — 끝나면 버려짐)
+  a.prog.dispose(); a.unsub(); a.unsubHist?.(); a.store.dispose();   // 풀은 유지(진행 중 청크는 ≤0.5초 — 끝나면 버려짐)
   window.removeEventListener('keydown', a.keydown);
   if (a.view) { a.view.setObsSurface(null); a.view.setCheckMarkers([]); a.view.setSection(null); }
   $('#m3-legend').hidden = true;
@@ -226,7 +235,57 @@ function onChange(tag) {
   if (GEOM_CHECK.has(tag)) rerunGeomChecks();
   renderAll(tag);
 }
+// ---- 되돌리기·다시 실행(2026-11-02) ----
+const HIST_TAGS = new Set([...PERSIST_TAGS, 'view']);
+function rememberLedMesh() { const g = getLedMesh(); if (g?.name) (A.ledMeshes ??= new Map()).set(g.name, g); }   // 광원을 바꾼 뒤 되돌릴 때 쓸 LED 메쉬
+function histCapture() {
+  rememberLedMesh();
+  const S = A.store.session;
+  return JSON.stringify({ m: A.store.mspec, v: { hidden: S.hidden ?? [], hideLeds: !!S.hideLeds, hiddenLeds: S.hiddenLeds ?? [] }, locked: Object.keys(A.ad?.locked ?? {}).sort() });
+}
+function histRestore(next, was) {
+  const st = A.store, S = st.session, M = st.mspec, n = JSON.parse(next), w = JSON.parse(was);
+  Object.assign(S, n.v);
+  const ad = A.ad;
+  if (ad && JSON.stringify(n.locked) !== JSON.stringify(w.locked)) {   // 최적화 [적용]을 되돌림 — 고정·[되돌리기] 도 함께
+    for (const k of w.locked) if (!n.locked.includes(k)) { delete ad.locked?.[k]; adSel(k, true); }
+    for (const k of n.locked) if (!w.locked.includes(k)) { ad.locked[k] = { at: Date.now() }; adSel(k, false); }
+    ad.undo = null; ad.applied = null; ad.lastLock = null;
+  }
+  if (JSON.stringify(n.m) === JSON.stringify(w.m)) { st.update('view'); return; }   // 보기만 바뀜 = 계산 그대로
+  // spec.mech3d 객체는 main.js 와 공유 — 같은 객체 안을 바꿔 넣음(불러오기와 같은 경로로 메쉬·광원 다시 맞춤)
+  for (const k of Object.keys(M)) delete M[k];
+  Object.assign(M, n.m);
+  S.xfMsg = null; S.pick = null; S.multi = [];
+  const want = M.light?.step?.name;
+  if (want && getLedMesh()?.name !== want) {
+    const g = A.ledMeshes?.get(want);
+    if (g) setLedMesh(g.name, g.parts); else rebuildMechLight(M);
+    if (A.ctx.canSave?.() !== false) saveLedIDB().catch(() => {});
+  }
+  L.resetLedCaches(); applyPartMods(M.parts); A.meshShown = null; A.geom = null;
+  if (ad) { ad.result = null; if (ad.running && ad.runner && !ad.runner.stopped) ad.runner.cancel(); }
+  st.update('target'); st.update('material');
+}
+function histStep(k) {
+  const h = A?.hist; if (!h) return;
+  if (!h[k]()) { setStatus(k === 'undo' ? '되돌릴 작업이 없음' : '다시 실행할 작업이 없음'); return; }
+  setStatus(k === 'undo' ? '되돌림 (Ctrl+Y = 다시 실행)' : '다시 실행함');
+  renderView(); renderAuto();
+}
+function setUntrace(it) {
+  if (!it) return;
+  A.store.update('material', (m) => { for (const i of it.ids) m.parts[i] = { ...m.parts[i], untrace: it.on || undefined }; });
+}
 function onKey(e) {
+  // Ctrl+Z / Ctrl+Y(Ctrl+Shift+Z) — 어디서든. 입력칸에 고치던 글자가 있으면 그 칸의 되돌리기(브라우저 기본). 한글 입력 상태에서도 되게 e.code
+  if (A && (e.ctrlKey || e.metaKey) && !e.altKey && (e.code === 'KeyZ' || e.code === 'KeyY')) {
+    const t = e.target, editing = t.matches?.('input, textarea') && !['checkbox', 'radio', 'range'].includes(t.type) && t.value !== t.defaultValue;
+    if (editing) return;
+    e.preventDefault();
+    histStep(e.code === 'KeyY' || e.shiftKey ? 'redo' : 'undo');
+    return;
+  }
   if (!A || e.target.closest?.('input, select, textarea')) return;
   if (e.key === 'Escape') A.store.update('session', (_, s) => { s.sel = null; s.ledSel = null; s.pick = null; s.focusCheck = null; });
   else if (e.key === 'f' || e.key === 'F') A.view?.fitAll();   // 맞춤(보는 방향 그대로)
@@ -954,6 +1013,7 @@ function adApply() {
   const fp = d.finish?.part, pf = fp != null ? M.parts[fp]?.finish : null, pc = fp != null ? M.parts[fp]?.coating ?? null : null;
   const finCh = fp != null && !(pf?.kind === d.finish.kind && (pf?.R ?? null) === (d.finish.R ?? null) && pc === (d.finish.coating ?? null));   // ④ 면 처리(특수 처리 표시 포함)가 다르면
   const dzCh = Math.abs(d.dz ?? 0) > 1e-9 && (M.light.kind === 'step' ? !!M.light.step : M.light.manual?.pcb?.kind === 'depth');   // ⑤ 이동 있음
+  A.hist?.hold();   // 적용 한 번 = 되돌리기 한 칸(형상 적용은 오래 걸릴 수 있음)
   const undo = { milky: milkyCh ? [mp, adClone(M.parts[mp].material)] : null, manual: lightCh ? adClone(Lm) : null, stepVirt: stepCh ? { v: adClone(sv) } : null, shape: mod ? [d.shape.part, adClone(M.parts[d.shape.part].shapeMod ?? null)] : null,
     finish: finCh ? [fp, adClone(pf), pc] : null, dz: dzCh ? (M.light.kind === 'step' ? { step: adClone({ offset: M.light.step.offset, emitters: M.light.step.emitters }) } : { depth: M.light.manual.pcb.depth }) : null };
   const tm = new Date();
@@ -971,6 +1031,7 @@ function adApply() {
   if (mod) A.store.update('material', (m) => { m.parts[d.shape.part].shapeMod = mod; applyPartMods(m.parts); m.contacts = redetectContacts(m.contacts); });
   if (finCh) A.store.update('material', (m) => { applyFinish(m, d.finish); });
   if (dzCh) A.store.update('light', (m) => { applyDz(m, d.dz, r.ctx.line.frame.d); });   // STEP: 발광점도 같은 이동(재인식과 같음)
+  A.hist?.release();
   renderAuto();
 }
 // [그래도 적용] — '현재안 유지'(차이가 잡음 수준)여도 찾은 후보로 바꿈
@@ -1113,9 +1174,11 @@ function onViewContext({ part, led, x, y }) {
   if (mech != null && st.session.node !== `part:${mech}` && !(st.session.multi ?? []).includes(`part:${mech}`)) st.update('session', (_, q) => { q.multi = []; q.node = `part:${mech}`; q.sel = { part: mech, face: null }; q.ledSel = null; });
   const S = st.session, sel = S.node?.startsWith('part:') ? +S.node.slice(5) : null, multi = (S.multi ?? []).filter((q) => q.startsWith('part:')).map((q) => +q.slice(5));
   const LS = ledsNow(), rows = ledRows(LS), ln = isLed ? ledOfHit({ part, led }, nMech, LS.lay) : null;
-  const items = viewCtxItems({ part: mech, isLed, ledRank: rows.find((r) => r.n === ln)?.rank ?? null, selPart: sel, multi, hidden: S.hidden ?? [], hideLeds: !!S.hideLeds, hiddenLeds: S.hiddenLeds ?? [], names: M.parts.map((p) => p.name) });
+  const utIds = mech == null ? [] : multi.length > 1 && multi.includes(mech) ? multi : [mech];
+  const ut = untraceItem(M, utIds);
+  const items = viewCtxItems({ untrace: ut, part: mech, isLed, ledRank: rows.find((r) => r.n === ln)?.rank ?? null, selPart: sel, multi, hidden: S.hidden ?? [], hideLeds: !!S.hideLeds, hiddenLeds: S.hiddenLeds ?? [], names: M.parts.map((p) => p.name) });
   if (!items.length) return;
-  showCtxMenu(document, x, y, items, (k) => st.update('view', (m, q) => {
+  showCtxMenu(document, x, y, items, (k) => (k === 'untrace' ? setUntrace(ut) : st.update('view', (m, q) => {
     const n = m.parts.length, tv = (id, only = false) => Object.assign(q, toggleVisibility(id, only, n, q.hidden, q.hideLeds));
     if (k === 'hide') tv(`part:${mech}`);
     else if (k === 'show') tv(`part:${sel}`);
@@ -1124,7 +1187,7 @@ function onViewContext({ part, led, x, y }) {
     else if (k === 'led') q.hideLeds = !q.hideLeds;
     else if (k === 'led1') Object.assign(q, toggleLed(ln, rows.map((r) => r.n), q.hiddenLeds, q.hideLeds));
     else if (k === 'all') { q.hidden = []; q.hideLeds = false; q.hiddenLeds = []; }
-  }), $('#mech3d-wrap'));
+  })), $('#mech3d-wrap'));
 }
 // ---- 3D 클릭 (main.js:393-425) — 기구 부품 수(nMech) 이상인 번호는 LED STEP 부품 ----
 function onPick(s) {
@@ -1599,6 +1662,7 @@ function renderAll(tag = 'all') {
       else if (id.startsWith('group:')) { const g = (m.groups ?? []).find((x) => x.id === id.slice(6)); if (g) g.name = name; }
     }),
     onRedraw: () => st.update('session'),
+    onUntrace: setUntrace,
   }, lay, M.light.kind === 'none' ? [] : ledRows(LS));
   const pi = S.node?.startsWith('part:') ? +S.node.slice(5) : -1, clr = pi >= 0 ? clearanceOf(pi) : null;
   if (clr !== A.clrShown) { A.clrShown = clr; renderMarkers(); }

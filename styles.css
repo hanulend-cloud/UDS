@@ -905,3 +905,8 @@ body.booting::after { content: "불러오는 중…"; position: fixed; left: 50%
 .m3-big-q { font-size: 12.5px; white-space: nowrap; }
 .m3-big-q select { font: inherit; }
 .m3-big-hd button:disabled { opacity: .45; cursor: default; }
+.proj-file { display: flex; align-items: center; gap: 8px; font-size: 12.5px; min-width: 0; }
+.proj-file b { font-weight: 600; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proj-file [data-pf="st"] { opacity: .65; white-space: nowrap; }
+.proj-file[data-kind="warn"] [data-pf="st"] { color: #c2410c; opacity: 1; }
+.proj-file button { font-size: 12px; padding: 1px 8px; }

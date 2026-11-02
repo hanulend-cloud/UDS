@@ -4,7 +4,7 @@
 export const TAGS = ['material', 'light', 'observe', 'target', 'contacts', 'view', 'session', 'meta'];   // meta = 이름·그룹(저장만, 계산 다시 안 함)
 export const PHYSICS = new Set(['material', 'light', 'observe', 'contacts']);        // 계산 다시 시작
 export const GEOM_CHECK = new Set(['material', 'light', 'observe', 'target']);       // 기하 점검 다시(target = 점검 기준값)
-const PERSIST = new Set(['material', 'light', 'observe', 'target', 'contacts', 'meta']);
+export const PERSIST_TAGS = new Set(['material', 'light', 'observe', 'target', 'contacts', 'meta']);
 
 export function initialSession() {
   return {
@@ -37,7 +37,7 @@ export function createStore(mspec, { persist = () => {}, delay = 300, timers = g
       if (!TAGS.includes(tag)) throw new Error(`알 수 없는 변경 태그: ${tag}`);
       if (disposed) return;
       if (fn) fn(store.mspec, store.session);
-      if (PERSIST.has(tag)) {
+      if (PERSIST_TAGS.has(tag)) {
         if (t != null) timers.clearTimeout(t);
         t = timers.setTimeout(() => { t = null; save(); }, delay);
       }

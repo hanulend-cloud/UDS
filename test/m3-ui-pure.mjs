@@ -451,7 +451,7 @@ done();
   const lab = treeCtxItems(M, { node: 'part:3', multi: ['part:0', 'part:3'] }, 'part:3')[0].label;
   const r = removeFromGroups(M.groups, [2]), r2 = removeFromGroups(M.groups, [1, 2]);
   const rg = rangeSelect(['part:0', 'part:1', 'part:2', 'part:3'], 'part:1', 'part:3');
-  const ok = a.join() === 'group,rename,eye' && /2개/.test(lab) && b.join() === 'group,out,rename,eye' && c.join() === 'ungroup,rename,eye' && r[0].parts.join() === '1' && r2.length === 0 && rg.join() === 'part:1,part:2,part:3';
+  const ok = a.join() === 'group,rename,eye,untrace' && /2개/.test(lab) && b.join() === 'group,out,rename,eye,untrace' && c.join() === 'ungroup,rename,eye,untrace' && r[0].parts.join() === '1' && r2.length === 0 && rg.join() === 'part:1,part:2,part:3';
   console.log(ok ? 'PASS 트리 우클릭 메뉴: 그룹 만들기(N개)·그룹에서 빼기·그룹 해제·이름·보기 · Shift 범위 선택' : (process.exitCode = 1, `FAIL 우클릭 메뉴 ${a} | ${b} | ${c} | ${lab} | ${JSON.stringify(r)} | ${rg}`)); }
 { // 선택 선 TXT(2026-10-30): 지정 점을 지나는 길이·폭 방향 원자료(평활 없음), 값 = 2D 최대 대비 %(2D TXT 와 같은 기준), 관측면 밖 = 빈칸·빈 줄 뺌
   const { lineTxt } = await import('../src/ui/m3/results-panel.js');
@@ -501,3 +501,14 @@ done();
   okL(treeNodes(M0, { node: null, hidden: [] }, undefined, Array.from({ length: 31 }, (_, i) => ({ n: i, rank: i + 1, s: i }))).every((x) => !x.id.startsWith('led:')), 'LED 31개 = 처음엔 접힘');
   const H = treeHtml(M0, { node: null, hidden: [] }, undefined, rows);
   okL(/class="m3-node[^"]* untr"[^>]*data-node="part:0"/.test(H) && treeHead().includes('부품 리스트') && !treeHead().includes('설계 트리'), 'untr 클래스 · 제목 부품 리스트'); }
+{ // 우클릭 빛 계산 제외(2026-11-02)
+  const { untraceItem, treeCtxItems, viewCtxItems } = await import('../src/ui/m3/feature-tree.js');
+  const okU = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
+  const M1 = { parts: [{ name: 'A' }, { name: 'B', untrace: true }, { name: 'L', role: 'light' }], groups: [{ id: 'g', name: 'G', parts: [0, 1] }] };
+  okU(untraceItem(M1, [0]).label === '빛 계산에서 제외' && untraceItem(M1, [0]).on === true, '포함 부품 = 제외');
+  okU(untraceItem(M1, [1]).label === '빛 계산에 다시 포함' && untraceItem(M1, [1]).on === false, '제외 부품 = 다시 포함');
+  okU(untraceItem(M1, [0, 1]).label === '선택한 부품 2개 빛 계산에서 제외' && untraceItem(M1, [0, 1]).on === true, '섞임 = 모두 제외');
+  okU(untraceItem(M1, [2]) === null && untraceItem(M1, [0, 2]).ids.join() === '0', '광원 부품 제외 대상 아님');
+  okU(treeCtxItems(M1, { node: 'part:1', multi: [] }, 'part:1').some((x) => x.k === 'untrace' && x.ids.join() === '1'), '트리 부품 우클릭');
+  okU(treeCtxItems(M1, { node: 'group:g', multi: [] }, 'group:g').find((x) => x.k === 'untrace').ids.join() === '0,1', '트리 그룹 우클릭 = 그룹 전체');
+  okU(viewCtxItems({ part: 0, untrace: untraceItem(M1, [0]) }).map((x) => x.k).join() === 'hide,only,untrace', '3D 부품 우클릭'); }
