@@ -63,6 +63,12 @@ const same = (a, b) => a.length === b.length && a.every((v, k) => v === b[k]);
   ok(h.result.shares[0] > 0.99 && host.handle({ type: 'partsOnPath', sceneKey: 'old', nMech: 1 }).reply.stale === true, 'Worker: 장면에서 검출 · 다른 장면 = stale');
 }
 
+{ // 쉬는 Worker 는 장면을 내려놓음
+  const host = makeChunkHost({ getTable: () => table, getDb: () => null });
+  host.handle({ type: 'scene', sceneKey: 'dr', mechParts: [fx.plate], mspec: fx.mspec, ledParts: null, lineData: lightData(fx.line), G: fx.G, obs: fx.obs, emitters: fx.emitters });
+  ok(host.sceneKey === 'dr' && host.handle({ type: 'drop' }).reply.dropped && host.sceneKey === null && host.handle({ type: 'chunk', sceneKey: 'dr', seed: 1, N: 10 }).reply.stale === true, 'drop: 장면을 비움 · 이후 청크 = stale');
+}
+
 { // 대표 광경로(광경로 화살표): 원하는 경로(':0' = 판 하나 통과)로 관측면에 닿은 광자 하나의 면 적중점 — LED → 판 아랫면 → 윗면, 나가는 방향
   const r = samplePath({ ...base, emitters: [fx.emitters[2]], want: ':0', nMech: 1, seed: 5 });
   const z = r?.pts.map((q) => q[2]) ?? [];

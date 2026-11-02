@@ -18,6 +18,11 @@ export function buildSceneMesh(name, rawParts, pre = null) {
   const combined = combineParts(parts);
   return { name, parts, combined, bvh: buildBvh(combined.positions, combined.triangles) };
 }
+// 빛 추적용(계산 Worker) — 합친 메쉬와 합친 BVH 하나만. 부품별 BVH 는 추적에 안 씀(부품마다 또 만들면 Worker 15개 몫만큼 메모리·시간 낭비)
+export function buildTraceMesh(name, parts) {
+  const combined = combineParts(parts);
+  return { name, parts, combined, bvh: buildBvh(combined.positions, combined.triangles) };
+}
 export function setMech3dMesh(name, rawParts, pre = null) {
   raw = buildSceneMesh(name, rawParts, pre); raw.raw = raw; xkey = ''; pmemo = [];
   scene = raw;

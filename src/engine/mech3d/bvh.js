@@ -12,36 +12,62 @@ export function buildBvh(positions, triangles, leafSize = 4) {
   }
   const order = new Uint32Array(nT);
   for (let i = 0; i < nT; i++) order[i] = i;
-  const box = [], meta = [];
-  function build(s, e) {
-    const id = meta.length / 2;
-    const a = [Infinity, Infinity, Infinity], b = [-Infinity, -Infinity, -Infinity];
-    const ca = [Infinity, Infinity, Infinity], cb = [-Infinity, -Infinity, -Infinity];
-    for (let i = s; i < e; i++) {
-      const t = order[i];
-      for (let k = 0; k < 3; k++) {
-        if (lo[t * 3 + k] < a[k]) a[k] = lo[t * 3 + k];
-        if (hi[t * 3 + k] > b[k]) b[k] = hi[t * 3 + k];
-        if (c[t * 3 + k] < ca[k]) ca[k] = c[t * 3 + k];
-        if (c[t * 3 + k] > cb[k]) cb[k] = c[t * 3 + k];
+  // JS 배열 없이(2026-11-02) — 재귀마다 Array.from·sort 와 노드 배열이 Worker 마다 JS 힙을 키워 큰 도면에서 탭이 메모리 부족으로 죽었음(V8 OOM).
+  // 정렬은 같은 결과를 내는 안정 병합 정렬(나무가 예전과 똑같음 — 계산 결과 불변). 노드 수 ≤ 2n−1
+  const maxNodes = Math.max(1, 2 * nT), boxA = new Float32Array(maxNodes * 6), metaA = new Int32Array(maxNodes * 2), aux = new Uint32Array(nT);
+  let nodes = 0;
+  function sortByAxis(s, e, ax) {
+    const RUN = 8, ofs = ax;
+    for (let r = s; r < e; r += RUN) {
+      const rEnd = Math.min(r + RUN, e);
+      for (let i = r + 1; i < rEnd; i++) {
+        const t = order[i], key = c[t * 3 + ofs];
+        let m = i - 1;
+        while (m >= r && c[order[m] * 3 + ofs] > key) { order[m + 1] = order[m]; m--; }
+        order[m + 1] = t;
       }
     }
-    box.push(a[0], a[1], a[2], b[0], b[1], b[2]);
-    meta.push(s, e - s);
+    let src = order, dst = aux;
+    for (let w = RUN; w < e - s; w *= 2) {
+      for (let l = s; l < e; l += 2 * w) {
+        const mid = Math.min(l + w, e), end = Math.min(l + 2 * w, e);
+        let a = l, b = mid, o = l;
+        while (a < mid && b < end) dst[o++] = c[src[b] * 3 + ofs] < c[src[a] * 3 + ofs] ? src[b++] : src[a++];
+        while (a < mid) dst[o++] = src[a++];
+        while (b < end) dst[o++] = src[b++];
+      }
+      const x = src; src = dst; dst = x;
+    }
+    if (src !== order) order.set(src.subarray(s, e), s);
+  }
+  function build(s, e) {
+    const id = nodes++;
+    let ax0 = Infinity, ay0 = Infinity, az0 = Infinity, bx0 = -Infinity, by0 = -Infinity, bz0 = -Infinity;
+    let cax = Infinity, cay = Infinity, caz = Infinity, cbx = -Infinity, cby = -Infinity, cbz = -Infinity;
+    for (let i = s; i < e; i++) {
+      const q = order[i] * 3;
+      if (lo[q] < ax0) ax0 = lo[q]; if (hi[q] > bx0) bx0 = hi[q]; if (c[q] < cax) cax = c[q]; if (c[q] > cbx) cbx = c[q];
+      if (lo[q + 1] < ay0) ay0 = lo[q + 1]; if (hi[q + 1] > by0) by0 = hi[q + 1]; if (c[q + 1] < cay) cay = c[q + 1]; if (c[q + 1] > cby) cby = c[q + 1];
+      if (lo[q + 2] < az0) az0 = lo[q + 2]; if (hi[q + 2] > bz0) bz0 = hi[q + 2]; if (c[q + 2] < caz) caz = c[q + 2]; if (c[q + 2] > cbz) cbz = c[q + 2];
+    }
+    const b6 = id * 6;
+    boxA[b6] = ax0; boxA[b6 + 1] = ay0; boxA[b6 + 2] = az0; boxA[b6 + 3] = bx0; boxA[b6 + 4] = by0; boxA[b6 + 5] = bz0;
+    metaA[id * 2] = s; metaA[id * 2 + 1] = e - s;
     if (e - s <= leafSize) return id;
-    let ax = 0;
-    for (let k = 1; k < 3; k++) if (cb[k] - ca[k] > cb[ax] - ca[ax]) ax = k;
-    if (!(cb[ax] - ca[ax] > 0)) return id;   // 중심이 모두 같음 → 잎
-    const sub = Array.from(order.subarray(s, e)).sort((p, q) => c[p * 3 + ax] - c[q * 3 + ax]);
-    order.set(sub, s);
+    const dx = cbx - cax, dy = cby - cay, dz = cbz - caz;
+    let ax = 0, dMax = dx;
+    if (dy > dMax) { ax = 1; dMax = dy; }
+    if (dz > dMax) { ax = 2; dMax = dz; }
+    if (!(dMax > 0)) return id;   // 중심이 모두 같음 → 잎
+    sortByAxis(s, e, ax);
     const m = (s + e) >> 1;
     build(s, m);
     const r = build(m, e);
-    meta[id * 2] = r; meta[id * 2 + 1] = 0;
+    metaA[id * 2] = r; metaA[id * 2 + 1] = 0;
     return id;
   }
   build(0, nT);
-  return { box: Float32Array.from(box), meta: Int32Array.from(meta), order, positions, triangles };
+  return { box: boxA.slice(0, nodes * 6), meta: metaA.slice(0, nodes * 2), order, positions, triangles };
 }
 
 // Möller–Trumbore(양면). 적중 거리 t(음수 가능) 또는 −1(평행·빗나감). 마지막 적중의 무게중심 좌표는 hitUV 에.

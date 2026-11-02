@@ -7,11 +7,18 @@ const TIMEOUT = 10 * 60 * 1000;
 // localStorage uds.gpu = '0' 이면 GPU 를 쓰지 않음(비교·문제 해결용)
 const gpuAllowed = () => { try { return !!globalThis.navigator?.gpu && localStorage.getItem('uds.gpu') !== '0'; } catch { return !!globalThis.navigator?.gpu; } };
 
+// 큰 도면 메모리 상한(2026-11-02) — 도면은 Worker 마다 따로 들고 있어 '삼각형 수 × Worker 수' 만큼 메모리를 씀. 탭이 약 7.5 GB 에서 메모리 부족으로 죽었음(크래시 덤프).
+// 동시에 장면을 드는 Worker 수를 줄여 넘지 않게(느려질 뿐 결과는 같음). 실측 Worker 하나 ≈ 145 B/삼각형 — 쓰레기 수거 지연을 더해 2배로 잡음
+export const SCENE_BUDGET = 4e9, SCENE_BYTES_PER_TRI = 300;
+export const sceneWorkerLimit = (tris, size) => Math.max(1, Math.min(size, Math.floor(SCENE_BUDGET / (SCENE_BYTES_PER_TRI * Math.max(1, tris)))));
+const sceneTris = (m) => [...(m.mechParts ?? []), ...(m.ledParts ?? [])].reduce((n, p) => n + (p.triangles?.length ?? 0) / 3, 0);
+
 export function createPool({ dbLists, l2Raw = () => null, onStatus = () => {}, onGpu = () => {} }) {
   const pending = new Map(), pool = [];
   let gpu = null;
   let reqId = 0, loadFails = 0;   // 모듈 로드 실패로 다시 띄운 횟수(무한 반복 방지)
-  const lastScene = [];   // 포트별 마지막 장면 메시지 — 새로 띄운 Worker 에 다시 보냄
+  const lastScene = [], loaded = [];   // 포트별 마지막 장면 메시지(새로 띄운 Worker 에 다시 보냄) · Worker 에 실제로 올라간 장면 번호
+  let limit = Infinity;   // 큰 도면이면 장면을 드는 Worker 수 제한(sceneWorkerLimit)
   function onMessage(e) {
     const d = e.data;
     if (d.id == null) { if (d.gpu) { gpu = d.gpu; onGpu(gpu); } else if (d.error) onStatus(`계산 Worker 초기화 실패: ${d.error}`); return; }
@@ -22,6 +29,7 @@ export function createPool({ dbLists, l2Raw = () => null, onStatus = () => {}, o
   function drop(w, msg) {
     w.terminate();
     const k = pool.indexOf(w); if (k >= 0) pool.splice(k, 1);
+    loaded.length = 0;   // 번호가 밀림 — 다음 청크 때 장면부터 다시
     for (const [id, p] of pending) if (p.w === w) { pending.delete(id); clearTimeout(p.timer); p.rej(new Error(msg)); }
   }
   function killAll(msg) { for (const w of pool.slice()) drop(w, msg); }
@@ -32,7 +40,7 @@ export function createPool({ dbLists, l2Raw = () => null, onStatus = () => {}, o
     w.onerror = (e) => {
       const k2 = pool.indexOf(w);
       if (!e.message && k2 >= 0 && ++loadFails <= 6) {
-        w.terminate(); pool[k2] = spawn(k2);
+        w.terminate(); pool[k2] = spawn(k2); loaded[k2] = null;
         for (const [id, p] of pending) if (p.w === w) { pending.delete(id); clearTimeout(p.timer); p.rej(Object.assign(new Error('계산 Worker 다시 띄움(파일 받기 실패)'), { retry: true })); }
         return;
       }
@@ -53,18 +61,28 @@ export function createPool({ dbLists, l2Raw = () => null, onStatus = () => {}, o
   // (CPU 가 많으면 GPU 를 먹이는 Worker·전력 몫이 모자람). off() = 이 포트는 쉼(계산 루프가 다음 청크를 보내지 않음)
   const cpuWithGpu = () => Math.max(1, Math.floor((navigator.hardwareConcurrency ?? 4) / 2) - 2);
   // 포트 보내기 — Worker 를 다시 띄웠으면(retry) 잠깐 쉬고 장면부터 다시 보낸 뒤 같은 요청(최대 3번)
+  // 쉬는 포트(off)에는 장면을 보내지 않음 — 계산 안 하는 Worker 까지 도면을 들고 있었음. 나중에 그 포트가 일하게 되면(GPU 소실 등) 첫 청크 때 장면부터 보냄
+  const isOff = (k) => { const last = k === size() - 1, ok = !!gpu?.ok; return ok ? !last && k >= Math.min(cpuWithGpu(), limit - 1) : k >= limit; };
   const sendK = async (k, msg) => {
-    if (msg.type === 'scene') lastScene[k] = msg;
+    if (msg.type === 'scene') {
+      lastScene[k] = msg;
+      limit = sceneWorkerLimit(sceneTris(msg), size());
+      if (isOff(k)) {
+        if (loaded[k]) { loaded[k] = null; call(worker(k), { type: 'drop' }).catch(() => {}); }   // 옛 장면도 내려놓음
+        return { sceneKey: msg.sceneKey, ready: true, skipped: true };
+      }
+    } else if (msg.type !== 'drop' && lastScene[k]?.sceneKey === msg.sceneKey && loaded[k] !== msg.sceneKey) await call(worker(k), lastScene[k]).then(() => { loaded[k] = msg.sceneKey; });
     for (let n = 0; ; n++) {
-      try { return await call(worker(k), msg); } catch (e) {
+      try { const r = await call(worker(k), msg); if (msg.type === 'scene' && !r.error) loaded[k] = msg.sceneKey; return r; } catch (e) {
         if (!e.retry || n >= 3) throw e;
         await new Promise((r) => setTimeout(r, 300 * (n + 1)));
-        if (msg.type !== 'scene' && lastScene[k]) await call(worker(k), lastScene[k]);
+        loaded[k] = null;
+        if (msg.type !== 'scene' && lastScene[k]) { await call(worker(k), lastScene[k]); loaded[k] = lastScene[k].sceneKey; }
       }
     }
   };
-  const ports = () => Array.from({ length: size() }, (_, k) => ({ send: (msg) => sendK(k, msg), gpu: k === size() - 1, off: () => !!gpu?.ok && k < size() - 1 && k >= cpuWithGpu() }));
+  const ports = () => Array.from({ length: size() }, (_, k) => ({ send: (msg) => sendK(k, msg), gpu: k === size() - 1, off: () => isOff(k) }));
   const warm = () => { for (let k = 0; k < size(); k++) worker(k); };
   const setDb = (db) => { for (const w of pool) w.postMessage({ type: 'db', db }); };   // 이미 뜬 Worker 의 소재 DB 갱신(새 Worker 는 init 에서)
-  return { worker, call, killAll, ports, warm, setDb, gpu: () => (gpuAllowed() ? gpu : { ok: false, name: null, error: globalThis.navigator?.gpu ? '설정에서 끔' : null }), cpuWorkers: () => (gpu?.ok ? cpuWithGpu() : size()) };
+  return { worker, call, killAll, ports, warm, setDb, gpu: () => (gpuAllowed() ? gpu : { ok: false, name: null, error: globalThis.navigator?.gpu ? '설정에서 끔' : null }), cpuWorkers: () => (gpu?.ok ? cpuWithGpu() : size()), sceneLimit: () => limit };
 }

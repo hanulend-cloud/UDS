@@ -334,6 +334,12 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   ok(/케이스 · 빛 30%/.test(hh) && !hh.includes('>벽') && hh.includes('자동 검출'), '② 목록: 빛이 닿는 불투명 부품만');
   ok(tileConfigHtml('shape', { ...st, avail: all, path: null }).html.includes('검출 전'), '검출 전 안내');
 }
+{ // 큰 도면 Worker 수 제한: 어떤 크기에서도 예산을 넘지 않음 · 보통 도면은 제한 없음 · 최소 1개
+  const { sceneWorkerLimit: f, SCENE_BUDGET: B, SCENE_BYTES_PER_TRI: b } = await import('../src/ui/m3/pool.js');
+  ok(f(50, 15) === 15 && f(5e5, 15) === 15 && f(1.1e6, 15) === 12 && f(3e6, 15) === 4 && f(5e7, 15) === 1 && f(0, 15) === 15 && f(50, 3) === 3, `Worker 수: 50만 ${f(5e5, 15)} · 110만 ${f(1.1e6, 15)} · 300만 ${f(3e6, 15)} · 5000만 ${f(5e7, 15)}`);
+  ok([1e5, 1e6, 2e6, 5e6, 1e7].every((t) => f(t, 15) * t * b <= B), '예산(4 GB) 안');
+}
+
 done();
 
 { const { clearDbHtml } = await import('../src/ui/mech3d-panel.js');

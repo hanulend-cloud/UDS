@@ -1,6 +1,5 @@
 // 점진 계산 Worker 의 장면 캐시·청크 처리 — spec 2026-10-15 m3-cad-ui §4. 순수(Worker 와 Node 시험이 같이 씀).
 // 'scene': 장면·BVH·관측 라인을 한 번 만들어 sceneKey 로 기억. 'chunk': 기억한 장면과 sceneKey 가 같을 때만 runChunk.
-import { buildSceneMesh } from './runtime.js';
 import { lineFromData } from './line.js';
 import { composeScene, runChunk, runChunkGpu, samplePath, partsOnPath } from './job.js';
 import { milkyGridOptics, rwCoeffs } from './reweight.js';
@@ -22,12 +21,13 @@ export function makeChunkHost({ getTable, getDb = () => null }) {
           const table = getTable();
           if (!table) throw new Error('L2 산란 응답표가 없음');
           cache = null;   // 실패하면 이전 장면도 쓰지 않음
-          const db = getDb(), rt = buildSceneMesh('mech', m.mechParts), line = lineFromData(m.lineData);
+          const db = getDb(), rt = { name: 'mech', parts: m.mechParts }, line = lineFromData(m.lineData);   // 합친 메쉬·BVH 는 composeScene 이 한 번만
           const S = composeScene({ rt, mspec: m.mspec, ledParts: m.ledParts, table, db, line });
           cache = { sceneKey: m.sceneKey, db, S, line, G: m.G, obs: m.obs, emitters: m.emitters, ledSpec: m.mspec.light.spec, mspec: m.mspec };
           return { reply: { sceneKey: m.sceneKey, ready: true }, transfer: [] };
         } catch (e) { cache = null; return { reply: { sceneKey: m.sceneKey, error: String(e?.message ?? e) }, transfer: [] }; }
       }
+      if (m.type === 'drop') { cache = null; return { reply: { dropped: true }, transfer: [] }; }   // 쉬는 Worker — 장면을 내려놓음(메모리)
       if (m.type === 'path') {   // 대표 광경로 — { emitter, want, nMech } → { path: { pts, dir } | null }
         if (!cache || cache.sceneKey !== m.sceneKey) return { reply: { sceneKey: m.sceneKey, stale: true }, transfer: [] };
         const { S, line, obs, G, ledSpec } = cache;

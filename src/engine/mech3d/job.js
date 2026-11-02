@@ -1,5 +1,5 @@
 // 3D 계산 작업 — spec 2026-10-14 §6. 메인·Worker 공용(순수). 장면 = 기구 부품 + 광원 부품(LED STEP 의 PCB·LED 몸체, 또는 가상 PCB).
-import { buildSceneMesh } from './runtime.js';
+import { buildTraceMesh } from './runtime.js';
 import { buildTraceScene } from './scene3d.js';
 import { transformMesh } from './xform.js';
 import { pcbPlaneMesh } from './placement.js';
@@ -27,7 +27,8 @@ export function composeScene({ rt, mspec, ledParts, table, db, line }) {
     extraMeshes.push(pcbPlaneMesh(line, L.manual.pcb.depth));
     extraSpecs.push(setPartFinish(defaultPart(base, 'PCB', 0), null, solderFin));
   }
-  const rt2 = extraMeshes.length ? buildSceneMesh('job', [...rt.parts, ...extraMeshes]) : rt;
+  // 합친 BVH 는 LED 까지 합쳐 한 번만(rt 에 합친 메쉬가 없으면 여기서 처음 만듦)
+  const rt2 = extraMeshes.length ? buildTraceMesh('job', [...rt.parts, ...extraMeshes]) : rt.combined ? rt : buildTraceMesh('job', rt.parts);
   return buildTraceScene(rt2, { ...mspec, parts: [...mspec.parts, ...extraSpecs] }, { table, db });
 }
 

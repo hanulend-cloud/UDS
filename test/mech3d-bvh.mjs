@@ -52,4 +52,31 @@ ok(buildBvh(new Float32Array(0), new Uint32Array(0)) && intersectRay(buildBvh(ne
   const h1 = intersectRay(bb, 0.5, 1.5, 0, 0, 0, 1, 0, Infinity, h0?.tri ?? -1);
   ok(h0 && h0.t === 0 && h1 && Math.abs(h1.t - 2) < 1e-6 && h1.tri !== h0.tri, `skipTri: 출발면 t ${h0?.t} 제외 → 다음 적중 t ${h1?.t.toFixed(6)}`);
 }
+{ // 메모리 개선 전 구현과 나무가 똑같아야 함(계산 결과 불변) — 무작위 · 겹친 중심 · 격자(같은 값 많음) · 빈 메쉬 · 잎 크기
+  function oldBvh(positions, triangles, leafSize = 4) {
+    const nT = triangles.length / 3, lo = new Float32Array(nT * 3), hi = new Float32Array(nT * 3), c = new Float32Array(nT * 3);
+    for (let t = 0; t < nT; t++) for (let k = 0; k < 3; k++) { let mn = Infinity, mx = -Infinity; for (let j = 0; j < 3; j++) { const v = positions[triangles[t * 3 + j] * 3 + k]; if (v < mn) mn = v; if (v > mx) mx = v; } lo[t * 3 + k] = mn; hi[t * 3 + k] = mx; c[t * 3 + k] = (mn + mx) / 2; }
+    const order = new Uint32Array(nT); for (let i = 0; i < nT; i++) order[i] = i;
+    const box = [], meta = [];
+    function build(s, e) {
+      const id = meta.length / 2, a = [Infinity, Infinity, Infinity], b = [-Infinity, -Infinity, -Infinity], ca = [Infinity, Infinity, Infinity], cb = [-Infinity, -Infinity, -Infinity];
+      for (let i = s; i < e; i++) { const t = order[i]; for (let k = 0; k < 3; k++) { if (lo[t * 3 + k] < a[k]) a[k] = lo[t * 3 + k]; if (hi[t * 3 + k] > b[k]) b[k] = hi[t * 3 + k]; if (c[t * 3 + k] < ca[k]) ca[k] = c[t * 3 + k]; if (c[t * 3 + k] > cb[k]) cb[k] = c[t * 3 + k]; } }
+      box.push(a[0], a[1], a[2], b[0], b[1], b[2]); meta.push(s, e - s);
+      if (e - s <= leafSize) return id;
+      let ax = 0; for (let k = 1; k < 3; k++) if (cb[k] - ca[k] > cb[ax] - ca[ax]) ax = k;
+      if (!(cb[ax] - ca[ax] > 0)) return id;
+      const sub = Array.from(order.subarray(s, e)).sort((p, q) => c[p * 3 + ax] - c[q * 3 + ax]); order.set(sub, s);
+      const m = (s + e) >> 1; build(s, m); const r = build(m, e); meta[id * 2] = r; meta[id * 2 + 1] = 0; return id;
+    }
+    build(0, nT);
+    return { box: Float32Array.from(box), meta: Int32Array.from(meta), order };
+  }
+  let sd = 12345; const rnd = () => (sd = (sd * 1664525 + 1013904223) >>> 0) / 4294967296;
+  const soup = (n, f) => { const P = new Float32Array(n * 9), T = new Uint32Array(n * 3); for (let i = 0; i < n * 9; i++) { P[i] = f(); } for (let i = 0; i < n * 3; i++) T[i] = i; return [P, T]; };
+  const same = (x, y) => x.length === y.length && x.every((v, i) => Object.is(v, y[i]));
+  const eq = (a, b) => same(a.box, b.box) && same(a.meta, b.meta) && same(a.order, b.order);
+  const cases = { 무작위: soup(5000, rnd), '값이 몇 개뿐(같은 중심 많음)': soup(5000, () => Math.floor(rnd() * 4)), '작은 메쉬': soup(3, rnd), '정렬 경계(9개)': soup(9, rnd), '모두 같은 점': soup(50, () => 1), '빈 메쉬': [new Float32Array(0), new Uint32Array(0)] };
+  for (const [name, [P, T]] of Object.entries(cases)) for (const leaf of [4, 1]) ok(eq(buildBvh(P, T, leaf), oldBvh(P, T, leaf)), `예전 나무와 같음: ${name} · 잎 ${leaf}`);
+}
+
 done();
