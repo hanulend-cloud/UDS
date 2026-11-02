@@ -534,7 +534,7 @@ main:has(#m3-start:not([hidden])) { grid-template-rows: minmax(0, 1fr); }
 .m3-big-hd b { white-space: nowrap; }
 .m3-big-in.min { grid-template-rows: auto; padding-bottom: 0; }   /* 접기 = 제목 줄만 */
 .m3-big-in.min .m3-big-hd { margin-bottom: 0; border-bottom: 0; }
-.m3-big-in.min .m3-big-grid, .m3-big-in.min .m3-big-q, .m3-big-in.min [data-pin-txt], .m3-big-in.min .m3-mon-rs { display: none; }
+.m3-big-in.min .m3-big-grid, .m3-big-in.min .m3-big-q, .m3-big-in.min [data-pin-txt] { display: none; }
 header:has(.mb-drop) { z-index: 80; }   /* 메뉴를 펼치면 떠 있는 창 위로 */
 .od-path-note { font-size: 11px; margin-top: 2px; }
 .m3-big-sp { flex: 1; }
@@ -748,8 +748,7 @@ body.booting::after { content: "불러오는 중…"; position: fixed; left: 50%
 .m3-mon .m3-fac-split, .m3-mon .m3-dock-split { display: none; }
 .m3-mon.min #m3-factor > :not(#m3-auto), .m3-mon.min #m3-dock, .m3-mon.min .m3-mon-flow { display: none; }   /* 접기 = 실행 줄(왼쪽 아래 #m3-auto)만 */   /* 접기 = 기구 최적화 실행 줄만 */
 .m3-cmd .m3-step.on { outline: 2px solid var(--m3-acc); }
-.m3-mon-rs { position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize; touch-action: none; background: linear-gradient(135deg, transparent 50%, #9aa7b8 50%, #9aa7b8 60%, transparent 60%, transparent 72%, #9aa7b8 72%, #9aa7b8 82%, transparent 82%); }
-.m3-mon.min .m3-mon-rs { display: none; }
+
 #m3-views button[data-mon].on { background: var(--m3-accbg); border-color: var(--m3-acc); color: var(--m3-acc); }
 /* 설계 인자 현황 줄 앞 체크(최적화 사용) · 켠 항목 설정 줄 · 최적화 타일 전후 사양표 */
 .fb-sw { display: inline-flex; align-items: center; margin-right: 2px; cursor: pointer; }
@@ -939,3 +938,23 @@ body.booting::after { content: "불러오는 중…"; position: fixed; left: 50%
 .m3-ledd.added { color: #16a34a; font-weight: 600; }
 .m3-node.chg .m3-lbl { color: #f79009; font-weight: 600; }
 .m3-node.chg > :not(.m3-lbl):not(button) { color: #f79009; }
+
+/* 떠 있는 창: 상하좌우·모서리 크기 조절 · 접으면 제목과 현재 결과만 */
+.m3-rz { position: absolute; z-index: 5; touch-action: none; }
+.m3-rz.n, .m3-rz.s { left: 10px; right: 10px; height: 5px; cursor: ns-resize; }
+.m3-rz.e, .m3-rz.w { top: 10px; bottom: 10px; width: 5px; cursor: ew-resize; }
+.m3-rz.n { top: 0; } .m3-rz.s { bottom: 0; } .m3-rz.e { right: 0; } .m3-rz.w { left: 0; }
+.m3-rz.ne, .m3-rz.nw, .m3-rz.se, .m3-rz.sw { width: 12px; height: 12px; }
+.m3-rz.ne { top: 0; right: 0; cursor: nesw-resize; } .m3-rz.sw { bottom: 0; left: 0; cursor: nesw-resize; }
+.m3-rz.nw { top: 0; left: 0; cursor: nwse-resize; } .m3-rz.se { bottom: 0; right: 0; cursor: nwse-resize; background: linear-gradient(135deg, transparent 50%, #9aa7b8 50%, #9aa7b8 60%, transparent 60%, transparent 72%, #9aa7b8 72%, #9aa7b8 82%, transparent 82%); }
+.m3-mon.min .m3-rz, .m3-big-in.min .m3-rz { display: none; }
+.m3-mon-sum { display: none; font-size: 12px; white-space: nowrap; }
+.m3-mon-sum b { font-weight: 600; margin-right: 6px; }
+.m3-mon-sum b.ok { color: #16803c; } .m3-mon-sum b.bad { color: #c8321f; }
+.m3-mon-sum span { color: #667085; }
+.m3-mon.min .m3-mon-sum, .m3-big-in.min .m3-mon-sum { display: inline; }
+.m3-mon.min .m3-mon-body { display: none; }
+.m3-mon.min { grid-template-rows: auto; }
+.m3-mon.min .m3-mon-hd { border-bottom: 0; }
+/* 숫자 칸: 고쳤지만 아직 적용 안 함(Enter 대기) */
+input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background: rgba(247,144,9,.14); }

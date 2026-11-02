@@ -379,6 +379,26 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   ok(nd.chg && JSON.stringify(nd).includes('원설계 40 → 18개'), '트리: 변경 표시');
 }
 
+{ // 창을 열 때 화면 안으로: 아래가 나가면 올림 · 화면보다 크면 줄임
+  const { fitRect: g } = await import('../src/ui/m3/monitor.js');
+  const a = g({ x: 53, y: 158, w: 963, h: 696 }, 1024, 768), b = g({ x: 0, y: 0, w: 5000, h: 5000 }, 1000, 700), c = g({ x: null, y: 80, w: 500, h: 300 }, 1000, 700);
+  ok(a.y + a.h <= 760 && a.h === 696 && a.x + a.w <= 1016, `아래가 나가면 올림: y ${a.y}`);
+  ok(b.w === 984 && b.h === 684 && b.x === 8 && b.y === 8 && c.x === 492 && c.y === 80, '너무 크면 줄임 · 위치 없으면 오른쪽');
+}
+{ // 창 크기 조절: 8방향 · 반대쪽은 제자리 · 최소 크기
+  const { resizeRect: f } = await import('../src/ui/m3/monitor.js');
+  const s0 = { x: 100, y: 100, w: 500, h: 400 }, q = (r) => [r.x, r.y, r.w, r.h].join();
+  ok(q(f(s0, 'e', 50, 0)) === '100,100,550,400' && q(f(s0, 's', 0, 30)) === '100,100,500,430', '오른쪽·아래 = 크기만');
+  ok(q(f(s0, 'w', 50, 0)) === '150,100,450,400' && q(f(s0, 'n', 0, -40)) === '100,60,500,440', '왼쪽·위 = 반대쪽 제자리');
+  ok(q(f(s0, 'nw', 10, 10)) === '110,110,490,390' && q(f(s0, 'se', -5, 5)) === '100,100,495,405' && q(f(s0, 'ne', 5, 5)) === '100,105,505,395' && q(f(s0, 'sw', 5, 5)) === '105,100,495,405', '모서리 4곳');
+  ok(q(f(s0, 'w', 900, 0, 320, 160)) === '280,100,320,400' && q(f(s0, 'n', 0, 900, 320, 160)) === '100,340,500,160' && q(f(s0, 'e', -900, 0, 320, 160)) === '100,100,320,400', '최소 크기에서 멈추고 반대쪽은 그대로');
+}
+{ // Milky 표 적용 단추 값 = 표 값 그대로(1.525 가 1.52 로 반올림되면 줄을 못 찾았음)
+  const { milkyTableHtml } = await import('../src/ui/m3/autodesign-panel.js');
+  const h = milkyTableHtml([{ milky: 1.025, Ulen: 0.7, Uwid: 0.8, eff: 0.2 }, { milky: 1.525, Ulen: 0.7, Uwid: 0.8, eff: 0.2 }, { milky: 2.5, Ulen: 0.7, Uwid: 0.8, eff: 0.2 }], 2.5, {});
+  ok(h.includes('data-v="1.525"') && h.includes('data-v="1.025"'), '버튼 값이 표 값과 정확히 같음');
+}
+
 done();
 
 { const { clearDbHtml } = await import('../src/ui/mech3d-panel.js');

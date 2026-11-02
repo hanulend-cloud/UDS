@@ -7,6 +7,7 @@ import { getMech3d, getLedMesh, setLedMesh, saveLedIDB, applyPartMods, redetectC
 import { createMonitor } from './monitor.js';
 import { reportError } from '../error-log.js';
 import { ledChange, ledDeltaText, pitchOf } from './led-change.js';
+import { installCommitInputs } from './commit-input.js';
 import { createHistory } from './history.js';
 import { mountSplit } from './pane-split.js';
 import { findLeds, supportPart, emitterFaceAway, autoLedGroup } from '../../engine/mech3d/led-detect.js';
@@ -168,6 +169,7 @@ function getView() {
 const reflCat = () => catalogOf(A?.ctx.reflectDb?.() ?? null);
 let monitor = null;   // ⑤ 기구 최적화 창 — 화면(DOM) 하나에 하나, 기구가 바뀌어도 유지
 export async function mount(ctx) {
+  installCommitInputs();
   mountSplitter(document.querySelector('.m3-main'));   // 좌·우 창 폭 끌어서 조절(한 번만 붙음)
   mountDockSplitter(document.querySelector('#m3-dock'), document.querySelector('#mech3d-wrap'));   // 아래 칸 높이 조절
   // ⑤ 기구 최적화 창(떠 있는 창) — 설계 인자 현황·기구 최적화 칸을 기본 화면에서 빼서 담음. 여닫기 = 명령줄 [5 기구 최적화]
@@ -386,6 +388,7 @@ function onCalc(snap) {
   A.simDash?.sample(snap, M.observe.targetNoise ?? 0.01, M.observe, M.parts.map((p) => p.name), M.parts.length, !!adState().running);
   drawLightPaths();
   adDetectPath();
+  monitorSummary();
   paintObs(snap);
   A.cmd.update(S, M, snap.stats ?? null);
   renderStatus();
@@ -589,6 +592,7 @@ function factorNow() {
 }
 function renderAuto() {
   const el = $('#m3-auto'), st = adState();
+  monitorSummary();
   el.hidden = false;   // 닫혀 있어도 한 줄 머리는 늘 보인다(메뉴가 사라진 것처럼 보이지 않게)
   $('#m3-dock')?.classList.toggle('collapsed', !st.open);   // 접으면 아래 칸 = 한 줄(대시보드 숨김)
   const M = A.store.mspec, avail = adAvail(M);
@@ -611,6 +615,16 @@ function renderAuto() {
     onSel: (k, v) => adSel(k, v),
     onAction: (k, v) => ({ continue: adContinue, applyMilky: () => adApplyMilky(+v), run: adRunBoost, stop: adStop, close: () => monitor?.close(), apply: adApply, applyAlt: adApplyAlt, cancel: adCancel, revert: adRevert, step: adStep, view: () => { st.resultOpen = true; renderAuto(); }, hide: () => { st.resultOpen = false; renderAuto(); } })[k]?.(),
   });
+}
+// 접은 창에 보일 현재 결과 — 실행 중 = 진행률, 결과 있음 = 후보 값, 그 밖 = 지금 값(길이·폭 균일도)
+function monitorSummary() {
+  if (!A || !monitor) return;
+  const st = A.ad, M = A.store.mspec, cell = (t, v, g) => `<b class="${Number.isFinite(v) && Number.isFinite(g) ? (v + 1e-9 >= g ? 'ok' : 'bad') : ''}">${t} ${Number.isFinite(v) ? v.toFixed(2) : '–'}</b>`;
+  if (st?.running) { monitor.setSummary(`<b>실행 중 ${Math.round((st.running.frac ?? 0) * 100)}%</b>`); return; }
+  const b = st?.result?.best, s = A.prog?.snapshot()?.stats;
+  if (!b && (!s || s.empty || s.relNoise > 0.05)) { monitor.setSummary('<span>계산 중</span>'); return; }   // 초반 값은 잡음
+  const U = b ? [b.Ulen, b.Uwid] : [s.Ulen, s.Uwid];
+  monitor.setSummary(`${b ? '<span>후보</span> ' : ''}${cell('길이', U[0], M.observe.targetLen)} ${cell('폭', U[1], M.observe.targetWid)}`);
 }
 function adStop() { const st = adState(); if (!st.running || !st.runner) return; st.runner.cancel(); setStatus('기구 최적화 중지됨'); A.optDash?.stop(); }
 // 실행 문맥 = 시작 때 스냅샷 { M0: mspec 복사, line, G, obs, rt: 기구 런타임, mp: ① 대상 부품 } — 평가·미리보기·적용이 모두 이것 기준
@@ -1008,7 +1022,7 @@ async function adRun(opt = {}) {
     },
     async verify(d) {   // 정밀 재판정(현재안·최종안): 250만 광자(최소 150만, 20초까지) — 광자가 적으면 균일도(최저÷최고)가 잡음 때문에 낮게 나옴(6초 제한 때 0.69 vs 실제 0.78)
       const { M: Md, parts } = designScene(d, ctx);
-      const eff0 = currentVerified?.eff ?? snap0.photometry?.eff, r = await R.trace(adJob(Md, parts, ctx), { N: Math.min(1e7, 2.5e6 * Math.max(1, 0.5 / (eff0 > 0 ? eff0 : 0.5))), maxMs: 20000, minN: 1.5e6, batches: 10 });   // 효율이 낮으면 관측면에 닿는 빛이 적어 광자를 더
+      const eff0 = currentVerified?.eff ?? snap0.photometry?.eff, r = await R.trace(adJob(Md, parts, ctx), { N: Math.ceil(Math.min(1e7, 2.5e6 * Math.max(1, 0.5 / (eff0 > 0 ? eff0 : 0.5)))), maxMs: 20000, minN: 1.5e6, batches: 10 });   // 효율이 낮으면 관측면에 닿는 빛이 적어 광자를 더
       const stt = tallyStats(G, r.batches, obs);
       A.optDash?.evals('final', [{ label: verifyLabel(d), Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty }]);
       return { stats: stt, eff: adEff(r) };
@@ -1095,6 +1109,7 @@ function adApply() {
   if (finCh) A.store.update('material', (m) => { applyFinish(m, d.finish); });
   if (dzCh) A.store.update('light', (m) => { applyDz(m, d.dz, r.ctx.line.frame.d); });   // STEP: 발광점도 같은 이동(재인식과 같음)
   A.hist?.release();
+  setStatus(undo.milky || undo.manual || undo.stepVirt || undo.shape || undo.finish || undo.dz ? '적용함 — 다시 계산 중' : '적용할 변경이 없음(지금 설계와 같음)');
   renderAuto();
 }
 // 이 안에서 이어서(2026-10-30) — 결과를 적용한 뒤, 체크했지만 이번 실행에서 돌리지 않은 항목만 그 위에서 최적화(예: ③ 형상 결과 → ② 위치·① Milky).
@@ -1116,8 +1131,8 @@ async function adContinue() {
 }
 // Milky 조정 표에서 고른 Milky 로 적용 — 최적안의 다른 인자는 그대로, Milky 와 그 추정 균일도·효율만 바꿈
 function adApplyMilky(v) {
-  const r = adState().result, row = r?.milkyRows?.find((x) => Math.abs(x.milky - v) < 0.005);
-  if (!r || !row) return;
+  const r = adState().result, row = r?.milkyRows?.find((x) => Math.abs(x.milky - v) < 1e-6);   // 버튼 값 = 표 값 그대로(반올림하면 1.525 같은 줄을 못 찾아 아무 일도 안 했음)
+  if (!r || !row) { setStatus('Milky 적용 실패: 표에서 그 값을 찾지 못함'); return; }
   Object.assign(r, { design: { ...r.design, milky: row.milky }, unchanged: false, best: { ...r.best, milky: row.milky, Ulen: row.Ulen, Uwid: row.Uwid, eff: row.eff } });
   adApply();
 }

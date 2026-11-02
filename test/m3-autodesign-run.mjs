@@ -75,4 +75,10 @@ const fakePorts = (log, delay = 0) => Array.from({ length: 3 }, (_, w) => ({ sen
   ok(l1.join() === l2.join() && l1.length === 6 && l1.every((x) => +x.split(':')[1] >= 5000 && +x.split(':')[1] < 5006) && a.batches.map((x) => x[0]).join() === b.batches.map((x) => x[0]).join() && a.photons === 30000,
     `crn: 청크 (포트:시드:N) 같음 — ${l1.join(' ')}`);
 }
+{ // 광자 수는 정수 — 소수면 GPU 가 'offset is out of bounds' 로 꺼졌음
+  const seen = [], ports = fakePorts([]).map((p) => ({ send: (m) => { if (m.type === 'chunk') seen.push(m.N); return p.send(m); } }));
+  const G = { ns: 2, nw: 2 }, R = createAdRunner({ ports });
+  await R.trace({ sceneKey: 'i', scene: { G, mechParts: [] } }, { N: 1234567.8, batches: 2, maxMs: 1000, minN: 1000 });
+  ok(seen.length > 0 && seen.every(Number.isInteger), `청크 광자 수가 모두 정수 (${seen.length}개)`);
+}
 done();

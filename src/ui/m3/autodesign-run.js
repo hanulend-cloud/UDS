@@ -32,7 +32,8 @@ export function createAdRunner({ ports, now = () => globalThis.performance?.now?
   // chunkN 기본 = Worker 마다 청크 2개쯤(후보당 광자가 적어도 모든 Worker 가 일하게)
   // crn(같은 난수 비교, 형상 후보용) = 시드 기준 — 청크 i 의 시드 crn+i · 크기 chunkN · 포트(쓰는 포트 i % 수) · 배치 i % batches 를 고정해
   // 후보마다 같은 광자 난수로 추적(후보 차이만 남음). 시간 제한·적응 청크 없음(N 전부)
-  async function trace(job, { N, maxMs = Infinity, minN = 0, chunkN = Math.max(2000, Math.ceil(N / (2 * ports.length))), chunkMs = Math.min(500, maxMs / 5), batches = 8, rw = null, crn = null }) {
+  async function trace(job, { N: N0, maxMs = Infinity, minN = 0, chunkN = Math.max(2000, Math.ceil(N0 / (2 * ports.length))), chunkMs = Math.min(500, maxMs / 5), batches = 8, rw = null, crn = null }) {
+    const N = Math.ceil(N0);   // 광자 수는 정수(소수면 GPU 가 'offset is out of bounds' 로 꺼짐)
     await prepare(job);
     if (crn != null) return traceCrn(job, { N, chunkN, batches, rw, crn });
     const nCell = job.scene.G.ns * job.scene.G.nw, timed = Number.isFinite(maxMs);

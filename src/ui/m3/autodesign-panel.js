@@ -249,7 +249,7 @@ export function milkyTableHtml(rows, chosen, tg = {}) {
   rows = rows.filter((r) => pick.has(r));
   const pm = (v, t) => (Number.isFinite(v) && Number.isFinite(t) ? (v + 1e-9 >= t ? ' <b class="ok">✓</b>' : ' <b class="bad">✕</b>') : '');
   const tr = (r) => { const sel = Math.abs(r.milky - chosen) < 0.005;
-    return `<tr${sel ? ' class="sel"' : ''}><td>${r.milky.toFixed(2)}${sel ? ' <span class="mut">최적</span>' : ''}</td><td>${f2(r.Ulen)}${pm(r.Ulen, tg.len)}</td><td>${f2(r.Uwid)}${pm(r.Uwid, tg.wid)}</td><td>${Number.isFinite(r.eff) ? `${(r.eff * 100).toFixed(1)}%` : '–'}</td><td>${sel ? '' : `<button type="button" data-ad="applyMilky" data-v="${+r.milky.toFixed(2)}">적용</button>`}</td></tr>`; };
+    return `<tr${sel ? ' class="sel"' : ''}><td>${r.milky.toFixed(2)}${sel ? ' <span class="mut">최적</span>' : ''}</td><td>${f2(r.Ulen)}${pm(r.Ulen, tg.len)}</td><td>${f2(r.Uwid)}${pm(r.Uwid, tg.wid)}</td><td>${Number.isFinite(r.eff) ? `${(r.eff * 100).toFixed(1)}%` : '–'}</td><td>${sel ? '' : `<button type="button" data-ad="applyMilky" data-v="${r.milky}">적용</button>`}</td></tr>`; };
   return `<details class="m3-mtab"><summary>Milky 조정 <span class="mut">— 낮추면 광 효율↑ · 균일도↓ (다른 인자는 최적안 그대로의 추정)</span></summary>
     <table class="m3-cmp m3-cmp-s"><tr><th>Milky</th><th>길이 균일도</th><th>폭 균일도</th><th>광 효율</th><th></th></tr>${rows.map(tr).join('')}</table></details>`;
 }
@@ -280,6 +280,7 @@ export function renderAutoPanel(el, state, h) {
     el.querySelector('.m3-ad-prog span').textContent = state.running.text ?? '';
     return;
   }
+  if (r && el._adKey === key) return;   // 결과가 그대로면 다시 만들지 않음 — 누르는 사이 단추가 바뀌면 클릭이 사라지고, 펼친 Milky 표도 닫힘
   el._adKey = key; el.innerHTML = html;
   el.querySelectorAll('[data-ad]').forEach((x) => {
     const k = x.dataset.ad;
