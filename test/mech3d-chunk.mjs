@@ -27,7 +27,7 @@ const same = (a, b) => a.length === b.length && a.every((v, k) => v === b[k]);
   const s = host.handle(scene);
   ok(s.reply.ready === true && s.reply.sceneKey === 'k1' && host.sceneKey === 'k1', '장면 메시지 → ready, sceneKey 기억');
   const c = host.handle({ type: 'chunk', sceneKey: 'k1', seed: 3 * 7919, N: 2000 });
-  ok(same(c.reply.acc, J.accs[0]) && c.transfer.length === 2 && c.reply.leak && Number.isFinite(c.reply.escObs), 'host 청크 = runJob 배치 0, 전송 버퍼 2개');
+  ok(same(c.reply.acc, J.accs[0]) && c.transfer.length === 3 && c.reply.accAll?.length === c.reply.acc.length && c.reply.leak && Number.isFinite(c.reply.escObs), 'host 청크 = runJob 배치 0, 전송 버퍼 3개(acc·accAll·cnt)');
   ok(host.handle({ type: 'chunk', sceneKey: 'k0', seed: 1, N: 10 }).reply.stale === true, '다른 sceneKey 청크 → stale');
   const rr = host.handle({ type: 'run' }).reply;
   ok(typeof rr.error === 'string' && rr.error.includes('run 메시지는 제거됨'), '구 run 메시지 → error 응답');
