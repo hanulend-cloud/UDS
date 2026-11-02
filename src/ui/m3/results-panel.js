@@ -445,7 +445,8 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     if (typeof ResizeObserver !== 'undefined') { big.ro = new ResizeObserver(() => paintBig()); big.ro.observe(ov.querySelector('.m3-big-in')); }
     setFocus(null);
   }
-  el.addEventListener('click', (e) => { if (e.target.closest('[data-pin-txt]')) { txtPin(); return; } const b = e.target.closest('[data-zoom]'); if (b) openBig(); });
+  // onclick 대입(addEventListener 아님) — 패널을 다시 만들면(새 도면·프로젝트) 앞 패널의 처리를 대체. 쌓이면 큰 창이 2개 열리고 아래 창은 이전 계산 데이터였음
+  el.onclick = (e) => { if (e.target.closest('[data-pin-txt]')) { txtPin(); return; } const b = e.target.closest('[data-zoom]'); if (b) openBig(); };
   // 메인 결과 칸 높이 조절(2D · 길이 1D · 폭 1D 사이 끌기 막대) — 전체 높이는 그대로, 비율만(보는 사람별)
   mountSplit([...el.querySelectorAll(':scope > .m3-blk')], { key: 'uds.m3.resSplit', dir: 'col', min: 110, onChange: () => { if (last) update(last); } });
   let last = null;
