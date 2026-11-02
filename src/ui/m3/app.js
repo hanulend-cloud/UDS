@@ -5,6 +5,7 @@
 // 점진 계산 갱신(1초마다)은 store 알림 없이 결과 패널·상태 띠·색지도만 다시 그린다(입력 중 속성 패널이 다시 그려지지 않게).
 import { getMech3d, getLedMesh, setLedMesh, saveLedIDB, applyPartMods, redetectContacts } from '../../engine/mech3d/runtime.js';
 import { createMonitor } from './monitor.js';
+import { reportError } from '../error-log.js';
 import { createHistory } from './history.js';
 import { mountSplit } from './pane-split.js';
 import { findLeds, supportPart, emitterFaceAway, autoLedGroup } from '../../engine/mech3d/led-detect.js';
@@ -75,7 +76,14 @@ export function materialsChanged(msg) {
   A.store.update('material', (m, x) => { for (const e of list) m.parts = syncClearParts(m.parts, e.id, e); x.status = msg; });
 }
 export function adminChanged() { if (A) A.store.update('session', (_, x) => { x.status = isAdmin() ? '관리자 모드 켬 — 소재 DB 관리·숫자 물성 칸이 보임' : '관리자 모드 끔'; }); }
-export function setStatus(t) { A?.store.update('session', (_, s) => { s.status = t; }); }
+export function setStatus(t) { if (/실패|오류|응답 없음|시간 초과/.test(t ?? '')) reportError('작업', t); A?.store.update('session', (_, s) => { s.status = t; }); }
+// 오류 기록에 함께 남길 '그때 하던 일' — 최적화 단계 · 계산 상태 · 도면 크기 · 장치
+export function errorContext() {
+  if (!A) return '3D 화면 아님';
+  const s = A.prog?.snapshot?.(), g = pool?.gpu?.(), M = A.store.mspec;
+  let tris = 0; try { for (const p of getMech3d()?.parts ?? []) tris += p.triangles.length / 3; } catch { tris = 0; }
+  return [A.ad?.running ? `기구 최적화: ${String(A.ad.running.text ?? '').replace(/ · 남은.*/, '')}` : '', `계산 ${s?.state ?? '–'}${s?.photons ? ` · 광선 ${Math.round(s.photons / 1e4)}만` : ''}`, `부품 ${M.parts.length}개 · 삼각형 ${tris.toLocaleString()}`, `화질 ${M.observe.quality ?? 'low'}`, g?.ok ? `GPU ${g.name ?? ''}` : 'CPU'].filter(Boolean).join(' / ');
+}
 export function flush() { A?.store.flush(); }
 export function importLed(file) { if (!A) return; if (A.store.mspec.light.kind !== 'step') A.store.update('light', (m) => { m.light.kind = 'step'; }); importLedStep(file); }   // 예제 프로젝트 — LED STEP 을 코드에서 불러옴(같은 이름이면 저장된 기준 LED 로 재인식)
 // 상단 메뉴(main.js) → 3D 명령. 3D 화면이 아니면 false
@@ -124,6 +132,7 @@ function exportMechStep() {
 }
 // 제목 옆 계산 장치 표시 — GPU 사용 중 / CPU 만(GPU 없음·실패). g = pool.gpu(): null = 확인 중
 function gpuBadge(g) {
+  if (g && !g.ok && g.error && g.error !== '설정에서 끔') reportError('GPU', g.error);
   const el = document.getElementById('gpu-badge'); if (!el) return;
   const cores = pool?.cpuWorkers?.() ?? Math.max(1, Math.min(15, (navigator.hardwareConcurrency ?? 4) - 1));
   el.hidden = false;
@@ -367,6 +376,7 @@ function onCalc(snap) {
   if (!A) return;
   const S = A.store.session, M = A.store.mspec, T = A.timing, now = performance.now();
   S.calc = snap;
+  if (snap.state === 'error') reportError('계산', `계산 실패: ${snap.error}`);
   if (snap.state === 'starting' && !T.start) T.start = now;   // 성능 기준(spec §6)은 장면 준비 시작부터
   if (T.start && snap.stats && T.first == null) T.first = (now - T.start) / 1000;
   if (T.start && snap.stats?.relNoise != null && snap.stats.relNoise <= 0.05 && T.noise5 == null) T.noise5 = (now - T.start) / 1000;

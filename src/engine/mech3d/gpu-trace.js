@@ -348,7 +348,7 @@ export async function createGpuTracer() {
   const device = await adapter.requestDevice({ requiredLimits: { maxStorageBufferBindingSize: lim.maxStorageBufferBindingSize, maxBufferSize: lim.maxBufferSize } });
   let dead = false;
   // GPU 가 멈추면(드라이버 재설정 — DXGI_ERROR_DEVICE_HUNG 등) 완료 알림이 영영 안 올 수 있음 → 소실·시간 초과 때 실패로 끝내 청크가 CPU 로 넘어가게(2026-11-02)
-  const lost = device.lost.then(() => { dead = true; throw new Error('GPU 장치를 잃음'); });
+  const lost = device.lost.then((info) => { dead = true; throw new Error(`GPU 장치를 잃음${info?.message ? ` (${info.message})` : ''}`); });
   lost.catch(() => {});
   const guarded = (p) => { let id; const late = new Promise((_, rej) => { id = setTimeout(() => { dead = true; rej(new Error(`GPU 응답 없음 (${GPU_WAIT_MS / 1000}초)`)); }, GPU_WAIT_MS); }); return Promise.race([p, lost, late]).finally(() => clearTimeout(id)); };
   const mod = device.createShaderModule({ code: WGSL });

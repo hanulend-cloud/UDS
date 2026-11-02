@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Uniform Design Simulator</title>
   <link rel="stylesheet" href="./styles.css" />
+  <script>/* 시작 중 오류 수집 — main.js 가 못 뜨면(파일 못 받음·문법 오류) 여기서 직접 알림(오류 기록: src/ui/error-log.js) */
+    window.__udsEarly = [];
+    addEventListener('error', function (e) { var t = e.target; window.__udsEarly.push({ msg: e.message || ('파일을 불러오지 못함: ' + ((t && (t.src || t.href)) || '')), stack: (e.error && e.error.stack) || '' }); }, true);
+    addEventListener('unhandledrejection', function (e) { var r = e.reason; window.__udsEarly.push({ msg: (r && r.message) || String(r), stack: (r && r.stack) || '' }); });
+    setTimeout(function () { if (window.__udsErrUi || !window.__udsEarly.length) return; var d = document.createElement('div'); d.className = 'err-toast error'; d.setAttribute('role', 'alert'); d.textContent = '프로그램을 시작하지 못함 — 서버 창(run.bat)을 확인하고 Ctrl+F5 를 누르세요. 오류: ' + window.__udsEarly[0].msg; document.body.appendChild(d); }, 10000);
+  </script>
   <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }</script>
 </head>
 <body class="booting"><script>setTimeout(() => document.body.classList.remove("booting"), 10000);   /* 시작 중 오류가 나도 10초 뒤엔 보이게 */</script>

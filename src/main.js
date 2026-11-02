@@ -26,6 +26,7 @@ import { matchesPending, restorePending } from './engine/mech3d/restore.js';
 import { bounds } from './engine/mech3d/mesh.js';
 import { migrateMech3d } from './engine/mech3d/defs.js';
 import * as m3app from './ui/m3/app.js';
+import { installErrorLog, openErrorLog, reportError } from './ui/error-log.js';
 import { mountMenubar } from './ui/menubar.js';
 import { APP_VERSION, APP_DATE } from './version.js';
 import { createProjectFile, projectFileLabel } from './ui/project-file.js';
@@ -296,7 +297,7 @@ function setupMenubar() {
       { id: 'admin', label: '관리자 모드 (소재 DB 관리)', checked: isAdmin },
       { id: 'mat-db', label: '소재 DB 관리…', enabled: () => m3() && isAdmin() },
     ] },
-    { label: '도움말', items: [{ id: 'guide', label: '사용 순서' }, { id: 'about', label: '버전 정보' }] },
+    { label: '도움말', items: [{ id: 'guide', label: '사용 순서' }, { id: 'errlog', label: '오류 기록…' }, { id: 'about', label: '버전 정보' }] },
   ];
   const run = (id) => {
     if (id === 'new') return newProject();
@@ -316,6 +317,7 @@ function setupMenubar() {
     if (id === 'paths') return m3app.setPathsOn(!m3app.pathsOn());
     if (id === 'xray') return m3app.setXrayOn(!m3app.xrayOn());
     if (id === 'guide') return alert(GUIDE);
+    if (id === 'errlog') return openErrorLog();
     if (id === 'about') return alert(`Uniform Design Simulator ${APP_VERSION} (${APP_DATE})
 3D 기구 설계 — 도광·확산 부품의 균일도 해석과 기구 최적화
 예제 프로젝트: 평판 구조 + LED STEP 10개 1열`);
@@ -806,6 +808,7 @@ async function openProject() {
 // 프로젝트 파일 이름·저장 상태(머리) + 탭 제목
 let projFile = null;
 function renderProjFile(st) {
+  if (st.err) reportError('파일', `파일 저장 실패: ${st.err}`);
   const el = $('#proj-file'); if (!el) return;
   const d = projectFileLabel(st);
   el.dataset.kind = d.kind; el.title = d.title ?? (st.hasFile ? '이 파일에 실시간 저장됨' : '파일 › 다른 이름으로 저장 — 고른 파일에 실시간 저장');
@@ -945,6 +948,7 @@ mount();
 setupZoom();
 setupHeatPick();
 setupMenubar();
+installErrorLog({ context: () => m3app.errorContext() });
 setupProjectFile();
 window.addEventListener('resize', schedule);
 // 3D 모드 디바운스 저장 마저 쓰기(탭 닫기·새로고침·모바일 백그라운드)
