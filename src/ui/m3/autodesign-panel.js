@@ -50,17 +50,22 @@ export function profileSvg(cur, best, W = 200, H = 48) {
   return `<div class="m3-row"><span class="mut">길이 프로파일(각 최대 = 1) · 회색 현재 · 색 최적</span></div><svg class="m3-ad-prof" viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" role="img" aria-label="길이 프로파일 현재 대 최적">${a}${b}</svg>`;
 }
 
+// 광경로 위로 치는 최소 비중(1%) — 이보다 적게 닿는 부품은 대상 목록에서 뺌
+export const PATH_MIN = 0.01;
 // M = spec.mech3d, info.non25[i] = 부품 i 의 비 2.5D 비율(관측 방향, app 이 frameHeights 로 계산)
+// info.path = 광경로 검출 결과 { shares } | null — 있으면 ③ 형상·② 케이스 대상 = 광경로 위 부품만, 비중 큰 순. 없으면(계산 전) 쓸 수 있는 부품 전체
 export function stageAvailability(M, info) {
+  const path = info.path ?? null, shr = (i) => path?.shares?.[i] ?? 0, onP = (i) => !path || shr(i) >= PATH_MIN, order = (a) => (path ? a.sort((x, y) => shr(y) - shr(x) || x - y) : a);
   const milkyParts = M.parts.map((p, i) => (p.material.kind === 'milky' ? i : -1)).filter((i) => i >= 0);
-  const shapeParts = M.parts.map((p, i) => (p.material.kind !== 'opaque' && (info.non25?.[i] ?? 1) <= 0.02 ? i : -1)).filter((i) => i >= 0);
-  const opaque = M.parts.map((p, i) => (p.material.kind === 'opaque' && p.role !== 'light' && !p.untrace ? i : -1)).filter((i) => i >= 0);   // ④ 대상 = 계산에 드는 불투명 부품(광원으로 옮긴 LED·추적 제외 부품 빼고)
+  const lit = M.parts.map((p, i) => (p.material.kind !== 'opaque' && p.role !== 'light' && !p.untrace && onP(i) ? i : -1)).filter((i) => i >= 0);   // 빛이 지나는 투과 부품
+  const shapeParts = order(lit.filter((i) => (info.non25?.[i] ?? 1) <= 0.02)), shapeSkip = path ? order(lit.filter((i) => !shapeParts.includes(i))) : [];   // shapeSkip = 광경로 위지만 2.5D 가 아니라 형상을 못 바꿈
+  const opaque = order(M.parts.map((p, i) => (p.material.kind === 'opaque' && p.role !== 'light' && !p.untrace && onP(i) ? i : -1)).filter((i) => i >= 0));   // ④ 대상 = 계산에 드는 불투명 부품(광원으로 옮긴 LED·추적 제외 부품 빼고)
   return {
     milky: milkyParts.length ? { ok: true, parts: milkyParts } : { ok: false, why: 'Milky 부품이 없음 — 부품 소재를 Milky 로 지정하세요' },
     leds: M.light.kind === 'manual' ? { ok: true } : M.light.kind === 'step' ? (stepRefEmitter(M.light.step) ? { ok: true, note: 'LED STEP — 기준 LED 를 복사해 개수·간격 조정' } : { ok: false, why: 'LED STEP — 기준이 될 LED 가 없음 · LED 발광면을 먼저 지정하세요' }) : { ok: false, why: '광원을 직접 배치로 지정하세요' },
-    shape: shapeParts.length ? { ok: true, parts: shapeParts } : { ok: false, why: '관측 방향으로 2.5D 인 투과 부품이 없음' },
+    shape: shapeParts.length ? { ok: true, parts: shapeParts, skip: shapeSkip } : { ok: false, why: !path ? '관측 방향으로 2.5D 인 투과 부품이 없음' : shapeSkip.length ? '광경로의 투과 부품이 관측 방향으로 2.5D 가 아님' : '광경로에 투과 부품이 없음' },
     height: heightAvail(M.light),
-    housing: opaque.length ? { ok: true, parts: opaque } : { ok: false, why: '불투명 부품이 없음 — 케이스 부품 소재를 불투명으로 지정하세요' },
+    housing: opaque.length ? { ok: true, parts: opaque } : { ok: false, why: path ? '빛이 닿는 불투명 부품이 없음' : '불투명 부품이 없음 — 케이스 부품 소재를 불투명으로 지정하세요' },
   };
 }
 // ⑤ 가능 여부 — 직접 배치(깊이) · LED STEP(발광점 있음). 기구 면 PCB 는 높이가 면으로 정해짐
@@ -112,8 +117,10 @@ const progHtml = (running) => {
 // 화면의 기구 최적화 = 3 항목: ① Milky · ② 기구 위치(= 엔진 ② LED 배치 + ⑤ LED 높이) · ③ 기구 형상. 케이스 반사율(④)은 부품 속성에서 직접
 export const AD_ITEMS = [['position', '① 위치', ['leds', 'height']], ['housing', '② 케이스 면', ['housing']], ['shape', '③ 형상', ['shape']], ['milky', '④ Milky', ['milky']]];   // 계산 순서(2026-10-30)
 export const TILE_NOTE = { position: 'LED 개수·피치·열과 LED–커버 거리(높이)', milky: 'Milky 값을 바꿔 균일도 최고점을 찾음(밝기는 줄어듦)', leds: 'LED 개수·피치·열을 바꿈', shape: '도광판 아랫면 형상(두께·끝단·가장자리)', housing: '케이스 반사율(소재 상한 안)', height: 'LED–커버 거리' };
-export function tileConfigHtml(k, { avail, sel, running, names = [], milkyPart = null, housingMat = null }) {
+export function tileConfigHtml(k, { avail, sel, running, names = [], milkyPart = null, housingMat = null, path = null }) {
   const pname = (i) => esc(names[i] ?? `부품 ${i + 1}`), dis = running ? ' disabled' : '';
+  const pct = (i) => (path ? ` · 빛 ${Math.round((path.shares?.[i] ?? 0) * 100)}%` : '');
+  const pathNote = (t) => `<div class="od-path-note mut" title="${t}">${path ? '광경로에서 자동 검출 · 빛 많은 순' : '광경로 검출 전 — 쓸 수 있는 부품 전체'}</div>`;
   if (k === 'position') {   // ② 기구 위치 = LED 배치 + LED 높이(쓸 수 있는 것만)
     const okL = !!avail.leds?.ok, okH = !!avail.height?.ok;
     if (!okL && !okH) { const why = avail.leds?.why ?? avail.height?.why ?? ''; return { on: false, box: '<input type="checkbox" data-ad="position" disabled aria-label="① 위치 사용">', opt: '', why, html: `<label class="od-sw off"><input type="checkbox" data-ad="position" disabled> 사용 안 함</label><div class="od-why mut">${esc(why)}</div>` }; }
@@ -127,8 +134,8 @@ export function tileConfigHtml(k, { avail, sel, running, names = [], milkyPart =
   const on = !!sel[k], sw = `<label class="od-sw"><input type="checkbox" data-ad="${k}"${on ? ' checked' : ''}${dis}> ${on ? '사용' : '사용 안 함'}</label>`;
   let opt = '';
   if (on && k === 'milky') opt = milkyPart != null ? `<div class="od-opt mut">대상: ${pname(milkyPart)}</div>` : '';   // 상한 입력칸은 뺌(2026-10-29) — 상한 = capDefault 자동
-  if (k === 'shape') opt = `<div class="od-opt">형상 바꿀 부품 <select data-ad="shapePart" aria-label="③ 대상 부품"${dis}>${avail.shape.parts.map((i) => `<option value="${i}"${i === sel.shapePart ? ' selected' : ''}>${pname(i)}</option>`).join('')}</select></div>`;
-  if (k === 'housing') opt = `<div class="od-opt">대상 <select data-ad="housingPart" aria-label="④ 대상 부품"${dis}>${avail.housing.parts.map((i) => `<option value="${i}"${i === sel.housingPart ? ' selected' : ''}>${pname(i)}</option>`).join('')}</select> <span class="mut">${housingMat ? `${esc(housingMat.name)} · 최대 ${Math.round(housingMat.max * 100)}%` : '소재 미지정'}</span></div>
+  if (k === 'shape') opt = `<div class="od-opt">형상 바꿀 부품 <select data-ad="shapePart" aria-label="③ 대상 부품"${dis}>${avail.shape.parts.map((i) => `<option value="${i}"${i === sel.shapePart ? ' selected' : ''}>${pname(i)}${pct(i)}</option>`).join('')}${(avail.shape.skip ?? []).map((i) => `<option value="${i}" disabled>${pname(i)}${pct(i)} · 2.5D 아님</option>`).join('')}</select></div>${pathNote('빛 % = 관측면에 닿은 빛 중 그 부품을 지난 비중(1% 미만 부품은 목록에서 뺌)')}`;
+  if (k === 'housing') opt = `<div class="od-opt">대상 <select data-ad="housingPart" aria-label="④ 대상 부품"${dis}>${avail.housing.parts.map((i) => `<option value="${i}"${i === sel.housingPart ? ' selected' : ''}>${pname(i)}${pct(i)}</option>`).join('')}</select> <span class="mut">${housingMat ? `${esc(housingMat.name)} · 최대 ${Math.round(housingMat.max * 100)}%` : '소재 미지정'}</span></div>${pathNote('빛 % = LED 에서 나온 빛 중 그 면에 닿은 비중(1% 미만 부품은 목록에서 뺌)')}
     <label class="od-opt"><input type="checkbox" data-ad="housingSpecial"${sel.housingSpecial ? ' checked' : ''}${dis}> 특수 표면처리 허용</label>`;
   const why = `${TILE_NOTE[k] ?? ''}${a.note ? ` · ${a.note}` : ''}`;
   return { on, box: `<input type="checkbox" data-ad="${k}"${on ? ' checked' : ''}${dis} aria-label="${k} 사용">`, opt, why, html: `${sw}<div class="od-why mut">${esc(why)}</div>${opt}` };

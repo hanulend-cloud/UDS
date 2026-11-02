@@ -2,7 +2,7 @@
 // 'scene': 장면·BVH·관측 라인을 한 번 만들어 sceneKey 로 기억. 'chunk': 기억한 장면과 sceneKey 가 같을 때만 runChunk.
 import { buildSceneMesh } from './runtime.js';
 import { lineFromData } from './line.js';
-import { composeScene, runChunk, runChunkGpu, samplePath } from './job.js';
+import { composeScene, runChunk, runChunkGpu, samplePath, partsOnPath } from './job.js';
 import { milkyGridOptics, rwCoeffs } from './reweight.js';
 
 // getTable(): L2 산란 응답표, getDb(): 실측소재 DB(없으면 null)
@@ -32,6 +32,11 @@ export function makeChunkHost({ getTable, getDb = () => null }) {
         if (!cache || cache.sceneKey !== m.sceneKey) return { reply: { sceneKey: m.sceneKey, stale: true }, transfer: [] };
         const { S, line, obs, G, ledSpec } = cache;
         return { reply: { sceneKey: m.sceneKey, path: samplePath({ S, line, obs, G, emitters: [m.emitter ?? cache.emitters[0]], ledSpec, want: m.want, nMech: m.nMech ?? Infinity }) }, transfer: [] };
+      }
+      if (m.type === 'partsOnPath') {   // 광경로 위 부품 — { nMech } → { result: { shares, observed, photons } }
+        if (!cache || cache.sceneKey !== m.sceneKey) return { reply: { sceneKey: m.sceneKey, stale: true }, transfer: [] };
+        const { S, line, obs, G, ledSpec, emitters } = cache;
+        return { reply: { sceneKey: m.sceneKey, result: partsOnPath({ S, line, obs, G, emitters, ledSpec, nMech: m.nMech ?? Infinity }) }, transfer: [] };
       }
       if (m.type === 'chunk') {
         if (!cache || cache.sceneKey !== m.sceneKey) return { reply: { sceneKey: m.sceneKey, stale: true }, transfer: [] };

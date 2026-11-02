@@ -319,6 +319,21 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   const { topPaths, pathText } = await import('../src/ui/m3/opt-dash.js');
   const t = topPaths({ ':2>1': 50, 'R:2>1': 25, ':2>1>5': 10, 'R:2>1>2>1': 15 }, 3);
   ok(t.length === 3 && t[0].share === 0.6 && t[0].parts.join() === '2,1' && !t[0].refl && t[1].refl && pathText(t[0], ['a', 'b', 'c']) === 'LED → c → b → 관측면', `topPaths: ${JSON.stringify(t.map((x) => [x.parts.join('>'), x.refl, x.share]))}`); }
+{ // 광경로 위 부품 — 기구 최적화 ③ 형상·② 케이스 대상 목록
+  const { stageAvailability, tileConfigHtml, PATH_MIN } = await import('../src/ui/m3/autodesign-panel.js');
+  const K = (kind, x = {}) => ({ material: { kind }, ...x }), M = { parts: [K('milky'), K('clear'), K('clear'), K('opaque'), K('opaque'), K('opaque', { untrace: true })], light: { kind: 'manual' }, observe: { faces: [] } };
+  const non25 = [0, 0, 0.5, 1, 1, 1], all = stageAvailability(M, { non25 });
+  ok(all.shape.parts.join() === '0,1' && all.housing.parts.join() === '3,4', '검출 전: 쓸 수 있는 부품 전체(추적 제외는 뺌)');
+  const path = { shares: { 0: 0.4, 1: 1, 2: 0.9, 3: PATH_MIN / 2, 4: 0.3 } }, a = stageAvailability(M, { non25, path });
+  ok(a.shape.parts.join() === '1,0' && a.shape.skip.join() === '2' && a.housing.parts.join() === '4', '검출 뒤: 광경로 위만 · 빛 많은 순 · 2.5D 아닌 부품은 skip · 1% 미만 뺌');
+  const none = stageAvailability(M, { non25, path: { shares: {} } });
+  ok(!none.shape.ok && /광경로/.test(none.shape.why) && !none.housing.ok && /닿는/.test(none.housing.why), '광경로에 부품이 없으면 이유 표시');
+  const st = { avail: a, sel: { shape: true, shapePart: 1, housing: true, housingPart: 4 }, running: null, names: ['커버', 'LGP', '렌즈', '벽', '케이스', '제외'], path };
+  const hs = tileConfigHtml('shape', st).html, hh = tileConfigHtml('housing', st).html;
+  ok(/LGP · 빛 100%/.test(hs) && hs.indexOf('LGP') < hs.indexOf('커버') && /value="2" disabled>렌즈 · 빛 90% · 2\.5D 아님/.test(hs) && !hs.includes('제외') && hs.includes('자동 검출'), '③ 목록: 빛 % · 많은 순 · 못 바꾸는 부품은 비활성');
+  ok(/케이스 · 빛 30%/.test(hh) && !hh.includes('>벽') && hh.includes('자동 검출'), '② 목록: 빛이 닿는 불투명 부품만');
+  ok(tileConfigHtml('shape', { ...st, avail: all, path: null }).html.includes('검출 전'), '검출 전 안내');
+}
 done();
 
 { const { clearDbHtml } = await import('../src/ui/mech3d-panel.js');

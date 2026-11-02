@@ -15,6 +15,20 @@ export function clampRect(r, vw, vh) {
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) ?? {}; } catch { return {}; } };
 const save = (s) => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch {} };
 
+// 머리·모서리 끌기(떠 있는 창 공용) — snap() = 끌기 시작 때 상태, onMove(dx, dy, 시작 상태), ok(e) = 끌어도 되는 곳인지
+export function dragBy(handle, snap, onMove, ok, onEnd = () => {}) {
+  handle.addEventListener('pointerdown', (e) => {
+    if (!ok(e)) return;
+    e.preventDefault(); handle.setPointerCapture(e.pointerId);
+    const x0 = e.clientX, y0 = e.clientY, s0 = snap();
+    const mv = (ev) => onMove(ev.clientX - x0, ev.clientY - y0, s0);
+    const up = () => { handle.removeEventListener('pointermove', mv); handle.removeEventListener('pointerup', up); handle.removeEventListener('pointercancel', up); onEnd(); };
+    handle.addEventListener('pointermove', mv); handle.addEventListener('pointerup', up); handle.addEventListener('pointercancel', up);
+  });
+}
+// 떠 있는 창이 겹칠 때 — 누른 창을 앞으로(기구 최적화 창 ↔ 광량 분포 창)
+export function raiseWin(el) { document.querySelectorAll('.m3-mon, .m3-big-in').forEach((w) => { w.style.zIndex = w === el ? '61' : '60'; }); }
+
 // host = 창을 붙일 곳(#mech3d-wrap — CSS 변수 상속), items = 창에 담을 칸들(차례대로), onChange(open) = 단추 표시 갱신
 export function createMonitor({ host, items, onChange = () => {} }) {
   const sv = load(), old = sv.lay !== LAY;
@@ -28,20 +42,12 @@ export function createMonitor({ host, items, onChange = () => {} }) {
   const body = el.querySelector('.m3-mon-body');
   for (const it of items.filter(Boolean)) body.appendChild(it);   // 기본 화면에서 빼서 창 안으로(닫아도 여기 그대로)
   host.appendChild(el);
-  drag(el.querySelector('.m3-mon-hd'), (dx, dy, s0) => { st.x = s0.x + dx; st.y = s0.y + dy; place(); }, (e) => !e.target.closest('button'));
-  drag(el.querySelector('.m3-mon-rs'), (dx, dy, s0) => { st.w = s0.w + dx; st.h = s0.h + dy; place(); }, () => !st.min, kick);
+  const snap = () => ({ ...st });
+  dragBy(el.querySelector('.m3-mon-hd'), snap, (dx, dy, s0) => { st.x = s0.x + dx; st.y = s0.y + dy; place(); }, (e) => !e.target.closest('button'), persist);
+  dragBy(el.querySelector('.m3-mon-rs'), snap, (dx, dy, s0) => { st.w = s0.w + dx; st.h = s0.h + dy; place(); }, () => !st.min, () => { persist(); kick(); });
+  el.addEventListener('pointerdown', () => raiseWin(el), true);
   el.querySelector('[data-mon-min]').onclick = () => setMin(!st.min);
   el.querySelector('[data-mon-close]').onclick = () => close();
-  function drag(handle, onMove, ok, onEnd = () => {}) {
-    handle.addEventListener('pointerdown', (e) => {
-      if (!ok(e)) return;
-      e.preventDefault(); handle.setPointerCapture(e.pointerId);
-      const x0 = e.clientX, y0 = e.clientY, s0 = { ...st };
-      const mv = (ev) => onMove(ev.clientX - x0, ev.clientY - y0, s0);
-      const up = () => { handle.removeEventListener('pointermove', mv); handle.removeEventListener('pointerup', up); handle.removeEventListener('pointercancel', up); persist(); onEnd(); };
-      handle.addEventListener('pointermove', mv); handle.addEventListener('pointerup', up); handle.addEventListener('pointercancel', up);
-    });
-  }
   function setMin(v) {
     st.min = v; persist();
     el.classList.toggle('min', v);

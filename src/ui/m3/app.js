@@ -161,7 +161,7 @@ export async function mount(ctx) {
   mountSplitter(document.querySelector('.m3-main'));   // 좌·우 창 폭 끌어서 조절(한 번만 붙음)
   mountDockSplitter(document.querySelector('#m3-dock'), document.querySelector('#mech3d-wrap'));   // 아래 칸 높이 조절
   // ⑤ 기구 최적화 창(떠 있는 창) — 설계 인자 현황·기구 최적화 칸을 기본 화면에서 빼서 담음. 여닫기 = 명령줄 [5 기구 최적화]
-  monitor ??= createMonitor({ host: $('#mech3d-wrap'), items: [$('#m3-factor'), $('#m3-dock')], onChange: (on) => { const b = document.querySelector('#m3-cmd [data-c="opt"]'); if (b) { b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); } if (on && A && !adState().open) adSetOpen(true); if (A) renderMarkers(); } });
+  monitor ??= createMonitor({ host: $('#mech3d-wrap'), items: [$('#m3-factor'), $('#m3-dock')], onChange: (on) => { const b = document.querySelector('#m3-cmd [data-c="opt"]'); if (b) { b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); } if (on && A && !adState().open) adSetOpen(true); if (A) { renderMarkers(); adDetectPath(); } } });
   // 기구 최적화 창 안: 왼쪽 설계 인자 ↔ 오른쪽 실행·진행 폭 조절(가운데 세로 경계선 끌기, 보는 사람별)
   // 실행 줄·결과 카드(#m3-auto) = 왼쪽 설계 인자 바로 아래(2026-10-30) — 고르고 → 실행 → 결과를 한 칸에서, 오른쪽은 진행 모니터만
   if ($('#m3-auto') && $('#m3-auto').parentElement !== $('#m3-factor')) $('#m3-factor')?.appendChild($('#m3-auto'));
@@ -211,6 +211,7 @@ export function unmount() {
   if (!A) return;
   const a = A; A = null;   // 먼저 비워서 cancel 의 onUpdate 가 그리지 않게
   a.ad?.runner?.cancel(); a.ad?.stepWorker?.terminate();
+  a.results?.closeBig();   // 떠 있는 광량 분포 창 — 다른 프로젝트의 그림이 남지 않게
   $('#m3-auto').hidden = true;
   a.prog.dispose(); a.unsub(); a.unsubHist?.(); a.store.dispose();   // 풀은 유지(진행 중 청크는 ≤0.5초 — 끝나면 버려짐)
   window.removeEventListener('keydown', a.keydown);
@@ -373,6 +374,7 @@ function onCalc(snap) {
   A.results.update({ snap, observe: M.observe, message: guidance(snap), leds: ledSW(M, S.line), leak: leakText(A.checks.leak, M.parts.map((p) => p.name)) });
   A.simDash?.sample(snap, M.observe.targetNoise ?? 0.01, M.observe, M.parts.map((p) => p.name), M.parts.length, !!adState().running);
   drawLightPaths();
+  adDetectPath();
   paintObs(snap);
   A.cmd.update(S, M, snap.stats ?? null);
   renderStatus();
@@ -531,6 +533,22 @@ function adInfo() {   // 부품별 비 2.5D 비율(부품 윗면 기준 — part
   if (!st.info || st.info.rt !== rt || st.info.line !== S.line) st.info = { rt, line: S.line, non25: S.line && rt ? rt.parts.map((p) => heightsFor(p, partFrame(p, S.line.frame), 0.5).non25) : [], boxes: rt ? rt.parts.map((p) => bounds(p.positions)) : [] };   // boxes = ④ 기본 대상용 외곽
   return st.info;
 }
+const adAvail = (M) => stageAvailability(M, { ...adInfo(), path: adState().path ?? null });
+// 광경로 위 부품 검출 — 계산 중인 장면(Worker 0)에서 광자로 재서 ③ 형상·② 케이스 대상 목록을 좁힘. 장면마다 한 번, 기구 최적화 창이 열려 있을 때만.
+// 최적화 실행 중에는 Worker 장면이 후보로 바뀌므로 쉼. 관측면에 빛이 안 닿으면 path = null(전체 목록)
+function adDetectPath() {
+  const a = A, st = a?.ad;
+  if (!st || st.running || !monitor?.isOpen()) return;
+  const sceneKey = a.prog?.snapshot?.().sceneKey, port = a.pool?.ports?.()[0];
+  if (!sceneKey || !port || st.pathKey === sceneKey) return;
+  st.pathKey = sceneKey;
+  port.send({ type: 'partsOnPath', sceneKey, nMech: a.store.mspec.parts.length }).then((r) => {
+    if (A !== a || st.pathKey !== sceneKey) return;
+    if (!r?.result) { st.pathKey = null; return; }   // 장면이 그새 바뀜 — 다음 갱신에서 다시
+    st.path = r.result.observed > 0 ? { shares: r.result.shares } : null;
+    renderAuto(); renderMarkers();
+  }, () => { if (st.pathKey === sceneKey) st.pathKey = null; });
+}
 const adMilkyPart = (M, avail) => (avail.milky.ok ? (avail.milky.parts.find((i) => M.observe.faces.some((f) => f.part === i)) ?? avail.milky.parts[0]) : null);
 const adClone = (x) => (x == null ? null : JSON.parse(JSON.stringify(x)));
 // 기구 최적화 카드 펼침 상태 — 새로고침해도 기억(브라우저별 편의 설정)
@@ -539,8 +557,10 @@ function adSetOpen(v) { adState().open = v; try { localStorage.setItem(AD_OPEN_K
 // 기구 최적화 항목·설정 바꾸기(왼쪽 칸·가운데 타일 공용)
 function adSel(k, v) {
   const st = adState(); if (st.running) return;
-  if (k === 'position') { const av = stageAvailability(A.store.mspec, adInfo()); st.sel.leds = !!v && !!av.leds?.ok; st.sel.height = !!v && !!av.height?.ok; }   // ② 기구 위치 = LED 배치 + 높이
+  if (k === 'position') { const av = adAvail(A.store.mspec); st.sel.leds = !!v && !!av.leds?.ok; st.sel.height = !!v && !!av.height?.ok; }   // ② 기구 위치 = LED 배치 + 높이
   else st.sel[k] = k === 'milkyMax' ? clampCap(v) : v;
+  if (k === 'shapePart') st.sel.shapeAuto = false;   // 직접 고르면 검출 결과가 바뀌어도 그대로(목록에서 빠질 때만 다시 자동)
+  if (k === 'housingPart') st.sel.housingAuto = false;
   st.sel.boost = false;   // 보완 자동 추가는 화면에서 뺌(④ 케이스 면은 2026-10-30 다시 켬 — 설계 인자 ④ 줄)
   renderAuto(); renderMarkers();   // ③ 대상 부품 강조 갱신
 }
@@ -557,12 +577,15 @@ function renderAuto() {
   const el = $('#m3-auto'), st = adState();
   el.hidden = false;   // 닫혀 있어도 한 줄 머리는 늘 보인다(메뉴가 사라진 것처럼 보이지 않게)
   $('#m3-dock')?.classList.toggle('collapsed', !st.open);   // 접으면 아래 칸 = 한 줄(대시보드 숨김)
-  const M = A.store.mspec, avail = stageAvailability(M, adInfo());
-  if (!st.running && !avail.shape.parts?.includes(st.sel.shapePart)) st.sel.shapePart = avail.shape.ok ? avail.shape.parts[0] : -1;   // 부품 소재·형상이 바뀌어 대상이 빠지면 첫 후보로
-  if (!st.running && !avail.housing.parts?.includes(st.sel.housingPart)) { const k = defaultHousingPart(M, adInfo().boxes); st.sel.housingPart = avail.housing.ok ? (avail.housing.parts.includes(k) ? k : avail.housing.parts[0]) : -1; }   // ④ 기본 = 관측 부품을 감싸는 가장 큰 불투명 부품
+  const M = A.store.mspec, avail = adAvail(M);
+  adDetectPath();
+  if (!st.running && !avail.shape.parts?.includes(st.sel.shapePart)) st.sel.shapeAuto = true;   // 직접 고른 대상이 목록에서 빠지면 다시 자동
+  if (!st.running && !avail.housing.parts?.includes(st.sel.housingPart)) st.sel.housingAuto = true;
+  if (!st.running && st.sel.shapeAuto !== false) st.sel.shapePart = avail.shape.ok ? avail.shape.parts[0] : -1;   // 자동 = 빛이 가장 많이 지나는 부품(검출 전 = 첫 후보)
+  if (!st.running && st.sel.housingAuto !== false) { const k = defaultHousingPart(M, adInfo().boxes); st.sel.housingPart = avail.housing.ok ? (avail.housing.parts.includes(k) ? k : avail.housing.parts[0]) : -1; }   // ② 자동 = 관측 부품을 감싸는 가장 큰 불투명 부품(광경로 위일 때), 아니면 빛이 가장 많이 닿는 부품
   const mp = st.running ? st.milkyPart : adMilkyPart(M, avail), sel = { ...st.sel, milkyMax: st.sel.milkyMax ?? capDefault(st.sel, avail, mp != null ? M.parts[mp].material.milky : 0) };
   const hm = st.sel.housingPart >= 0 ? reflCat().find((e) => !e.special && e.id === M.parts[st.sel.housingPart]?.reflMaterial) : null;   // ④ 대상 반사 소재
-  A.tileState = { avail, sel, running: st.running, names: M.parts.map((p) => p.name), milkyPart: mp, housingMat: hm ? { name: hm.name, max: hm.max } : null };
+  A.tileState = { avail, sel, running: st.running, names: M.parts.map((p) => p.name), milkyPart: mp, housingMat: hm ? { name: hm.name, max: hm.max } : null, path: st.path ?? null };
   if (!st.open) {   // 설정(tileState)은 위에서 먼저 — 설계 인자 현황 줄 체크가 접힘과 무관하게 보이게
     el.innerHTML = '<button type="button" class="m3-ad-collapsed" data-ad="open" aria-expanded="false"><i class="m3-fl">5</i>기구 최적화 <span class="mut">— 목표 미달일 때 Milky·LED 위치·형상 후보 찾기 · 펼치기 ▴</span></button>';
     el.querySelector('[data-ad="open"]').onclick = () => { adSetOpen(true); };
@@ -792,7 +815,7 @@ const BOOST_SETS = [['housing'], ['height'], ['housing', 'height'], ['leds'], ['
 const BOOST_LABEL = { housing: '④ 케이스 면', height: '⑤ LED 높이', leds: '② LED 배치' };
 // 최적화 대시보드 — 실행 시작 때 체크한 항목으로 초기화, 끝나면 결과 표시
 function dashReset(only = null) {   // only = 이번에 돌릴 단계(이어서 최적화) — 없으면 체크 상태
-  const st = adState(), avail = stageAvailability(A.store.mspec, adInfo()), O = A.store.mspec.observe;
+  const st = adState(), avail = adAvail(A.store.mspec), O = A.store.mspec.observe;
   const on = (k) => (only ? !!only[k] : !!st.sel[k] && !!avail[k]?.ok);
   A.optDash?.reset({ stages: { milky: on('milky'), position: on('leds') || on('height'), shape: on('shape'), housing: on('housing') }, tgLen: O.targetLen, tgWid: O.targetWid, locked: { ...(st.locked ?? {}) } });
 }
@@ -812,7 +835,7 @@ async function adRunBoost() {
   let r = await adRun();
   if (!r || r.feasible || st.sel.boost === false || !st.result) return;
   const b0 = st.result, base = { Ulen: b0.best.Ulen, Uwid: b0.best.Uwid, milky: b0.best.milky, reason: b0.reason, unchanged: b0.unchanged };
-  const avail = stageAvailability(A.store.mspec, adInfo()), checked = r.stages;
+  const avail = adAvail(A.store.mspec), checked = r.stages;
   const sets = BOOST_SETS.filter((set) => set.every((k) => !checked[k] && avail[k]?.ok));
   let good = b0;
   for (const [i, set] of sets.entries()) {
@@ -833,7 +856,7 @@ async function adRun(opt = {}) {
   if (!S.line || st.running) return null;
   if (/^기구 최적화 실패/.test(S.status ?? '')) setStatus('');   // 지난 실패 문구는 지움
   const M0 = adClone(A.store.mspec), line = S.line, rt = getMech3d();   // 실행 격리 — 편집은 실행을 중지시킴(onChange)
-  const avail = stageAvailability(M0, adInfo()), stages = opt.stages ?? { milky: st.sel.milky && avail.milky.ok, leds: st.sel.leds && avail.leds.ok, shape: st.sel.shape && avail.shape.ok && avail.shape.parts.includes(st.sel.shapePart),
+  const avail = adAvail(M0), stages = opt.stages ?? { milky: st.sel.milky && avail.milky.ok, leds: st.sel.leds && avail.leds.ok, shape: st.sel.shape && avail.shape.ok && avail.shape.parts.includes(st.sel.shapePart),
     height: st.sel.height && avail.height.ok, housing: st.sel.housing && avail.housing.ok && avail.housing.parts.includes(st.sel.housingPart) };
   st.milkyPart = adMilkyPart(M0, avail);
   const hpSel = avail.housing?.parts?.includes(st.sel.housingPart) ? st.sel.housingPart : defaultHousingPart(M0, adInfo().boxes);   // 보완으로 ④ 를 더했으면 기본 케이스 부품
@@ -1039,7 +1062,7 @@ function adApply() {
 // 적용한 형상·배치는 장면(getMech3d)에 들어가 다음 실행의 출발점이 됨. 적용은 [되돌리기] 로 취소 가능
 async function adContinue() {
   const st = adState(), r = st.result; if (!r || st.running) return;
-  const done = r.stages ?? {}, s = st.sel, av = stageAvailability(A.store.mspec, adInfo());
+  const done = r.stages ?? {}, s = st.sel, av = adAvail(A.store.mspec);
   const next = { milky: !!(s.milky && !done.milky && av.milky.ok), leds: !!(s.leds && !done.leds && av.leds.ok), height: !!(s.height && !done.height && av.height.ok), housing: !!(s.housing && !done.housing && av.housing.ok && av.housing.parts.includes(s.housingPart)),
     shape: !!(s.shape && !done.shape && av.shape.ok && av.shape.parts.includes(s.shapePart)) };
   if (!Object.values(next).some(Boolean)) { setStatus('이어서 최적화할 항목이 없음 — 설계 인자에서 위치·Milky 등을 더 체크하세요'); renderAuto(); return; }

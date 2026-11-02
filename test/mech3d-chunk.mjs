@@ -1,5 +1,5 @@
 // 청크 실행·새는 빛·Worker 장면 캐시(Node 모의): node test/mech3d-chunk.mjs
-import { runJob, runChunk, samplePath } from '../src/engine/mech3d/job.js';
+import { runJob, runChunk, samplePath, partsOnPath } from '../src/engine/mech3d/job.js';
 import { makeChunkHost } from '../src/engine/mech3d/chunk-host.js';
 import { lightData } from '../src/engine/mech3d/line.js';
 import { loadTable } from './l2-util.mjs';
@@ -48,6 +48,19 @@ const same = (a, b) => a.length === b.length && a.every((v, k) => v === b[k]);
   const all = host.handle({ type: 'chunk', sceneKey: 'p4', seed: 7, N: 3000 }).reply;
   const mid = (a) => { let s = 0; for (let i = Math.floor(F.G.ns * 0.45); i < Math.ceil(F.G.ns * 0.55); i++) for (let j = 0; j < F.G.nw; j++) s += a[i * F.G.nw + j]; return s; };
   ok(one.acc.some((v) => v > 0) && Math.abs(all.ledger.emitted / one.ledger.emitted - 5) < 1e-9 && mid(one.acc) / one.ledger.emitted > mid(all.acc) / all.ledger.emitted, 'chunk.emitters: 가운데 LED 1개만 — 방출 = LED 1개 몫(combineSources 는 광속 합), 가운데에 몰림');
+}
+
+{ // 광경로 위 부품: 투과 판은 관측 빛 전부가 지남 · 불투명이면 관측 빛이 없어도 닿은 비중이 나옴 · nMech 이상 뺌 · 시간 제한 · 장면 캐시
+  const r = partsOnPath({ ...base, nMech: 1 });
+  ok(r.observed > 0 && r.shares[0] > 0.99 && r.shares[0] <= 1 + 1e-9 && r.photons === 18000, `투과 판 비중 ${r.shares[0]?.toFixed(3)} · 관측 ${r.observed.toFixed(3)}`);
+  ok(Object.keys(partsOnPath({ ...base, nMech: 0, batches: 1 }).shares).length === 0, 'nMech 이상 번호는 뺌');
+  const blk = partsOnPath({ ...base, S: { ...fx.S, optics: fx.S.optics.map((o) => ({ ...o, transmissive: false })) }, nMech: 1, batches: 2 });
+  ok(blk.shares[0] > 0.2 && blk.shares[0] <= 1 + 1e-9, `불투명 판: 방출 대비 닿은 비중 ${blk.shares[0]?.toFixed(3)}`);
+  let t = 0; ok(partsOnPath({ ...base, nMech: 1, N: 100, maxMs: 5, now: () => (t += 10) }).photons === 100, '시간이 지나면 첫 묶음에서 멈춤');
+  const host = makeChunkHost({ getTable: () => table, getDb: () => null });
+  host.handle({ type: 'scene', sceneKey: 'pp', mechParts: [fx.plate], mspec: fx.mspec, ledParts: null, lineData: lightData(fx.line), G: fx.G, obs: fx.obs, emitters: fx.emitters });
+  const h = host.handle({ type: 'partsOnPath', sceneKey: 'pp', nMech: 1 }).reply;
+  ok(h.result.shares[0] > 0.99 && host.handle({ type: 'partsOnPath', sceneKey: 'old', nMech: 1 }).reply.stale === true, 'Worker: 장면에서 검출 · 다른 장면 = stale');
 }
 
 { // 대표 광경로(광경로 화살표): 원하는 경로(':0' = 판 하나 통과)로 관측면에 닿은 광자 하나의 면 적중점 — LED → 판 아랫면 → 윗면, 나가는 방향

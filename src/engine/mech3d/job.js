@@ -94,6 +94,38 @@ export function samplePath({ S, line, obs, G, emitters, ledSpec, want, nMech = I
   return found[Math.floor((found.length - 1) / 2)];
 }
 
+// 광경로 위 부품 검출(기구 최적화 대상 목록) — 실제 MC 광자로 부품별 비중을 잼. shares[부품] =
+//   투과 부품: 관측면에 닿은 빛 중 그 부품을 지난 비중 · 불투명 부품: 방출한 빛 중 그 면에 닿은 비중(지금 반사율이 낮아 관측면까지 못 와도 '닿으면' 대상 — 그래서 방출 기준)
+// batches × N 광자까지, maxMs 넘으면 멈춤. 반환 { shares, observed(관측면 빛 비중), photons }. nMech 이상 번호(LED·PCB)는 뺌
+export function partsOnPath({ S, line, obs, G, emitters, ledSpec, nMech = Infinity, N = 1500, seed = 11, batches = 12, maxEvents = 4000, maxMs = 1500, now = () => Date.now() }) {
+  const src = ledSources(emitters, ledSpec), tr = {}, op = {}, t0 = now();
+  let emitted = 0, observed = 0, photons = 0;
+  for (let b = 0; b < batches && (b === 0 || now() - t0 < maxMs); b++) {
+    const a = makeAccumulator(G, line, obs);
+    let curP = -1, seen = new Set();
+    const r = runMC3D(S, {
+      source: src, N, seed: seed * 7919 + b, maxEvents,
+      onExit: a.onExit,
+      onHit(part, face, x, y, z, dx, dy, dz, w, p, entering) {
+        if (p !== curP) { curP = p; seen = new Set(); }
+        if (!entering || part < 0 || part >= nMech || seen.has(part)) return;
+        seen.add(part);
+        if (!S.optics[part]?.transmissive) op[part] = (op[part] ?? 0) + w;
+      },
+      onEscape(x, y, z, dx, dy, dz, w, p) {
+        if (!a.onEscape(x, y, z, dx, dy, dz, w, p)) return;
+        observed += w;
+        if (curP === p) for (const q of seen) if (S.optics[q]?.transmissive) tr[q] = (tr[q] ?? 0) + w;
+      },
+    });
+    emitted += r.ledger.emitted; photons += N;
+  }
+  const shares = {};
+  for (const q in tr) shares[q] = tr[q] / observed;
+  for (const q in op) shares[q] = op[q] / emitted;
+  return { shares, observed: emitted > 0 ? observed / emitted : 0, photons };
+}
+
 // GPU 청크 — runChunk 와 같은 결과 형식. 광원 표본은 CPU 가 뽑고(seed), GPU 가 추적한 광자별 기록(gpu-trace.js REC)을
 // 같은 집계기에 차례로 넣는다(마지막 출사 → 탈출). gpu = createGpuTracer() 결과
 export async function runChunkGpu(gpu, { S, line, obs, G, emitters, ledSpec, N, seed, rw = null }) {

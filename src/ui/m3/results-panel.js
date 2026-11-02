@@ -1,4 +1,5 @@
 import { mountSplit } from './pane-split.js';
+import { clampRect, dragBy, raiseWin } from './monitor.js';
 // 결과 패널 — spec 2026-10-15 m3-cad-ui §2(시안 m3-ui-mockup 오른쪽):
 // ① 2D 광량 분포(관측면 펼침 s×w) + 평균 광량(목표 대비)·광 효율 ② 길이 1D 프로파일(목표선) + 길이 균일도 ③ 폭 1D 프로파일(최저 창) + 폭 균일도.
 // update({ snap(progressive snapshot), observe(spec.mech3d.observe), message(안내 | ''), leds?: [{s, w}](LED 위치 — 프로파일 아래 표시) })
@@ -360,6 +361,15 @@ function sizeCanvas(cv, ratio) {
 }
 
 const QUALITY_OPTS = [['low', '저화질 1.5 mm'], ['mid', '중화질 1 mm'], ['high', '고화질 0.5 mm']];   // 정사각 칸 크기(2026-10-30) — 작을수록 계산 오래(중 ≈2배 · 고 ≈4배 광선)
+// 큰 창 위치·크기(보는 사람별) — 처음 = 메뉴 아래 넓게
+const BIG_KEY = 'uds.m3.bigWin', BIG_MIN_W = 360;
+function bigRectLoad() {
+  let r = null; try { r = JSON.parse(localStorage.getItem(BIG_KEY)); } catch { r = null; }
+  if (Number.isFinite(r?.x) && Number.isFinite(r?.y) && r.w >= 480 && r.h >= 360) return r;
+  const w = Math.round(Math.min(1600, innerWidth * 0.94));
+  return { x: Math.round((innerWidth - w) / 2), y: 56, w, h: Math.max(360, innerHeight - 72) };
+}
+function bigRectSave(r) { try { localStorage.setItem(BIG_KEY, JSON.stringify({ x: r.x, y: r.y, w: r.w, h: r.h })); } catch {} }
 export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds', onLeak = null } = {}) {
   const gaugeHtml = (k) => `<div class="m3-gauge" data-r="${k}"><div class="f"></div><div class="tg"></div></div>`;
   el.innerHTML = `
@@ -419,7 +429,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
       paint(k, cv);
     }
   };
-  const closeBig = () => { if (!big) return; big.ro?.disconnect(); big.el.remove(); document.removeEventListener('keydown', big.key); window.removeEventListener('resize', big.rs); big = null; };
+  const closeBig = () => { if (!big) return; big.ro?.disconnect(); big.el.remove(); document.removeEventListener('keydown', big.key); document.removeEventListener('pointerdown', big.down, true); window.removeEventListener('resize', big.rs); big = null; };
   const setFocus = (k) => {
     big.focus = k; if (k) big.grid.dataset.focus = k; else delete big.grid.dataset.focus;   // 속성이 있으면(빈 값도) 한 그림 배치
     big.grid.querySelectorAll('[data-big-one]').forEach((b) => { const on = b.dataset.bigOne === k; b.textContent = on ? '↙ 모두 보기' : '⤢ 이 그림만'; b.title = on ? '2D·1D 를 한 화면에' : '이 그림만 화면 가득'; });
@@ -429,16 +439,36 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     closeBig();
     const eq0 = defaultEqual(VIEW.map?.G);
     const ov = document.createElement('div');
-    ov.className = 'm3-big'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', '광량 분포 2D·1D');
+    // 떠 있는 창(2026-11-02) — 기구 최적화 창처럼 머리 끌어 옮기기 · 모서리로 크기 · 접기. 뒤 화면을 막지 않음(열어 둔 채 설계·최적화). 위치·크기 = 보는 사람별, 접힘은 열 때마다 펼침
+    const rect = bigRectLoad();
+    ov.className = 'm3-big-in'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', '광량 분포 2D·1D');
     const cell = (k) => `<div class="m3-big-c" data-k="${k}"><div class="m3-big-ct"><b>${TITLE[k]}</b><span class="m3-big-sp"></span>${k === 'map' ? `<label class="m3-big-eq"><input type="checkbox" data-big-eq${eq0 ? ' checked' : ''}> 실제 비율</label>` : ''}<button type="button" data-big-txt="${k}" title="${k === 'map' ? '2D 분포 표(칸마다, 최대 대비 %)' : `${TITLE[k]} — ${k === 'prof' ? '폭 평균' : '최저 창·길이 평균'} 곡선(원자료 %, 고른 점이 있으면 그 곡선도)`}">${k === 'map' ? '2D CSV' : '평균값 CSV'}</button><button type="button" data-big-one="${k}">⤢ 이 그림만</button></div><canvas class="m3-big-cv" data-big-cv="${k}"></canvas></div>`;
-    ov.innerHTML = `<div class="m3-big-in"><div class="m3-big-hd"><b title="2D 클릭 = 그 점 기준 1D 곡선(주황)">광량 분포 — 2D · 1D</b><span class="m3-big-sp"></span><label class="m3-big-q">화질 <select data-big-q aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label><button type="button" data-pin-txt>선택 선 CSV</button><button type="button" data-big-close>닫기 (Esc)</button></div>
-      <div class="m3-big-grid">${cell('map')}<div class="m3-big-row">${cell('prof')}${cell('wprof')}</div></div></div>`;
-    document.body.appendChild(ov);
+    ov.innerHTML = `<div class="m3-big-hd" title="끌어서 옮기기"><b title="2D 클릭 = 그 점 기준 1D 곡선(주황)">광량 분포 — 2D · 1D</b><span class="m3-big-sp"></span><label class="m3-big-q">화질 <select data-big-q aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label><button type="button" data-pin-txt>선택 선 CSV</button><button type="button" data-big-min></button><button type="button" data-big-close>닫기 (Esc)</button></div>
+      <div class="m3-big-grid">${cell('map')}<div class="m3-big-row">${cell('prof')}${cell('wprof')}</div></div><div class="m3-mon-rs" title="크기 조절"></div>`;
+    (el.closest('#mech3d-wrap') ?? document.body).appendChild(ov);   // 설계 화면에 붙임(화면을 바꾸면 함께 숨음)
     const cvs = Object.fromEntries(KINDS.map((k) => [k, ov.querySelector(`[data-big-cv="${k}"]`)]));
-    big = { el: ov, cvs, grid: ov.querySelector('.m3-big-grid'), focus: null, equal: eq0, key: (e) => { if (e.key === 'Escape') { if (big.focus) setFocus(null); else closeBig(); } }, rs: () => paintBig() };
-    document.addEventListener('keydown', big.key); window.addEventListener('resize', big.rs);
+    const place = () => {
+      const m = big.min, r = clampRect(m ? { ...rect, w: BIG_MIN_W } : rect, innerWidth, innerHeight);
+      rect.x = r.x; rect.y = r.y; if (!m) { rect.w = r.w; rect.h = r.h; }
+      Object.assign(ov.style, { left: `${r.x}px`, top: `${r.y}px`, width: `${r.w}px`, height: m ? 'auto' : `${r.h}px` });
+    };
+    const setMin = (v) => {
+      big.min = v; ov.classList.toggle('min', v);
+      const b = ov.querySelector('[data-big-min]'); b.textContent = v ? '▾ 펼치기' : '▴ 접기'; b.title = v ? '2D·1D 그림 보기' : '제목 줄만 남기기';
+      place(); if (!v) paintBig();
+    };
+    // Esc = 이 창을 마지막으로 눌렀을 때만(뒤 화면에서 작업 중인 Esc 를 가로채지 않게)
+    big = { el: ov, cvs, grid: ov.querySelector('.m3-big-grid'), focus: null, equal: eq0, min: false, active: true,
+      key: (e) => { if (e.key !== 'Escape' || !big.active) return; if (big.focus) setFocus(null); else closeBig(); },
+      down: (e) => { big.active = ov.contains(e.target); },
+      rs: () => { place(); paintBig(); } };
+    document.addEventListener('keydown', big.key); document.addEventListener('pointerdown', big.down, true); window.addEventListener('resize', big.rs);
+    ov.addEventListener('pointerdown', () => raiseWin(ov), true);
+    const snap = () => ({ ...rect }), keep = () => bigRectSave(rect);
+    dragBy(ov.querySelector('.m3-big-hd'), snap, (dx, dy, s0) => { rect.x = s0.x + dx; rect.y = s0.y + dy; place(); }, (e) => !e.target.closest('button, select, label, input'), keep);
+    dragBy(ov.querySelector('.m3-mon-rs'), snap, (dx, dy, s0) => { rect.w = Math.max(480, s0.w + dx); rect.h = Math.max(360, s0.h + dy); place(); }, () => !big.min, keep);
+    ov.querySelector('[data-big-min]').onclick = () => setMin(!big.min);
     ov.addEventListener('click', (e) => {
-      if (e.target === ov) { closeBig(); return; }
       const one = e.target.closest('[data-big-one]'); if (one) { setFocus(big.focus === one.dataset.bigOne ? null : one.dataset.bigOne); return; }
       const t = e.target.closest('[data-big-txt]'); if (t) (t.dataset.bigTxt === 'map' ? txt2D() : txt1D(t.dataset.bigTxt));   // 그림마다 그 그림의 표
       if (e.target.closest('[data-pin-txt]')) txtPin();   // 선택 선 원자료
@@ -451,8 +481,8 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     const C = (k) => ov.querySelector(`.m3-big-c[data-k="${k}"]`);
     mountSplit([C('map'), ov.querySelector('.m3-big-row')], { key: 'uds.m3.bigV', dir: 'col', min: 120, onChange: () => paintBig() });
     mountSplit([C('prof'), C('wprof')], { key: 'uds.m3.bigH', dir: 'row', min: 160, onChange: () => paintBig() });
-    if (typeof ResizeObserver !== 'undefined') { big.ro = new ResizeObserver(() => paintBig()); big.ro.observe(ov.querySelector('.m3-big-in')); }
-    setFocus(null); syncBig();
+    if (typeof ResizeObserver !== 'undefined') { big.ro = new ResizeObserver(() => paintBig()); big.ro.observe(ov); }
+    setMin(false); raiseWin(ov); setFocus(null); syncBig();
   }
   // 큰 창 머리: 화질 = 지금 값, [선택 선 CSV] = 점을 골랐을 때만
   const syncBig = () => {
@@ -540,5 +570,5 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     new ResizeObserver(() => { const c = q('map'), w = c.clientWidth ? `${c.clientWidth}x${c.clientHeight}` : 0; if (w && w !== w0) { w0 = w; if (last) update(last); } }).observe(el);   // 폭·높이(아래 칸 높이 조절) 바뀌면 다시 그림
   }
   clear();
-  return { update };
+  return { update, closeBig };
 }
