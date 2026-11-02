@@ -30,3 +30,15 @@ export function geomLimit({ cur, raw, led, i, oldXf, newXf, emitters }) {
   const msg = { type: 'lx', id: ++reqId, cur: ensure('cur', cur), raw: ensure('raw', raw), led: led?.length ? ensure('led', led) : null, i, oldXf: oldXf ?? null, newXf, emitters: (emitters ?? []).map((e) => ({ pos: e.pos, axis: e.axis })) };
   return new Promise((res) => { pending.set(msg.id, res); w().postMessage(msg); });
 }
+// 모든 부품 쌍 간섭(큰 도면은 오래 걸림) — 선택 계산을 막지 않게 전용 Worker. 새 요청이 오면 앞 계산은 버림(앞 Promise 는 끝나지 않음)
+let clashW = null;
+export function geomClash(parts) {
+  clashW?.terminate();
+  const me = clashW = new Worker(new URL('../../engine/mech3d/geom-worker.js', import.meta.url), { type: 'module' });
+  const end = (res, d) => { me.terminate(); if (clashW === me) clashW = null; res(d); };
+  return new Promise((res) => {
+    me.onmessage = (e) => end(res, e.data);
+    me.onerror = () => end(res, { error: '간섭 계산 Worker 오류' });
+    me.postMessage({ type: 'clash', parts: parts.map((p) => (p ? { positions: p.positions, triangles: p.triangles } : null)) });
+  });
+}

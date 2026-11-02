@@ -19,6 +19,7 @@ export function initialSession() {
     focusCheck: null,    // 강조할 점검 id
     hidden: [],          // 3D 에서 숨긴 기구 부품 번호(보기 전용 — 계산에는 그대로 포함)
     hideLeds: false,     // LED STEP 부품(PCB·LED) 숨김
+    hiddenLeds: [],      // 한 개씩 숨긴 LED 번호(보기 전용 — 계산에는 그대로 포함)
     xfMsg: null,         // 크기·위치 조절이 간섭으로 제한됐을 때 { part, text }
     multi: [],           // 피처 트리 여러 부품 선택(Ctrl/Shift+클릭 — 그룹 만들기)
     fold: {},            // 트리 접힘 { parts | 그룹 id: true } — 광원으로 옮긴 부품 묶음 '_light' 는 기본 접힘

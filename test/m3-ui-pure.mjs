@@ -44,7 +44,7 @@ ok(calcLabel({ state: 'running' }) === '⏸ 계산 중' && calcLabel({ state: 'p
   ok(/role="button" tabindex="0" aria-current="true" data-node="part:0"/.test(h) && (h.match(/aria-current/g) ?? []).length === 1 && (h.match(/role="button" tabindex="0"(?: aria-current="true")? data-node=/g) ?? []).length === treeNodes(M, { node: 'part:0', line: null }).length,
     '트리 노드: role=button · tabindex=0 · 선택 노드만 aria-current'); }
 { const N = treeNodes(M, { node: null, line: null, hidden: [1], hideLeds: false }).filter((n) => n.id !== 'target');
-  ok(N[0].eye === 'all' && N[1].eye === 'on' && N[2].eye === 'off' && N.find((n) => n.id === 'leds').eye === undefined, '눈 단추: 숨긴 부품 off · 머리 = 모두 보기 · 직접 배치 LED 없음');
+  ok(N[0].eye === 'all' && N[1].eye === 'on' && N[2].eye === 'off' && N.find((n) => n.id === 'leds').eye === 'on', '눈 단추: 숨긴 부품 off · 머리 = 모두 보기 · 직접 배치 LED 도 있음');
   ok(treeNodes(M, { node: null, line: null, hidden: [] }).find((n) => n.id === 'parts').eye === undefined, '숨긴 것 없으면 머리 눈 단추 없음');
   const h = treeHtml(M, { node: null, line: null, hidden: [1] });
   ok(/data-eye="part:1"[^>]*aria-pressed="false"/.test(h) && /class="m3-node child d1  hid"/.test(h), '눈 단추 HTML · 숨긴 행 흐리게');
@@ -52,7 +52,7 @@ ok(calcLabel({ state: 'running' }) === '⏸ 계산 중' && calcLabel({ state: 'p
   ok(treeNodes(stp, { node: null, line: null, hideLeds: true }).find((n) => n.id === 'leds').eye === 'off', 'LED STEP 노드 눈 단추');
   const T = toggleVisibility;
   ok(JSON.stringify(T('part:1', false, 3, [], false)) === '{"hidden":[1],"hideLeds":false}' && JSON.stringify(T('part:1', false, 3, [1], false)) === '{"hidden":[],"hideLeds":false}'
-    && JSON.stringify(T('part:1', true, 3, [], false)) === '{"hidden":[0,2],"hideLeds":true}' && JSON.stringify(T('parts', false, 3, [0, 2], true)) === '{"hidden":[],"hideLeds":false}'
+    && JSON.stringify(T('part:1', true, 3, [], false)) === '{"hidden":[0,2],"hideLeds":true}' && JSON.stringify(T('parts', false, 3, [0, 2], true)) === '{"hidden":[],"hideLeds":false,"hiddenLeds":[]}'
     && JSON.stringify(T('leds', false, 3, [2], false)) === '{"hidden":[2],"hideLeds":true}' && JSON.stringify(T('leds', true, 3, [], true)) === '{"hidden":[0,1,2],"hideLeds":false}', 'toggleVisibility: 끄기·켜기·이것만·모두 보기·LED'); }
 { const cls = []; const el = { listeners: {}, addEventListener(k, f) { this.listeners[k] = f; }, contains: () => true, ownerDocument: null, querySelectorAll: () => [], set innerHTML(v) { this._h = v; }, get innerHTML() { return this._h; } };
   let eye = null, node = null;
@@ -74,7 +74,7 @@ ok(JSON.stringify(judgeText(0.85, 0.8)) === '{"cls":"ok","text":"목표 0.80 · 
   ok(rel.value === '75%' && rel.ratio === null && abs.value === '1234 cd/m²' && abs.pass === true && Math.abs(abs.ratio - 1.2344) < 1e-12 && none.pass === null && none.sub === '목표 없음',
     `평균 광량 카드: 상대 ${rel.value}, 절대 ${abs.value}(${abs.sub})`); }
 { const T = checkLabels({ interference: { status: 'bad', count: 2 }, reach: { status: 'ok', minReach: 0.92, minDist: 6.5 }, wall: { status: 'warn', min: 0.5 }, leak: { status: 'ok', ratio: 0.04 } });
-  ok(T.map((t) => t.text).join(' | ') === 'LED–부품 간섭 2건 | 살두께 0.50 mm' && T.map((t) => t.st).join() === 'bad,warn', `점검 배지(조립·성형만): ${T.map((t) => t.text).join(' | ')}`);
+  ok(T.map((t) => t.text).join(' | ') === 'LED–부품 간섭 2건 | 살두께 0.50 mm | 부품 간섭 –' && T.map((t) => t.st).join() === 'bad,warn,na', `점검 배지(조립·성형만): ${T.map((t) => t.text).join(' | ')}`);
   ok(checkLabels({}).every((t) => t.st === 'na' && t.text.endsWith('–')) && checkLabels({ interference: { status: 'ok', count: 0 } })[0].text === 'LED–부품 간섭 없음', '점검 전 → 회색 –'); }
 // 반올림: 판정과 표시가 엇갈리지 않게(좋을수록 큰 값은 내림, 작을수록 좋은 값은 올림, 미달 폭은 최소 0.01)
 ok(fmtU(0.7999) === '0.79' && fmtU(0.92) === '0.92' && fmtU(0.29) === '0.29' && fmtU(1) === '1.00' && fmtU(NaN) === '–'
@@ -481,3 +481,23 @@ done();
     && k({ part: 1, multi: [0, 1] }) === 'hideSel,only' && k({ part: 1, hidden: [2] }) === 'hide,only,all'
     && k({ selPart: 2, hidden: [2] }) === 'show,all' && k({ isLed: true }) === 'led' && k({ hideLeds: true }) === 'led,all' && k({}) === '';
   console.log(ok3 ? 'PASS 3D 우클릭 메뉴' : (process.exitCode = 1, `FAIL 3D 우클릭 메뉴 ${k({ part: 1 })} | ${k({ part: 1, multi: [0, 1] })} | ${k({ selPart: 2, hidden: [2] })}`)); }
+{ // LED 한 개씩 보기·취소선·제목(2026-11-02)
+  const { toggleLed, viewCtxItems, treeNodes, treeHtml, treeHead, toggleVisibility: tv } = await import('../src/ui/m3/feature-tree.js');
+  const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b), okL = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
+  okL(eq(toggleLed(1, [0, 1, 2], [], false), { hiddenLeds: [1], hideLeds: false }) && eq(toggleLed(1, [0, 1, 2], [1], false).hiddenLeds, []), 'LED 한 개 끄기·켜기');
+  okL(eq(toggleLed(1, [0, 1, 2], [], true), { hiddenLeds: [0, 2], hideLeds: false }) && eq(toggleLed(1, [0, 1, 2], [], false, true).hiddenLeds, [0, 2]), '전체 끔에서 누름 · Shift = 그 LED 만');
+  okL(eq(tv('parts', false, 3, [1], true).hiddenLeds, []), '모두 보기 = 한 개씩 숨긴 LED 도');
+  const ks = (o) => viewCtxItems(o).map((x) => x.k).join();
+  okL(ks({ isLed: true, ledRank: 3 }) === 'led1,led' && viewCtxItems({ isLed: true, ledRank: 3 })[0].label === 'LED 3 숨기기', 'LED 우클릭 = 이 LED · 모두');
+  okL(viewCtxItems({ hiddenLeds: [1, 2] })[0].label === '숨긴 것 모두 보기 (LED 2개)', '숨긴 LED 수');
+  const L0 = { kind: 'manual', spec: { beam: 120 }, manual: { count: 2, rows: 1, pitch: 0 } }, O0 = { targetLen: .8, targetWid: .8, faces: [] }, mat = { kind: 'opaque' };
+  const M0 = { light: L0, observe: O0, parts: [{ name: 'A', material: mat, untrace: true }, { name: 'B', material: mat }] };
+  const rows = [{ n: 1, rank: 1, s: 5, excluded: false }, { n: 0, rank: 2, s: 9, excluded: true }];
+  const N = treeNodes(M0, { node: 'leds', ledSel: 1, hidden: [], hiddenLeds: [0] }, undefined, rows), by = (id) => N.find((x) => x.id === id);
+  okL(by('led:1').label === 'LED 1' && by('led:1').eye === 'on' && by('led:0').eye === 'off' && by('led:1').sel, 'LED 노드 = 위치 순 번호 · 눈 · 선택');
+  okL(by('led:0').strike && by('led:0').badge === '빛 끔', '빛 끈 LED = 취소선');
+  okL(by('part:0').strike && !by('part:1').strike, '계산 제외 부품 = 취소선');
+  okL(treeNodes(M0, { node: null, hidden: [], fold: { leds: true } }, undefined, rows).every((x) => !x.id.startsWith('led:')), 'LED 접기');
+  okL(treeNodes(M0, { node: null, hidden: [] }, undefined, Array.from({ length: 31 }, (_, i) => ({ n: i, rank: i + 1, s: i }))).every((x) => !x.id.startsWith('led:')), 'LED 31개 = 처음엔 접힘');
+  const H = treeHtml(M0, { node: null, hidden: [] }, undefined, rows);
+  okL(/class="m3-node[^"]* untr"[^>]*data-node="part:0"/.test(H) && treeHead().includes('부품 리스트') && !treeHead().includes('설계 트리'), 'untr 클래스 · 제목 부품 리스트'); }

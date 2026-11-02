@@ -430,8 +430,8 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     const eq0 = defaultEqual(VIEW.map?.G);
     const ov = document.createElement('div');
     ov.className = 'm3-big'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', '광량 분포 2D·1D');
-    const cell = (k) => `<div class="m3-big-c" data-k="${k}"><div class="m3-big-ct"><b>${TITLE[k]}</b><span class="m3-big-sp"></span>${k === 'map' ? `<label class="m3-big-eq"><input type="checkbox" data-big-eq${eq0 ? ' checked' : ''}> 실제 비율</label>` : ''}<button type="button" data-big-txt="${k}" title="${k === 'map' ? '2D 분포 표(탭 구분, 최대 대비 %)' : `${TITLE[k]} 표(원자료 %, 지정 점 곡선 포함)`}">CSV</button><button type="button" data-big-one="${k}">⤢ 이 그림만</button></div><canvas class="m3-big-cv" data-big-cv="${k}"></canvas></div>`;
-    ov.innerHTML = `<div class="m3-big-in"><div class="m3-big-hd"><b title="2D 클릭 = 그 점 기준 1D 곡선(주황)">광량 분포 — 2D · 1D</b><span class="m3-big-sp"></span><button type="button" data-pin-txt title="2D 에서 고른 점을 지나는 길이·폭 방향 원자료(평활 없음, 2D 최대 대비 %)">선택 선 CSV</button><button type="button" data-big-close>닫기 (Esc)</button></div>
+    const cell = (k) => `<div class="m3-big-c" data-k="${k}"><div class="m3-big-ct"><b>${TITLE[k]}</b><span class="m3-big-sp"></span>${k === 'map' ? `<label class="m3-big-eq"><input type="checkbox" data-big-eq${eq0 ? ' checked' : ''}> 실제 비율</label>` : ''}<button type="button" data-big-txt="${k}" title="${k === 'map' ? '2D 분포 표(칸마다, 최대 대비 %)' : `${TITLE[k]} — ${k === 'prof' ? '폭 평균' : '최저 창·길이 평균'} 곡선(원자료 %, 고른 점이 있으면 그 곡선도)`}">${k === 'map' ? '2D CSV' : '평균값 CSV'}</button><button type="button" data-big-one="${k}">⤢ 이 그림만</button></div><canvas class="m3-big-cv" data-big-cv="${k}"></canvas></div>`;
+    ov.innerHTML = `<div class="m3-big-in"><div class="m3-big-hd"><b title="2D 클릭 = 그 점 기준 1D 곡선(주황)">광량 분포 — 2D · 1D</b><span class="m3-big-sp"></span><label class="m3-big-q">화질 <select data-big-q aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label><button type="button" data-pin-txt>선택 선 CSV</button><button type="button" data-big-close>닫기 (Esc)</button></div>
       <div class="m3-big-grid">${cell('map')}<div class="m3-big-row">${cell('prof')}${cell('wprof')}</div></div></div>`;
     document.body.appendChild(ov);
     const cvs = Object.fromEntries(KINDS.map((k) => [k, ov.querySelector(`[data-big-cv="${k}"]`)]));
@@ -444,6 +444,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
       if (e.target.closest('[data-pin-txt]')) txtPin();   // 선택 선 원자료
     });
     ov.querySelector('[data-big-close]').onclick = closeBig;
+    ov.querySelector('[data-big-q]').onchange = (e) => onQuality?.(e.target.value);
     const eq = ov.querySelector('[data-big-eq]'); eq.onchange = () => { big.equal = eq.checked; paint('map', cvs.map); };
     wireMapHover(cvs.map); cvs.map._onPin = onPin; wireHover(cvs.prof); wireHover(cvs.wprof);
     // 창 안 크기 조절: 2D ↕ 1D(높이) · 길이 1D ↔ 폭 1D(폭) — 끌기 막대(비율 기억). 창 자체 = 오른쪽 아래 모서리(CSS resize)
@@ -451,8 +452,15 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     mountSplit([C('map'), ov.querySelector('.m3-big-row')], { key: 'uds.m3.bigV', dir: 'col', min: 120, onChange: () => paintBig() });
     mountSplit([C('prof'), C('wprof')], { key: 'uds.m3.bigH', dir: 'row', min: 160, onChange: () => paintBig() });
     if (typeof ResizeObserver !== 'undefined') { big.ro = new ResizeObserver(() => paintBig()); big.ro.observe(ov.querySelector('.m3-big-in')); }
-    setFocus(null);
+    setFocus(null); syncBig();
   }
+  // 큰 창 머리: 화질 = 지금 값, [선택 선 CSV] = 점을 골랐을 때만
+  const syncBig = () => {
+    if (!big) return;
+    const s = big.el.querySelector('[data-big-q]'), b = big.el.querySelector('[data-pin-txt]');
+    if (document.activeElement !== s) s.value = last?.observe?.quality ?? 'low';
+    b.disabled = !pin; b.title = pin ? '고른 점을 지나는 길이·폭 방향 원자료(평활 없음, 2D 최대 대비 %)' : '2D 에서 점을 클릭하면 저장할 수 있음';
+  };
   // onclick 대입(addEventListener 아님) — 패널을 다시 만들면(새 도면·프로젝트) 앞 패널의 처리를 대체. 쌓이면 큰 창이 2개 열리고 아래 창은 이전 계산 데이터였음
   el.onclick = (e) => { if (e.target.closest('[data-pin-txt]')) { txtPin(); return; } const b = e.target.closest('[data-zoom]'); if (b) openBig(); };
   // 메인 결과 칸 높이 조절(2D · 길이 1D · 폭 1D 사이 끌기 막대) — 전체 높이는 그대로, 비율만(보는 사람별)
@@ -486,7 +494,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     const { snap, observe, message } = args, st = snap?.stats, G = snap?.G;
     if (observe && document.activeElement !== q('quality')) q('quality').value = observe.quality ?? 'low';
     el.querySelectorAll('.m3-blk').forEach((b) => b.classList.toggle('dim', !st || !!st.empty));
-    if (!st || st.empty || !G) { clear(message); return; }
+    if (!st || st.empty || !G) { clear(message); syncBig(); return; }
     q('msg').hidden = !message; q('msg').textContent = message || '';
     for (const k of Object.keys(RATIO)) sizeCanvas(q(k), RATIO[k]);
     const dpr = dprNow();
@@ -525,7 +533,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     const eff = snap.photometry?.eff;
     q('eff').textContent = Number.isFinite(eff) ? `${(eff * 100).toFixed(1)}%` : '–';
     const lk = args.leak ?? ''; if (q('leak').textContent !== lk) q('leak').textContent = lk; q('leak').hidden = !lk;   // 새는 빛(광 효율 아래)
-    paintBig();   // 큰 창도 계산을 따라감
+    paintBig(); syncBig();   // 큰 창도 계산을 따라감
   }
   if (typeof ResizeObserver !== 'undefined') {
     let w0 = 0;

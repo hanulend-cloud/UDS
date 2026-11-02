@@ -2,12 +2,17 @@
 // 큰 부품(수만~수십만 삼각형)에서 표본점마다 최근접점·광선·안쪽 판정을 하므로 수 초~수십 초 — 화면 스레드에서 돌리면 '페이지 응답 없음'.
 // 메시지: { type:'parts', role:'cur'|'raw'|'led', key, parts:[{positions,triangles}|null] } — 역할마다 마지막 것만 보관(메모리)
 //         { type:'lx', id, cur, raw, led, i, oldXf, newXf, emitters } → { id, lx: limitXform 결과 }
+//         { type:'clash', parts:[{positions,triangles}|null] } → { clashes } | { error } — 모든 부품 쌍(전용 Worker)
 //         { type:'q', id, cur, raw, led, i, xf, emitters(간격용), limEmitters(가능 범위용 — LED STEP 일 때만) } → { id, clr, lim } | { id, stale:true }(그사이 장면이 바뀜) | { id, error }
-import { partClearance, axisLimits, limitXform } from './clearance.js';
+import { partClearance, axisLimits, limitXform, allPartClashes } from './clearance.js';
 
 const store = {};   // role → { key, parts }
 self.onmessage = (ev) => {
   const m = ev.data;
+  if (m.type === 'clash') {
+    try { const clashes = allPartClashes(m.parts); self.postMessage({ clashes }, clashes.flatMap((c) => [c.positions.buffer, c.triangles.buffer])); } catch (e) { self.postMessage({ error: String(e?.message ?? e) }); }
+    return;
+  }
   if (m.type === 'parts') { store[m.role] = { key: m.key, parts: m.parts }; return; }
   if (m.type !== 'q' && m.type !== 'lx') return;
   try {

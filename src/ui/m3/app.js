@@ -19,10 +19,10 @@ import { createPool } from './pool.js';
 import * as L from './leds.js';
 import { buildObsOverlay, cellColors, extractFaces } from './colormap.js';
 import { mountCommandBar } from './command-bar.js';
-import { renderFeatureTree, toggleVisibility, makeGroup, ungroup, groupMembers, rangeSelect, removeFromGroups, viewCtxItems, showCtxMenu } from './feature-tree.js';
+import { renderFeatureTree, toggleVisibility, makeGroup, ungroup, groupMembers, rangeSelect, removeFromGroups, viewCtxItems, showCtxMenu, toggleLed, ledFoldDefault } from './feature-tree.js';
 import { mountSplitter, mountDockSplitter, mountFacSplitter } from './splitter.js';
 import { createOptDash, createSimDash } from './opt-dash.js';
-import { geomQuery, geomLimit } from './geom-client.js';
+import { geomQuery, geomLimit, geomClash } from './geom-client.js';
 import { renderPropertyPanel } from './property-panel.js';
 import { meshInfo, clearDbHtml, clearAddFormHtml, reflAddFormHtml, wireMaterialDb, dbFormState } from '../mech3d-panel.js';
 import { isAdmin } from '../../model/admin.js';
@@ -86,7 +86,7 @@ export function command(id) {
     case 'theme': click('#m3-views [data-theme-toggle]'); break;
     case 'fit': h.onFit(); break;
     case 'section': h.onSection(); break;
-    case 'show-all': st.update('view', (_, x) => { x.hidden = []; x.hideLeds = false; }); break;
+    case 'show-all': st.update('view', (_, x) => { x.hidden = []; x.hideLeds = false; x.hiddenLeds = []; }); break;
     case 'deselect': st.update('session', (_, x) => { x.sel = null; x.ledSel = null; x.pick = null; x.focusCheck = null; }); break;
     case 'led-pick': h.onLed(); break;
     case 'obs-pick': h.onObs(); break;
@@ -343,7 +343,21 @@ function rerunGeomChecks() {
   // LED STEP 의 PCB(합친 장면 번호 = 기구 부품 수 + pcb)는 LED 몸체와 늘 맞닿으므로 간섭 검사에서 뺀다
   const pcb = M.light.kind === 'step' ? L.stepLayout(M, S.line)?.pcb ?? -1 : -1, exclude = pcb >= 0 ? [rt.parts.length + pcb] : [];
   Object.assign(A.checks, runGeomChecks({ rt, mspec: M, emitters, bodies: L.ledBodies(M, S.line), obsParts: new Set(M.observe.faces.map((f) => f.part)), beam: M.light.spec.beam, exclude }));
+  refreshClash();
   renderMarkers(); renderStatus();
+}
+// 부품끼리 겹친 곳(2026-11-02) — 장면·계산 제외가 바뀔 때만 다시. 결과 = 3D 표식(renderMarkers) + 상태 띠 배지
+function refreshClash() {
+  const M = A.store.mspec, rt = getMech3d(), off = M.parts.map((p) => !!p.untrace || p.role === 'light'), k = off.join();
+  if (A.clashAsk?.rt === rt && A.clashAsk.k === k) return;
+  const ask = A.clashAsk = { rt, k };
+  A.checks.clash = { status: 'na', count: 0, items: [] };
+  geomClash(rt.parts.map((p, i) => (off[i] ? null : p))).then((r) => {
+    if (!A || A.clashAsk !== ask) return;
+    const items = r.clashes ?? [], nm = (i) => A.store.mspec.parts[i]?.name ?? `부품 ${i + 1}`;
+    A.checks.clash = r.error ? { status: 'na', count: 0, items: [] } : { status: items.length ? 'bad' : 'ok', count: items.length, items, names: items.map((c) => `${nm(c.a)} – ${nm(c.b)} ${c.depth.toFixed(2)} mm`).join('\n') };
+    renderMarkers(); renderStatus();
+  });
 }
 function updateLeakCheck(snap) {
   const M = A.store.mspec;
@@ -359,11 +373,18 @@ function renderMarkers() {
   // ③ 형상 바꿀 부품 — 기구 최적화 창이 열려 있고 ③ 을 켰으면 보라색으로 덮어 표시
   const ad = A.ad, spi = ad?.sel?.shape && monitor?.isOpen() ? ad.sel.shapePart : -1;
   if (spi >= 0 && rt?.parts[spi]) out.push({ type: 'tris', positions: rt.parts[spi].positions, triangles: rt.parts[spi].triangles, color: 0xa855f7, opacity: 0.35 });
+  const hidP = new Set(A.store.session.hidden ?? []);
+  for (const c of C.clash?.items ?? []) {   // 부품끼리 겹친 부위 = 빨간 면 + 가장 깊은 곳 빨간 원(둘 다 숨긴 쌍은 뺌)
+    if (hidP.has(c.a) && hidP.has(c.b)) continue;
+    if (c.triangles.length) out.push({ type: 'tris', positions: c.positions, triangles: c.triangles, color: 0xff3b30, opacity: 0.6 });
+    out.push({ type: 'ring', pos: c.pos, color: 0xff3b30, size: size('clash') });
+  }
   for (const it of C.interference?.items ?? []) out.push({ type: 'ring', pos: it.pos, color: it.kind === 'potted' ? 0xffa000 : 0xff3b30, size: size('interference') });   // 포팅 LED(투과 부품 안) = 주황 경고
+  const hidA = new Set(A.store.session.hiddenLeds ?? []), emA = hidA.size ? ledsNow().em : [];
   for (const it of C.reach?.items ?? []) {
     const col = 0x4cd964;   // LED 방향 화살표만(도달 경고 고리는 뺌 — 직진만 봐서 도광 구조에서 잘못 경고, 2026-10-29)
     // LED 방향 = 화살표, 빛 원뿔(len = min(4, 0.4·간격))보다 1.6배 길게 — 단 닿는 면을 넘지 않게(간격의 90%). LED 를 끄면(hideLeds) 함께 숨김
-    if (it.dist != null && !A.store.session.hideLeds) out.push({ type: 'arrow', pos: it.pos, axis: it.axis, len: Math.min(1.6 * Math.min(4, 0.4 * it.dist), 0.9 * it.dist), color: col });
+    if (it.dist != null && !A.store.session.hideLeds && !hidA.has(emA[it.led]?.led ?? it.led)) out.push({ type: 'arrow', pos: it.pos, axis: it.axis, len: Math.min(1.6 * Math.min(4, 0.4 * it.dist), 0.9 * it.dist), color: col });
   }
   if (C.wall?.pos && (C.wall.status === 'warn' || f === 'wall')) out.push({ type: 'ring', pos: C.wall.pos, color: 0xffa000, size: size('wall') });
   const w = C.leak?.worst;
@@ -1091,7 +1112,8 @@ function onViewContext({ part, led, x, y }) {
   const mech = part != null && part < nMech ? part : null, isLed = led != null || (part != null && part >= nMech);
   if (mech != null && st.session.node !== `part:${mech}` && !(st.session.multi ?? []).includes(`part:${mech}`)) st.update('session', (_, q) => { q.multi = []; q.node = `part:${mech}`; q.sel = { part: mech, face: null }; q.ledSel = null; });
   const S = st.session, sel = S.node?.startsWith('part:') ? +S.node.slice(5) : null, multi = (S.multi ?? []).filter((q) => q.startsWith('part:')).map((q) => +q.slice(5));
-  const items = viewCtxItems({ part: mech, isLed, selPart: sel, multi, hidden: S.hidden ?? [], hideLeds: !!S.hideLeds, names: M.parts.map((p) => p.name) });
+  const LS = ledsNow(), rows = ledRows(LS), ln = isLed ? ledOfHit({ part, led }, nMech, LS.lay) : null;
+  const items = viewCtxItems({ part: mech, isLed, ledRank: rows.find((r) => r.n === ln)?.rank ?? null, selPart: sel, multi, hidden: S.hidden ?? [], hideLeds: !!S.hideLeds, hiddenLeds: S.hiddenLeds ?? [], names: M.parts.map((p) => p.name) });
   if (!items.length) return;
   showCtxMenu(document, x, y, items, (k) => st.update('view', (m, q) => {
     const n = m.parts.length, tv = (id, only = false) => Object.assign(q, toggleVisibility(id, only, n, q.hidden, q.hideLeds));
@@ -1100,7 +1122,8 @@ function onViewContext({ part, led, x, y }) {
     else if (k === 'only') tv(`part:${mech}`, true);
     else if (k === 'hideSel') q.hidden = [...new Set([...(q.hidden ?? []), ...multi])];
     else if (k === 'led') q.hideLeds = !q.hideLeds;
-    else if (k === 'all') { q.hidden = []; q.hideLeds = false; }
+    else if (k === 'led1') Object.assign(q, toggleLed(ln, rows.map((r) => r.n), q.hiddenLeds, q.hideLeds));
+    else if (k === 'all') { q.hidden = []; q.hideLeds = false; q.hiddenLeds = []; }
   }), $('#mech3d-wrap'));
 }
 // ---- 3D 클릭 (main.js:393-425) — 기구 부품 수(nMech) 이상인 번호는 LED STEP 부품 ----
@@ -1450,6 +1473,7 @@ function cmdHandlers() {
 function ledEdit(m, x, op, n = null) {
   const stp = m.light.kind === 'step' ? m.light.step : null;
   if (!stp) return;
+  x.hiddenLeds = [];   // 번호가 바뀜
   if (op === 'orig') { stp.virtual = null; m.light.ledAdjust = null; x.ledSel = null; x.status = 'LED 를 STEP 원래 배치로 되돌림'; return; }
   const line = x.line, lay = line ? L.stepLayout(m, line) : null;
   if (!lay || lay.err) { x.status = `LED 배치를 편집할 수 없음: ${lay?.err ?? '관측면(라인)을 먼저 지정하세요'}`; return; }
@@ -1528,12 +1552,15 @@ function lineInfo() {
 function autoGrid() { const l = A.store.session.line; return l ? { ...autoCells(l.length, l.width, A.store.mspec.observe.quality), winS: Math.max(5, l.length / 10) } : null; }
 function renderAll(tag = 'all') {
   const st = A.store, M = st.mspec, S = st.session;
-  const LS = ledsNow(); A.ledTotal = LS.list.length;
+  const LS = ledsNow();
+  if (A.ledTotal !== LS.list.length && S.hiddenLeds?.length) S.hiddenLeds = [];   // 개수가 바뀌면(최적화 적용 등) 번호가 달라짐
+  A.ledTotal = LS.list.length;
   if (S.ledSel != null && !(S.ledSel < LS.list.length)) S.ledSel = null;   // 배치가 바뀌어 번호가 없어짐
   renderView();
   const lay = M.light.kind === 'step' ? L.stepLayout(M, S.line) : undefined;   // LED STEP 실제 배치(가상 실패 표시용)
   renderFeatureTree($('#m3-tree'), M, S, {
     onNode: (id, o = {}) => st.update('session', (_, x) => {
+      if (id.startsWith('led:')) { x.multi = []; x.node = 'leds'; x.sel = null; x.ledSel = +id.slice(4); return; }   // LED 한 개 = 3D 표시 + 속성 창 옮기기
       if (o.range && id.startsWith('part:')) {   // Shift+클릭 = 지금 고른 부품부터 여기까지 범위(화면 순서)
         const from = x.node?.startsWith('part:') ? x.node : id;
         x.multi = rangeSelect(o.order ?? [], from, id); x.node = id; x.sel = { part: +id.slice(5), face: null }; return;
@@ -1545,8 +1572,8 @@ function renderAll(tag = 'all') {
       }
       x.multi = []; x.node = id; x.sel = id.startsWith('part:') ? { part: +id.slice(5), face: null } : null; if (id !== 'leds') x.ledSel = null;
     }),
-    onEye: (id, only) => st.update('view', (m, x) => Object.assign(x, toggleVisibility(id, only, m.parts.length, x.hidden, x.hideLeds, id.startsWith('group:') ? groupMembers(m, id.slice(6)) : []))),
-    onFold: (id) => st.update('session', (_, x) => { const k = id === 'parts' ? 'parts' : id.slice(6), def = k === '_light'; x.fold = { ...x.fold, [k]: !(x.fold?.[k] ?? def) }; }),   // 접기·펼치기(세션)
+    onEye: (id, only) => st.update('view', (m, x) => Object.assign(x, id.startsWith('led:') ? toggleLed(+id.slice(4), ledsNow().list.map((it) => it.n), x.hiddenLeds, x.hideLeds, only) : toggleVisibility(id, only, m.parts.length, x.hidden, x.hideLeds, id.startsWith('group:') ? groupMembers(m, id.slice(6)) : []))),
+    onFold: (id) => st.update('session', (_, x) => { const k = id === 'parts' || id === 'leds' ? id : id.slice(6), def = k === '_light' || (k === 'leds' && ledFoldDefault(A.ledTotal)); x.fold = { ...x.fold, [k]: !(x.fold?.[k] ?? def) }; }),   // 접기·펼치기(세션)
     // 우클릭: 고른 것에 없으면 그것만 고름(고른 것 위에서 우클릭하면 여러 개 그대로)
     onCtxSelect: (id) => st.update('session', (_, x) => {
       if (id === x.node || (x.multi ?? []).includes(id)) return;
@@ -1572,7 +1599,7 @@ function renderAll(tag = 'all') {
       else if (id.startsWith('group:')) { const g = (m.groups ?? []).find((x) => x.id === id.slice(6)); if (g) g.name = name; }
     }),
     onRedraw: () => st.update('session'),
-  }, lay);
+  }, lay, M.light.kind === 'none' ? [] : ledRows(LS));
   const pi = S.node?.startsWith('part:') ? +S.node.slice(5) : -1, clr = pi >= 0 ? clearanceOf(pi) : null;
   if (clr !== A.clrShown) { A.clrShown = clr; renderMarkers(); }
   if (tag !== 'view') renderPropertyPanel($('#m3-props'), M, S, { admin: isAdmin(), dbList: A.ctx.materialDb()?.list() ?? [], catalog: reflCat(), clearList: clearUser(), clearUsed: M.parts.reduce((o, p) => { const id = p.material?.matId; if (id) o[id] = (o[id] ?? 0) + 1; return o; }, {}), milkyUsed: M.parts.reduce((o, p) => { const id = p.material?.kind === 'milky' && p.material.dbId; if (id) o[id] = (o[id] ?? 0) + 1; return o; }, {}), auto: autoGrid(), dir: M.observe.dir ?? S.line?.frame.d, lineInfo: lineInfo(), clearance: clr, xfInfo: pi >= 0 ? xformInfoOf(pi) : null, meshInfo: pi >= 0 ? partMeshInfo(pi) : null, xfMsg: S.xfMsg?.part === pi ? S.xfMsg.text : '', lay: lay ?? null, led: S.node === 'leds' && S.ledSel != null ? ledUi(LS, S.ledSel) : null, ...(S.node === 'leds' ? { ledList: ledRows(LS), ledGap: minFinite(ledGaps(LS.em)) } : {}) }, propHandlers());
@@ -1600,19 +1627,21 @@ function renderView() {
   const meshKey = [pv ?? cur, lp];   // 기구·LED 메쉬(위치 보정 포함 — 캐시 객체)가 바뀌면 다시 그림. 카메라는 기구가 바뀔 때만 맞춤
   if (!A.meshShown || A.meshShown.some((x, i) => x !== meshKey[i])) {
     const keepCamera = !!A.meshShown && A.meshShown[0].raw === cur.raw;   // 크기·위치 조절만 바뀌면 카메라 유지
-    if (A.meshShown?.[0].raw !== cur.raw) { S.hidden = []; S.hideLeds = false; }   // 다른 기구를 불러오면 보기 상태 초기화
+    if (A.meshShown?.[0].raw !== cur.raw) { S.hidden = []; S.hideLeds = false; S.hiddenLeds = []; }   // 다른 기구를 불러오면 보기 상태 초기화
     A.meshShown = meshKey; v.setParts([...(pv ?? cur).parts, ...(lp ?? [])], kinds, { keepCamera });
   } else v.setKinds(kinds);
   const hid = new Set(S.hidden), nMech = M.parts.length;
-  v.setHidden((i) => (i < nMech ? hid.has(i) || M.parts[i]?.role === 'light' : S.hideLeds));   // 도면 광원 원본은 숨김(광원 그룹이 대신 보임)
+  const hidL = new Set(S.hiddenLeds ?? []), hidLP = new Set([...hidL].map((n) => lay?.leds[n]));   // 한 개씩 숨긴 LED → 그 몸체 메쉬 · 빛 원뿔 · 화살표(PCB 는 그대로)
+  v.setHidden((i) => (i < nMech ? hid.has(i) || M.parts[i]?.role === 'light' : S.hideLeds || hidLP.has(i - nMech)));   // 도면 광원 원본은 숨김(광원 그룹이 대신 보임)
   const dk = M.parts.map((p) => (p.untrace ? 1 : 0)).join('');
   if (A.dimKey !== dk) { A.dimKey = dk; v.setDim((i) => !!M.parts[i]?.untrace); }
-  if (A.ledsHid !== !!S.hideLeds) { A.ledsHid = !!S.hideLeds; renderMarkers(); }   // LED 켜기/끄기 → 방향 화살표도
+  const hk = `${!!S.hideLeds}|${S.hiddenLeds ?? ''}|${S.hidden ?? ''}`;
+  if (A.ledsHid !== hk) { A.ledsHid = hk; renderMarkers(); }   // LED 켜기/끄기 → 방향 화살표도
   const LS = ledsNow(pv?.M ?? M, S.line), body = !pv && S.ledSel != null ? LS.list[S.ledSel]?.part ?? null : null;
   v.setSelection(S.sel ?? (body != null && lp?.[body] ? { part: cur.parts.length + body, face: null } : null));   // 선택 LED 몸체 = 부품 선택처럼 강조
   const sp = (pv?.M ?? M).light.spec, half = sp.model === 'gaussian' ? sp.beam / 2 : 60, gaps = ledGaps(LS.em, pv?.M ?? M);
   // LED 를 끄면(트리 눈 단추) 지향각(빛 원뿔·방향 화살표)도 함께 숨김
-  const cones = S.hideLeds ? [] : LS.em.map((e, i) => ({ pos: e.pos, axis: e.axis, half, len: Number.isFinite(gaps[i]) ? Math.min(4, 0.4 * gaps[i]) : 4, n: e.led ?? i }));
+  const cones = S.hideLeds ? [] : LS.em.map((e, i) => ({ pos: e.pos, axis: e.axis, half, len: Number.isFinite(gaps[i]) ? Math.min(4, 0.4 * gaps[i]) : 4, n: e.led ?? i })).filter((c) => !hidL.has(c.n));
   // 인식한 라인 중심선은 그리지 않음(가로줄이 결과 색을 가린다는 의견 — 2026-10-26). 라인 정보는 관측면 속성 창 글자로
   v.setOverlay({ obsFaces: M.observe.faces, line3d: null, cones, coneSel: pv ? null : S.ledSel, obsArrow: obsArrow(M, S.line, cur) });
   // 선택 모드: LED 발광면/제외 → LED STEP 부품만 클릭되고 기구물은 투시, 관측면·PCB 면 → 기구 부품만 클릭

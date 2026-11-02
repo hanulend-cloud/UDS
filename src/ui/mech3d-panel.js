@@ -283,7 +283,7 @@ export function renderPartProps(el, m, sel0, dbList, h) {
   const fk = sel.face != null ? `${sel.part}:${sel.face}` : null;
   if (fk && fk !== SEC_FACE) { SEC_OPEN.set('finish', true); PART_TAB = 'detail'; }   // 새 면 선택 → 상세 탭 · 면 처리 구역 자동 열기
   SEC_FACE = fk;
-  el.innerHTML = `<div class="m3-h m3-title" title="${esc(partHeaderText(p, sel.meshInfo ?? null))}">${esc(partTitleText(p, sel.meshInfo ?? null))}</div>${partEditor(p, sel, dbList)}`;
+  el.innerHTML = `<div class="m3-h m3-title${p.untrace ? ' m3-untr' : ''}" title="${esc(partHeaderText(p, sel.meshInfo ?? null))}">${esc(partTitleText(p, sel.meshInfo ?? null))}</div>${partEditor(p, sel, dbList)}`;
   const i = sel.part;
   el.querySelectorAll('[data-m3-tab]').forEach((b) => { b.onclick = () => { if (PART_TAB !== b.dataset.m3Tab) { PART_TAB = b.dataset.m3Tab; renderPartProps(el, m, sel0, dbList, h); } }; });
   el.querySelectorAll('details[data-m3-sec]').forEach((d) => d.addEventListener('toggle', () => SEC_OPEN.set(d.dataset.m3Sec, d.open)));

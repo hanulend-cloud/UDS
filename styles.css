@@ -327,6 +327,7 @@ main:has(#mech3d-wrap:not([hidden])) { grid-template-rows: minmax(0, 1fr); }
 .m3-eye:hover, .m3-eye:focus-visible { background: #e3e8f2; }
 .m3-eye.off { color: var(--m3-mut); }
 .m3-node.hid { color: var(--m3-mut); }
+.m3-node.untr .m3-lbl, .m3-title.m3-untr { text-decoration: line-through; }
 .m3-node:not(.child) .m3-eye { order: 9; font-size: 11px; }
 .m3-badge { margin-left: auto; font-size: 10px; padding: 1px 5px; border-radius: 4px; background: #e9ecf2; color: #3c4455; }
 .m3-badge.k-milky { background: #e3edf6; } .m3-badge.k-clear { background: #dcefff; color: #0d4b85; } .m3-badge.k-led { background: #fff1cc; color: #7a5a12; }
@@ -901,3 +902,6 @@ body.booting::after { content: "불러오는 중…"; position: fixed; left: 50%
 .m3-ledlist td:last-child { text-align: right; width: 1%; white-space: nowrap; }
 .m3-ledlist button { font: inherit; font-size: 11px; line-height: 1.2; padding: 0 5px; border: 1px solid var(--m3-line); border-radius: 4px; background: transparent; color: inherit; cursor: pointer; }
 .m3-link { font: inherit; font-size: 11px; border: 0; background: none; color: var(--m3-acc); cursor: pointer; padding: 0 0 0 6px; text-decoration: underline; }
+.m3-big-q { font-size: 12.5px; white-space: nowrap; }
+.m3-big-q select { font: inherit; }
+.m3-big-hd button:disabled { opacity: .45; cursor: default; }

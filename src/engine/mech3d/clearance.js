@@ -140,6 +140,49 @@ export function meshPenetration(A, B, tol = TOL, stopAt = Infinity) {
   return out;
 }
 
+// 간섭 부위(2026-11-02) — 겹친 덩어리의 겉면 = A 표면 중 B 안 + B 표면 중 A 안. 상대 표면 근처의 삼각형만 잘게 나눠(최소 0.25 mm) 경계를 따라가고,
+// 상대 표면에서 먼 삼각형은 통째로 안/밖 판정. 맞붙은 면은 뺌. 반환 삼각형 좌표 배열(xyz × 3 × n)
+export function clashRegion(A, B, tol = TOL, maxTris = 40000, maxTests = 2e6) {
+  const ba = boxOf(A), bb = boxOf(B), lo = [0, 1, 2].map((k) => Math.max(ba[k], bb[k])), hi = [0, 1, 2].map((k) => Math.min(ba[k + 3], bb[k + 3]));
+  const cell = Math.max(0.05, Math.min(0.25, Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) / 40)), out = [], near = [];
+  for (const [X, Y] of [[A, B], [B, A]]) {   // 시험 횟수는 방향마다 따로 — 한쪽이 다 써서 다른 쪽 표식이 빠지지 않게
+    let tests = 0;
+    const Ys = solid(Y), by = boxOf(Y), P = X.positions, T = X.triangles;
+    const keep = (p) => boxDist(by, p) === 0 && insidePart(Ys, p);
+    const cut = (a, b, c, d) => {
+      if (out.length >= maxTris * 9 || tests >= maxTests) return;
+      for (let k = 0; k < 3; k++) if (Math.max(a[k], b[k], c[k]) < lo[k] || Math.min(a[k], b[k], c[k]) > hi[k]) return;
+      const p = a.map((v, k) => (v + b[k] + c[k]) / 3), L = Math.max(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]), Math.hypot(b[0] - c[0], b[1] - c[1], b[2] - c[2]), Math.hypot(c[0] - a[0], c[1] - a[1], c[2] - a[2]));
+      tests++;
+      if (L > cell && d < 12) {
+        if (nearestOnMesh(Y, p, L, near)) {   // 상대 표면이 가까움 = 경계가 지날 수 있음 → 4등분
+          const ab = a.map((v, k) => (v + b[k]) / 2), bc = b.map((v, k) => (v + c[k]) / 2), ca = c.map((v, k) => (v + a[k]) / 2);
+          cut(a, ab, ca, d + 1); cut(ab, b, bc, d + 1); cut(ca, bc, c, d + 1); cut(ab, bc, ca, d + 1);
+        } else if (keep(p)) out.push(...a, ...b, ...c);   // 삼각형 전체가 한쪽
+        return;
+      }
+      if (!nearestOnMesh(Y, p, tol, near) && keep(p)) out.push(...a, ...b, ...c);
+    };
+    for (const t of queryBox(bvhOf(X), lo, hi, [])) cut(vtx(P, T[3 * t]), vtx(P, T[3 * t + 1]), vtx(P, T[3 * t + 2]), 0);
+  }
+  return out;
+}
+// 모든 부품 쌍의 간섭 — parts[i] = null 이면 뺌(추적 제외·광원으로 옮긴 부품). [{ a, b, depth, pos, positions, triangles }]
+export function allPartClashes(parts, tol = TOL) {
+  const out = [];
+  for (let a = 0; a < parts.length; a++) {
+    if (!parts[a]) continue;
+    for (let b = a + 1; b < parts.length; b++) {
+      if (!parts[b]) continue;
+      const pen = meshPenetration(parts[a], parts[b], tol);
+      if (!pen) continue;
+      const r = clashRegion(parts[a], parts[b], tol);
+      out.push({ a, b, depth: pen.depth, pos: pen.pos, positions: Float32Array.from(r), triangles: Uint32Array.from({ length: r.length / 3 }, (_, i) => i) });
+    }
+  }
+  return out;
+}
+
 // 선택 부품 i 의 간격 표 — parts: 기구 부품(변환 반영), ledParts: LED STEP 메쉬(PCB·LED, 없으면 []), emitters: [{pos, axis}]
 // 반환 { parts: [{ part, gap, pa, pb, depth }] (간격 순), leds: [{ part, gap, pa, pb, depth }], ledMin: { led, dist, pa, pb } | null, ledAxial: { led, dist } | null }
 export function partClearance(parts, i, { ledParts = [], emitters = [], maxDist = 20 } = {}) {

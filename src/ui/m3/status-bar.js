@@ -13,10 +13,11 @@ export const isActivateKey = (e) => e.key === 'Enter' || e.key === ' ' || e.key 
 // C = { interference, wall } (checks.js 결과) → [{ id, st, text }] — 조립·성형 점검만(시뮬레이션이 못 잡는 것, 2026-10-29).
 // LED–커버 도달(직진 광선만 봐서 도광 구조에서 잘못 경고)은 뺐고, 새는 빛은 광분포 시뮬레이션 결과(광 효율 옆, leakText)로 옮김
 export function checkLabels(C) {
-  const I = C.interference, W = C.wall, na = (x) => !x || x.status === 'na';
+  const I = C.interference, W = C.wall, P = C.clash, na = (x) => !x || x.status === 'na';
   return [
     { id: 'interference', st: I?.status ?? 'na', text: na(I) ? 'LED–부품 간섭 –' : I.status === 'warn' ? `LED 포팅(투과 부품 안) ${I.count}건` : I.count ? `LED–부품 간섭 ${I.count}건` : 'LED–부품 간섭 없음' },
     { id: 'wall', st: W?.status ?? 'na', text: na(W) ? '살두께 –' : `살두께 ${(Math.floor(W.min * 100 + 1e-9) / 100).toFixed(2)} mm` },
+    { id: 'clash', st: P?.status ?? 'na', text: na(P) ? '부품 간섭 –' : P.count ? `부품 간섭 ${P.count}곳` : '부품 간섭 없음', title: P?.names ?? '' },
   ];
 }
 // 새는 빛(순수) — 관측면 밖으로 나간 빛 비율(올림)과 가장 많이 새는 면. K = checkLeak 결과, names = 부품 이름. 없으면 ''
@@ -31,7 +32,7 @@ export function leakText(K, names = []) {
 const STATE_BY_EL = new WeakMap();
 const setText = (n, v) => { if (n.textContent !== v) n.textContent = v; };
 const setAttr = (n, k, v) => { if (n.getAttribute(k) !== v) n.setAttribute(k, v); };
-const IDS = ['interference', 'wall'];
+const IDS = ['interference', 'wall', 'clash'];
 function init(el) {
   el.innerHTML = `<span class="mut m3-chkok" data-s="ok">✓ 조립·성형 점검 이상 없음(간섭 · 살두께)</span>
     ${IDS.map((id) => `<span class="m3-chk" role="button" tabindex="0" data-chk="${id}"><span class="m3-dot na"></span><span class="m3-ico" aria-hidden="true"></span><span data-t></span></span>`).join('')}
@@ -57,7 +58,7 @@ export function renderStatusBar(el, d, h) {
     const dc = `m3-dot ${x.st}`;
     if (o.dot.className !== dc) o.dot.className = dc;
     setText(o.ico, statusIcon(x.st)); setText(o.t, x.text);
-    setAttr(o.n, 'aria-label', checkAria(x)); setAttr(o.n, 'aria-pressed', on ? 'true' : 'false');
+    setAttr(o.n, 'title', x.title ?? ''); setAttr(o.n, 'aria-label', checkAria(x)); setAttr(o.n, 'aria-pressed', on ? 'true' : 'false');
   }
   const anyBad = checkLabels(d.checks ?? {}).some((x) => x.st === 'warn' || x.st === 'bad'), okN = S.ok ?? (S.ok = el.querySelector('[data-s="ok"]'));
   if (okN && okN.hidden !== anyBad) okN.hidden = anyBad;
