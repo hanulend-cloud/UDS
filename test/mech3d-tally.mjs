@@ -142,4 +142,17 @@ ok(S.counted === nV && S.noiseWarn === false, `집계 셀 ${S.counted}, 잡음 �
   let v0 = false; for (let j = 0; j < half.nw; j++) if (half.valid[j]) v0 = true;
   ok(v0, '끝 칸: 칸의 25% 남은 끝 칸도 판정에 포함');
 }
+{ // 폭 칸이 행마다 같아야 함(2026-11-02) — 폭 가장자리 칸이 딱 절반 걸치면 픽셀 세기 오차로 일부 행(19·57번)만 빠져, 그 행이 튀고(어두운 가장자리 제외) LED 봉우리가 불규칙해 보였음
+  const L1 = recognizeLine([topFaceMesh(rectTris(0, 0, 116, 16), 2)], [{ part: 0, face: 1 }], [0, 0, 1]);
+  for (const quality of ['low', 'mid', 'high']) {
+    const Gq = tallyGeometry(L1, { faces: [{ part: 0, face: 1 }], dir: [0, 0, 1], cone: 10, edgeExcl: 0.5, targetLen: 0.8, targetWid: 0.5, quality });
+    const cols = []; for (let i = 1; i < Gq.ns - 1; i++) { const c = []; for (let j = 0; j < Gq.nw; j++) if (Gq.valid[i * Gq.nw + j]) c.push(j); cols.push(c.join()); }
+    const uniq = new Set(cols);
+    ok(uniq.size === 1, `${quality}: 안쪽 ${cols.length}행의 폭 칸 구성 ${uniq.size}가지 (${[...uniq].map((u) => u.split(',').length).join('/')}칸)`);
+  }
+  // 정말 좁은 면(모든 칸이 일부만 걸침)은 예전 기준 그대로 — 절반 미만이면 칸을 만들지 않음
+  const N = recognizeLine([topFaceMesh(rectTris(0, 0, 100, 1.2), 2)], [{ part: 0, face: 1 }], [0, 0, 1]), Gn = tallyGeometry(N, { faces: [{ part: 0, face: 1 }], dir: [0, 0, 1], cone: 10, edgeExcl: 0.5, targetLen: 0.8, targetWid: 0.5, cellS: 1, cellW: 1 });
+  let nv = 0; for (let k = 0; k < Gn.valid.length; k++) nv += Gn.valid[k];
+  ok(nv === 0, `좁은 면: 칸의 절반 미만만 걸치면 칸 없음 (유효 ${nv})`);
+}
 done();

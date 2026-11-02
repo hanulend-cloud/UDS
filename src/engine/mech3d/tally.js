@@ -46,7 +46,12 @@ export function tallyGeometry(line, obs) {
   for (let i = 0; i < ns; i++) {
     const sLen = line.closed ? ds : Math.min((i + 1) * ds, L - edge) - Math.max(i * ds, edge);
     if (sLen < 0.25 * ds - 1e-9) continue;
-    for (let j = 0; j < nw; j++) { const k = i * nw + j; if (area[k] > 0 && area[k] >= 0.5 * sLen * cell) valid[k] = 1; }
+    // 기준 = 그 행의 꽉 찬 칸 면적(2026-11-02) — 면적은 픽셀 수로 세어 행마다 몇 % 흔들림. 고정값과 비교하면 폭 가장자리 칸이 딱 절반 걸칠 때 일부 행만 빠져
+    // 그 행이 튀었음(어두운 가장자리 제외 → LED 봉우리가 불규칙해 보이고 균일도가 낮게 나옴). 꽉 찬 칸이 없는 행(좁은 면)은 고정값 그대로
+    const nominal = sLen * cell; let full = 0;
+    for (let j = 0; j < nw; j++) full = Math.max(full, area[i * nw + j]);
+    const need = full >= 0.8 * nominal ? 0.495 * full : 0.5 * nominal;
+    for (let j = 0; j < nw; j++) { const k = i * nw + j; if (area[k] > 0 && area[k] >= need) valid[k] = 1; }
   }
   const validAll = new Uint8Array(ns * nw);
   for (let k = 0; k < validAll.length; k++) if (areaAll[k] >= 0.1 * ds * cell) validAll[k] = 1;   // 면이 칸의 10% 이상 걸치면 값을 냄(더 작은 조각은 잡음만 큼)

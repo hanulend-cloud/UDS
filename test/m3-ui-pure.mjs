@@ -360,6 +360,25 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   ok(t.includes('80.00') && t.includes('100.00') && !t.includes('50.00'), 'CSV = 원자료(다듬은 값이 아님)');
 }
 
+{ // 원설계 대비 LED 변경
+  const { ledChange, pitchOf, pitchText, ledDeltaText } = await import('../src/ui/m3/led-change.js');
+  const { ledChangeHtml } = await import('../src/ui/mech3d-light-panel.js');
+  const grid = (n, p, e = 0, w = 0) => Array.from({ length: n }, (_, i) => ({ s: e + i * p, w, n: i }));
+  const same = ledChange(grid(5, 10), grid(5, 10));
+  ok(!same.changed && same.rows.every((r) => r.state === 'same') && ledChangeHtml(same).includes('원설계 그대로') && ledDeltaText(same.rows[0]) === '', '그대로 = 변경 없음');
+  const mv = ledChange(grid(3, 10), [{ s: 0, w: 0 }, { s: 12, w: 0 }, { s: 20, w: -2 }]);
+  ok(mv.moved === 2 && mv.added === 0 && mv.removed === 0 && ledDeltaText(mv.rows[1]) === '+2' && ledDeltaText(mv.rows[2]) === '폭 −2', '옮김: 거리·폭 표시');
+  const real = [7.25, 25.25, 46.75, 71.5, 91.5, 117.25, 141.5, 162.75, 187.75, 212.25, 237.25, 258.5, 282.75, 308.5, 328.5, 353.25, 374.75, 392.75].map((s, n) => ({ s, w: -12, n }));
+  const big = ledChange(grid(40, 10, 5), real), h = ledChangeHtml(big);
+  ok(big.changed && big.nOrig === 40 && big.nCur === 18 && !big.pitchCur.uniform && h.includes('원설계에서 변경됨') && h.includes('40개 · 피치 10 mm') && h.includes('18개 · 피치 18~25.8 mm (간격 불규칙)'), `실제 도면: ${pitchText(big.pitchOrig)} → ${pitchText(big.pitchCur)}`);
+  ok(big.moved + big.added === 18 && big.removed + big.moved === 40, `개수 맞음: 옮김 ${big.moved} · 추가 ${big.added} · 없어짐 ${big.removed}`);
+  ok(pitchOf(grid(2, 7)).uniform && pitchOf(grid(1, 7)).p === null && ledChangeHtml(null) === '', '간격 요약 · 기준 없음');
+  const { treeNodes } = await import('../src/ui/m3/feature-tree.js');
+  const M = { parts: [], groups: [], contacts: [], observe: { faces: [], targetLen: 0.8, targetWid: 0.8 }, light: { kind: 'manual', spec: { beam: 120 }, manual: { count: 18, pitch: 22.7, rows: 1 } } };
+  const nd = treeNodes(M, { hidden: [], fold: {}, multi: [], ledChange: big }, undefined, []).find((x) => x.id === 'leds');
+  ok(nd.chg && JSON.stringify(nd).includes('원설계 40 → 18개'), '트리: 변경 표시');
+}
+
 done();
 
 { const { clearDbHtml } = await import('../src/ui/mech3d-panel.js');

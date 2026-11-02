@@ -6,6 +6,7 @@
 import { getMech3d, getLedMesh, setLedMesh, saveLedIDB, applyPartMods, redetectContacts } from '../../engine/mech3d/runtime.js';
 import { createMonitor } from './monitor.js';
 import { reportError } from '../error-log.js';
+import { ledChange, ledDeltaText, pitchOf } from './led-change.js';
 import { createHistory } from './history.js';
 import { mountSplit } from './pane-split.js';
 import { findLeds, supportPart, emitterFaceAway, autoLedGroup } from '../../engine/mech3d/led-detect.js';
@@ -381,7 +382,7 @@ function onCalc(snap) {
   if (T.start && snap.stats && T.first == null) T.first = (now - T.start) / 1000;
   if (T.start && snap.stats?.relNoise != null && snap.stats.relNoise <= 0.05 && T.noise5 == null) T.noise5 = (now - T.start) / 1000;
   updateLeakCheck(snap);
-  A.results.update({ snap, observe: M.observe, message: guidance(snap), leds: ledSW(M, S.line), leak: leakText(A.checks.leak, M.parts.map((p) => p.name)) });
+  A.results.update({ snap, observe: M.observe, message: guidance(snap), leds: ledSW(M, S.line), ledsOrig: (() => { const c = ledChangeNow(M, S.line); return c?.changed ? c.orig : []; })(), leak: leakText(A.checks.leak, M.parts.map((p) => p.name)) });
   A.simDash?.sample(snap, M.observe.targetNoise ?? 0.01, M.observe, M.parts.map((p) => p.name), M.parts.length, !!adState().running);
   drawLightPaths();
   adDetectPath();
@@ -444,6 +445,9 @@ function renderMarkers() {
   // ③ 형상 바꿀 부품 — 기구 최적화 창이 열려 있고 ③ 을 켰으면 보라색으로 덮어 표시
   const ad = A.ad, spi = ad?.sel?.shape && monitor?.isOpen() ? ad.sel.shapePart : -1;
   if (spi >= 0 && rt?.parts[spi]) out.push({ type: 'tris', positions: rt.parts[spi].positions, triangles: rt.parts[spi].triangles, color: 0xa855f7, opacity: 0.35 });
+  // 원설계 LED 위치 = 회색 고리(바뀌었을 때만) — 지금 LED 와 견주어 변경이 3D 에서 보이게(2026-11-02)
+  const chgM = ledChangeNow();
+  if (chgM?.changed && !A.store.session.hideLeds) for (const o of chgM.orig) out.push({ type: 'ring', pos: o.pos, color: 0x9aa7b8, size: 6 });
   const hidP = new Set(A.store.session.hidden ?? []);
   for (const c of C.clash?.items ?? []) {   // 부품끼리 겹친 부위 = 빨간 면 + 가장 깊은 곳 빨간 원(둘 다 숨긴 쌍은 뺌)
     if (hidP.has(c.a) && hidP.has(c.b)) continue;
@@ -699,6 +703,30 @@ function lateralCandidates(M0, line, rt, ctx) {
 }
 const C_interf = (m, mech) => interferenceKeys(m, mech, [], []).size > 0;
 // 결과 프로파일 아래에 찍을 LED 위치(라인 좌표 s, w) — 배치·라인이 같으면 캐시
+// 원설계 LED 위치 = LED STEP 그대로(편집·최적화·개별 조정·빛 끔 전) · 직접 배치 = 최적화를 처음 적용하기 전 값(light.originManual). 기준이 없으면 null
+let ledChgCache = null;
+function ledOriginOf(M, line) {
+  const Lt = M.light;
+  if (Lt.kind === 'step' && Lt.step?.emitters?.length) return L.currentEmitters({ ...M, light: { ...Lt, ledAdjust: null, step: { ...Lt.step, virtual: null, excluded: [] } } }, line);
+  if (Lt.kind === 'manual' && Lt.originManual) return L.currentEmitters({ ...M, light: { ...Lt, ledAdjust: null, manual: { ...Lt.manual, ...Lt.originManual } } }, line);
+  return null;
+}
+function ledChangeNow(M = A.store.mspec, line = A.store.session.line) {
+  if (!line) return null;
+  const key = JSON.stringify([M.light, M.parts.map((p) => p.xform ?? null)]);
+  if (ledChgCache?.key === key && ledChgCache.line === line) return ledChgCache.v;
+  let v = null;
+  try {
+    const O = ledOriginOf(M, line);
+    if (O?.length) {
+      const sw = (e) => { const [s, w] = line.toSW(...line.to2D(e.pos)); return { s, w, pos: e.pos }; };
+      const { list, em } = ledsNow(M, line), cur = list.length ? list.filter((r) => r.e && !r.excluded).map((r) => ({ ...sw(r.e), n: r.n })) : em.map((e, n) => ({ ...sw(e), n }));
+      v = ledChange(O.map(sw), cur);
+    }
+  } catch { v = null; }
+  ledChgCache = { key, line, v };
+  return v;
+}
 let ledSWCache = null;
 function ledSW(M, line) {
   if (!line) return [];
@@ -870,7 +898,9 @@ async function adRun(opt = {}) {
     height: st.sel.height && avail.height.ok, housing: st.sel.housing && avail.housing.ok && avail.housing.parts.includes(st.sel.housingPart) };
   st.milkyPart = adMilkyPart(M0, avail);
   const hpSel = avail.housing?.parts?.includes(st.sel.housingPart) ? st.sel.housingPart : defaultHousingPart(M0, adInfo().boxes);   // 보완으로 ④ 를 더했으면 기본 케이스 부품
-  const obs = tallyObs(M0.observe, M0.observe.dir ?? line.frame.d), G = geometry(obs), sp = st.sel.shapePart, hp = stages.housing ? hpSel : -1;
+  // 최적화 판정 격자 = 늘 저화질(2026-11-02) — 고화질 칸(0.5 mm)으로 짧게 평가하면 잡음이 '불균일' 로 보여 값이 크게 낮게 나오고(실측 길이 균일도 0.65 vs 정밀 0.76)
+  // LED 를 너무 많이 쓰거나 간격이 제멋대로가 됨. 화면 화질은 그대로, 최적화 평가만
+  const lowQ = (M0.observe.quality ?? 'low') === 'low', obs = tallyObs({ ...M0.observe, quality: 'low' }, M0.observe.dir ?? line.frame.d), G = lowQ ? geometry(tallyObs(M0.observe, M0.observe.dir ?? line.frame.d)) : tallyGeometry(line, obs), sp = st.sel.shapePart, hp = stages.housing ? hpSel : -1;
   let hInfo = null; if (stages.height) { try { hInfo = adHeightInfo(M0, line, rt); } catch { stages.height = false; } }   // 범위 계산 실패 = ⑤ 생략
   const ctx = { M0, line, G, obs, rt, mp: st.milkyPart };
   const R = (st.runner = createAdRunner({ ports: A.pool.ports(), chunkTimeoutMs: 90000 }));   // 높은 Milky 청크는 30 초를 넘기기도 함
@@ -926,7 +956,7 @@ async function adRun(opt = {}) {
         Md.light.step.virtual = { count: 0, pitch: 0 };
       } else sets = cand.map(({ s, w }) => [ledAtS(line, s, Md.light.manual, rt, w)]);
       // 시간 예산 60 s(spec §2.2c): 후보당 1.2만 광자, 넘치면 줄임(≥ 3000) — 지도는 후보마다 방출 1 기준(emitted = 1)
-      const r = await R.traceEach(adJob(Md, parts, ctx, { emitters: sets[0] }), sets, { N: 12000, maxMs: 60000, minN: 3000, onProgress: (i, n) => progress('leds', i / n, `LED 위치 후보 시험 ${i}/${n}`) });
+      const r = await R.traceEach(adJob(Md, parts, ctx, { emitters: sets[0] }), sets, { N: 30000, maxMs: 60000, minN: 3000, onProgress: (i, n) => progress('leds', i / n, `LED 위치 후보 시험 ${i}/${n}`) });
       // 간섭 방지: LED 몸체 반폭 + 0.3 mm 만큼 라인 끝에서 떨어지게(끝벽), 2열 간격도 반폭만큼 안쪽(측벽)
       const m = ledHalf + 0.3, gapsOk = gaps.filter((g) => !(line.width > 0) || g + m <= line.width / 2 + 1e-9);
       return { cand, maps: r.maps, emitted: r.emitted, gaps: gapsOk, sMargin: m, minGap: Math.max(2, 2 * ledHalf + 0.2) };
@@ -978,7 +1008,7 @@ async function adRun(opt = {}) {
     },
     async verify(d) {   // 정밀 재판정(현재안·최종안): 250만 광자(최소 150만, 20초까지) — 광자가 적으면 균일도(최저÷최고)가 잡음 때문에 낮게 나옴(6초 제한 때 0.69 vs 실제 0.78)
       const { M: Md, parts } = designScene(d, ctx);
-      const r = await R.trace(adJob(Md, parts, ctx), { N: 2.5e6, maxMs: 20000, minN: 1.5e6, batches: 10 });
+      const eff0 = currentVerified?.eff ?? snap0.photometry?.eff, r = await R.trace(adJob(Md, parts, ctx), { N: Math.min(1e7, 2.5e6 * Math.max(1, 0.5 / (eff0 > 0 ? eff0 : 0.5))), maxMs: 20000, minN: 1.5e6, batches: 10 });   // 효율이 낮으면 관측면에 닿는 빛이 적어 광자를 더
       const stt = tallyStats(G, r.batches, obs);
       A.optDash?.evals('final', [{ label: verifyLabel(d), Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty }]);
       return { stats: stt, eff: adEff(r) };
@@ -994,7 +1024,7 @@ async function adRun(opt = {}) {
   let res = null;
   try {
     res = await runAutoDesign({
-      stages, obs, G, line, current: cur, milkyMax: st.sel.milkyMax ?? null, housingProbe, finishText: (f) => finishText(f, reflCat()), nMax: Math.max(1, Math.min(60, Math.floor(line.length / 2))), pitchRange: null, stepMode: stp,
+      stages, obs, G, line, current: cur, milkyMax: st.sel.milkyMax ?? null, housingProbe, finishText: (f) => finishText(f, reflCat()), nMax: Math.max(1, Math.min(60, Math.floor(line.length / 2))), pitchRange: null, stepMode: stp, currentIrregular: stages.leds && (() => { try { const q = pitchOf(L.currentEmitters(M0, line).map((e) => { const [s, w] = line.toSW(...line.to2D(e.pos)); return { s, w }; })); return !q.uniform; } catch { return false; } })(),
       shapePart: sp, shapeRanges,
       shapeStart: stages.shape && M0.parts[sp]?.shapeMod ? (({ dt, h, R, e, c, kL, kW }) => ({ dt, h, R, e, c, kL, kW }))(M0.parts[sp].shapeMod) : null,   // 이미 적용한 형상에서 이어서
       ...(stages.shape ? (({ screen, schedule }) => ({ screen, schedule }))(shapeBudget(currentVerified?.eff ?? snap0.photometry?.eff)) : {}),   // ③ 광자 = 광 효율 반비례
@@ -1059,7 +1089,7 @@ function adApply() {
   for (const k of lockK) { if (k === 'position') { st.sel.leds = false; st.sel.height = false; } else st.sel[k] = false; }
   if (undo.milky || undo.manual || undo.stepVirt || undo.shape || undo.finish || undo.dz) st.undo = undo;
   if (milkyCh) A.store.update('material', (m) => { m.parts[mp] = setPartMaterialParam(m.parts[mp], 'milky', d.milky); });
-  if (lightCh) A.store.update('light', (m) => { Object.assign(m.light.manual, { count: d.count, pitch: d.pitch }, rw); if (d.positions) m.light.manual.positions = adClone(d.positions); else delete m.light.manual.positions; });
+  if (lightCh) A.store.update('light', (m) => { m.light.originManual ??= adClone({ count: Lm.count, pitch: Lm.pitch, rows: Lm.rows ?? 1, rowGap: Lm.rowGap ?? 0, positions: Lm.positions ?? null }); Object.assign(m.light.manual, { count: d.count, pitch: d.pitch }, rw); if (d.positions) m.light.manual.positions = adClone(d.positions); else delete m.light.manual.positions; });
   if (stepCh) A.store.update('light', (m, x) => { m.light.step.virtual = stepVirtOf(d, rw); if (x.pick === 'led' || x.pick === 'ledx') x.pick = null; });   // 가상 중엔 발광면·제외 클릭 끔
   if (mod) A.store.update('material', (m) => { m.parts[d.shape.part].shapeMod = mod; applyPartMods(m.parts); m.contacts = redetectContacts(m.contacts); });
   if (finCh) A.store.update('material', (m) => { applyFinish(m, d.finish); });
@@ -1612,7 +1642,8 @@ function ledLineS(LS, it) {
 }
 // LED 목록 = 라인 위치 순(도면에 저장된 순서는 뒤섞여 있음) — rank = 화면에 보이는 번호(1부터), n = 내부 번호
 function ledRows(LS) {
-  const rows = LS.list.map((it) => ({ n: it.n, s: ledLineS(LS, it), excluded: it.excluded })).sort((a, b) => (Number.isFinite(a.s) ? a.s : Infinity) - (Number.isFinite(b.s) ? b.s : Infinity) || a.n - b.n);
+  const chg = ledChangeNow();   // 원설계 대비 — 트리·목록에 표시
+  const rows = LS.list.map((it) => { const c = chg?.byN.get(it.n) ?? null; return { n: it.n, s: ledLineS(LS, it), excluded: it.excluded, chg: c, delta: ledDeltaText(c) }; }).sort((a, b) => (Number.isFinite(a.s) ? a.s : Infinity) - (Number.isFinite(b.s) ? b.s : Infinity) || a.n - b.n);
   rows.forEach((r, i) => { r.rank = i + 1; });
   return rows;
 }
@@ -1654,6 +1685,7 @@ function renderAll(tag = 'all') {
   if (S.ledSel != null && !(S.ledSel < LS.list.length)) S.ledSel = null;   // 배치가 바뀌어 번호가 없어짐
   renderView();
   const lay = M.light.kind === 'step' ? L.stepLayout(M, S.line) : undefined;   // LED STEP 실제 배치(가상 실패 표시용)
+  S.ledChange = ledChangeNow();   // 트리 LED 노드 표시용
   renderFeatureTree($('#m3-tree'), M, S, {
     onNode: (id, o = {}) => st.update('session', (_, x) => {
       if (id.startsWith('led:')) { x.multi = []; x.node = 'leds'; x.sel = null; x.ledSel = +id.slice(4); return; }   // LED 한 개 = 3D 표시 + 속성 창 옮기기
@@ -1699,7 +1731,7 @@ function renderAll(tag = 'all') {
   }, lay, M.light.kind === 'none' ? [] : ledRows(LS));
   const pi = S.node?.startsWith('part:') ? +S.node.slice(5) : -1, clr = pi >= 0 ? clearanceOf(pi) : null;
   if (clr !== A.clrShown) { A.clrShown = clr; renderMarkers(); }
-  if (tag !== 'view') renderPropertyPanel($('#m3-props'), M, S, { admin: isAdmin(), dbList: A.ctx.materialDb()?.list() ?? [], catalog: reflCat(), clearList: clearUser(), clearUsed: M.parts.reduce((o, p) => { const id = p.material?.matId; if (id) o[id] = (o[id] ?? 0) + 1; return o; }, {}), milkyUsed: M.parts.reduce((o, p) => { const id = p.material?.kind === 'milky' && p.material.dbId; if (id) o[id] = (o[id] ?? 0) + 1; return o; }, {}), auto: autoGrid(), dir: M.observe.dir ?? S.line?.frame.d, lineInfo: lineInfo(), clearance: clr, xfInfo: pi >= 0 ? xformInfoOf(pi) : null, meshInfo: pi >= 0 ? partMeshInfo(pi) : null, xfMsg: S.xfMsg?.part === pi ? S.xfMsg.text : '', lay: lay ?? null, led: S.node === 'leds' && S.ledSel != null ? ledUi(LS, S.ledSel) : null, ...(S.node === 'leds' ? { ledList: ledRows(LS), ledGap: minFinite(ledGaps(LS.em)) } : {}) }, propHandlers());
+  if (tag !== 'view') renderPropertyPanel($('#m3-props'), M, S, { admin: isAdmin(), dbList: A.ctx.materialDb()?.list() ?? [], catalog: reflCat(), clearList: clearUser(), clearUsed: M.parts.reduce((o, p) => { const id = p.material?.matId; if (id) o[id] = (o[id] ?? 0) + 1; return o; }, {}), milkyUsed: M.parts.reduce((o, p) => { const id = p.material?.kind === 'milky' && p.material.dbId; if (id) o[id] = (o[id] ?? 0) + 1; return o; }, {}), auto: autoGrid(), dir: M.observe.dir ?? S.line?.frame.d, lineInfo: lineInfo(), clearance: clr, xfInfo: pi >= 0 ? xformInfoOf(pi) : null, meshInfo: pi >= 0 ? partMeshInfo(pi) : null, xfMsg: S.xfMsg?.part === pi ? S.xfMsg.text : '', lay: lay ?? null, led: S.node === 'leds' && S.ledSel != null ? ledUi(LS, S.ledSel) : null, ...(S.node === 'leds' ? { ledList: ledRows(LS), ledGap: minFinite(ledGaps(LS.em)), ledChange: ledChangeNow() } : {}) }, propHandlers());
   if (tag === 'session' || tag === 'all') renderMarkers();
   A.cmd.update(S, M);
   renderStatus();

@@ -931,3 +931,11 @@ body.booting::after { content: "불러오는 중…"; position: fixed; left: 50%
 .err-item.warn { border-left-color: #f79009; }
 .err-item > span, .err-item b span { color: #667085; font-size: 12px; font-weight: 400; }
 .err-item pre { margin: 6px 0 0; padding: 6px 8px; background: #f3f6fa; border-radius: 4px; font-size: 11.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* 원설계 대비 LED 변경 표시 */
+.m3-ledchg { margin: 4px 0; padding: 5px 8px; border: 1px solid #f79009; border-left-width: 4px; border-radius: 6px; background: rgba(247,144,9,.1); font-size: 12px; line-height: 1.5; }
+.m3-ledd { white-space: nowrap; font-size: 11px; }
+.m3-ledd.moved { color: #d97706; font-weight: 600; }
+.m3-ledd.added { color: #16a34a; font-weight: 600; }
+.m3-node.chg .m3-lbl { color: #f79009; font-weight: 600; }
+.m3-node.chg > :not(.m3-lbl):not(button) { color: #f79009; }

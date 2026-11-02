@@ -30,7 +30,7 @@ export function lumCard(st, ph, targetLum) {
 
 // 1D 곡선 표시 다듬기(순수, 2026-11-02) — 칸이 많은 방향의 들쭉날쭉한 잡음만 줄임. 판정·최저점·마우스 값·CSV 는 원자료 그대로.
 // 예전 가우스 평활은 LED 리플 높이를 깎아 그림이 CSV 와 달랐음(76~100% → 81~96%, 그래서 뺐음) → 봉우리 높이를 지키는 Savitzky-Golay(2차)로, 리플을 5% 넘게 깎지 않는 창만
-export const SMOOTH_MIN_CELLS = 40, RIPPLE_KEEP = 0.95, SMOOTH_MAX_HALF = 8;
+export const SMOOTH_MIN_CELLS = 40, RIPPLE_KEEP = 0.95, SMOOTH_MAX_HALF = 16;
 const sgCoef = (m, j) => (3 * (3 * m * m + 3 * m - 1 - 5 * j * j)) / ((2 * m + 3) * (2 * m + 1) * (2 * m - 1));   // 창 ±m 칸, 가운데에서 j 칸
 // 주기 period(칸)인 물결이 창 ±m 를 지난 뒤 남는 높이 비율
 export function sgGain(m, period) { let g = 0; for (let j = -m; j <= m; j++) g += sgCoef(m, j) * Math.cos((2 * Math.PI * j) / period); return g; }
@@ -85,8 +85,8 @@ export function plotRange(curves, tg) {
   return { y0: Math.max(0, Math.floor((mn - 5) / 10) * 10), y1: 102 };
 }
 const PL = 38, PR = 8;
-function drawPlot(cv, curves, tg, { x0, x1, xl, leds = [] }, dpr = 1, hover = null) {
-  cv._plot = { curves, tg, opt: { x0, x1, xl, leds }, dpr };
+function drawPlot(cv, curves, tg, { x0, x1, xl, leds = [], ledsOrig = [] }, dpr = 1, hover = null) {
+  cv._plot = { curves, tg, opt: { x0, x1, xl, leds, ledsOrig }, dpr };
   const x = cv.getContext('2d'), W = cv.width, H = cv.height, pl = PL * dpr, pb = 30 * dpr, pt = 16 * dpr, pr = PR * dpr;
   const { y0, y1 } = plotRange(curves, tg), PW = W - pl - pr, PH = H - pb - pt;
   const Y = (v) => pt + (1 - (v * 100 - y0) / (y1 - y0)) * PH, XS = (sv) => pl + ((sv - x0) / (x1 - x0 || 1)) * PW;
@@ -109,6 +109,16 @@ function drawPlot(cv, curves, tg, { x0, x1, xl, leds = [] }, dpr = 1, hover = nu
   }
   x.textAlign = 'right'; x.fillText(xl, W - pr, pt + PH + 18 * dpr);
   x.strokeStyle = 'rgba(128,140,160,.6)'; x.strokeRect(pl, pt, PW, PH);
+  // 원설계 LED 위치(바뀌었을 때만, 아래 빈 회색 삼각형) — 지금 위치와 견주어 변경이 보이게(2026-11-02)
+  if (ledsOrig.length) {
+    x.strokeStyle = '#7d8798'; x.lineWidth = dpr;
+    for (const q of ledsOrig) {
+      if (q < x0 - 1e-9 || q > x1 + 1e-9) continue;
+      const px = XS(q);
+      x.beginPath(); x.moveTo(px, pt + PH); x.lineTo(px - 3.5 * dpr, pt + PH + 6 * dpr); x.lineTo(px + 3.5 * dpr, pt + PH + 6 * dpr); x.closePath(); x.stroke();
+    }
+    x.fillStyle = '#8a93a6'; x.textAlign = 'left'; x.textBaseline = 'top'; x.fillText('▲ 지금  △ 원설계', pl, pt + PH + 18 * dpr);
+  }
   // LED 위치(아래 노란 삼각형)
   x.fillStyle = 'rgba(240,190,40,.95)';
   for (const q of leds) {
@@ -581,7 +591,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     if (pin && !(pi >= 0 && pi < G.ns && pj >= 0 && pj < G.nw)) pin = null;
     const FG = fullG(G), mapF = st.mapAll ?? st.map, pp = pin ? pointProfiles(FG, mapF, pi, pj) : null, ring = G.closed ? '원주' : '길이', rad = G.closed ? '반경(폭)' : '폭';
     VIEW.map = { G: FG, map: mapF, leds, pin, smooth: true };
-    VIEW.prof = plotView([{ ys: Array.from(st.profile, (v) => v / pm), color: '#1f6fd1', name: '폭 평균', band: st.relNoise ?? 0 }, ...(pp ? [{ ys: Array.from(pp.along), color: PIN_COLOR, name: `지정 점 w=${pin.w.toFixed(1)}` }] : [])], observe.targetLen, { x0: 0, x1: G.L, xl: 's (mm)', leds: leds.map((p) => p.s) });
+    VIEW.prof = plotView([{ ys: Array.from(st.profile, (v) => v / pm), color: '#1f6fd1', name: '폭 평균', band: st.relNoise ?? 0 }, ...(pp ? [{ ys: Array.from(pp.along), color: PIN_COLOR, name: `지정 점 w=${pin.w.toFixed(1)}` }] : [])], observe.targetLen, { x0: 0, x1: G.L, xl: 's (mm)', leds: leds.map((p) => p.s), ledsOrig: (args.ledsOrig ?? []).map((p) => p.s) });
     q('psub').title = `${pin ? `폭 평균 + 지정 점(주황, ${ring} 방향) · 같은 점 다시 클릭 = 해제` : '폭 평균 · 2D 클릭 = 그 점 기준 곡선 추가'} · 옅은 띠 = 계산 잡음 범위 · 빨간 점선 = 목표 하한 · 곡선은 잡음만 살짝 다듬어 그림(LED 리플 높이 유지) · 최저점·마우스 값·CSV·판정 = 원자료`;
     q('pinbtn').innerHTML = pin ? '<button type="button" class="m3-pintxt" data-pin-txt title="고른 점을 지나는 길이·폭 방향 원자료(평활 없음, 2D 최대 대비 %)">선택 선 CSV</button>' : '';
     paint('map', q('map')); paint('prof', q('prof'));

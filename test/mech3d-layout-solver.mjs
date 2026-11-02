@@ -20,7 +20,7 @@ const gapsOk = (r, g) => ss(r).every((x, i, a) => i === 0 || x - a[i - 1] >= g -
   const maps = mk(0), obs = { targetLen: 0.7, targetWid: 0 };
   const r = solveLayout({ G, obs, line, cand, maps, rowsOptions: [1], nMax: 30 }), old = searchLeds2({ G, obs, line, cand, maps, rowsOptions: [1], pitches: [0], nMax: 30 });
   ok(r.feasible && r.kind === 'uniform' && !old.feasible && r.total === 7 && r.pitch > 0, `끝 여백 최적화: ${layoutText(r)} (기존 균등 = 미달)`);
-  ok(sym(r) && grid(r) && gapsOk(r, 2) && r.positions.every((q) => q.w === 0), '대칭 · 0.25 mm 격자 · 최소 간격 2 mm · 1열');
+  ok(sym(r) && (r.kind === 'uniform' || grid(r)) && gapsOk(r, 2) && r.positions.every((q) => q.w === 0), '대칭 · 비균등은 0.25 mm 격자 · 최소 간격 2 mm · 1열');
   ok(r.alts.length >= 1 && r.alts.every((a) => a.positions?.length), '대안(검증 미달 때) 있음'); }
 { // 강한 끝 감쇠: 같은 피치로는 안 되고 끝을 촘촘히 해야 통과
   const maps = mk(0.4), obs = { targetLen: 0.7, targetWid: 0 };
@@ -69,6 +69,13 @@ const gapsOk = (r, g) => ss(r).every((x, i, a) => i === 0 || x - a[i - 1] >= g -
   ok(pass.feasible && !r.feasible && r.limit === 'wid' && r.n === pass.n && r.stats.Ulen >= 0.8, `폭 못 닿음: 길이 통과 최소 ${r.n}개 (폭 조건 없을 때 ${pass.n}개) · limit ${r.limit}`);
   const both = solveLayout({ G: G2, obs: { targetLen: 1.5, targetWid: 0.95 }, line, cand, maps: m2, rowsOptions: [1], nMax: 40 });
   ok(!both.feasible && both.limit === 'wid' && both.positions.length > 0, `양쪽 다 못 닿음: 가장 가까운 안 ${both.n}개`);
+}
+
+{ // 균일한 피치 원칙: uniformOnly = 끝이 어두워도 끝 압축·자유 배치를 안 하고, 간격이 소수까지 정확히 같음
+  const r = solveLayout({ G, obs: { targetLen: 0.8, targetWid: 0 }, line, cand, maps: mk(0.4), rowsOptions: [1], nMax: 30, uniformOnly: true }), s = ss(r), g = s.slice(1).map((x, i) => x - s[i]);
+  ok(r.kind === 'uniform' && Math.max(...g) - Math.min(...g) < 1e-9 && sym(r), `같은 피치만: ${layoutText(r)} · 간격 차 ${(Math.max(...g) - Math.min(...g)).toExponential(1)}`);
+  const f = solveLayout({ G, obs: { targetLen: 0.8, targetWid: 0 }, line, cand, maps: mk(0.4), rowsOptions: [1], nMax: 30 });
+  ok(r.atCount(r.n + 1).kind === 'uniform' && (f.kind !== 'uniform' || f.n === r.n), `개수 늘리기도 같은 피치 · 제한 없을 때 ${layoutText(f)}`);
 }
 
 done();

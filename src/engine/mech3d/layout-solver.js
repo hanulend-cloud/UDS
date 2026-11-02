@@ -46,7 +46,7 @@ function layoutText0(r) {
 // safety = 통과 판정 여유(기저 추정은 광자 잡음이 있어 검증에서 0 근처 통과가 뒤집힘 — 이만큼 넘는 배치만 통과로 봄)
 // wCenter = 열 배치 기준 폭 위치(기준 LED 대비 mm, 2026-10-30) — 1열 = wCenter, 2열 = wCenter ± g. 후보 격자에 그 w 줄들이 있어야 함
 export function solveLayout(args) {
-  const { G, obs, line, cand, maps, rowsOptions = [1, 2], gaps = [], nMax, emitted = 1, minGap = 2, pitchRange = null, timeBudget = 20000, now = () => Date.now(), safety = 0, sMargin = 0, wCenter = 0, inner = false } = args;
+  const { G, obs, line, cand, maps, rowsOptions = [1, 2], gaps = [], nMax, emitted = 1, minGap = 2, pitchRange = null, timeBudget = 20000, now = () => Date.now(), safety = 0, sMargin = 0, wCenter = 0, inner = false, uniformOnly = false } = args;   // uniformOnly = 같은 피치만(끝 압축·자유 배치 안 함)
   const sm = line.closed ? 0 : Math.max(0, sMargin);   // 끝 여유: 첫·끝 LED 중심 ≥ sm(몸체가 끝벽에 닿지 않게)
   const L = line.length, closed = !!line.closed, nCell = G.ns * G.nw, t0 = now(), RO = [...new Set(rowsOptions)].sort((a, b) => a - b);
   const gMin = Math.max(minGap, pitchRange?.min ?? 0);
@@ -71,7 +71,7 @@ export function solveLayout(args) {
     let eLo = sm, eHi = (L - (n - 1) * gMin) / 2;
     if (pitchRange) { eLo = Math.max(eLo, (L - (n - 1) * pitchRange.max) / 2); eHi = Math.min(eHi, (L - (n - 1) * pitchRange.min) / 2); }
     if (eHi < eLo - 1e-9) return null;
-    const tryE = (e) => { const ss = uniformPositions(L, n, e).map((s) => snapS(s, L)); if (!okGaps(ss, gMin, L, sm)) return; const r = ev(ss, rows, g, 'uniform', { pitch: +(ss[1] - ss[0]).toFixed(2), endMargin: ss[0] }); if (r && better(r, best)) best = r; };
+    const tryE = (e) => { const ss = uniformPositions(L, n, e); if (!okGaps(ss, gMin, L, sm)) return; const r = ev(ss, rows, g, 'uniform', { pitch: +(ss[1] - ss[0]).toFixed(2), endMargin: ss[0] }); if (r && better(r, best)) best = r; };
     for (let e = eLo; e <= eHi + 1e-9; e += 1) tryE(e);
     tryE(eHi);
     if (best) { const c = best.endMargin; for (let e = Math.max(eLo, c - 1); e <= Math.min(eHi, c + 1) + 1e-9; e += SNAP) tryE(e); }
@@ -108,6 +108,7 @@ export function solveLayout(args) {
   }
   function solveN(n, rows, g) {
     const s1 = stage1(n, rows, g);
+    if (uniformOnly) return s1;
     if (!s1 || s1.margin >= safety || s1.margin < HOPELESS + safety || now() - t0 > timeBudget) return s1;
     const s2 = stage2(n, rows, g);
     if (s2 && s2.margin >= safety) return s2;

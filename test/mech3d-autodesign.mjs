@@ -221,8 +221,8 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   ok(!r.unchanged && r.best.count === 1 && r.best.rows === 2 && r.best.rowGap === 1 && s2.total === 2, `② 2D: 2열 × ${r.best.count}개 ±${r.best.rowGap} (총 ${s2.total})`);
   // fewer 는 총수 비교: 현재 1열 2개(총 2) vs 2열 × 1개(총 2) — 점수 같으면 현재안 유지(열당 1 < 2 로 속지 않음)
   const io2 = { ...io, verify: async () => ({ stats: st(0.95, 0.9), eff: 1 }) };
-  const r2 = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0 }, current: { milky: 3, count: 2, pitch: 0, rows: 1 }, G, line, nMax: 4 }, io2);
-  const r3 = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0 }, current: { milky: 3, count: 3, pitch: 0, rows: 1 }, G, line, nMax: 4 }, io2);
+  const r2 = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0 }, current: { milky: 3, count: 2, pitch: 0, rows: 1 }, G, line, nMax: 4, ladderMs: 0 }, io2);
+  const r3 = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0 }, current: { milky: 3, count: 3, pitch: 0, rows: 1 }, G, line, nMax: 4, ladderMs: 0 }, io2);
   ok(r2.unchanged && !r3.unchanged && r3.best.rows === 2, 'fewer = 총 LED 수(rows·count): 총 2 = 2 → 유지, 총 2 < 3 → 추천');
   ok(sameDesign({ count: 2, pitch: 0 }, { count: 2, pitch: 0, rows: 1, rowGap: 0 }) && sameDesign({ count: 2, pitch: 0, rows: 1, rowGap: 3 }, { count: 2, pitch: 0 }) && !sameDesign({ count: 2, pitch: 0, rows: 2, rowGap: 3 }, { count: 2, pitch: 0 })
     && !sameDesign({ count: 2, pitch: 0, rows: 2, rowGap: 3 }, { count: 2, pitch: 0, rows: 2, rowGap: 4 }) && sameDesign({ count: 2, pitch: 0, rows: 2, rowGap: 3 }, { count: 2, pitch: 0, rows: 2, rowGap: 3 }), 'sameDesign: rows(없음 = 1)·rowGap(1열이면 무시)'); }
@@ -238,7 +238,7 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   const run = async (U) => {
     const calls = [], prog = [];
     const io = { basis: async () => B, verify: async (d) => { calls.push(d); return { stats: st(U(d), 0.9), eff: 1 }; }, progress: (s, f, t) => prog.push(t), cancelled: () => false };
-    const r = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0 }, current: { milky: 3, count: 3, pitch: 0, rows: 1 }, currentVerified: cv, G, line, nMax: 4 }, io);
+    const r = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0 }, current: { milky: 3, count: 3, pitch: 0, rows: 1 }, currentVerified: cv, G, line, nMax: 4, ladderMs: 0 }, io);
     return { r, calls, prog };
   };
   const a = await run((d) => (d.rows === 2 && d.rowGap === 2 ? 0.95 : d.rows === 2 ? 0.7 : 0.6));
@@ -334,7 +334,9 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   const a = await run((n) => st(n >= 10 ? 0.82 : 0.6 + n * 0.01, 0.9));
   ok(a.r.feasible && a.r.best.positions.length === 10 && new Set(a.r.best.positions.map((q) => q.w)).size === 1 && a.seen.at(-1) === 10 && a.seen.every((n, i) => !i || n > a.seen[i - 1]), `미달 → 하나씩 늘려 10개에서 통과 (재확인 ${a.seen.join('→')})`);
   const b = await run((n) => st(0.9, 0.4));   // 폭 부족 = 개수로 안 오름 → 두 번 만에 멈추고 적은 쪽 · 한계 문구
-  ok(!b.r.feasible && b.seen.length <= b.seen[0] + 4 && /한계: 폭 방향 확산 부족/.test(b.r.reason) && b.r.best.positions.length === b.seen[0], `폭 부족: ${b.seen.join('→')} 에서 멈춤 · 가장 적은 ${b.r.best.positions?.length}개`);
+  ok(!b.r.feasible && /한계: 폭 방향 확산 부족/.test(b.r.reason) && b.r.best.positions.length === Math.min(...b.seen), `폭 부족: ${b.seen.join('→')} — 나아지지 않으니 가장 적은 ${b.r.best.positions?.length}개`);
+  const down = await run((n) => st(n >= 3 ? 0.85 : 0.6, 0.9));   // 후보 추정은 많게 잡았지만 3개면 충분 → 줄여서 확인
+  ok(down.r.feasible && down.r.best.positions.length === 3 && down.seen.includes(2) && down.seen.every((n, i) => !i || n < down.seen[i - 1]), `많이 잡았으면 줄여 확인: ${down.seen.join('→')} → ${down.r.best.positions.length}개`);
   const c = await run((n) => st(n >= 12 ? 0.85 : 0.6, 0.9), { milky: 1, count: 8, pitch: 0, rows: 1 }, 0.82);   // 지금 8개가 이미 통과 → 지금보다 많아지는 안은 시험도 안 함
   ok(c.r.unchanged && c.seen.every((n) => n <= 8), `지금 통과면 개수를 늘리지 않음 (재확인 ${c.seen.join('→') || '없음'})`);
 }

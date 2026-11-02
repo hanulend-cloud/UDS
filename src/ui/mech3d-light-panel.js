@@ -1,5 +1,6 @@
 // 3D 기구 — 광원 · LED · 관측면 · 목표 속성 편집기 (spec 2026-10-14 §4·§5, 2026-10-15 m3-cad-ui §2). 상태 없음.
 // P3 의 renderLightPanel 을 피처 트리 노드별로 나눴다. 계산 버튼·결과 표시는 자동 점진 계산(결과 패널·상태 띠)으로 옮김.
+import { ledDeltaText, pitchText } from './m3/led-change.js';
 import { stepRefEmitter } from '../engine/mech3d/virtual-leds.js';
 import { clampRowGap, rowGapOptions } from '../engine/mech3d/placement.js';
 import { catalogOf } from '../engine/mech3d/housing-led.js';
@@ -129,12 +130,19 @@ function ledNodeBodyHtml(m, ui, adv = false, showBeam = false) {   // showBeam =
     ${adv ? '' : `<div class="m3-row"><label>광속</label><input type="number" min="0" step="1" value="${L.spec.fluxLm ?? 0}" data-lp-spec="fluxLm"> lm/개 <span class="mut">0 = 상대값(최대 대비 %)</span></div>`}
     <div class="m3-row"><label>PCB 색</label><select data-lp-solder>${['백색', '녹색', '흑색'].map((c) => `<option ${c === L.solder ? 'selected' : ''}>${c}</option>`).join('')}</select></div>`;
 }
+// 원설계 대비 변경(순수, 2026-11-02) — 위치·개수가 바뀌면 눈에 띄게. c = ledChange 결과 | null(비교 기준 없음)
+export function ledChangeHtml(c) {
+  if (!c) return '';
+  if (!c.changed) return `<div class="m3-row mut">원설계 그대로 — ${esc(pitchText(c.pitchOrig))}</div>`;
+  const parts = [c.moved ? `옮김 ${c.moved}` : '', c.added ? `추가 ${c.added}` : '', c.removed ? `없어짐 ${c.removed}` : ''].filter(Boolean).join(' · ');
+  return `<div class="m3-ledchg" role="status"><b>원설계에서 변경됨</b><div>원설계 ${esc(pitchText(c.pitchOrig))}</div><div>지금 <b>${esc(pitchText(c.pitchCur))}</b></div><div class="mut">${parts} · 3D 회색 고리·그래프 △ = 원설계 위치</div></div>`;
+}
 // LED 목록 표(순수, 2026-11-02) — 줄 클릭 = 선택(다시 클릭 = 해제, 3D 에 표시) · ✕ = 삭제(원래 STEP 은 빛만 끔 → [되살리기])
 function ledListHtml(ui, canDel) {
-  const list = ui.ledList ?? [], sel = ui.led?.n ?? null;
+  const list = ui.ledList ?? [], sel = ui.led?.n ?? null, chg = !!ui.ledChange?.changed;
   if (!list.length) return '<div class="m3-row mut">LED 없음</div>';
-  const row = (it) => `<tr class="${it.n === sel ? 'on' : ''}${it.excluded ? ' off' : ''}" data-lp-ledsel="${it.n}" tabindex="0" aria-selected="${it.n === sel}"><td>${it.rank ?? it.n + 1}</td><td>${num(it.s, 1)} mm</td><td>${canDel ? `<button type="button" data-lp-ledx="${it.n}" title="${it.excluded ? '이 LED 다시 켜기' : '이 LED 삭제'}">${it.excluded ? '되살리기' : '✕'}</button>` : ''}</td></tr>`;
-  return `<div class="m3-ledlist"><table><thead><tr><th>LED</th><th>라인 위치</th><th></th></tr></thead><tbody>${list.map(row).join('')}</tbody></table></div>`;
+  const row = (it) => `<tr class="${it.n === sel ? 'on' : ''}${it.excluded ? ' off' : ''}" data-lp-ledsel="${it.n}" tabindex="0" aria-selected="${it.n === sel}"><td>${it.rank ?? it.n + 1}</td><td>${num(it.s, 1)} mm</td>${chg ? `<td class="m3-ledd ${it.chg?.state ?? ''}">${esc(ledDeltaText(it.chg))}</td>` : ''}<td>${canDel ? `<button type="button" data-lp-ledx="${it.n}" title="${it.excluded ? '이 LED 다시 켜기' : '이 LED 삭제'}">${it.excluded ? '되살리기' : '✕'}</button>` : ''}</td></tr>`;
+  return `<div class="m3-ledlist"><table><thead><tr><th>LED</th><th>라인 위치</th>${chg ? '<th>원설계 대비</th>' : ''}<th></th></tr></thead><tbody>${list.map(row).join('')}</tbody></table></div>`;
 }
 const n2s = (v) => String(+(+v).toFixed(2));
 // 고른 LED 옮기기(순수) — 라인 방향 · 높이 · 간섭 안내
@@ -156,7 +164,7 @@ function ledBasicHtml(m, ui) {
   const arrange = st ? stepLayoutRowHtml(st, ui.line ?? null, n)
     : `<div class="m3-row"><b>LED ${n}개</b></div>${man.positions?.length ? `<div class="m3-row mut">기구 최적화 배치 — 위치 ${man.positions.length}개 · 개수·피치·열을 고치면 균등 배치로</div>` : ''}<div class="m3-row">개수<input type="number" min="1" step="1" value="${man.count}" data-lp-man="count" aria-label="LED 개수"> 피치<input type="number" min="0" step="0.5" value="${man.pitch}" data-lp-man="pitch" aria-label="LED 피치 mm">mm <span class="mut">(0 = 균등)</span></div>${ledRowsHtml(man, ui.line ?? null, 'man')}`;
   return `${!ready ? '<div class="m3-card"><div class="m3-row warn">LED 빛 나오는 면을 아직 모름 — 아래 [LED 자동 선택]</div></div>' : ''}
-    <div class="m3-card"><div class="m3-sub">배치</div>${arrange}
+    <div class="m3-card"><div class="m3-sub">배치</div>${ledChangeHtml(ui.ledChange)}${arrange}
       ${ledListHtml(ui, canDel)}
       ${ui.led ? ledMoveHtml(ui.led) : '<div class="m3-row mut">줄을 누르면 3D 에 표시되고 옮길 수 있음 · 3D 에서 LED 를 눌러도 됨</div>'}</div>
     <div class="m3-card"><div class="m3-sub">빛 퍼짐 <span class="mut">(모든 LED)</span></div><div class="m3-seg m3-seg3" role="group" aria-label="빛 퍼짐">${seg}</div>
