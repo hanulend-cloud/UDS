@@ -340,6 +340,26 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   ok([1e5, 1e6, 2e6, 5e6, 1e7].every((t) => f(t, 15) * t * b <= B), '예산(4 GB) 안');
 }
 
+{ // 1D 곡선 다듬기: 칸이 많을 때만 · LED 리플 높이 유지 · 잡음 감소 · 원자료 불변
+  const { smoothCurve, smoothHalf, sgGain, ledGapCells, profileTxt } = await import('../src/ui/m3/results-panel.js');
+  ok(smoothHalf(39, 8) === 0 && smoothHalf(11, null) === 0 && smoothHalf(77, null) === 2 && smoothHalf(77, 3) === 0, '칸 < 40 = 안 함(폭 방향) · LED 모르면 5칸 · 5칸으로도 리플이 깎이면 안 함');
+  const a = smoothHalf(77, 7.7), b = smoothHalf(232, 23);
+  ok(a >= 2 && b > a && sgGain(a, 7.7) >= 0.95 && sgGain(b, 23) >= 0.95, `저화질 간격 7.7칸 → 반폭 ${a} (높이 ${(sgGain(a, 7.7) * 100).toFixed(1)}%) · 고화질 23칸 → 반폭 ${b}`);
+  let sd = 5; const rnd = () => (sd = (sd * 1664525 + 1013904223) >>> 0) / 4294967296, gs = () => Math.sqrt(-2 * Math.log(rnd() + 1e-12)) * Math.cos(6.283185 * rnd());
+  const N = 400, P = 8, clean = Array.from({ length: N }, (_, i) => 0.88 + 0.12 * Math.cos((2 * Math.PI * i) / P)), noisy = clean.map((v) => v + 0.02 * gs()), m = smoothHalf(N, P), sm = smoothCurve(noisy, m);
+  const rng = (y) => Math.max(...y) - Math.min(...y), rms = (y) => Math.sqrt(y.slice(20, N - 20).reduce((t, v, i) => t + (v - clean[i + 20]) ** 2, 0) / (N - 40));
+  const pure = smoothCurve(clean, m);
+  ok(rng(pure.slice(20, N - 20)) / rng(clean) >= 0.95, `깨끗한 리플 높이 ${(rng(pure.slice(20, N - 20)) / rng(clean) * 100).toFixed(1)}% 유지`);
+  ok(rms(sm) < 0.8 * rms(noisy), `잡음 감소 ${rms(noisy).toFixed(4)} → ${rms(sm).toFixed(4)}`);
+  const line = Array.from({ length: 50 }, (_, i) => 0.2 + 0.01 * i), sl = smoothCurve(line, 3);
+  ok(sl.every((v, i) => Math.abs(v - line[i]) < 1e-12), '직선·기울기는 그대로(끝단 어두움을 왜곡 안 함)');
+  const gap = [0.5, 0.6, 0.7, NaN, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 0.9, 0.8], sg = smoothCurve(gap, 2);
+  ok(Number.isNaN(sg[3]) && sg[0] === 0.5 && sg[2] === 0.7 && sg[4] === 0.5 && sg[5] === 0.6 && Number.isFinite(sg[6]), 'NaN 그대로 · 끝·끊김 옆은 원자료');
+  ok(ledGapCells([10, 10, 30, 50, 55], 1) === 5 && ledGapCells([10], 1) === null && ledGapCells([], 1) === null, 'LED 간격: 2열 중복 빼고 가장 좁은 간격');
+  const t = profileTxt([{ title: 'x', v: { curves: [{ name: 'A', ys: [0.8, 1], draw: [0.5, 0.5] }], opt: { x0: 0, x1: 2, xl: 's (mm)' } } }]);
+  ok(t.includes('80.00') && t.includes('100.00') && !t.includes('50.00'), 'CSV = 원자료(다듬은 값이 아님)');
+}
+
 done();
 
 { const { clearDbHtml } = await import('../src/ui/mech3d-panel.js');
