@@ -8,6 +8,9 @@ import { coinFlags } from './mc3d.js';
 
 export const REC = 24;
 const WG = 64;
+const OPT = 14;   // 부품 광학 표 한 줄: n, mus, g, mua, 투과, 위상표 번호, 0, 0, 경계 상자(lo, hi)
+const PART_BOX_MARGIN = 0.1;   // 맞붙은 면 틈(COIN_GAP 0.04)보다 넉넉히
+const TIR_TRAP = 2000;   // 산란 없는 매질에서 이만큼 연달아 전반사 = 갇힘(직육면체 투명판은 방향이 몇 개로 닫혀 영영 못 나옴)
 const KIND = { whiteDiffuse: 0, metal: 1, black: 2, gloss: 3 };
 
 const WGSL = /* wgsl */`
@@ -27,6 +30,7 @@ struct Prm {
 const T_MIN: f32 = 2e-5;
 const BIG: f32 = 1e30;
 const PI: f32 = 3.14159265358979;
+const SCAT_GAP: f32 = 1e-4;
 const COIN_GAP_PLANAR: f32 = 0.02; const COIN_GAP: f32 = 0.04; const COIN_PLANAR_DOT: f32 = -0.9999; const COIN_DOT: f32 = -0.97; const COIN_BOX: f32 = 0.05; const COIN_BARY: f32 = 1e-6;
 
 var<private> rs: u32;
@@ -47,12 +51,17 @@ fn tFin(t: u32) -> u32 { return U[prm.oTI + t * 4u + 2u]; }
 fn tCoin(t: u32) -> bool { return (U[prm.oTI + t * 4u + 3u] & 1u) != 0u; }
 fn tSkip(t: u32) -> bool { return (U[prm.oTI + t * 4u + 3u] & 2u) != 0u; }   // 추적 제외 부품
 // 부품 광학: [n, mus, g, mua], [투과(1/0), 위상표 번호(−1 = HG), 0, 0]
-fn oN(q: i32) -> f32 { if (q < 0) { return 1.0; } return F[prm.oOPT + u32(q) * 8u]; }
-fn oMus(q: i32) -> f32 { return F[prm.oOPT + u32(q) * 8u + 1u]; }
-fn oG(q: i32) -> f32 { return F[prm.oOPT + u32(q) * 8u + 2u]; }
-fn oMua(q: i32) -> f32 { return F[prm.oOPT + u32(q) * 8u + 3u]; }
-fn oTr(q: i32) -> bool { return F[prm.oOPT + u32(q) * 8u + 4u] > 0.5; }
-fn oPh(q: i32) -> i32 { return i32(F[prm.oOPT + u32(q) * 8u + 5u]); }
+fn oN(q: i32) -> f32 { if (q < 0) { return 1.0; } return F[prm.oOPT + u32(q) * ${OPT}u]; }
+fn oMus(q: i32) -> f32 { return F[prm.oOPT + u32(q) * ${OPT}u + 1u]; }
+fn oG(q: i32) -> f32 { return F[prm.oOPT + u32(q) * ${OPT}u + 2u]; }
+fn oMua(q: i32) -> f32 { return F[prm.oOPT + u32(q) * ${OPT}u + 3u]; }
+fn oTr(q: i32) -> bool { return F[prm.oOPT + u32(q) * ${OPT}u + 4u] > 0.5; }
+fn oPh(q: i32) -> i32 { return i32(F[prm.oOPT + u32(q) * ${OPT}u + 5u]); }
+// 매질이 q 인데 그 부품 경계 상자 밖 = 면을 뚫고 샌 광자(f32 tMin 2e-5 안쪽 등) — 면을 다시 못 만나 μa 로 다 줄 때까지 수만 번 산란
+fn outOfPart(q: i32, x: vec3f) -> bool {
+  let o = prm.oOPT + u32(q) * ${OPT}u + 8u;
+  return x.x < F[o] || x.y < F[o + 1u] || x.z < F[o + 2u] || x.x > F[o + 3u] || x.y > F[o + 4u] || x.z > F[o + 5u];
+}
 fn finKind(f: u32) -> u32 { return u32(F[prm.oFIN + f * 2u]); }
 fn finR(f: u32) -> f32 { return F[prm.oFIN + f * 2u + 1u]; }
 
@@ -175,6 +184,7 @@ fn reflectBy(f: u32, nInc: f32) {
 }
 fn polv(as_: f32, ap: f32, s: vec3f, k: vec3f) -> vec3f { let v = as_ * s + ap * cross(s, k); let l = length(v); if (l < 1e-12) { return s; } return v / l; }
 // 편광 Fresnel n1 → n2 — 반사면 true. ndir·nE 설정
+var<private> tir: bool;
 fn fresnel(n1: f32, n2: f32) -> bool {
   var dn = dot(d, Nn); var I = Nn; if (dn > 0.0) { I = -Nn; dn = -dn; }
   let cosI = min(1.0, -dn); let eta = n1 / n2; let r = d - 2.0 * dn * I;
@@ -184,7 +194,7 @@ fn fresnel(n1: f32, n2: f32) -> bool {
   let Es = dot(E, s); let Ep = dot(E, cross(s, d));
   let k = 1.0 - eta * eta * (1.0 - cosI * cosI);
   hasDir = true; hasE = true;
-  if (k <= 0.0) { ndir = r; nE = polv(Es, Ep, s, r); return true; }
+  if (k <= 0.0) { tir = true; ndir = r; nE = polv(Es, Ep, s, r); return true; }
   let cosT = sqrt(k);
   let rs_ = (n1 * cosI - n2 * cosT) / (n1 * cosI + n2 * cosT); let rp = (n2 * cosI - n1 * cosT) / (n2 * cosI + n1 * cosT);
   let ts = 2.0 * n1 * cosI / (n1 * cosI + n2 * cosT); let tp = 2.0 * n1 * cosI / (n2 * cosI + n1 * cosT);
@@ -241,7 +251,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   E = randPol(d);
   var w = prm.w0;
   var skipPA = -1; var skipFA = -1; var skipPB = -1; var skipFB = -1; var skipTol: f32 = 0.0; var skipX = vec3f(0.0); var skipN = vec3f(0.0);
-  var lastTri = -1; var lastTri2 = -1;
+  var lastTri = -1; var lastTri2 = -1; var tirRun = 0u;
   var tL: f32 = 0.0; var tK: f32 = 0.0;
   sn = 0; stkOver = false; nSeq = 0; refl = false;
   var exitPart = -1; var exitFace = -1; var exitX = vec3f(0.0);
@@ -251,7 +261,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     let cur = sTop();
     var sFree = BIG;
     if (cur >= 0 && oMus(cur) > 0.0) { sFree = -log(max(1.0 - rnd(), 1e-30)) / oMus(cur); }
-    let h = intersect(x, d, sFree, lastTri, lastTri2);
+    let h = intersect(x, d, sFree + SCAT_GAP, lastTri, lastTri2);   // 면 바로 앞 산란은 면 적중으로 — 면에 붙어 산란하면 다음 광선이 T_MIN 안쪽 면을 못 봐 새어 나감
     if (!h && sFree >= BIG) {
       if (cur >= 0) { lost = lost + w; break; }
       esc = 1.0; break;
@@ -261,6 +271,8 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     if (cur == prm.track && prm.track >= 0) { tL = tL + t; if (!h) { tK = tK + 1.0; } }
     if (cur >= 0 && oMua(cur) > 0.0) { let a = w * (1.0 - exp(-oMua(cur) * t)); absV = absV + a; w = w - a; }
     if (!h) {   // 체적 산란
+      tirRun = 0u;
+      if (outOfPart(cur, x)) { lost = lost + w; break; }   // CPU 의 '매질 안에서 교차 없음 = 소실' 과 같은 처리
       skipPA = -1; lastTri = -1; lastTri2 = -1;
       let ph = oPh(cur); var cth: f32;
       if (ph >= 0) { let tt = rnd() * 4096.0; let k = min(4095u, u32(tt)); let f = tt - f32(k); let o = prm.oPH + u32(ph) * 4097u + k; cth = F[o] + f * (F[o + 1u] - F[o]); }
@@ -281,7 +293,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
         && abs(dot(Nn, skipN)) > -COIN_DOT && abs(dot(x - skipX, skipN)) <= skipTol + 1e-5) { lastTri2 = prevTri; continue; }
       skipPA = -1;
       let entering = dot(d, Nn) < 0.0;
-      hasDir = false; hasE = false; absorbed = false; var lostHere = false;
+      hasDir = false; hasE = false; absorbed = false; tir = false; var lostHere = false;
       let nCur = oN(cur);
       let tri2 = partnerAt(tri, x);
       note(q, entering); if (tri2 >= 0) { note(tPart(u32(tri2)), !entering); }
@@ -317,6 +329,11 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
       }
       if (lostHere) { lost = lost + w; break; }
       if (absorbed) { absS = absS + w; break; }
+      // 갇힌 광자·샌 광자가 dispatch 하나를 수 초~수십 초 붙잡으면 D3D TDR(2초) 로 GPU 장치를 잃음(DXGI_ERROR_DEVICE_HUNG). 끝까지 돈 결과와 같게 집계: 흡수 매질이면 언젠가 다 흡수, 아니면 소실
+      if (tir && cur >= 0 && oMus(cur) <= 0.0) {
+        tirRun = tirRun + 1u;
+        if (tirRun >= ${TIR_TRAP}u) { if (oMua(cur) > 0.0) { absV = absV + w; w = 0.0; } else { lost = lost + w; } break; }
+      } else { tirRun = 0u; }
       if (hasDir) {
         d = normalize(ndir);
         if (hasE) { E = nE; } else { E = randPol(d); }
@@ -371,8 +388,12 @@ export async function createGpuTracer() {
     const phs = [], phIdx = optics.map((o) => { if (!o.transmissive || !o.phase?.inv) return -1; let k = phs.indexOf(o.phase.inv); if (k < 0) { k = phs.length; phs.push(o.phase.inv); } return k; });
     const box = bvh.box.slice(); for (let n = 0; n < box.length; n += 6) for (let k = 0; k < 3; k++) { box[n + k] -= c[k]; box[n + 3 + k] -= c[k]; }
     const Pc = new Float32Array(P.length); for (let i = 0; i < P.length; i++) Pc[i] = P[i] - c[i % 3];
-    const opt = new Float32Array(optics.length * 8);
-    optics.forEach((o, q) => { if (o.transmissive) opt.set([o.n, o.mus, o.g, o.mua, 1, phIdx[q]], q * 8); else opt.set([1, 0, 0, 0, 0, -1], q * 8); });
+    const opt = new Float32Array(optics.length * OPT);
+    optics.forEach((o, q) => { if (o.transmissive) opt.set([o.n, o.mus, o.g, o.mua, 1, phIdx[q]], q * OPT); else opt.set([1, 0, 0, 0, 0, -1], q * OPT); opt.fill(Infinity, q * OPT + 8, q * OPT + 11); opt.fill(-Infinity, q * OPT + 11, q * OPT + 14); });
+    for (let t = 0; t < nT; t++) for (let v = 0; v < 3; v++) for (let k = 0; k < 3; k++) {   // 부품 경계 상자(장면 중심 기준 · 여유 포함)
+      const a = Pc[T[t * 3 + v] * 3 + k], o = partOf[t] * OPT + 8 + k;
+      opt[o] = Math.min(opt[o], a - PART_BOX_MARGIN); opt[o + 3] = Math.max(opt[o + 3], a + PART_BOX_MARGIN);
+    }
     const fin = new Float32Array(fins.length * 2);
     fins.forEach((f, k) => { const kk = KIND[f.kind]; if (kk == null) throw new Error(`GPU: 알 수 없는 면 처리 ${f.kind}`); fin[k * 2] = kk; fin[k * 2 + 1] = f.R ?? 0; });
     const con = [];
