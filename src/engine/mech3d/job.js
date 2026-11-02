@@ -61,7 +61,7 @@ export function runChunk({ S, line, obs, G, emitters, ledSpec, N, seed, rw = nul
       if (faces.has(k)) escObs += w; else leak[k] = (leak[k] ?? 0) + w;
     },
   });
-  return { acc: a.acc, cnt: a.cnt, ledger: r.ledger, leak, escObs, paths, ms: r.ms, rw: a.rw };
+  return { acc: a.acc, accAll: a.accAll, cnt: a.cnt, ledger: r.ledger, leak, escObs, paths, ms: r.ms, rw: a.rw };
 }
 
 // 대표 광경로(3D 광경로 화살표) — 실제 MC 광자 중 경로 want('R:2>1' 형식, 기구 부품 nMech 미만만)로 관측면에 집계된 것을 모아
@@ -118,7 +118,7 @@ export async function runChunkGpu(gpu, { S, line, obs, G, emitters, ledSpec, N, 
     const k = ep >= 0 ? `${ep}|${rec[o + 2]}` : '-1|-1';
     if (faces.has(k)) escObs += w; else leak[k] = (leak[k] ?? 0) + w;
   }
-  return { acc: a.acc, cnt: a.cnt, ledger, leak, escObs, paths, ms, rw: a.rw, gpu: true };
+  return { acc: a.acc, accAll: a.accAll, cnt: a.cnt, ledger, leak, escObs, paths, ms, rw: a.rw, gpu: true };
 }
 
 // 시드 규약: 배치 b 는 seed*7919+b 를 쓴다. 여러 Worker 로 나눌 때는 Worker 마다 서로 다른 seed 를 주고(배치 시드가 겹치지 않게), 각자 batches 개 배치를 돌려 합친다.

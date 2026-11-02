@@ -462,3 +462,7 @@ done();
   const ok1 = t[0] === `s (mm)${tab}값 (%)` && t[1] === `1${tab}25.00` && t[2] === `3${tab}50.00` && t[3] === `5${tab}100.00`;   // w=0.5 줄(j=2): 2,4,8
   const ok2 = t[4] === `w (mm)${tab}값 (%)` && t[5] === `0.5${tab}50.00` && t[6] === `-0.5${tab}37.50` && t.length === 7;   // s=3 칸(i=1): 위 = +w, 빈 줄(±1.5) 뺌
   console.log(ok1 && ok2 ? 'PASS 선택 선 TXT: 길이·폭 원자료 · 2D 최대 대비 % · 관측면 밖 뺌' : (process.exitCode = 1, `FAIL 선택 선 TXT ${JSON.stringify(t)}`)); }
+{ // 2D 칸 위치(2026-11-02): 빈 줄을 잘라도 칸 번호 j 의 w 는 전체 격자 기준 — 최저점 라벨·마우스 읽기가 빈 줄 수만큼 어긋나던 것
+  const { mapCellSW, mapViewG } = await import('../src/ui/m3/results-panel.js');
+  const G = { ns: 2, nw: 6, ds: 2, cell: 1, w0: -3, L: 4, valid: [0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0] }, V = mapViewG(G), [s, w] = mapCellSW(G, 1, 3);
+  console.log(V.jA === 2 && s === 3 && w === 0.5 && w >= V.w0 && w <= V.w0 + V.nw * G.cell ? 'PASS 2D 칸 위치: 표시 범위를 잘라도 w 가 맞음' : (process.exitCode = 1, `FAIL 2D 칸 위치 ${s} ${w} ${JSON.stringify(V.w0)}`)); }

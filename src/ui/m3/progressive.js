@@ -118,8 +118,9 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
   // 배치 평균이 바르다(예전엔 청크 개수 가중 → GPU 큰 청크가 섞이면 배치 간 차가 커져 잡음이 수렴하지 않음, 2026-10-27). 고정 크기면 f = 1(runJob 과 비트 일치)
   function accumulate(b, N, r) {
     const n = r.acc.length, f = N / o.chunkN;
-    const B = bins[b] ?? (bins[b] = { acc: new Float64Array(n), cnt: new Float64Array(n), n: 0, photons: 0 });
+    const B = bins[b] ?? (bins[b] = { acc: new Float64Array(n), accAll: new Float64Array(n), cnt: new Float64Array(n), n: 0, photons: 0 });
     for (let k = 0; k < n; k++) { B.acc[k] += r.acc[k] * f; B.cnt[k] += r.cnt[k]; }
+    if (r.accAll) for (let k = 0; k < n; k++) B.accAll[k] += r.accAll[k] * f;   // 면 전체(2D 표시·TXT)
     B.n++; B.photons += N; nMin = Math.min(nMin, N); nMax = Math.max(nMax, N);
     for (const key in ledger) ledger[key] += (r.ledger[key] ?? 0) * f;
     for (const key in r.leak ?? {}) leak[key] = (leak[key] ?? 0) + r.leak[key] * f;
@@ -135,6 +136,8 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
     const norm = (B, a) => (same ? (B.n === 1 ? a : a.map((v) => v / B.n)) : a.map((v) => v * (ref / B.photons)));
     const accs = filled.map((B) => norm(B, B.acc)), cnts = filled.map((B) => norm(B, B.cnt));
     const stats = tallyStats(job.G, accs, job.obs, cnts);
+    // 2D 표시·TXT 용 면 전체 지도 — stats.map 과 같은 정규화(제외 구역이 없는 칸은 값이 같음)
+    if (job.G.validAll) { const all = filled.map((B) => norm(B, B.accAll)), m = new Float64Array(job.G.ns * job.G.nw); for (let k = 0; k < m.length; k++) if (job.G.validAll[k]) { let v = 0; for (const a of all) v += a[k]; m[k] = v / all.length / job.G.areaAll[k]; } stats.mapAll = m; }
     const sum = new Float64Array(job.G.ns * job.G.nw);
     for (const B of filled) for (let k = 0; k < sum.length; k++) sum[k] += B.acc[k];
     return { stats, sum, photometry: photometry(job.G, sum, ledger, { fluxLm: job.fluxLm ?? 0, nLeds: job.nLeds ?? 0, cone: job.obs.cone ?? 90 }) };

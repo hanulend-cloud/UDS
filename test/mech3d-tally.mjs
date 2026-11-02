@@ -121,4 +121,16 @@ ok(S.counted === nV && S.noiseWarn === false, `집계 셀 ${S.counted}, 잡음 �
   const GA = tallyGeometry(line, { ...obs, cellS: null, cellW: null, quality: 'mid' });
   ok(GA.ds === 1 && GA.cell === 1, `자동 격자(중): 칸 ${GA.ds}×${GA.cell} mm`);
 }
+{ // 면 전체 집계(2026-11-02): 판정(acc)은 가장자리 제외 그대로, 2D 표시·TXT 용 accAll 은 가장자리까지 — 제외 구역 광자도 accAll 에만 들어감
+  const GF = tallyGeometry(line, { ...obs, cellS: 2, cellW: 1.5, edgeExcl: 0.5 });
+  const a = makeAccumulator(GF, line, { ...obs, cone: 90 });
+  a.onExit(0, 1, 50, 3, 2, 0, 0, 1, 1, 1); a.onEscape(50, 3, 2.5, 0, 0, 1, 1, 1);        // 가운데
+  a.onExit(0, 1, 50, 0.2, 2, 0, 0, 1, 1, 2); a.onEscape(50, 0.2, 2.5, 0, 0, 1, 1, 2);    // 폭 가장자리 0.2 mm(제외 구역)
+  const sum = (v) => v.reduce((x, y) => x + y, 0);
+  let aOld = 0, aAll = 0; for (let k = 0; k < GF.area.length; k++) { aOld += GF.area[k]; aAll += GF.areaAll[k]; }
+  ok(sum(a.acc) === 1 && sum(a.accAll) === 2 && Math.abs(aAll - 600) < 1 && aOld < aAll, `면 전체: 판정 acc ${sum(a.acc)} · 전체 accAll ${sum(a.accAll)} · 면적 ${aOld.toFixed(0)} → ${aAll.toFixed(0)} mm²`);
+  const jj = new Set(); for (let k = 0; k < GF.validAll.length; k++) if (GF.validAll[k]) jj.add(k % GF.nw);
+  const wr = [...jj].sort((x, y) => x - y), w0 = GF.w0 + wr[0] * GF.cell, w1 = GF.w0 + (wr[wr.length - 1] + 1) * GF.cell;
+  ok(w1 - w0 >= 6 - 1e-9, `면 전체 유효 칸: 폭 ${w0}~${w1} mm(면 폭 6 mm 를 덮음)`);
+}
 done();

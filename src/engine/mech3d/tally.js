@@ -19,10 +19,18 @@ export function tallyGeometry(line, obs) {
   const ac = autoCells(L, 2 * maxHalf, obs.quality), cellS = obs.cell ?? obs.cellS ?? ac.cellS, cell = obs.cell ?? obs.cellW ?? ac.cellW;   // cell = w 칸
   const ns = Math.max(1, Math.round(L / cellS)), ds = L / ns;
   const nw = Math.ceil((2 * (maxHalf + 2 * cell)) / cell), w0 = -nw * cell / 2;
-  const area = new Float64Array(ns * nw), pa = R.cell * R.cell, pixOk = new Uint8Array(R.nx * R.ny);
+  const area = new Float64Array(ns * nw), areaAll = new Float64Array(ns * nw), pa = R.cell * R.cell, pixOk = new Uint8Array(R.nx * R.ny);
+  // areaAll·validAll = 면 전체(가장자리 제외 없음, 2026-11-02) — 2D 표시·TXT 용. 판정(area·valid·acc)은 그대로
   for (let j = 0; j < R.ny; j++) for (let i = 0; i < R.nx; i++) {
     const k = j * R.nx + i;
-    if (!R.mask[k] || (R.dt[k] - 0.5) * R.cell < edge - 1e-9) continue;
+    if (!R.mask[k]) continue;
+    {
+      const [s, w] = line.toSW(R.x0 + (i + 0.5) * R.cell, R.y0 + (j + 0.5) * R.cell), wj = Math.floor((w - w0) / cell);
+      let si = Math.floor(s / ds);
+      if (line.closed) si = ((si % ns) + ns) % ns;
+      if (si >= 0 && si < ns && wj >= 0 && wj < nw) areaAll[si * nw + wj] += pa;
+    }
+    if ((R.dt[k] - 0.5) * R.cell < edge - 1e-9) continue;
     const [s, w] = line.toSW(R.x0 + (i + 0.5) * R.cell, R.y0 + (j + 0.5) * R.cell);
     if (!line.closed && (s < edge || s > L - edge)) continue;
     pixOk[k] = 1;
@@ -34,18 +42,20 @@ export function tallyGeometry(line, obs) {
   }
   const valid = new Uint8Array(ns * nw);
   for (let k = 0; k < valid.length; k++) if (area[k] >= 0.5 * ds * cell) valid[k] = 1;
+  const validAll = new Uint8Array(ns * nw);
+  for (let k = 0; k < validAll.length; k++) if (areaAll[k] >= 0.1 * ds * cell) validAll[k] = 1;   // 면이 칸의 10% 이상 걸치면 값을 냄(더 작은 조각은 잡음만 큼)
   // pixOk: 집계 가능한 래스터 픽셀(마스크 안, 경계에서 edgeExcl 이상, 열린 라인이면 끝 제외) — 집계기가 래스터 없이(Worker) 쓰도록 G 에 담음
-  return { ns, nw, ds, cell, w0, valid, area, L, closed: line.closed, winS: obs.winS ?? Math.max(5, L / 10), pix: { x0: R.x0, y0: R.y0, cell: R.cell, nx: R.nx, ny: R.ny }, pixOk };
+  return { ns, nw, ds, cell, w0, valid, area, validAll, areaAll, L, closed: line.closed, winS: obs.winS ?? Math.max(5, L / 10), pix: { x0: R.x0, y0: R.y0, cell: R.cell, nx: R.nx, ny: R.ny }, pixOk, pixAll: R.mask };
 }
 
 // rw = { C: rwCoeffs 결과 } | null — 있으면 관측 셀에 집계되는 탈출마다 Milky 격자 j 별 가중 w·f_j 도 더한다(acc 와 같은 셀 배열을 격자 수만큼 이어 붙임)
 export function makeAccumulator(G, line, obs, rw = null) {
   const faces = new Set(obs.faces.map((f) => `${f.part}|${f.face}`)), d = obs.dir ?? line.frame.d, cosC = Math.cos(((obs.cone ?? 10) * Math.PI) / 180);
-  const R = G.pix, nCell = G.ns * G.nw, acc = new Float64Array(nCell), cnt = new Uint32Array(nCell);
+  const R = G.pix, nCell = G.ns * G.nw, acc = new Float64Array(nCell), accAll = new Float64Array(nCell), cnt = new Uint32Array(nCell);
   const C = rw?.C ?? null, nJ = C ? C.n : 0, racc = C ? new Float64Array(nJ * nCell) : null, sf = C ? new Float64Array(nJ) : null, sf2 = C ? new Float64Array(nJ) : null;
   let lx = 0, ly = 0, lz = 0, has = false, lp = -1, nRw = 0;
   const acc_ = {
-    acc, cnt,
+    acc, accAll, cnt,
     get rw() { return C ? { acc: racc, sf, sf2, n: nRw } : null; },
     // p = 광자 번호(runMC3D 가 마지막 인자로 전달). 탈출 광자가 마지막 출사 광자와 같을 때만 집계 — 흡수·소실된 광자의 낡은 출사점을 쓰지 않는다.
     onExit(part, face, x, y, z, dx, dy, dz, w, p) { has = faces.has(`${part}|${face}`); lx = x; ly = y; lz = z; lp = p; },
@@ -61,13 +71,17 @@ export function makeAccumulator(G, line, obs, rw = null) {
     let counted = false;
     {
       const [qx, qy] = line.to2D([lx, ly, lz]), pi = Math.floor((qx - R.x0) / R.cell), pj = Math.floor((qy - R.y0) / R.cell);
-      if (pi < 0 || pj < 0 || pi >= R.nx || pj >= R.ny || !G.pixOk[pj * R.nx + pi]) return;   // 면적(area)과 같은 규칙 — 마스크 밖·제외 구역 광자는 세지 않음
+      if (pi < 0 || pj < 0 || pi >= R.nx || pj >= R.ny) return;
+      const pk = pj * R.nx + pi, inFace = G.pixAll ? G.pixAll[pk] : G.pixOk[pk];
+      if (!inFace) return;
       const [s, ww] = line.toSW(R.x0 + (pi + 0.5) * R.cell, R.y0 + (pj + 0.5) * R.cell);
       let i = Math.floor(s / G.ds);
       if (G.closed) i = ((i % G.ns) + G.ns) % G.ns; else if (i < 0 || i >= G.ns) return;
       const j = Math.floor((ww - G.w0) / G.cell);
       if (j < 0 || j >= G.nw) return;
       const k = i * G.nw + j;
+      accAll[k] += w;
+      if (!G.pixOk[pk]) return;   // 면적(area)과 같은 규칙 — 제외 구역 광자는 판정에 세지 않음(면 전체 accAll 에만)
       acc[k] += w; cnt[k]++;
       counted = true;
       if (C) {

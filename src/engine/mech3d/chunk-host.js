@@ -54,8 +54,8 @@ export function makeChunkHost({ getTable, getDb = () => null }) {
     },
   };
   function pack(m, r) {
-    const reply = { sceneKey: m.sceneKey, acc: r.acc, cnt: r.cnt, ledger: r.ledger, leak: r.leak, escObs: r.escObs, paths: r.paths, ms: r.ms, ...(r.gpu ? { gpu: true } : {}) };
-    const transfer = [r.acc.buffer, r.cnt.buffer];
+    const reply = { sceneKey: m.sceneKey, acc: r.acc, accAll: r.accAll, cnt: r.cnt, ledger: r.ledger, leak: r.leak, escObs: r.escObs, paths: r.paths, ms: r.ms, ...(r.gpu ? { gpu: true } : {}) };
+    const transfer = [r.acc.buffer, r.accAll.buffer, r.cnt.buffer];
     if (r.rw) { reply.rw = { ...r.rw, milkies: m.rw.milkies }; transfer.push(r.rw.acc.buffer); }
     return { reply, transfer };
   }
