@@ -240,6 +240,8 @@ export const mapCellSW = (G, i, j) => [(i + 0.5) * G.ds, G.w0 + (j + 0.5) * G.ce
 // 2D 표시·TXT 격자 = 면 전체(가장자리 제외 없음, 2026-11-02). 판정·1D 폭 평균은 G 그대로
 const FULLG = new WeakMap();
 export function fullG(G) { if (!G.validAll) return G; if (!FULLG.has(G)) FULLG.set(G, { ...G, valid: G.validAll, area: G.areaAll }); return FULLG.get(G); }
+// 큰 창 2D 기본 = 실제 비율 — 단, 띠가 납작해지는 긴 면(폭/길이 < 6%, 예: 400×4.4 mm 는 높이 11 px)은 폭을 늘려 보여 줌 — 순수
+export const defaultEqual = (G) => { if (!G) return true; const V = mapViewG(G); return (V.nw * V.cell) / G.L >= 0.06; };
 const VIEWG = new WeakMap();
 export function mapViewG(G) {
   if (VIEWG.has(G)) return VIEWG.get(G);
@@ -420,14 +422,15 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
   };
   function openBig() {
     closeBig();
+    const eq0 = defaultEqual(VIEW.map?.G);
     const ov = document.createElement('div');
     ov.className = 'm3-big'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', '광량 분포 2D·1D');
-    const cell = (k) => `<div class="m3-big-c" data-k="${k}"><div class="m3-big-ct"><b>${TITLE[k]}</b><span class="m3-big-sp"></span>${k === 'map' ? '<label class="m3-big-eq"><input type="checkbox" data-big-eq checked> 실제 비율</label>' : ''}<button type="button" data-big-txt="${k}" title="${k === 'map' ? '2D 분포 표(탭 구분, 최대 대비 %)' : `${TITLE[k]} 표(원자료 %, 지정 점 곡선 포함)`}">TXT</button><button type="button" data-big-one="${k}">⤢ 이 그림만</button></div><canvas class="m3-big-cv" data-big-cv="${k}"></canvas></div>`;
+    const cell = (k) => `<div class="m3-big-c" data-k="${k}"><div class="m3-big-ct"><b>${TITLE[k]}</b><span class="m3-big-sp"></span>${k === 'map' ? `<label class="m3-big-eq"><input type="checkbox" data-big-eq${eq0 ? ' checked' : ''}> 실제 비율</label>` : ''}<button type="button" data-big-txt="${k}" title="${k === 'map' ? '2D 분포 표(탭 구분, 최대 대비 %)' : `${TITLE[k]} 표(원자료 %, 지정 점 곡선 포함)`}">TXT</button><button type="button" data-big-one="${k}">⤢ 이 그림만</button></div><canvas class="m3-big-cv" data-big-cv="${k}"></canvas></div>`;
     ov.innerHTML = `<div class="m3-big-in"><div class="m3-big-hd"><b>광량 분포 — 2D · 1D</b><span class="mut" style="font-size:12px">2D 클릭 = 그 점 기준 1D 곡선(주황)</span><span class="m3-big-sp"></span><button type="button" data-pin-txt title="2D 에서 고른 점을 지나는 길이·폭 방향 원자료(평활 없음, 2D 최대 대비 %)">선택 선 TXT</button><button type="button" data-big-close>닫기 (Esc)</button></div>
       <div class="m3-big-grid">${cell('map')}<div class="m3-big-row">${cell('prof')}${cell('wprof')}</div></div></div>`;
     document.body.appendChild(ov);
     const cvs = Object.fromEntries(KINDS.map((k) => [k, ov.querySelector(`[data-big-cv="${k}"]`)]));
-    big = { el: ov, cvs, grid: ov.querySelector('.m3-big-grid'), focus: null, equal: true, key: (e) => { if (e.key === 'Escape') { if (big.focus) setFocus(null); else closeBig(); } }, rs: () => paintBig() };
+    big = { el: ov, cvs, grid: ov.querySelector('.m3-big-grid'), focus: null, equal: eq0, key: (e) => { if (e.key === 'Escape') { if (big.focus) setFocus(null); else closeBig(); } }, rs: () => paintBig() };
     document.addEventListener('keydown', big.key); window.addEventListener('resize', big.rs);
     ov.addEventListener('click', (e) => {
       if (e.target === ov) { closeBig(); return; }

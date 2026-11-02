@@ -466,3 +466,7 @@ done();
   const { mapCellSW, mapViewG } = await import('../src/ui/m3/results-panel.js');
   const G = { ns: 2, nw: 6, ds: 2, cell: 1, w0: -3, L: 4, valid: [0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0] }, V = mapViewG(G), [s, w] = mapCellSW(G, 1, 3);
   console.log(V.jA === 2 && s === 3 && w === 0.5 && w >= V.w0 && w <= V.w0 + V.nw * G.cell ? 'PASS 2D 칸 위치: 표시 범위를 잘라도 w 가 맞음' : (process.exitCode = 1, `FAIL 2D 칸 위치 ${s} ${w} ${JSON.stringify(V.w0)}`)); }
+{ // 큰 창 2D 기본 비율: 116×16 mm = 실제 비율, 400×4.4 mm = 폭 확대(실제 비율이면 띠가 납작함)
+  const { defaultEqual } = await import('../src/ui/m3/results-panel.js');
+  const G = (L, nw, cell) => ({ L, nw, cell, ns: 1, w0: 0, valid: new Uint8Array(nw).fill(1) });
+  console.log(defaultEqual(G(116, 11, 1.5)) === true && defaultEqual(G(400, 4, 1.1)) === false && defaultEqual(undefined) === true ? 'PASS 큰 창 2D 기본 비율' : (process.exitCode = 1, 'FAIL 큰 창 2D 기본 비율')); }
