@@ -19,7 +19,7 @@ import { createPool } from './pool.js';
 import * as L from './leds.js';
 import { buildObsOverlay, cellColors, extractFaces } from './colormap.js';
 import { mountCommandBar } from './command-bar.js';
-import { renderFeatureTree, toggleVisibility, makeGroup, ungroup, groupMembers, rangeSelect, removeFromGroups } from './feature-tree.js';
+import { renderFeatureTree, toggleVisibility, makeGroup, ungroup, groupMembers, rangeSelect, removeFromGroups, viewCtxItems, showCtxMenu } from './feature-tree.js';
 import { mountSplitter, mountDockSplitter, mountFacSplitter } from './splitter.js';
 import { createOptDash, createSimDash } from './opt-dash.js';
 import { geomQuery, geomLimit } from './geom-client.js';
@@ -130,7 +130,7 @@ globalThis.__m3 = () => A;   // 브라우저 점검용: __m3().prog.snapshot(), 
 
 function getView() {
   viewP ??= import('../mech3d-view.js').then(({ createMech3dView }) => {
-    const v = createMech3dView($('#mech3d-canvas'), { onPick: (s) => { if (A) onPick(s); }, gizmo: $('#m3-axes') });
+    const v = createMech3dView($('#mech3d-canvas'), { onPick: (s) => { if (A) onPick(s); }, onContext: (c) => { if (A) onViewContext(c); }, gizmo: $('#m3-axes') });
     const el = $('#m3-views');
     el.innerHTML = VIEWS.map(([k, t]) => `<button data-view="${k}">${t}</button>`).join('') + '<button type="button" data-fit title="지금 보이는 도면 전체를 창에 맞춤 — 보는 방향은 그대로 (F)">⤢ 맞춤</button><button type="button" data-xray aria-pressed="false" title="전체 부품 반투명 — 속 구조를 봄">투시</button><button type="button" data-paths aria-pressed="false" title="광경로 화살표 켜기/끄기">광경로</button><button type="button" data-theme-toggle aria-pressed="false"></button>';
     el.querySelector('[data-fit]').onclick = () => v.fitAll();
@@ -1084,6 +1084,25 @@ function mechLightClear() {
     x.pick = null; x.ledInfo = pv ? '도면 광원 해제 — 이전 광원으로 되돌림' : '도면 광원 해제 — 부품을 다시 기구로 계산';
   });
 }
+// 3D 우클릭(2026-11-02) — 누른 부품을 고르고 보기 켜기/끄기 메뉴. 면 고르기 중에는 메뉴 없음
+function onViewContext({ part, led, x, y }) {
+  const st = A.store, M = st.mspec, nMech = getMech3d().parts.length;
+  if (st.session.pick) return;
+  const mech = part != null && part < nMech ? part : null, isLed = led != null || (part != null && part >= nMech);
+  if (mech != null && st.session.node !== `part:${mech}` && !(st.session.multi ?? []).includes(`part:${mech}`)) st.update('session', (_, q) => { q.multi = []; q.node = `part:${mech}`; q.sel = { part: mech, face: null }; q.ledSel = null; });
+  const S = st.session, sel = S.node?.startsWith('part:') ? +S.node.slice(5) : null, multi = (S.multi ?? []).filter((q) => q.startsWith('part:')).map((q) => +q.slice(5));
+  const items = viewCtxItems({ part: mech, isLed, selPart: sel, multi, hidden: S.hidden ?? [], hideLeds: !!S.hideLeds, names: M.parts.map((p) => p.name) });
+  if (!items.length) return;
+  showCtxMenu(document, x, y, items, (k) => st.update('view', (m, q) => {
+    const n = m.parts.length, tv = (id, only = false) => Object.assign(q, toggleVisibility(id, only, n, q.hidden, q.hideLeds));
+    if (k === 'hide') tv(`part:${mech}`);
+    else if (k === 'show') tv(`part:${sel}`);
+    else if (k === 'only') tv(`part:${mech}`, true);
+    else if (k === 'hideSel') q.hidden = [...new Set([...(q.hidden ?? []), ...multi])];
+    else if (k === 'led') q.hideLeds = !q.hideLeds;
+    else if (k === 'all') { q.hidden = []; q.hideLeds = false; }
+  }), $('#mech3d-wrap'));
+}
 // ---- 3D 클릭 (main.js:393-425) — 기구 부품 수(nMech) 이상인 번호는 LED STEP 부품 ----
 function onPick(s) {
   const st = A.store, M = st.mspec, S = st.session, nMech = getMech3d().parts.length, pick = S.pick;
@@ -1464,16 +1483,27 @@ function ledGaps(em, M = A.store.mspec) {
 }
 const minFinite = (a) => a.reduce((m, v) => (Number.isFinite(v) && !(v >= m) ? v : m), NaN);
 // LED 속성 창 정보 — { n, total, s(라인 위치), gap(최소 커버 거리), adj, excluded, clash:[문구] }
-function ledUi(LS, n) {
-  const M = A.store.mspec, S = A.store.session, it = LS.list[n];
-  if (!it) return null;
+// LED 의 라인 위치(mm) — 발광점이 없으면(빛 끈 LED) 몸체 중심으로
+function ledLineS(LS, it) {
+  const line = A.store.session.line;
   let pos = it.e?.pos ?? null;
   if (!pos && it.part != null && LS.lay?.parts[it.part]) { const b = bounds(LS.lay.parts[it.part].positions); pos = [0, 1, 2].map((k) => (b[k] + b[k + 3]) / 2); }
-  const s = Number.isFinite(it.e?.s) ? it.e.s : pos && S.line ? S.line.toSW(...S.line.to2D(pos))[0] : NaN;
+  return Number.isFinite(it.e?.s) ? it.e.s : pos && line ? line.toSW(...line.to2D(pos))[0] : NaN;
+}
+// LED 목록 = 라인 위치 순(도면에 저장된 순서는 뒤섞여 있음) — rank = 화면에 보이는 번호(1부터), n = 내부 번호
+function ledRows(LS) {
+  const rows = LS.list.map((it) => ({ n: it.n, s: ledLineS(LS, it), excluded: it.excluded })).sort((a, b) => (Number.isFinite(a.s) ? a.s : Infinity) - (Number.isFinite(b.s) ? b.s : Infinity) || a.n - b.n);
+  rows.forEach((r, i) => { r.rank = i + 1; });
+  return rows;
+}
+function ledUi(LS, n) {
+  const M = A.store.mspec, it = LS.list[n];
+  if (!it) return null;
+  const s = ledLineS(LS, it);
   const nm = (p) => M.parts[p]?.name ?? `부품 ${p + 1}`;
   const say = { inside: (p) => `발광점이 ${nm(p)} 안에 있음 — 간섭`, overlap: (p) => `LED 몸체가 ${nm(p)}과(와) 겹침 — 간섭`, 'body-inside': (p) => `LED 몸체가 ${nm(p)} 안에 있음 — 간섭` };
   const clash = [...new Set(ledClashItems(A.checks.interference?.items, n, LS.em, LS.lay).filter((x) => say[x.kind]).map((x) => say[x.kind](x.part)))];
-  return { n, total: LS.list.length, s, gap: minFinite(ledGaps(LS.em)), adj: validAdjust(M.light)?.[n] ?? { ds: 0, dz: 0 }, excluded: it.excluded, clash };
+  return { n, rank: ledRows(LS).find((r) => r.n === n)?.rank ?? n + 1, total: LS.list.length, s, gap: minFinite(ledGaps(LS.em)), adj: validAdjust(M.light)?.[n] ?? { ds: 0, dz: 0 }, excluded: it.excluded, clash };
 }
 // 커버까지 거리(공통) → 모든 LED 를 관측 방향으로 같은 양 이동(기구 최적화 ⑤ 와 같은 applyDz: STEP offset·발광점 / 직접 배치 깊이)
 function ledDist(g) {
@@ -1545,7 +1575,7 @@ function renderAll(tag = 'all') {
   }, lay);
   const pi = S.node?.startsWith('part:') ? +S.node.slice(5) : -1, clr = pi >= 0 ? clearanceOf(pi) : null;
   if (clr !== A.clrShown) { A.clrShown = clr; renderMarkers(); }
-  if (tag !== 'view') renderPropertyPanel($('#m3-props'), M, S, { admin: isAdmin(), dbList: A.ctx.materialDb()?.list() ?? [], catalog: reflCat(), clearList: clearUser(), clearUsed: M.parts.reduce((o, p) => { const id = p.material?.matId; if (id) o[id] = (o[id] ?? 0) + 1; return o; }, {}), milkyUsed: M.parts.reduce((o, p) => { const id = p.material?.kind === 'milky' && p.material.dbId; if (id) o[id] = (o[id] ?? 0) + 1; return o; }, {}), auto: autoGrid(), dir: M.observe.dir ?? S.line?.frame.d, lineInfo: lineInfo(), clearance: clr, xfInfo: pi >= 0 ? xformInfoOf(pi) : null, meshInfo: pi >= 0 ? partMeshInfo(pi) : null, xfMsg: S.xfMsg?.part === pi ? S.xfMsg.text : '', lay: lay ?? null, led: S.node === 'leds' && S.ledSel != null ? ledUi(LS, S.ledSel) : null, ledTotal: LS.list.length }, propHandlers());
+  if (tag !== 'view') renderPropertyPanel($('#m3-props'), M, S, { admin: isAdmin(), dbList: A.ctx.materialDb()?.list() ?? [], catalog: reflCat(), clearList: clearUser(), clearUsed: M.parts.reduce((o, p) => { const id = p.material?.matId; if (id) o[id] = (o[id] ?? 0) + 1; return o; }, {}), milkyUsed: M.parts.reduce((o, p) => { const id = p.material?.kind === 'milky' && p.material.dbId; if (id) o[id] = (o[id] ?? 0) + 1; return o; }, {}), auto: autoGrid(), dir: M.observe.dir ?? S.line?.frame.d, lineInfo: lineInfo(), clearance: clr, xfInfo: pi >= 0 ? xformInfoOf(pi) : null, meshInfo: pi >= 0 ? partMeshInfo(pi) : null, xfMsg: S.xfMsg?.part === pi ? S.xfMsg.text : '', lay: lay ?? null, led: S.node === 'leds' && S.ledSel != null ? ledUi(LS, S.ledSel) : null, ...(S.node === 'leds' ? { ledList: ledRows(LS), ledGap: minFinite(ledGaps(LS.em)) } : {}) }, propHandlers());
   if (tag === 'session' || tag === 'all') renderMarkers();
   A.cmd.update(S, M);
   renderStatus();
@@ -1553,7 +1583,7 @@ function renderAll(tag = 'all') {
 }
 function renderStatus() {
   const S = A.store.session, M = A.store.mspec;
-  const lt = S.ledSel != null && A.ledTotal ? `LED ${S.ledSel + 1}/${A.ledTotal}` : '';
+  const lt = S.ledSel != null && A.ledTotal ? `LED ${ledRows(ledsNow()).find((r) => r.n === S.ledSel)?.rank ?? S.ledSel + 1}/${A.ledTotal}` : '';
   renderStatusBar($('#m3-status'), { calc: S.calc, targetNoise: M.observe.targetNoise ?? 0.01, checks: A.checks, focus: S.focusCheck, text: lt && S.status ? `${lt} · ${S.status}` : lt || S.status }, {
     onCheck: (id) => A.store.update('session', (_, s) => { s.focusCheck = s.focusCheck === id ? null : id; }),
   });

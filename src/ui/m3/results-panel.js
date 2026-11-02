@@ -193,7 +193,7 @@ export function mapTxt(G, map, { name = '', quality = '', photons = null, noise 
   const V = mapViewG(G);   // 그림과 같은 w 범위(관측면 밖 빈 줄 뺌)
   const f = (v) => String(+v.toFixed(3)), head = [
     '# UDS 2D 광량 분포 (관측면 전체 · 가장자리 포함 원자료) — 값 = 최대 대비 % · 빈칸 = 관측면 밖',
-    `# ${name ? `이름 ${name} · ` : ''}길이 s 0–${f(G.L)} mm · 폭 w ${f(V.w0)}–${f(V.w0 + V.nw * G.cell)} mm · 칸 ${G.ns} × ${V.nw} (${f(G.ds)} × ${f(G.cell)} mm)${quality ? ` · 화질 ${quality}` : ''}${photons ? ` · 광자 ${photons}` : ''}${Number.isFinite(noise) ? ` · 오차 ±${(noise * 100).toFixed(2)}%` : ''}`,
+    `# ${name ? `이름 ${name} · ` : ''}길이 s 0–${f(G.L)} mm · 폭 w ${f(V.w0)}–${f(V.w0 + V.nw * G.cell)} mm · 칸 ${G.ns} × ${V.nw} (${f(G.ds)} × ${f(G.cell)} mm)${quality ? ` · 화질 ${quality}` : ''}${photons ? ` · 광선 ${photons}` : ''}${Number.isFinite(noise) ? ` · 오차 ±${(noise * 100).toFixed(2)}%` : ''}`,
     ['w\\s(mm)', ...Array.from({ length: G.ns }, (_, i) => f((i + 0.5) * G.ds))].join('\t'),
   ];
   for (let j = V.jB; j >= V.jA; j--) {
@@ -211,7 +211,7 @@ export function lineTxt(G, map, pin, { name = '', quality = '', photons = null }
   const f = (v) => String(+v.toFixed(3)), val = (k) => (G.valid[k] && mx > 0 ? ((map[k] / mx) * 100).toFixed(2) : ''), V = mapViewG(G);
   const sC = (i + 0.5) * G.ds, wC = G.w0 + (j + 0.5) * G.cell;
   const out = ['# UDS 선택 선 원자료 — 평활 없음 · 값 = 2D 최대 대비 %(2D CSV 와 같은 기준) · 빈칸 = 관측면 밖',
-    `# ${name ? `이름 ${name} · ` : ''}선택 점 s ${f(sC)} mm · w ${f(wC)} mm (칸 ${f(G.ds)} × ${f(G.cell)} mm)${quality ? ` · 화질 ${quality}` : ''}${photons ? ` · 광자 ${photons}` : ''}`,
+    `# ${name ? `이름 ${name} · ` : ''}선택 점 s ${f(sC)} mm · w ${f(wC)} mm (칸 ${f(G.ds)} × ${f(G.cell)} mm)${quality ? ` · 화질 ${quality}` : ''}${photons ? ` · 광선 ${photons}` : ''}`,
     '', `# 길이 방향 — w = ${f(wC)} mm 줄`, 's (mm)\t값 (%)'];
   for (let a = 0; a < G.ns; a++) out.push(`${f((a + 0.5) * G.ds)}\t${val(a * G.nw + j)}`);
   out.push('', `# 폭 방향 — s = ${f(sC)} mm 칸 (위 = +w)`, 'w (mm)\t값 (%)');
@@ -359,19 +359,19 @@ function sizeCanvas(cv, ratio) {
   return true;
 }
 
-const QUALITY_OPTS = [['low', '저화질 1.5 mm'], ['mid', '중화질 1 mm'], ['high', '고화질 0.5 mm']];   // 정사각 칸 크기(2026-10-30) — 작을수록 계산 오래(중 ≈2배 · 고 ≈4배 광자)
+const QUALITY_OPTS = [['low', '저화질 1.5 mm'], ['mid', '중화질 1 mm'], ['high', '고화질 0.5 mm']];   // 정사각 칸 크기(2026-10-30) — 작을수록 계산 오래(중 ≈2배 · 고 ≈4배 광선)
 export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds', onLeak = null } = {}) {
   const gaugeHtml = (k) => `<div class="m3-gauge" data-r="${k}"><div class="f"></div><div class="tg"></div></div>`;
   el.innerHTML = `
     <div class="m3-msg" data-r="msg" hidden></div>
-    <div class="m3-blk"><div class="m3-t">2D 광량 분포 (관측면 펼침) <span><span data-r="mapsub"></span> <select data-r="quality" title="2D 분포·1D 프로파일 칸 크기(정사각) — 저 1.5 mm(빠름) · 중 1.0 mm(광자 ≈2배) · 고 0.5 mm(광자 ≈4배) · 짧거나 좁은 면은 그 방향만 더 잘게" aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>  <button type="button" class="m3-zoom" data-zoom="map" title="큰 창으로 보기" aria-label="2D 광량 분포 확대">⤢</button></span></div>
+    <div class="m3-blk"><div class="m3-t"><b class="m3-tt">2D 광량 분포 <i class="m3-info" data-r="mapsub" tabindex="0">ⓘ</i></b><span><select data-r="quality" title="2D 분포·1D 프로파일 칸 크기(정사각) — 저 1.5 mm(빠름) · 중 1.0 mm(광선 ≈2배) · 고 0.5 mm(광선 ≈4배) · 짧거나 좁은 면은 그 방향만 더 잘게" aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>  <button type="button" class="m3-zoom" data-zoom="map" title="큰 창으로 보기" aria-label="2D 광량 분포 확대">⤢</button></span></div>
       <div class="m3-withm"><canvas class="m3-g" data-r="map" width="600" height="200"></canvas>
         <div class="m3-m"><div class="l">평균 광량</div><div class="v" data-r="avg">–</div><div class="s" data-r="avgs"></div>${gaugeHtml('avgg')}
           <div class="l" style="margin-top:6px">광 효율</div><div class="v sm" data-r="eff">–</div><div class="s">관측면 원뿔 안 / LED 총 방출</div><button type="button" class="m3-leak" data-r="leak" hidden title="누르면 3D 에서 가장 많이 새는 면을 강조"></button></div></div></div>
-    <div class="m3-blk"><div class="m3-t">길이 방향 1D 프로파일 <span><span data-r="psub">폭 평균 · 2D 클릭 = 그 점 기준 곡선 추가</span> · 빨간 점선 = 목표 하한 <button type="button" class="m3-zoom" data-zoom="prof" title="큰 창으로 보기" aria-label="길이 프로파일 확대">⤢</button></span></div>
+    <div class="m3-blk"><div class="m3-t"><b class="m3-tt">길이 방향 1D 프로파일 <i class="m3-info" data-r="psub" tabindex="0">ⓘ</i></b><span><span data-r="pinbtn"></span> <button type="button" class="m3-zoom" data-zoom="prof" title="큰 창으로 보기" aria-label="길이 프로파일 확대">⤢</button></span></div>
       <div class="m3-withm"><canvas class="m3-g" data-r="prof" width="600" height="150"></canvas>
         <div class="m3-m"><div class="l">길이 균일도</div><div class="v" data-r="ul">–</div>${gaugeHtml('ulg')}<div class="s" data-r="ulj"></div></div></div></div>
-    <div class="m3-blk"><div class="m3-t">폭 방향 1D 프로파일 <span><span data-r="wsub"></span> <button type="button" class="m3-zoom" data-zoom="wprof" title="큰 창으로 보기" aria-label="폭 프로파일 확대">⤢</button></span></div>
+    <div class="m3-blk"><div class="m3-t"><b class="m3-tt">폭 방향 1D 프로파일 <i class="m3-info" data-r="wsub" tabindex="0">ⓘ</i></b><span><button type="button" class="m3-zoom" data-zoom="wprof" title="큰 창으로 보기" aria-label="폭 프로파일 확대">⤢</button></span></div>
       <div class="m3-withm"><canvas class="m3-g" data-r="wprof" width="600" height="120"></canvas>
         <div class="m3-m"><div class="l">폭 균일도</div><div class="v" data-r="uw">–</div>${gaugeHtml('uwg')}<div class="s" data-r="uwj"></div></div></div></div>`;
   const q = (k) => el.querySelector(`[data-r="${k}"]`);
@@ -431,7 +431,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     const ov = document.createElement('div');
     ov.className = 'm3-big'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', '광량 분포 2D·1D');
     const cell = (k) => `<div class="m3-big-c" data-k="${k}"><div class="m3-big-ct"><b>${TITLE[k]}</b><span class="m3-big-sp"></span>${k === 'map' ? `<label class="m3-big-eq"><input type="checkbox" data-big-eq${eq0 ? ' checked' : ''}> 실제 비율</label>` : ''}<button type="button" data-big-txt="${k}" title="${k === 'map' ? '2D 분포 표(탭 구분, 최대 대비 %)' : `${TITLE[k]} 표(원자료 %, 지정 점 곡선 포함)`}">CSV</button><button type="button" data-big-one="${k}">⤢ 이 그림만</button></div><canvas class="m3-big-cv" data-big-cv="${k}"></canvas></div>`;
-    ov.innerHTML = `<div class="m3-big-in"><div class="m3-big-hd"><b>광량 분포 — 2D · 1D</b><span class="mut" style="font-size:12px">2D 클릭 = 그 점 기준 1D 곡선(주황)</span><span class="m3-big-sp"></span><button type="button" data-pin-txt title="2D 에서 고른 점을 지나는 길이·폭 방향 원자료(평활 없음, 2D 최대 대비 %)">선택 선 CSV</button><button type="button" data-big-close>닫기 (Esc)</button></div>
+    ov.innerHTML = `<div class="m3-big-in"><div class="m3-big-hd"><b title="2D 클릭 = 그 점 기준 1D 곡선(주황)">광량 분포 — 2D · 1D</b><span class="m3-big-sp"></span><button type="button" data-pin-txt title="2D 에서 고른 점을 지나는 길이·폭 방향 원자료(평활 없음, 2D 최대 대비 %)">선택 선 CSV</button><button type="button" data-big-close>닫기 (Esc)</button></div>
       <div class="m3-big-grid">${cell('map')}<div class="m3-big-row">${cell('prof')}${cell('wprof')}</div></div></div>`;
     document.body.appendChild(ov);
     const cvs = Object.fromEntries(KINDS.map((k) => [k, ov.querySelector(`[data-big-cv="${k}"]`)]));
@@ -475,7 +475,8 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     VIEW.map = VIEW.prof = VIEW.wprof = null; if (big) for (const k of KINDS) clearCanvas(big.cvs[k]);
     for (const k of ['map', 'prof', 'wprof']) clearCanvas(q(k));
     for (const k of ['avg', 'eff', 'ul', 'uw']) { q(k).textContent = '–'; q(k).className = 'v'; }
-    for (const k of ['avgs', 'ulj', 'uwj', 'mapsub', 'wsub']) q(k).textContent = '';
+    for (const k of ['avgs', 'ulj', 'uwj']) q(k).textContent = '';
+    for (const k of ['mapsub', 'wsub']) q(k).title = '';
     for (const k of ['avgg', 'ulg', 'uwg']) resetGauge(q(k));
     q('avgg').hidden = true;
     q('msg').hidden = false; q('msg').textContent = message || DEFAULT_GUIDE;
@@ -489,7 +490,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     q('msg').hidden = !message; q('msg').textContent = message || '';
     for (const k of Object.keys(RATIO)) sizeCanvas(q(k), RATIO[k]);
     const dpr = dprNow();
-    const VG = mapViewG(fullG(G)); q('mapsub').textContent = `s 0–${G.L.toFixed(0)} mm × w ${VG.w0.toFixed(1)}–${(VG.w0 + VG.nw * VG.cell).toFixed(1)} mm`;
+    const VG = mapViewG(fullG(G)); q('mapsub').title = `관측면 펼침 · s 0–${G.L.toFixed(0)} mm × w ${VG.w0.toFixed(1)}–${(VG.w0 + VG.nw * VG.cell).toFixed(1)} mm · 칸 사이는 이어 칠함 · 클릭 = 그 점 기준 1D 곡선`;
     const pm = finiteMax(st.profile), leds = args.leds ?? [];
     // 지정 점 → 칸 (화질·관측면이 바뀌어 밖이면 해제)
     const pi = pin ? Math.floor(pin.s / G.ds) : -1, pj = pin ? Math.floor((pin.w - G.w0) / G.cell) : -1;
@@ -497,16 +498,17 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     const FG = fullG(G), mapF = st.mapAll ?? st.map, pp = pin ? pointProfiles(FG, mapF, pi, pj) : null, ring = G.closed ? '원주' : '길이', rad = G.closed ? '반경(폭)' : '폭';
     VIEW.map = { G: FG, map: mapF, leds, pin, smooth: true };
     VIEW.prof = plotView([{ ys: Array.from(st.profile, (v) => v / pm), color: '#1f6fd1', name: '폭 평균', band: st.relNoise ?? 0 }, ...(pp ? [{ ys: Array.from(pp.along), color: PIN_COLOR, name: `지정 점 w=${pin.w.toFixed(1)}` }] : [])], observe.targetLen, { x0: 0, x1: G.L, xl: 's (mm)', leds: leds.map((p) => p.s) });
-    q('psub').innerHTML = `${pin ? `폭 평균 + 지정 점(주황, ${ring} 방향) · 같은 점 다시 클릭 = 해제 <button type="button" class="m3-pintxt" data-pin-txt title="고른 점을 지나는 길이·폭 방향 원자료(평활 없음, 2D 최대 대비 %)">선택 선 CSV</button>` : '폭 평균 · 2D 클릭 = 그 점 기준 곡선 추가'} · 옅은 띠 = 계산 잡음 범위`;
+    q('psub').title = `${pin ? `폭 평균 + 지정 점(주황, ${ring} 방향) · 같은 점 다시 클릭 = 해제` : '폭 평균 · 2D 클릭 = 그 점 기준 곡선 추가'} · 옅은 띠 = 계산 잡음 범위 · 빨간 점선 = 목표 하한`;
+    q('pinbtn').innerHTML = pin ? '<button type="button" class="m3-pintxt" data-pin-txt title="고른 점을 지나는 길이·폭 방향 원자료(평활 없음, 2D 최대 대비 %)">선택 선 CSV</button>' : '';
     paint('map', q('map')); paint('prof', q('prof'));
     gauge('ul', st.Ulen, observe.targetLen);
     if (pp && (st.Uwid == null || !st.win)) {   // 폭 판정이 없어도 지정 점의 폭(원형 = 반경) 방향 곡선은 보여 줌
       VIEW.wprof = plotView([{ ys: Array.from(pp.across), color: PIN_COLOR, name: `지정 점 s=${pin.s.toFixed(1)}` }], null, { x0: G.w0, x1: G.w0 + G.nw * G.cell, xl: 'w (mm)', leds: [] });
       paint('wprof', q('wprof')); resetGauge(q('uwg'));
-      q('uw').textContent = '–'; q('uw').className = 'v'; q('uwj').textContent = '폭 판정 불가(폭이 격자 2칸 미만)'; q('wsub').textContent = `지정 점 s = ${pin.s.toFixed(1)} mm · ${rad} 방향`;
+      q('uw').textContent = '–'; q('uw').className = 'v'; q('uwj').textContent = '폭 판정 불가(폭이 격자 2칸 미만)'; q('wsub').title = `지정 점 s = ${pin.s.toFixed(1)} mm · ${rad} 방향`;
     } else if (st.Uwid == null || !st.win) {
       VIEW.wprof = null; clearCanvas(q('wprof')); resetGauge(q('uwg'));
-      q('uw').textContent = '–'; q('uw').className = 'v'; q('uwj').textContent = '폭 판정 불가(폭이 격자 2칸 미만)'; q('wsub').textContent = '';
+      q('uw').textContent = '–'; q('uw').className = 'v'; q('uwj').textContent = '폭 판정 불가(폭이 격자 2칸 미만)'; q('wsub').title = '';
     } else {
       // 판정 = 최저 창(실선), 비교 = 길이 전체 평균(점선) — 각자 최대 = 100%
       const wp = windowProfile(G, snap.sum, st.win[0], st.win[1]), wm = finiteMax(wp), wa = windowProfile(G, snap.sum, 0, G.ns), wam = finiteMax(wa);
@@ -514,7 +516,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
         observe.targetWid, { x0: G.w0, x1: G.w0 + G.nw * G.cell, xl: 'w (mm)', leds: [...new Set(leds.map((p) => +p.w.toFixed(2)))] });
       paint('wprof', q('wprof'));
       gauge('uw', st.Uwid, observe.targetWid);
-      q('wsub').textContent = `최저 창 s = ${st.sWorst.toFixed(1)} mm${pp ? ` · 지정 점 s = ${pin.s.toFixed(1)} mm(주황, ${rad} 방향)` : ''}`;
+      q('wsub').title = `최저 창 s = ${st.sWorst.toFixed(1)} mm${pp ? ` · 지정 점 s = ${pin.s.toFixed(1)} mm(주황, ${rad} 방향)` : ''}`;
     }
     const lc = lumCard(st, snap.photometry, observe.targetLum);
     q('avg').textContent = lc.value; q('avgs').textContent = lc.sub; q('avg').className = `v ${lc.pass == null ? '' : lc.pass ? 'ok' : 'bad'}`;

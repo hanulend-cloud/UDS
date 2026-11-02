@@ -36,12 +36,6 @@ export function dropStaleAdjust(light) {
   delete light.ledAdjust;
   return '배치가 바뀌어 개별 LED 조정을 지웠습니다';
 }
-// ◀(dir −1) ▶(+1) — 순환. 선택 없음: ▶ = 첫 LED, ◀ = 마지막. LED 없음 = null
-export function ledStepSel(n, total, dir) {
-  if (!(total > 0)) return null;
-  if (n == null) return dir > 0 ? 0 : total - 1;
-  return (((n + dir) % total) + total) % total;
-}
 // 그 LED 의 개별 조정 쓰기 — adj = { ds, dz } | null. 0·null = 항목 삭제, 비면 ledAdjust 삭제. 오래된 조정은 버리고 현재 layoutKey 로
 export function setLedAdjust(light, n, adj) {
   const items = { ...(validAdjust(light) ?? {}) };

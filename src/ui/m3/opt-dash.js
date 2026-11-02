@@ -1,7 +1,7 @@
 // 아래 칸 대시보드 — ① 기구 최적화 진행(6 항목 타일) ② 시뮬레이션 진행현황(수렴 그래프).
 // 최적화: app.js 의 기구 최적화 io 가 progress(stage, frac, text) · evals(stage, [{label, Ulen, Uwid, ok, why}]) 를 부른다.
 // 타일마다 상태(대기·진행 %·완료·건너뜀) · 시험 중 값 → 지금까지 최고 · 후보별 길이/폭 균일도 점 그래프(목표선) · 진행 막대.
-// 시뮬레이션: 점진 계산 스냅숏마다 sample(snap, targetNoise) — 광자 수에 따른 잡음 %·길이/폭 균일도 추정과 진행률 %(잡음이 목표에 닿으면 100%).
+// 시뮬레이션: 점진 계산 스냅숏마다 sample(snap, targetNoise) — 광선 수에 따른 잡음 %·길이/폭 균일도 추정과 진행률 %(잡음이 목표에 닿으면 100%).
 import { calcLabel } from './command-bar.js';
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 // 계산 순서대로(엔진: 위치 → 케이스 면 → 형상 → Milky, 2026-10-30) — 번호도 이 순서
@@ -182,9 +182,9 @@ export function topPaths(paths, nMech, k = 3) {
   return tot > 0 ? [...m.values()].sort((a, b) => b.w - a.w).slice(0, k).map((o) => ({ parts: o.parts, refl: o.refl, share: o.w / tot })) : [];
 }
 export const pathText = (p, names) => `LED → ${p.parts.map((q) => names[q] ?? `부품 ${q + 1}`).join(' → ')}${p.parts.length ? ' → ' : ''}관측면${p.refl ? ' (케이스 반사 포함)' : ''}`;
-// 시뮬레이션 진행현황 — 광자 수에 따른 잡음(%)·U 추정 · 진행률(잡음이 목표에 닿으면 100%)
+// 시뮬레이션 진행현황 — 광선 수에 따른 잡음(%)·U 추정 · 진행률(잡음이 목표에 닿으면 100%)
 export function simPct(relNoise, target) { return Number.isFinite(relNoise) && relNoise > 0 ? Math.max(0, Math.min(100, (target / relNoise) ** 2 * 100)) : 0; }
-// 남은 계산 예상(순수) — 오차는 광자 수의 제곱근에 반비례 → 필요 광자 = 지금 × (오차/목표)². 속도 = 최근 10초 광자 증가
+// 남은 계산 예상(순수) — 오차는 광선 수의 제곱근에 반비례 → 필요 광선 = 지금 × (오차/목표)². 속도 = 최근 10초 광선 증가
 const human = (n) => (n >= 1e8 ? `${(n / 1e8).toFixed(1)}억` : n >= 1e4 ? `${Math.round(n / 1e4).toLocaleString()}만` : String(Math.round(n)));
 export function etaText(H, tgt) {
   const last = H[H.length - 1];
@@ -192,7 +192,7 @@ export function etaText(H, tgt) {
   const need = last.ph * (last.noise / tgt) ** 2, ref = H.find((p) => last.t - p.t <= 10000) ?? H[0], rate = (last.ph - ref.ph) / Math.max(1e-3, (last.t - ref.t) / 1000);
   if (!(rate > 0)) return '';
   const sec = (need - last.ph) / rate, tm = sec < 90 ? `${Math.max(1, Math.round(sec))}초` : sec < 5400 ? `${Math.round(sec / 60)}분` : `${(sec / 3600).toFixed(1)}시간`;
-  return ` · 필요 광자 ≈ ${human(need)} · 남은 ≈ ${tm}`;
+  return ` · 필요 광선 ≈ ${human(need)} · 남은 ≈ ${tm}`;
 }
 // 빛 도달 진단(순수) — 관측면으로 나온 빛이 아주 적으면(< 1%) 빛이 실제로 어디로 갔는지 알려 줌: 많이 나간 곳(부품·면) · 흡수.
 // ledger = 원장(emitted·escaped·absSurf·absVol), leak = { 'part|face': 관측면이 아닌 곳으로 나간 양 }('-1|-1' = 투과 부품을 거치지 않고 공기로)
@@ -227,19 +227,18 @@ export function createSimDash(el, { onCtl = null } = {}) {
   function draw() { if (raf) return; raf = setTimeout(() => { raf = 0; render(); }, 40); }   // setTimeout: 화면이 숨겨져도(다른 탭) 갱신 — rAF 는 멈춤
   function render() {
     const last = H[H.length - 1], pct = last ? simPct(last.noise, tgt) : 0;
-    const w = 300, h = 70, x0 = 30, x1 = w - 30, y0 = 6, y1 = h - 14;
+    // 그래프 = 오차 하나(목표 점선)만, 실제 칸 크기로 그림(글자가 늘어나지 않게). 균일도는 아래 결과 칸에 있어 뺌(2026-11-02)
+    const plot = el.querySelector('.od-simplot'), w = plot?.clientWidth || 300, h = plot?.clientHeight || 70, x0 = 30, x1 = w - 8, y0 = 6, y1 = h - 15;
     let svg = '';
     if (H.length > 1) {
       const lp = (v) => Math.log10(Math.max(1, v)), a = lp(H[0].ph), b = lp(last.ph) || a + 1, X = (ph) => x0 + ((lp(ph) - a) / (b - a || 1)) * (x1 - x0);
       const nmax = Math.max(tgt * 2, ...H.map((p) => p.noise).filter(Number.isFinite)), YN = (v) => y0 + (1 - Math.min(1, v / nmax)) * (y1 - y0);
-      const us = H.flatMap((p) => [p.Ulen, p.Uwid]).filter(Number.isFinite), ulo = Math.max(0, Math.floor((Math.min(...us) - 0.03) * 20) / 20), uhi = Math.min(1, Math.ceil((Math.max(...us) + 0.02) * 20) / 20), YU = (v) => y0 + (1 - (v - ulo) / (uhi - ulo || 1)) * (y1 - y0);
-      const pl = (f, k) => H.filter((p) => Number.isFinite(p[k])).map((p) => `${X(p.ph).toFixed(1)},${f(p[k]).toFixed(1)}`).join(' ');
-      svg = `<svg class="od-sim" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+      const pl = H.filter((p) => Number.isFinite(p.noise)).map((p) => `${X(p.ph).toFixed(1)},${YN(p.noise).toFixed(1)}`).join(' ');
+      svg = `<svg class="od-sim" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
         <line class="od-tg" x1="${x0}" x2="${x1}" y1="${YN(tgt).toFixed(1)}" y2="${YN(tgt).toFixed(1)}"/>
-        <polyline class="od-ln" points="${pl(YN, 'noise')}"/><polyline class="od-l1" points="${pl(YU, 'Ulen')}"/><polyline class="od-l2" points="${pl(YU, 'Uwid')}"/>
-        <text class="od-ax" x="2" y="${y0 + 8}">${(nmax * 100).toFixed(0)}%</text><text class="od-ax" x="2" y="${y1}">0%</text>
-        <text class="od-ax" x="${x1 + 2}" y="${y0 + 8}">${uhi.toFixed(2)}</text><text class="od-ax" x="${x1 + 2}" y="${y1}">${ulo.toFixed(2)}</text>
-        <text class="od-ax" x="${x0}" y="${h - 4}">광자 ${H[0].ph.toLocaleString()}</text><text class="od-ax" x="${x1}" y="${h - 4}" text-anchor="end">${last.ph.toLocaleString()} (로그)</text></svg>`;
+        <polyline class="od-ln" points="${pl}"/>
+        <text class="od-ax" x="${x0 - 3}" y="${y0 + 7}" text-anchor="end">${(nmax * 100).toFixed(0)}%</text><text class="od-ax" x="${x0 - 3}" y="${y1}" text-anchor="end">0%</text>
+        <text class="od-ax" x="${x0}" y="${h - 3}">${H[0].ph.toLocaleString()}</text><text class="od-ax" x="${x1}" y="${h - 3}" text-anchor="end">${last.ph.toLocaleString()} 광선(로그)</text></svg>`;
     }
     const sTxt = { running: '계산 중', paused: '일시정지', done: reason === 'converged' ? '완료 — 목표 정확도 도달' : '계산 한도 도달 — 정확도 미달', pending: '대기', starting: '장면 준비' }[state] ?? state ?? '';
     const ctl = busy ? '기구 최적화 중' : calcLabel({ state, reason });
@@ -247,21 +246,22 @@ export function createSimDash(el, { onCtl = null } = {}) {
     if (!el.querySelector('.od-simh')) {
       el.innerHTML = `<div class="od-h od-simh"><i class="m3-fl">4</i>광분포 시뮬레이션 <span class="mut" data-s="st"></span><span class="m3-ad-sp"></span>${onCtl ? '<button type="button" data-sim-ctl></button>' : ''}</div>
         <div class="od-pct"><b data-s="pct"></b><div class="od-bar od-bar-big" title="계산 오차가 목표에 닿으면 100%"><i data-s="bar"></i></div></div>
-        <div class="od-row mut" data-s="row"></div><div class="od-diag" data-s="diag" hidden></div>
-        <details class="od-more"><summary><span data-s="sum">정확도 그래프 · 광경로</span></summary><div data-s="svg"></div><div data-s="paths"></div></details>`;
+        <div class="od-simbox"><div class="od-simcap" data-s="row"></div><div class="od-simplot" data-s="svg"></div></div><div class="od-diag" data-s="diag" hidden></div>
+        <details class="od-more"><summary><span data-s="sum">광경로</span></summary><div data-s="paths"></div></details>`;
       el.querySelector('[data-sim-ctl]')?.addEventListener('click', () => onCtl?.());
     }
     const set = (k, html) => { const n = el.querySelector(`[data-s="${k}"]`); if (n && n.innerHTML !== html) n.innerHTML = html; };
     set('st', busy ? '기구 최적화 중 — 일시정지(끝나면 이어서)' : esc(sTxt));
     const btn = el.querySelector('[data-sim-ctl]'); if (btn) { if (btn.textContent !== ctl) btn.textContent = ctl; btn.disabled = busy; }
     set('pct', `${pct.toFixed(0)}%`); el.querySelector('[data-s="bar"]').style.width = `${pct.toFixed(0)}%`;
-    set('row', `오차 ${last && Number.isFinite(last.noise) ? `±${(last.noise * 100).toFixed(1)}%` : '–'} → 목표 ±${(tgt * 100).toFixed(1)}% · 광자 ${last ? last.ph.toLocaleString() : 0}${last ? ` · 길이 균일도 ${f2(last.Ulen)} · 폭 균일도 ${f2(last.Uwid)}` : ''}${state === 'running' ? etaText(H, tgt) : ''}`);
+    set('row', `오차 ${last && Number.isFinite(last.noise) ? `±${(last.noise * 100).toFixed(1)}%` : '–'} → 목표 ±${(tgt * 100).toFixed(1)}% · 광선 수 ${last ? last.ph.toLocaleString() : 0}${state === 'running' ? etaText(H, tgt) : ''}`);
     const dg = el.querySelector('[data-s="diag"]'); if (dg) { dg.hidden = !diag; set('diag', diag?.html ?? ''); }
     set('svg', svg);
-    // 접힌 줄에는 주 광경로 한 줄 요약, 펼치면 정확도(오차) 그래프 + 광경로 목록
-    set('sum', P.length ? `정확도 그래프 · 광경로 <span class="mut">${(P[0].share * 100).toFixed(0)}% ${esc(pathText(P[0], names))}</span>` : '정확도 그래프 · 광경로');
+    // 접힌 줄에는 주 광경로 한 줄 요약, 펼치면 광경로 목록
+    set('sum', P.length ? `광경로 <span class="mut">${(P[0].share * 100).toFixed(0)}% ${esc(pathText(P[0], names))}</span>` : '광경로');
     set('paths', P.length ? `<div class="od-paths">${P.map((p) => `<div class="od-path"><span class="od-pbar"><i style="width:${(p.share * 100).toFixed(0)}%"></i></span><b>${(p.share * 100).toFixed(0)}%</b> ${esc(pathText(p, names))}</div>`).join('')}</div>` : '');
   }
   render();
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => draw()).observe(el);   // 칸 크기가 바뀌면 그래프를 그 크기로
   return { sample, paths: () => P };
 }

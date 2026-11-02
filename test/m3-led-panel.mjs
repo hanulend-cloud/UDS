@@ -1,6 +1,6 @@
 // LED 선택·속성 창(spec m3-cad-ui §4a) 순수 도우미: node test/m3-led-panel.mjs
-import { beamPreset, beamSpec, ledOfHit, ledClashItems, dropStaleAdjust, ledStepSel, setLedAdjust } from '../src/ui/m3/led-select.js';
-import { ledPanelHtml, ledNavHtml } from '../src/ui/mech3d-light-panel.js';
+import { beamPreset, beamSpec, ledOfHit, ledClashItems, dropStaleAdjust, setLedAdjust } from '../src/ui/m3/led-select.js';
+import { ledPanelHtml, setLpTab } from '../src/ui/mech3d-light-panel.js';
 import { layoutKeyOf, validAdjust } from '../src/engine/mech3d/led-adjust.js';
 import { defaultLight } from '../src/engine/mech3d/defs.js';
 import { ok, done } from './mech3d-util.mjs';
@@ -44,43 +44,49 @@ ok(ledOfHit({ part: 3 + 0 }, 3, lay) === null && ledOfHit({ part: 1 }, 3, lay) =
   setLedAdjust(Lt, 0, { ds: 1, dz: 0 });
   ok(Object.keys(Lt.ledAdjust.items).join() === '0' && Lt.ledAdjust.layoutKey === layoutKeyOf(Lt), '오래된 조정은 버리고 새로'); }
 
-// ◀ ▶
-ok(ledStepSel(null, 10, 1) === 0 && ledStepSel(null, 10, -1) === 9 && ledStepSel(9, 10, 1) === 0 && ledStepSel(0, 10, -1) === 9 && ledStepSel(3, 10, 1) === 4 && ledStepSel(0, 0, 1) === null, '◀ ▶ 순환 · 없음 = null');
-
-// LED 속성 창 HTML
+// LED 속성 창(2026-11-02): 기본 = 배치(추가·목록·옮기기)·빛 퍼짐·밝기·거리, 상세 = 발광면·배광·인식 고치기. ◀ ▶ 없음
 const line = { length: 120, closed: false, width: 16 };
 const man = { light: { ...defaultLight(), kind: 'manual' } };
 const led = (o = {}) => ({ n: 2, total: 10, s: 35, gap: 6.25, adj: { ds: 0, dz: 0 }, excluded: false, clash: [], ...o });
-{ const h = ledPanelHtml(man, { led: led(), line });
-  ok(h.includes('LED 3 · 10개 중 · 라인 위치 35.0 mm'), '머리');
-  ok(/data-lp-ledsel="1"[^>]*>◀/.test(h) && /data-lp-ledsel="3"[^>]*>▶/.test(h), '◀ ▶ = 이전·다음 번호');
+const list = [{ n: 0, s: 5, excluded: false }, { n: 1, s: 15, excluded: false }, { n: 2, s: 35, excluded: false }];
+const ui = (o = {}) => ({ line, ledList: list, ledGap: 6.25, ...o });
+{ const h = ledPanelHtml(man, ui());
+  ok(h.includes('data-lp-tab="basic"') && !h.includes('◀') && !h.includes('하나씩'), '탭 · ◀ ▶ 없음');
   ok(/data-lp-beam="120" aria-pressed="true"/.test(h) && /data-lp-beam="90" aria-pressed="false"/.test(h) && /data-lp-beam="60" aria-pressed="false"/.test(h), '120 = 넓게 눌림');
-  ok(h.includes('넓게 120°') && h.includes('보통 90°') && h.includes('좁게 60°') && h.includes('빛이 퍼지는 각도(밝기 절반 기준)') && !h.includes('램버시안') && !h.includes('가우시안'), '쉬운 말 · 모델 이름 숨김');
-  ok(/data-lp-spec="fluxLm"/.test(h) && h.includes('lm/개') && h.includes('0 = 상대값'), '광속');
-  ok(/value="6.3" data-lp-dist/.test(h) && !/data-lp-dist[^>]*disabled/.test(h), `커버까지 거리 = 현재 최소 간격 (${h.match(/value="[^"]*" data-lp-dist/)?.[0]})`);
-  ok(/data-lp-man="count"/.test(h) && /data-lp-man="pitch"/.test(h) && /data-lp-man="rows"/.test(h), '배치(개수·피치·열)');
-  ok(/data-lp-adj="ds"[^>]*value="0"|value="0"[^>]*data-lp-adj="ds"/.test(h) && /data-lp-adj="dz"/.test(h) && !/data-lp-adjreset/.test(h), '이 LED만 입력 · 조정 없으면 [원래대로] 없음');
-  ok(!/data-lp-ledx/.test(h), '직접 배치 = 제외 토글 없음');
-  ok(h.includes('배치·인식 (고급)') && /<details class="m3-sec" data-m3-sec="ledadv"/.test(h), '고급 접는 구역');
-  ok(!/m3-clash/.test(h), '간섭 없음 = 빨간 줄 없음'); }
-{ const h = ledPanelHtml({ light: { ...man.light, spec: { ...man.light.spec, model: 'gaussian', beam: 90 } } }, { led: led(), line });
-  ok(/data-lp-beam="90" aria-pressed="true"/.test(h) && /data-lp-beam="120" aria-pressed="false"/.test(h) && /data-lp-beamc[^>]*value=""/.test(h), '90 = 보통 눌림, 직접 입력 빈칸');
-  const hc = ledPanelHtml({ light: { ...man.light, spec: { ...man.light.spec, model: 'gaussian', beam: 45 } } }, { led: led(), line });
-  ok(!/aria-pressed="true"/.test(hc) && /data-lp-beamc[^>]*value="45"/.test(hc), '45 = 직접 입력(버튼 안 눌림)'); }
-{ const h = ledPanelHtml(man, { led: led({ adj: { ds: 2, dz: -0.5 }, clash: ['커버와 간섭'] }), line });
+  ok(h.includes('넓게 120°') && !h.includes('램버시안') && !h.includes('가우시안'), '기본 탭: 쉬운 말 · 모델 이름 숨김');
+  ok(/data-lp-spec="fluxLm"/.test(h) && h.includes('lm/개') && h.includes('0 = 상대값'), '밝기');
+  ok(/value="6.3" data-lp-dist/.test(h) && !/data-lp-dist[^>]*disabled/.test(h), '커버까지 거리 — LED 를 안 골라도 보임');
+  ok(/data-lp-man="count"/.test(h) && /data-lp-man="pitch"/.test(h) && /data-lp-man="rows"/.test(h), '직접 배치: 개수·피치·열');
+  ok((h.match(/<tr class="[^"]*" data-lp-ledsel="\d"/g) ?? []).length === 3 && h.includes('35.0 mm'), 'LED 목록: 줄마다 번호·위치');
+  ok(!/data-lp-ledx/.test(h), '직접 배치 = ✕ 없음(개수로 조절)');
+  ok(!/data-lp-adj=/.test(h) && h.includes('줄을 누르면'), '선택 없음 = 옮기기 칸 없음 + 안내'); }
+{ const h = ledPanelHtml(man, ui({ led: led({ adj: { ds: 2, dz: -0.5 }, clash: ['커버와 간섭'] }) }));
+  ok(/<tr class="on" data-lp-ledsel="2"/.test(h) && h.includes('LED 3 옮기기'), '고른 줄 강조 · 옮기기 제목');
   ok(/value="2"[^>]*data-lp-adj="ds"/.test(h) && /value="-0.5"[^>]*data-lp-adj="dz"/.test(h) && /data-lp-adjreset/.test(h), '조정 값 · [원래대로]');
-  ok(/class="m3-clash"[^>]*>[^<]*커버와 간섭/.test(h), '이 LED 간섭 = 빨간 줄'); }
+  ok(/data-lp-ledsel=""/.test(h), '[선택 해제]');
+  ok(/class="m3-clash"[^>]*>[^<]*커버와 간섭/.test(h), '이 LED 간섭 = 빨간 줄');
+  ok(!/data-lp-adjreset/.test(ledPanelHtml(man, ui({ led: led() }))), '조정 없으면 [원래대로] 없음');
+  const hr = ledPanelHtml(man, ui({ ledList: [{ n: 5, s: 1, rank: 1, excluded: false }], led: led({ n: 5, rank: 1 }) }));
+  ok(hr.includes('<td>1</td>') && hr.includes('LED 1 옮기기') && /data-lp-ledsel="5"/.test(hr), '화면 번호 = 위치 순위, 내부 번호는 따로'); }
+{ const h = ledPanelHtml({ light: { ...man.light, spec: { ...man.light.spec, model: 'gaussian', beam: 90 } } }, ui());
+  ok(/data-lp-beam="90" aria-pressed="true"/.test(h) && /data-lp-beamc[^>]*value=""/.test(h), '90 = 보통 눌림, 직접 입력 빈칸');
+  const hc = ledPanelHtml({ light: { ...man.light, spec: { ...man.light.spec, model: 'gaussian', beam: 45 } } }, ui());
+  ok(!/aria-pressed="true"/.test(hc) && /data-lp-beamc[^>]*value="45"/.test(hc), '45 = 직접 입력(버튼 안 눌림)'); }
 { const face = { light: { ...man.light, manual: { ...man.light.manual, pcb: { kind: 'face', part: 1, face: 2 } } } };
-  const h = ledPanelHtml(face, { led: led(), line });
+  const h = ledPanelHtml(face, ui());
   ok(/data-lp-dist[^>]*disabled/.test(h) && h.includes('PCB 를 기구 면으로 지정'), '면 PCB = 거리 입력 비활성 + 이유'); }
 { const st = { name: 'a.stp', leds: [1, 2], pcb: 0, excluded: [], emitters: [{ part: 1, pos: [0, 0, 0], axis: [0, 0, 1] }], offset: [0, 0, 0], rot: [0, 0, 0], virtual: null };
   const ms = { light: { ...defaultLight(), kind: 'step', step: st } };
-  const h = ledPanelHtml(ms, { led: led({ total: 2, n: 1 }), line });
-  ok(/data-lp-ledx/.test(h) && h.includes('이 LED 삭제') && h.includes('STEP 원래 몸체는 그대로'), 'LED STEP 원래 = 삭제(제외 토글)');
-  ok(ledPanelHtml(ms, { led: led({ total: 2, n: 1, excluded: true }), line }).includes('이 LED 다시 넣기'), '삭제된 LED = 다시 넣기');
-  ok((h.match(/data-lp-edit="add"/g) ?? []).length === 1, 'STEP 배치 행 한 번만');
-  const hv = ledPanelHtml({ light: { ...ms.light, step: { ...st, virtual: { positions: [{ s: 1, w: 0, dz: 0 }] } } } }, { led: led({ total: 1 }), line });
-  ok(/data-lp-ledx/.test(hv) && hv.includes('배치에서 뺌') && /data-lp-edit="orig"/.test(hv), '편집한 배치 = 목록에서 삭제 · STEP 원래대로'); }
-// 노드 창(선택 없음) 의 LED 고르기 줄
-ok(/data-lp-ledsel="9"[^>]*>◀/.test(ledNavHtml(null, 10)) && /data-lp-ledsel="0"[^>]*>▶/.test(ledNavHtml(null, 10)) && ledNavHtml(null, 0) === '', '선택 없음: ◀ = 마지막, ▶ = 첫 LED · LED 없음 = 줄 없음');
+  const h = ledPanelHtml(ms, ui());
+  ok((h.match(/data-lp-ledx="\d"/g) ?? []).length === 3 && h.includes('>✕<'), 'LED STEP: 줄마다 ✕');
+  ok(ledPanelHtml(ms, ui({ ledList: [{ n: 0, s: 5, excluded: true }] })).includes('되살리기'), '빛 끈 LED = 되살리기');
+  ok((h.match(/data-lp-edit="add"/g) ?? []).length === 1 && h.indexOf('data-lp-edit="add"') < h.indexOf('m3-ledlist'), '[+ LED 추가] 한 번, 목록 위');
+  const hv = ledPanelHtml({ light: { ...ms.light, step: { ...st, virtual: { positions: [{ s: 1, w: 0, dz: 0 }] } } } }, ui());
+  ok(/data-lp-ledx="0"/.test(hv) && /data-lp-edit="orig"/.test(hv), '편집한 배치 = ✕ · STEP 원래대로');
+  ok(!/data-lp-ledx/.test(ledPanelHtml({ light: { ...ms.light, step: { ...st, virtual: { positions: [{ s: 1, w: 0, dz: 0 }] } } } }, ui({ line: null }))), '라인 없으면 편집한 배치 삭제 불가');
+  ok(ledPanelHtml({ light: { ...ms.light, step: { ...st, emitters: [] } } }, ui()).includes('빛 나오는 면을 아직 모름'), '발광면 없음 = 안내');
+  setLpTab('leds', 'detail');
+  const d = ledPanelHtml(ms, ui());
+  ok(d.includes('인식 고치기') && d.includes('램버시안') && /data-lp-spec="sizeX"/.test(d) && /data-lp-solder/.test(d) && !d.includes('m3-ledlist'), '상세 탭 = 인식 고치기·배광 모델·발광면·PCB 색');
+  setLpTab('leds', 'basic'); }
 done();

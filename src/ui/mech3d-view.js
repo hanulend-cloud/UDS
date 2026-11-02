@@ -16,7 +16,7 @@ const SEL_TINT = new THREE.Color(0xffb020), FACE_COLOR = new THREE.Color(0xff5a3
 const VIEW_DIR = { top: [0, -1e-3, 1], front: [0, -1, 0], side: [1, 0, 0], iso: [0.7, -1.1, 0.9] };
 const SECTION_N = { x: [-1, 0, 0], y: [0, -1, 0], z: [0, 0, -1] };   // 단면: 좌표 ≤ pos 쪽만 남김
 
-export function createMech3dView(canvas, { onPick, gizmo = null }) {
+export function createMech3dView(canvas, { onPick, onContext = null, gizmo = null }) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio || 1);
   renderer.localClippingEnabled = true;
@@ -506,6 +506,19 @@ export function createMech3dView(canvas, { onPick, gizmo = null }) {
   let down = null;
   canvas.addEventListener('pointerdown', (e) => { if (e.button === 0 && e.isPrimary) down = [e.clientX, e.clientY]; });
   canvas.addEventListener('pointercancel', () => { down = null; });
+  // 우클릭(끌지 않음) → onContext({ part, led, x, y }) — 우클릭 끌기는 화면 이동(OrbitControls)이라 메뉴 없음
+  let rdown = null;
+  canvas.addEventListener('pointerdown', (e) => { if (e.button === 2) rdown = [e.clientX, e.clientY]; });
+  canvas.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    if (!onContext || (rdown && Math.hypot(e.clientX - rdown[0], e.clientY - rdown[1]) > 4)) { rdown = null; return; }
+    rdown = null;
+    const r = canvas.getBoundingClientRect();
+    ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
+    const ch = ray.intersectObjects([...coneMeshes].reverse(), false)[0], led = ch ? ch.object.userData.nums[Math.floor(ch.faceIndex / CONE_SEG)] : null;
+    const hits = ray.intersectObjects(meshes.filter((m) => m.visible), false), h = clip.length ? hits.find((x) => clip[0].distanceToPoint(x.point) >= 0) : hits[0];
+    onContext({ part: h ? h.object.userData.part : null, led, x: e.clientX, y: e.clientY });
+  });
   canvas.addEventListener('pointerup', (e) => {
     if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 4) { down = null; return; }
     down = null;

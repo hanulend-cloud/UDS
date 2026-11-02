@@ -141,7 +141,7 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   const node = (s) => treeNodes({ ...M, light: { ...defaultLight(), kind: 'step', step: s } }, { node: null, line: null }).find((n) => n.id === 'leds');
   ok(node(st).label === 'LED ×2' && node(st).badge === '120°', `원래 위치 배지: ${node(st).label} ${node(st).badge}`);
   const a = node({ ...st, virtual: { count: 6, pitch: 15 } }), b = node({ ...st, virtual: { count: 4, pitch: 0 } }), c = node({ ...st, virtual: { positions: [{ s: 1, w: 0, dz: 0 }, { s: 9, w: 0, dz: 0 }, { s: 20, w: 0, dz: 0 }] } });
-  ok(a.label === 'LED ×6' && a.badge === '자동 6개 피치 15' && b.badge === '자동 4개 균등' && c.label === 'LED ×3' && c.badge === 'STEP 편집', `배지: ${a.label} ${a.badge} / ${b.badge} / ${c.label} ${c.badge}`);
+  ok(a.label === 'LED ×6' && a.badge === '자동 6개 피치 15' && b.badge === '자동 4개 균등' && c.label === 'LED ×3' && c.badge === '배치 편집', `배지: ${a.label} ${a.badge} / ${b.badge} / ${c.label} ${c.badge}`);
   const ln = { length: 100, closed: false, width: 6 };
   const h0 = stepLayoutRowHtml(st, ln, 2), h1 = stepLayoutRowHtml({ ...st, virtual: { positions: [] } }, ln), h2 = stepLayoutRowHtml({ ...st, emitters: [] }, ln), h3 = stepLayoutRowHtml(st, null);
   ok(h0.includes('LED 2개 · STEP 원래 배치') && /data-lp-edit="add">\+ LED 추가/.test(h0) && /data-lp-edit="align"/.test(h0) && !/data-lp-edit="orig"/.test(h0), '배치 행: 원래 = 추가·같은 간격 · 원래대로 없음');
@@ -337,7 +337,7 @@ done();
 { const { etaText } = await import('../src/ui/m3/opt-dash.js');
   const H = [{ ph: 1e6, t: 0, noise: 0.1 }, { ph: 2e6, t: 5000, noise: 0.07 }, { ph: 3e6, t: 10000, noise: 0.0577 }];
   const e = etaText(H, 0.02);
-  console.log(e.includes('필요 광자 ≈ 2,497만') && e.includes('남은 ≈ 2분') && etaText([{ ph: 1, t: 0, noise: 0.01 }], 0.02) === '' ? 'PASS 남은 계산 예상(필요 광자·시간)' : (process.exitCode = 1, `FAIL 남은 계산 예상: ${e}`)); }
+  console.log(e.includes('필요 광선 ≈ 2,497만') && e.includes('남은 ≈ 2분') && etaText([{ ph: 1, t: 0, noise: 0.01 }], 0.02) === '' ? 'PASS 남은 계산 예상(필요 광선·시간)' : (process.exitCode = 1, `FAIL 남은 계산 예상: ${e}`)); }
 { const { mapLayout } = await import('../src/ui/m3/results-panel.js');
   const G = { w0: -2.75, nw: 8, cell: 0.6875, L: 440, ns: 110 }, a = mapLayout(G, 600, 180, 1), b = mapLayout({ w0: -12, nw: 8, cell: 3, L: 116, ns: 100 }, 600, 180, 1);
   const [x, y] = a.xy(250, 1), back = a.at(x, y);
@@ -474,3 +474,10 @@ done();
   const { toCsv } = await import('../src/ui/m3/results-panel.js');
   const c = toCsv('# 이름 a,b\ns\t값\t\n1.5\t"x"\t2.00');
   console.log(c === '"# 이름 a,b"\r\ns,값,\r\n1.5,"""x""",2.00' ? 'PASS CSV 변환' : (process.exitCode = 1, `FAIL CSV 변환 ${JSON.stringify(c)}`)); }
+{ // 3D 우클릭 메뉴(2026-11-02): 부품 숨기기·이 부품만·숨긴 것 다시 보기 · LED · 여러 개 선택
+  const { viewCtxItems } = await import('../src/ui/m3/feature-tree.js');
+  const names = ['A', 'B', 'C'], k = (o) => viewCtxItems({ names, ...o }).map((x) => x.k).join();
+  const ok3 = k({ part: 1 }) === 'hide,only' && viewCtxItems({ names, part: 1 })[0].label === 'B 숨기기'
+    && k({ part: 1, multi: [0, 1] }) === 'hideSel,only' && k({ part: 1, hidden: [2] }) === 'hide,only,all'
+    && k({ selPart: 2, hidden: [2] }) === 'show,all' && k({ isLed: true }) === 'led' && k({ hideLeds: true }) === 'led,all' && k({}) === '';
+  console.log(ok3 ? 'PASS 3D 우클릭 메뉴' : (process.exitCode = 1, `FAIL 3D 우클릭 메뉴 ${k({ part: 1 })} | ${k({ part: 1, multi: [0, 1] })} | ${k({ selPart: 2, hidden: [2] })}`)); }

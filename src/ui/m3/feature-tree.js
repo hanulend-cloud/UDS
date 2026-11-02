@@ -43,7 +43,7 @@ export function treeNodes(M, S, lay) {
     const nr = (o) => (Array.isArray(o.positions) ? o.positions.length : o.count * (o.rows === 2 ? 2 : 1)), rw = (o) => (o.rows === 2 ? `2열 × ${o.count}개` : `${o.count}개`);   // 총 LED = 열 수 × 열당 개수(spec P4 §2.2b)
     const n = vt && !failed ? (lay?.virtual ? lay.leds.length : nr(vt)) : L.kind === 'step' ? (L.step?.leds ?? []).filter((i) => !ex.includes(i)).length : nr(L.manual);
     const pit = (p) => (p > 0 ? `피치 ${+(+p).toFixed(1)}` : '균등');
-    node('leds', `LED ×${n}`, L.kind === 'manual' ? (L.manual.rows === 2 ? `${rw(L.manual)} ${pit(L.manual.pitch)}` : pit(L.manual.pitch)) : failed ? '배치 편집 실패' : vt ? (Array.isArray(vt.positions) ? 'STEP 편집' : `자동 ${rw(vt)} ${pit(vt.pitch)}`) : `${L.spec.beam}°`, true, 'led', L.kind === 'step' ? (S.hideLeds ? 'off' : 'on') : undefined);
+    node('leds', `LED ×${n}`, L.kind === 'manual' ? (L.manual.rows === 2 ? `${rw(L.manual)} ${pit(L.manual.pitch)}` : pit(L.manual.pitch)) : failed ? '배치 편집 실패' : vt ? (Array.isArray(vt.positions) ? '배치 편집' : `자동 ${rw(vt)} ${pit(vt.pitch)}`) : `${L.spec.beam}°`, true, 'led', L.kind === 'step' ? (S.hideLeds ? 'off' : 'on') : undefined);
   }
   const ln = S.line;
   // 관측면(하위 노드 없음 — ▾ 뺌): 라인 종류·길이×폭 mm · 면 수 / 인식 실패 / 미지정
@@ -78,6 +78,20 @@ export function treeCtxItems(M, S, id) {
   if (id.startsWith('part:') || id.startsWith('group:')) out.push({ k: 'eye', label: '보이기 / 숨기기' });
   return out;
 }
+// 3D 우클릭 메뉴 항목(순수, 2026-11-02) — part = 누른 기구 부품 | null, isLed = LED 를 누름, selPart = 트리에서 고른 부품(숨겨져 있으면 [다시 보기])
+export function viewCtxItems({ part = null, isLed = false, selPart = null, multi = [], hidden = [], hideLeds = false, names = [] }) {
+  const out = [], nm = (i) => names[i] ?? `부품 ${i + 1}`;
+  if (part != null) {
+    if (multi.length > 1 && multi.includes(part)) out.push({ k: 'hideSel', label: `선택한 부품 ${multi.length}개 숨기기` });
+    else out.push({ k: 'hide', label: `${nm(part)} 숨기기` });
+    out.push({ k: 'only', label: `${nm(part)}만 보기` });
+  }
+  if (isLed) out.push({ k: 'led', label: 'LED 숨기기' });
+  if (selPart != null && hidden.includes(selPart) && selPart !== part) out.push({ k: 'show', label: `${nm(selPart)} 다시 보기` });
+  if (hideLeds && !isLed) out.push({ k: 'led', label: 'LED 다시 보기' });
+  if (hidden.length || hideLeds) out.push({ k: 'all', label: `숨긴 것 모두 보기${hidden.length ? ` (부품 ${hidden.length}개)` : ''}` });
+  return out;
+}
 // 그룹 부품 번호 — '_light' = 그룹 밖 광원으로 옮긴 부품(자동 묶음)
 export function groupMembers(M, id) {
   if (id === '_light') { const inG = new Set((M.groups ?? []).flatMap((g) => g.parts)); return M.parts.map((p, i) => i).filter((i) => M.parts[i].role === 'light' && !inG.has(i)); }
@@ -110,7 +124,7 @@ export function treeHead() {   // 그룹 단추는 우클릭 메뉴로 옮김(20
 }
 export const treeHtml = (M, S, lay) => `${treeHead(M, S)}${treeNodes(M, S, lay).map((n) => `<div class="m3-node ${n.child ? 'child' : ''} d${n.depth ?? 0}${n.id.startsWith('group:') ? ' grp' : ''} ${n.sel ? 'sel' : ''} ${n.eye === 'off' ? 'hid' : ''}" role="button" tabindex="0"${n.sel ? ' aria-current="true"' : ''} data-node="${esc(n.id)}">${caret(n)}${eyeHtml(n)}<span class="m3-lbl"${renamable(n) ? ' data-lbl title="더블클릭: 이름 바꾸기"' : ''}>${esc(n.label)}</span> <span class="${n.child && !n.id.startsWith('group:') ? `m3-badge k-${esc(n.kind)}` : 'b'}">${esc(n.badge)}</span></div>`).join('')}`;
 // 작은 우클릭 메뉴(화면 고정 위치) — 바깥 클릭·Esc·창 벗어남 = 닫기
-function ctxMenu(doc, x, y, items, onPick, host = doc.body) {   // host = 테마 변수를 물려받을 곳
+export function showCtxMenu(doc, x, y, items, onPick, host = doc.body) {   // host = 테마 변수를 물려받을 곳
   doc.querySelector('.m3-ctx')?.remove();
   const m = doc.createElement('div'); m.className = 'm3-ctx'; m.setAttribute('role', 'menu');
   m.innerHTML = items.map((it) => `<button type="button" role="menuitem" data-k="${it.k}">${esc(it.label)}</button>`).join('');
@@ -144,7 +158,7 @@ export function renderFeatureTree(el, M, S, h, lay) {
       e.preventDefault();
       B.h?.onCtxSelect?.(id);
       const items = treeCtxItems(B.M, B.S, id); if (!items.length) return;
-      ctxMenu(el.ownerDocument, e.clientX, e.clientY, items, (k) => {
+      showCtxMenu(el.ownerDocument, e.clientX, e.clientY, items, (k) => {
         if (k === 'rename') { const lb = [...el.querySelectorAll('[data-node]')].find((x) => x.dataset.node === id)?.querySelector('[data-lbl]'); if (lb) startRename(lb); }
         else if (k === 'eye') B.h?.onEye?.(id, false);
         else B.h?.onTreeAct?.(k);
