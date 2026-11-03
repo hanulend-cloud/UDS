@@ -31,7 +31,7 @@ const opts = (obj, cur) => Object.entries(obj).map(([k, v]) => `<option value="$
 // lim = 반사율 상한 { kind, max, entry } | null — 같은 종류일 때 R 칸 옆에 표시
 function finishRow(f, scope, allowInherit, lim = null) {
   const k = f ? FINISH_KINDS[f.kind] : null, limTxt = lim && k?.hasR && f.kind === lim.kind ? ` <span class="mut">${lim.entry.special ? '특수 처리' : '소재'} 상한 ${pct(lim.max)}%</span>` : '';
-  return `<div class="m3-row"><select data-m3-finish="${scope}" aria-label="${scope === 'face' ? '선택한 면' : '부품 기본'} 면 처리 종류">
+  return `<div class="m3-row"><label>${scope === 'face' ? '이 면' : '부품 전체'}</label><select data-m3-finish="${scope}" aria-label="${scope === 'face' ? '선택한 면' : '부품 기본'} 면 처리 종류">
       ${allowInherit ? `<option value="" ${f ? '' : 'selected'}>부품 기본 따름</option>` : ''}${opts(FINISH_KINDS, f?.kind)}</select>
     ${k?.hasR ? `반사율 <input type="number" min="0" max="100" step="1" value="${esc(pct(f.R))}" data-m3-finishr="${scope}" aria-label="반사율 %">%${limTxt}` : ''}</div>`;
 }
@@ -79,7 +79,7 @@ export function materialPickHtml(p, groups) {
 function basicMaterialHtml(p, dbList, catalog, sel = {}) {
   const mat = p.material, groups = materialGroups({ milky: dbList, clear: sel.clearList ?? [], refl: catalog });
   const milky = mat.kind === 'milky' ? `<div class="m3-row"><label>확산 정도</label><input type="number" min="0" max="10" step="0.1" value="${esc(mat.milky)}" data-m3-mat="milky" aria-label="Milky 값"> <span class="mut">${+mat.milky > 0 ? '' : '<b>지금 투명</b> · '}Milky · 0 = 투명 · 높을수록 고르게 · 어두워짐</span></div>` : '';
-  return `<div class="m3-row"><label>소재</label>${materialPickHtml(p, groups)}</div>${milky}
+  return `<div class="m3-sub">소재</div><div class="m3-row"><label>소재 이름</label>${materialPickHtml(p, groups)}</div>${milky}
     <div class="m3-row mut m3-matsum">${esc(materialSummary(p, { milky: dbList, refl: catalog }))}</div>
     ${sel.admin ? `<div class="m3-admin"><div class="m3-sub">관리자 · 물성 직접 조정</div>${adminMaterialHtml(p, catalog)}</div>` : ''}`;
 }
@@ -175,23 +175,23 @@ export function xfSummaryText(p, info) {
 // 추적 제외(untrace) 스위치 — 부품은 남기고 빛 계산에서만 뺌. 도면에서 광원으로 옮긴 부품은 안내만
 export function untraceHtml(p) {
   if (p.role === 'light') return '<div class="m3-card m3-untrace on"><b>광원으로 사용 중</b> <span class="mut">이 부품은 광원 그룹으로 옮겨져 계산함 — 해제는 광원 노드에서</span></div>';
-  return `<div class="m3-card m3-untrace${p.untrace ? ' on' : ''}"><label class="m3-sw"><input type="checkbox" data-m3-untrace${p.untrace ? ' checked' : ''}> 빛 계산에서 제외 <span class="mut">(삭제 아님 — 빛이 이 부품을 그냥 지나감)</span></label></div>`;
+  return `<div class="m3-card m3-untrace${p.untrace ? ' on' : ''}"><div class="m3-sub">빛 계산</div><label class="m3-sw"><input type="checkbox" data-m3-untrace${p.untrace ? ' checked' : ''}> 빛 계산에서 제외 <span class="mut">(삭제 아님 — 빛이 이 부품을 그냥 지나감)</span></label></div>`;
 }
 function partEditor(p, sel, dbList) {
   const face = sel.face, cat = sel.catalog ?? DEFAULT_FINISH_CATALOG, lim = finishLimit(p, cat), opaque = p.material.kind === 'opaque', tab = PART_TAB;
   // 면 처리(상세): 불투명 + 반사 소재 지정 → 종류는 소재가 정함 · 미지정 → 종류만 · 투과 부품 → 종류·반사율
   const partFin = !opaque ? finishRow(p.finish, 'part', false, lim)
-    : p.reflMaterial ? '<div class="mut m3-note">표면 종류는 반사 소재가 정함</div>' : `<div class="m3-row"><span class="mut">부품 기본</span><select data-m3-finish="part" aria-label="부품 기본 면 처리 종류">${opts(FINISH_KINDS, p.finish?.kind)}</select></div>`;
+    : p.reflMaterial ? '<div class="m3-row"><label>부품 전체</label><span class="mut">표면 종류는 반사 소재가 정함</span></div>' : `<div class="m3-row"><label>부품 전체</label><select data-m3-finish="part" aria-label="부품 기본 면 처리 종류">${opts(FINISH_KINDS, p.finish?.kind)}</select></div>`;
   const faceRow = face != null ? `<div class="m3-row"><span class="mut">선택한 면 #${face}${p.faceFinish[face] ? ' · 덮어씀' : ''}</span></div>${finishRow(p.faceFinish[face] ?? null, 'face', true, lim)}` : '';
   const nOver = Object.keys(p.faceFinish ?? {}).length;
   const dSum = p.shapeMod ? '형상 변경됨' : '';
   const tabs = `<div class="m3-tabs" role="tablist" aria-label="부품 속성">
-    <button type="button" role="tab" data-m3-tab="basic" aria-selected="${tab === 'basic'}">기본</button>
-    <button type="button" role="tab" data-m3-tab="detail" aria-selected="${tab === 'detail'}">상세${dSum ? ` <span class="m3-tab-s">${esc(dSum)}</span>` : ''}</button></div>`;
+    <button type="button" role="tab" data-m3-tab="basic" aria-selected="${tab === 'basic'}">기본 <span class="m3-tab-s">소재 · 표면 상태</span></button>
+    <button type="button" role="tab" data-m3-tab="detail" aria-selected="${tab === 'detail'}">상세 <span class="m3-tab-s">${esc(dSum || '위치 · 크기 · 접촉면')}</span></button></div>`;
   const warn = `${overlapWarnHtml(sel.clearance)}${sel.xfMsg ? `<div class="m3-warn" role="status">${esc(sel.xfMsg)}</div>` : ''}`;
   const body = tab === 'basic'
-    ? `${untraceHtml(p)}<div class="m3-card">${basicMaterialHtml(p, dbList, cat, sel)}</div>
-      <div class="m3-card"><div class="m3-sub">표면 상태 <span class="mut">${face != null ? `면 #${face} 선택` : nOver ? `면 ${nOver}개 따로 지정` : ''}</span></div>${partFin}${faceRow}<div class="mut m3-note">3D 뷰에서 면을 클릭하면 그 면만 다르게 지정할 수 있습니다</div></div>`
+    ? `<div class="m3-card">${basicMaterialHtml(p, dbList, cat, sel)}</div>
+      <div class="m3-card"><div class="m3-sub">표면 상태 <span class="mut">${face != null ? `면 #${face} 선택` : nOver ? `면 ${nOver}개 따로 지정` : ''}</span></div>${partFin}${faceRow}<div class="mut m3-note">3D 뷰에서 면을 클릭하면 그 면만 다르게 지정할 수 있습니다</div></div>${untraceHtml(p)}`
     : `<div class="m3-card"><div class="m3-sub">위치 · 크기 <span class="mut">mm · ${esc(xfSummaryText(p, sel.xfInfo))}</span></div>${xformEditor(p, sel.xfInfo, sel.lock)}${ledDistHtml(sel.clearance)}</div>
       ${secHtml('contact', '접촉면 (이 부품)', '', contactsForPartHtml(sel.contacts ?? [], sel.part, sel.names ?? []))}`;
   return `${warn}${tabs}<div class="m3-edit" role="tabpanel">${body}</div>`;

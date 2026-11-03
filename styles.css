@@ -970,6 +970,17 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 #mech3d-wrap .m3-tabs { gap: 3px; padding: 3px; margin: 4px 0 8px; background: var(--m3-head, #e9edf3); border: 1px solid var(--m3-line); border-radius: 8px; }
 #mech3d-wrap .m3-tabs [role=tab] { border: 0; border-radius: 6px; margin: 0; padding: 6px 4px; font-weight: 500; }
 #mech3d-wrap .m3-tabs [role=tab][aria-selected=true] { background: var(--m3-acc); color: #fff; border: 0; font-weight: 700; }
+/* 기본·상세 구분: 탭 아래 내용이 탭과 이어진 틀 안에, 상세는 바탕색도 다르게 · 탭마다 무엇이 있는지 작은 글씨 */
+#mech3d-wrap .m3-tabs:has(+ .m3-edit) { margin-bottom: 0; border-bottom: 0; border-radius: 8px 8px 0 0; }
+#mech3d-wrap .m3-tabs + .m3-edit { border: 1.5px solid var(--m3-acc); border-radius: 0 0 8px 8px; padding: 6px; }
+#mech3d-wrap .m3-tabs:has([role=tab]:last-child[aria-selected=true]) + .m3-edit { background: var(--m3-accbg); }
+#mech3d-wrap .m3-edit .m3-card { background: var(--m3-panel, #fff); }
+#mech3d-wrap .m3-tabs .m3-tab-s { display: block; font-size: 10px; font-weight: 400; overflow: hidden; text-overflow: ellipsis; }
+#mech3d-wrap .m3-tabs [role=tab][aria-selected=true] .m3-tab-s { color: #fff; opacity: .9; }
+/* 속성 카드 양식: 굵은 제목 + 밑줄, 줄 = [이름표 | 입력] */
+.m3-props .m3-card > .m3-sub:first-child { font-size: 12.5px; font-weight: 700; opacity: 1; padding-bottom: 3px; margin-bottom: 4px; border-bottom: 1px solid var(--m3-line); }
+.m3-props .m3-card > .m3-sub:first-child .mut { font-weight: 400; font-size: 11px; }
+.m3-props .m3-card .m3-row > label + select { flex: 1 1 90px; min-width: 0; max-width: 100%; }
 #mech3d-wrap .m3-tabs [role=tab][aria-selected=true] .m3-tab-s { color: inherit; }
 .m3-mon-hd > b, .m3-big-hd > b, .m3-rmodal-hd > b, .err-dlg-hd > b, .zoom-modal-hd > span:first-child { font-size: 17px; font-weight: 800; letter-spacing: -.01em; }
 .m3-res-h { flex: none; font-size: 14px; font-weight: 800; padding: 2px 2px 2px 8px; border-left: 4px solid var(--m3-acc); }

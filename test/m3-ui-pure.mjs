@@ -269,7 +269,7 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   renderPartProps(el, P, { ...sel, admin: true }, [], {});
   ok(html.includes('data-m3-finishr="part"') && html.includes('상한 90%') && html.includes('관리자'), '관리자 모드: 숫자 물성 칸(반사율·상한)');
   setPartTab('detail'); renderPartProps(el, P, sel, [], {});
-  ok(html.includes('data-m3-xf="c0"') && html.includes('data-m3-xf="z2"') && html.includes('data-m3-xflock') && html.includes('LED까지 <b class="led">1.5 mm</b>') && !html.includes('data-m3-sec="xf"') && !html.includes('data-m3-sec="finish"') && html.includes('data-m3-sec="contact"') && !html.includes('표면 상태'), '상세 탭: 위치·크기 · 접촉면(표면 상태는 기본 탭)');
+  ok(html.includes('data-m3-xf="c0"') && html.includes('data-m3-xf="z2"') && html.includes('data-m3-xflock') && html.includes('LED까지 <b class="led">1.5 mm</b>') && !html.includes('data-m3-sec="xf"') && !html.includes('data-m3-sec="finish"') && html.includes('data-m3-sec="contact"') && !html.includes('data-m3-finish'), '상세 탭: 위치·크기 · 접촉면(표면 상태는 기본 탭)');
   ok(html.includes('>부품 2 · ') || html.includes(`>${P.parts[1].name} · `), '제목 = 이름 · 크기');
   ok(!html.includes('data-m3-pick') && !html.includes('data-m3-refladd') && !html.includes('data-m3-sec="refldb"') && !html.includes('data-m3-finish="part"'), '상세 탭: 소재 고르기·DB 구역 없음 · 종류 선택 숨김');
   secs.contact.open = true; secs.contact.toggle();

@@ -27,7 +27,8 @@ const on = (el, q, ev, fn) => el.querySelectorAll(q).forEach((x) => x.addEventLi
 const LP_TAB = { leds: 'basic', obs: 'basic' };
 export const lpTab = (k) => LP_TAB[k];
 export function setLpTab(k, t) { LP_TAB[k] = t === 'detail' ? 'detail' : 'basic'; }
-const tabsHtml = (k, dSum = '') => `<div class="m3-tabs" role="tablist"><button type="button" role="tab" data-lp-tab="basic" aria-selected="${LP_TAB[k] === 'basic'}">기본</button><button type="button" role="tab" data-lp-tab="detail" aria-selected="${LP_TAB[k] === 'detail'}">상세${dSum ? ` <span class="m3-tab-s">${esc(dSum)}</span>` : ''}</button></div>`;
+const TAB_SUB = { leds: ['빛 퍼짐 · 발광면', '배치 · 밝기 · 배광'], obs: ['면 · 목표', '방향 · 계산 · 점검'] };   // 탭에 무엇이 있는지
+const tabsHtml = (k, dSum = '') => `<div class="m3-tabs" role="tablist"><button type="button" role="tab" data-lp-tab="basic" aria-selected="${LP_TAB[k] === 'basic'}">기본 <span class="m3-tab-s">${TAB_SUB[k][0]}</span></button><button type="button" role="tab" data-lp-tab="detail" aria-selected="${LP_TAB[k] === 'detail'}">상세 <span class="m3-tab-s">${esc(dSum || TAB_SUB[k][1])}</span></button></div>`;
 const wireTabs = (el, k, redraw) => on(el, '[data-lp-tab]', 'click', (x) => { if (LP_TAB[k] !== x.dataset.lpTab) { LP_TAB[k] = x.dataset.lpTab; redraw(); } });
 const wirePick = (el, ui, h) => on(el, '[data-lp-pick]', 'click', (x) => h.onPick(ui.pick === x.dataset.lpPick ? null : x.dataset.lpPick));
 
