@@ -267,4 +267,15 @@ const perPhoton = (s) => Array.from(s.sum, (v) => v / (s.photons / 25000));   //
   ok(s1.state === 'done' && s1.targetNoise === 0.02 && s1.stats.relNoise > 0.005, `먼 미달: 설정한 노이즈에서 멈춤 (길이 ${s1.stats.Ulen.toFixed(2)})`);
   Q.cancel();
 }
+{ // 기구 최적화 최종 판정 값 인계: 청크 없이 끝난 계산이 되고, 판정과 같은 균일도 · 격자가 다르면 무시
+  const T = fakeTimers(), a = delayedPort(T), P = createProgressive({ ports: [a], timers: T, opts: OPT });
+  const batches = Array.from({ length: 10 }, (_, b) => ({ acc: Float64Array.from({ length: 8 }, (_, k) => (k < 2 ? 0.8 : 1) * (1 + 0.001 * Math.sin(b + k)) * 5e5), accAll: new Float64Array(8), cnt: new Float64Array(8).fill(50), n: 5, photons: 5e5 }));
+  const seed = { batches, ledger: { emitted: 5e6, escaped: 2.5e6 }, leak: {}, paths: { ':0': 5e6 }, nCell: 8, photons: 5e6 };
+  const want = tallyStats(G, batches.map((b) => b.acc), obs);
+  P.restart(job(9), () => seed); await T.advance(500); await settle();
+  const sn = P.snapshot();
+  ok(sn.state === 'done' && sn.reason === 'adopted' && chunks(a).length === 0 && Math.abs(sn.stats.Ulen - want.Ulen) < 1e-9 && Math.abs(sn.stats.Uwid - want.Uwid) < 1e-9 && sn.photons === 5e6 && scenes(a).length === 1, `인계 값 = 판정 값 ${sn.stats?.Ulen?.toFixed(4)}`);
+  P.restart(job(10), () => ({ ...seed, nCell: 99 })); await T.advance(500); await settle();
+  ok(P.snapshot().state === 'running' && chunks(a).length > 0, '격자가 다른 값은 무시 — 새로 계산');
+  P.dispose(); }
 done();

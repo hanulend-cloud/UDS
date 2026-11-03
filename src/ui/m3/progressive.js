@@ -26,7 +26,7 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
   const cap = () => job?.maxPhotons ?? o.maxPhotons;   // 계산 한도 — 작업(화질)별, 없으면 기본
   let gen = 0, state = 'idle', reason = null, error = null, job = null, pendingJob = null, debounce = null, ticker = null;
   let paths = {}, bins, binIssued, ledger, leak, nextChunk, issued, retry, doneChunks, photons, ignored, snap, early, nMin, nMax;
-  let wantPaused = false, disposed = false;   // wantPaused: 대기·시작 중 일시정지 요청 → 시작될 때 적용
+  let pendingSeed = null, wantPaused = false, disposed = false;   // wantPaused: 대기·시작 중 일시정지 요청 → 시작될 때 적용
   const busy = ports.map(() => 0);   // 포트별로 돌고 있는 펌프의 세대(0 = 쉼)
   const ready = ports.map(() => 0);  // 포트별로 장면이 준비된 세대 — 준비된 포트부터 바로 청크를 보낸다
   const size = ports.map(() => o.minChunk);   // 포트별 다음 청크 크기(적응형)
@@ -45,12 +45,13 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
   }
 
   // 물리 변경 — 진행 중 결과는 세대(gen)로 무효화하고 디바운스 뒤 새로 시작
-  function restart(j) {
+  // seedFn(선택) = 시작 때 부르는 함수 — 값이 있으면(기구 최적화가 이미 잰 결과) 청크를 돌리지 않고 그 결과를 끝난 계산으로 받음
+  function restart(j, seedFn = null) {
     if (disposed) return;
     gen++; stopTick();
     if (debounce != null) timers.clearTimeout(debounce);
     if (state === 'paused') wantPaused = true;   // 사용자 일시정지는 다시 시작 뒤에도 유지(여러 값을 고치는 동안)
-    resetAcc(); job = null; pendingJob = j; state = 'pending'; reason = null; error = null;
+    resetAcc(); job = null; pendingJob = j; pendingSeed = seedFn; state = 'pending'; reason = null; error = null;
     const g = gen;
     debounce = timers.setTimeout(() => { debounce = null; begin(g); }, o.debounceMs);
     emit();
@@ -58,7 +59,8 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
   async function begin(g) {
     let j;
     try { j = typeof pendingJob === 'function' ? pendingJob() : pendingJob; } catch (e) { fail(g, e); return; }
-    pendingJob = null;
+    const sd = pendingSeed?.() ?? null, seed = j && sd?.nCell === j.G.ns * j.G.nw ? sd : null;
+    pendingJob = null; pendingSeed = null;
     if (!j) { state = 'idle'; reason = 'notReady'; emit(); return; }
     job = j; state = 'starting'; emit();
     size.fill(o.minChunk);
@@ -68,6 +70,7 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
       if (g !== gen || state === 'error') return;
       ready[k] = g;
       if (state === 'starting') {
+        if (seed) { loadSeed(seed); finish('adopted'); return; }
         if (wantPaused) { wantPaused = false; state = 'paused'; emit(); return; }
         state = 'running'; startTick(); emit();
       }
@@ -127,6 +130,19 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
     for (const key in r.paths ?? {}) paths[key] = (paths[key] ?? 0) + r.paths[key] * f;   // 광경로(관측면으로 나온 빛이 거친 부품 차례)
     photons += N; doneChunks++;
   }
+  // 기구 최적화 최종 판정의 누적 결과를 그대로 받음(2026-11-03) — seed 값은 광자 수를 곱해 더한 합이라 chunkN 으로 나누면 accumulate 와 같은 꼴
+  function loadSeed(seed) {
+    const c0 = o.chunkN;
+    seed.batches.forEach((b, i) => {
+      const n = b.acc.length, B = bins[i % o.bins] ?? (bins[i % o.bins] = { acc: new Float64Array(n), accAll: new Float64Array(n), cnt: new Float64Array(n), n: 0, photons: 0 });
+      for (let k = 0; k < n; k++) { B.acc[k] += b.acc[k] / c0; B.accAll[k] += b.accAll[k] / c0; B.cnt[k] += b.cnt[k]; }
+      B.n += b.n; B.photons += b.photons; doneChunks += b.n;
+    });
+    for (const key in ledger) ledger[key] = (seed.ledger[key] ?? 0) / c0;
+    for (const key in seed.leak ?? {}) leak[key] = seed.leak[key] / c0;
+    for (const key in seed.paths ?? {}) paths[key] = seed.paths[key] / c0;
+    photons = issued = seed.photons; nMin = 1; nMax = 2;
+  }
   function compute() {
     const filled = bins.filter(Boolean);
     if (!job || filled.length < 2) return { stats: null, sum: null, photometry: null };
@@ -178,7 +194,7 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
   function cancel() {
     gen++; stopTick();
     if (debounce != null) { timers.clearTimeout(debounce); debounce = null; }
-    job = null; pendingJob = null; wantPaused = false; resetAcc(); state = 'idle'; reason = null; error = null;
+    job = null; pendingJob = null; pendingSeed = null; wantPaused = false; resetAcc(); state = 'idle'; reason = null; error = null;
     emit();
   }
   // 화면 해제 — 알림 없이 취소하고, 이후 호출은 무시

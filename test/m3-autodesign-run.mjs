@@ -81,4 +81,8 @@ const fakePorts = (log, delay = 0) => Array.from({ length: 3 }, (_, w) => ({ sen
   await R.trace({ sceneKey: 'i', scene: { G, mechParts: [] } }, { N: 1234567.8, batches: 2, maxMs: 1000, minN: 1000 });
   ok(seen.length > 0 && seen.every(Number.isInteger), `청크 광자 수가 모두 정수 (${seen.length}개)`);
 }
+{ // keepRaw = 점진 계산에 넘길 원자료(광자 수를 곱한 합)
+  const R = createAdRunner({ ports: fakePorts([]) }), r = await R.trace({ sceneKey: 'kr', scene: { G: { ns: 2, nw: 2 } } }, { N: 60000, chunkN: 10000, batches: 4, keepRaw: true });
+  ok(r.kept.nCell === nCell && r.kept.photons === 60000 && r.kept.batches.reduce((a, b) => a + b.acc[0], 0) === 60000 && r.kept.ledger.emitted === 60000 * 10000 && r.kept.batches.reduce((a, b) => a + b.n, 0) === 6, '원자료 합 = 광자 수');
+  const r0 = await R.trace({ sceneKey: 'kr', scene: { G: { ns: 2, nw: 2 } } }, { N: 1000, chunkN: 1000, batches: 1 }); ok(r0.kept === null, '평소에는 원자료 없음'); }
 done();

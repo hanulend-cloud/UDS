@@ -1,5 +1,6 @@
 import { mountSplit } from './pane-split.js';
 import { clampRect, fitRect, dragBy, raiseWin, mountResizers, COLLAPSED_W } from './monitor.js';
+import { simPct } from './opt-dash.js';
 // 결과 패널 — spec 2026-10-15 m3-cad-ui §2(시안 m3-ui-mockup 오른쪽):
 // ① 2D 광량 분포(관측면 펼침 s×w) + 평균 광량(목표 대비)·광 효율 ② 길이 1D 프로파일(목표선) + 길이 균일도 ③ 폭 1D 프로파일(최저 창) + 폭 균일도.
 // update({ snap(progressive snapshot), observe(spec.mech3d.observe), message(안내 | ''), leds?: [{s, w}](LED 위치 — 프로파일 아래 표시) })
@@ -423,9 +424,10 @@ function bigRectLoad() {
   return { x: Math.round((innerWidth - w) / 2), y: 56, w, h: Math.max(360, innerHeight - 72) };
 }
 function bigRectSave(r) { try { localStorage.setItem(BIG_KEY, JSON.stringify({ x: r.x, y: r.y, w: r.w, h: r.h })); } catch {} }
-export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds', onLeak = null } = {}) {
+export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds', onLeak = null, onBig = null } = {}) {
   const gaugeHtml = (k) => `<div class="m3-gauge" data-r="${k}"><div class="f"></div><div class="tg"></div></div>`;
   el.innerHTML = `
+    <div class="m3-res-h">시뮬레이션 결과</div>
     <div class="m3-msg" data-r="msg" hidden></div>
     <div class="m3-blk"><div class="m3-t"><b class="m3-tt">2D 광량 분포 <i class="m3-info" data-r="mapsub" tabindex="0">ⓘ</i></b><span><select data-r="quality" title="2D 분포·1D 프로파일 칸 크기(정사각) — 저 1.5 mm(빠름) · 중 1.0 mm(광선 ≈2배) · 고 0.5 mm(광선 ≈4배) · 짧거나 좁은 면은 그 방향만 더 잘게" aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>  <button type="button" class="m3-zoom" data-zoom="map" title="큰 창으로 보기" aria-label="2D 광량 분포 확대">⤢</button></span></div>
       <div class="m3-withm"><canvas class="m3-g" data-r="map" width="600" height="200"></canvas>
@@ -485,7 +487,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
       paint(k, cv);
     }
   };
-  const closeBig = () => { if (!big) return; big.ro?.disconnect(); big.el.remove(); document.removeEventListener('keydown', big.key); document.removeEventListener('pointerdown', big.down, true); window.removeEventListener('resize', big.rs); big = null; };
+  const closeBig = () => { if (!big) return; onBig?.(null); big.ro?.disconnect(); big.el.remove(); document.removeEventListener('keydown', big.key); document.removeEventListener('pointerdown', big.down, true); window.removeEventListener('resize', big.rs); big = null; };
   const setFocus = (k) => {
     big.focus = k; if (k) big.grid.dataset.focus = k; else delete big.grid.dataset.focus;   // 속성이 있으면(빈 값도) 한 그림 배치
     big.grid.querySelectorAll('[data-big-one]').forEach((b) => { const on = b.dataset.bigOne === k; b.textContent = on ? '↙ 모두 보기' : '⤢ 이 그림만'; b.title = on ? '2D·1D 를 한 화면에' : '이 그림만 화면 가득'; });
@@ -497,10 +499,10 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     const ov = document.createElement('div');
     // 떠 있는 창(2026-11-02) — 기구 최적화 창처럼 머리 끌어 옮기기 · 모서리로 크기 · 접기. 뒤 화면을 막지 않음(열어 둔 채 설계·최적화). 위치·크기 = 보는 사람별, 접힘은 열 때마다 펼침
     const rect = fitRect(bigRectLoad(), innerWidth, innerHeight);
-    ov.className = 'm3-big-in'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', '광량 분포 2D·1D');
+    ov.className = 'm3-big-in'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', '광시뮬레이션');
     const cell = (k) => `<div class="m3-big-c" data-k="${k}"><div class="m3-big-ct"><b>${TITLE[k]}</b><span class="m3-big-sp"></span>${k === 'map' ? `<label class="m3-big-eq"><input type="checkbox" data-big-eq${eq0 ? ' checked' : ''}> 실제 비율</label>` : ''}<button type="button" data-big-txt="${k}" title="${k === 'map' ? '2D 분포 표(칸마다, 최대 대비 %)' : `${TITLE[k]} — ${k === 'prof' ? '폭 평균' : '최저 창·길이 평균'} 곡선(원자료 %, 고른 점이 있으면 그 곡선도)`}">${k === 'map' ? '2D CSV' : '평균값 CSV'}</button><button type="button" data-big-one="${k}">⤢ 이 그림만</button></div><canvas class="m3-big-cv" data-big-cv="${k}"></canvas></div>`;
-    ov.innerHTML = `<div class="m3-big-hd" title="끌어서 옮기기"><b title="2D 클릭 = 그 점 기준 1D 곡선(주황)">광량 분포 — 2D · 1D</b><span class="m3-mon-sum" data-big-sum></span><span class="m3-big-sp"></span><label class="m3-big-q">화질 <select data-big-q aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label><button type="button" data-pin-txt>선택 선 CSV</button><button type="button" data-big-min></button><button type="button" data-big-close>닫기 (Esc)</button></div>
-      <div class="m3-big-grid">${cell('map')}<div class="m3-big-row">${cell('prof')}${cell('wprof')}</div></div>`;
+    ov.innerHTML = `<div class="m3-big-hd" title="끌어서 옮기기"><b title="진행 현황 · 2D · 1D — 2D 클릭 = 그 점 기준 1D 곡선(주황)">광시뮬레이션</b><span class="m3-mon-sum" data-big-sum></span><span class="m3-big-sp"></span><label class="m3-big-q">화질 <select data-big-q aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label><button type="button" data-pin-txt>선택 선 CSV</button><button type="button" data-big-min></button><button type="button" data-big-close title="Esc">✕ 닫기</button></div>
+      <div class="m3-big-grid"><div class="m3-big-prog" data-big-prog></div>${cell('map')}<div class="m3-big-row">${cell('prof')}${cell('wprof')}</div></div>`;
     (el.closest('#mech3d-wrap') ?? document.body).appendChild(ov);   // 설계 화면에 붙임(화면을 바꾸면 함께 숨음)
     const cvs = Object.fromEntries(KINDS.map((k) => [k, ov.querySelector(`[data-big-cv="${k}"]`)]));
     const place = () => {
@@ -538,7 +540,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     mountSplit([C('map'), ov.querySelector('.m3-big-row')], { key: 'uds.m3.bigV', dir: 'col', min: 120, onChange: () => paintBig() });
     mountSplit([C('prof'), C('wprof')], { key: 'uds.m3.bigH', dir: 'row', min: 160, onChange: () => paintBig() });
     if (typeof ResizeObserver !== 'undefined') { big.ro = new ResizeObserver(() => paintBig()); big.ro.observe(ov); }
-    setMin(false); raiseWin(ov); setFocus(null); syncBig();
+    setMin(false); raiseWin(ov); setFocus(null); syncBig(); onBig?.(ov.querySelector('[data-big-prog]'));
   }
   // 큰 창 머리: 화질 = 지금 값, [선택 선 CSV] = 점을 골랐을 때만
   const syncBig = () => {
@@ -546,7 +548,8 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     const s = big.el.querySelector('[data-big-q]'), b = big.el.querySelector('[data-pin-txt]');
     if (document.activeElement !== s) s.value = last?.observe?.quality ?? 'low';
     const su = big.el.querySelector('[data-big-sum]'), st0 = last?.snap?.stats, O = last?.observe, u = (t, v, g) => `<b class="${Number.isFinite(v) && Number.isFinite(g) ? (v + 1e-9 >= g ? 'ok' : 'bad') : ''}">${t} ${Number.isFinite(v) ? v.toFixed(2) : '–'}</b>`;
-    if (su) su.innerHTML = !st0 || st0.empty ? '' : st0.relNoise > 0.05 ? '<span>계산 중</span>' : `${u('길이', st0.Ulen, O?.targetLen)} ${u('폭', st0.Uwid, O?.targetWid)}`;   // 접었을 때 보이는 현재 결과(계산 초반 값은 노이즈가라 숨김)
+    const pr = last?.snap?.state === 'done' ? 100 : simPct(st0?.relNoise, last?.snap?.targetNoise ?? 0.01);
+    if (su) su.innerHTML = `<b>진행 ${pr.toFixed(0)}%</b> ${!st0 || st0.empty || st0.relNoise > 0.05 ? '' : `${u('길이', st0.Ulen, O?.targetLen)} ${u('폭', st0.Uwid, O?.targetWid)}`}`;   // 접었을 때 보이는 현재 결과(계산 초반 값은 노이즈가라 숨김)
     b.disabled = !pin; b.title = pin ? '고른 점을 지나는 길이·폭 방향 원자료(평활 없음, 2D 최대 대비 %)' : '2D 에서 점을 클릭하면 저장할 수 있음';
   };
   // onclick 대입(addEventListener 아님) — 패널을 다시 만들면(새 도면·프로젝트) 앞 패널의 처리를 대체. 쌓이면 큰 창이 2개 열리고 아래 창은 이전 계산 데이터였음
@@ -628,5 +631,5 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     new ResizeObserver(() => { const c = q('map'), w = c.clientWidth ? `${c.clientWidth}x${c.clientHeight}` : 0; if (w && w !== w0) { w0 = w; if (last) update(last); } }).observe(el);   // 폭·높이(아래 칸 높이 조절) 바뀌면 다시 그림
   }
   clear();
-  return { update, closeBig };
+  return { update, closeBig, toggleBig: () => (big ? closeBig() : openBig()) };
 }

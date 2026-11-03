@@ -84,7 +84,7 @@ export function openErrorLog() {
   const log = theLog(), d = document.createElement('div');
   d.className = 'err-dlg'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-label', '오류 기록');
   const L = log.list();
-  d.innerHTML = `<div class="err-dlg-in"><div class="err-dlg-hd"><b>오류 기록</b> <span>최근 ${L.length}건 · 새 것이 위</span><i></i><button type="button" data-e="copy"${L.length ? '' : ' disabled'}>내용 복사</button><button type="button" data-e="clear"${L.length ? '' : ' disabled'}>기록 지우기</button><button type="button" data-e="close">닫기</button></div>
+  d.innerHTML = `<div class="err-dlg-in"><div class="err-dlg-hd"><b>오류 기록</b> <span>최근 ${L.length}건 · 새 것이 위</span><i></i><button type="button" data-e="copy"${L.length ? '' : ' disabled'}>내용 복사</button><button type="button" data-e="clear"${L.length ? '' : ' disabled'}>기록 지우기</button><button type="button" data-e="close">✕ 닫기</button></div>
     <div class="err-dlg-list">${L.length ? L.map((e) => { const x = explainError(e.msg); return `<div class="err-item ${x.level}"><b>${esc(x.title)}${e.n > 1 ? ` <span>${e.n}번</span>` : ''}</b> <span>${esc(stamp(e.t))}</span><div>${esc(x.cause)} — ${esc(x.todo)}</div><pre>${esc(entryText(e))}</pre></div>`; }).join('') : '<p>기록된 오류가 없습니다.</p>'}</div></div>`;
   d.addEventListener('click', async (ev) => {
     const k = ev.target.closest?.('[data-e]')?.dataset.e;

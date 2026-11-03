@@ -15,6 +15,7 @@ import { loadClear, saveClear, clearExportJson, clearImport, parseMaterialFile }
 import { setPartMaterial, setPartMaterialParam, CLEAR_BASE, applyClearEntry, clearEntryFromForm, editClearEntry, syncClearParts } from '../../engine/mech3d/materials.js';
 import { lineFromData, lightData, obsDirection } from '../../engine/mech3d/line.js';
 import { tallyGeometry, tallyStats, autoCells } from '../../engine/mech3d/tally.js';
+import { isUntraced } from '../../engine/mech3d/scene3d.js';
 import { bounds } from '../../engine/mech3d/mesh.js';
 import { runGeomChecks, checkInterference, boxTravel, checkLeak } from '../../engine/mech3d/checks.js';
 import { createStore, PHYSICS, GEOM_CHECK, PERSIST_TAGS } from './store.js';
@@ -25,7 +26,7 @@ import { buildObsOverlay, cellColors, extractFaces } from './colormap.js';
 import { mountCommandBar } from './command-bar.js';
 import { renderFeatureTree, toggleVisibility, makeGroup, ungroup, groupMembers, rangeSelect, removeFromGroups, viewCtxItems, showCtxMenu, toggleLed, ledFoldDefault, untraceItem } from './feature-tree.js';
 import { mountSplitter, mountDockSplitter, mountFacSplitter } from './splitter.js';
-import { createOptDash, createSimDash } from './opt-dash.js';
+import { createOptDash, createSimDash, simPct } from './opt-dash.js';
 import { geomQuery, geomLimit, geomClash } from './geom-client.js';
 import { renderPropertyPanel } from './property-panel.js';
 import { meshInfo, clearDbHtml, clearAddFormHtml, reflAddFormHtml, wireMaterialDb, dbFormState } from '../mech3d-panel.js';
@@ -199,7 +200,7 @@ export async function mount(ctx) {
   }
   const a = A = { ctx, store, pool, view: null, meshShown: null, lineKey: '', Gc: null, obsShown: null, checks: {}, markKey: '', timing: { start: 0, first: null, noise5: null } };
   a.prog = createProgressive({ ports: pool.ports(), onUpdate: onCalc, opts: { targetNoise: ctx.mspec.observe.targetNoise ?? 0.01 } });
-  a.results = createResultsPanel($('#m3-res'), { onLeak: () => A.store.update('session', (_, s) => { s.focusCheck = s.focusCheck === 'leak' ? null : 'leak'; }), fileName: () => String(A?.store?.mspec?.name ?? 'uds').replace(/\.(stp|step)$/i, ''), onQuality: (v) => A.store.update('observe', (m) => { m.observe.quality = v; }) });
+  a.results = createResultsPanel($('#m3-res'), { onLeak: () => A.store.update('session', (_, s) => { s.focusCheck = s.focusCheck === 'leak' ? null : 'leak'; }), onBig: (node) => A?.simDash?.attach(node), fileName: () => String(A?.store?.mspec?.name ?? 'uds').replace(/\.(stp|step)$/i, ''), onQuality: (v) => A.store.update('observe', (m) => { m.observe.quality = v; }) });
   a.optDash = createOptDash($('#m3-optdash'), { config: (k) => (A?.tileState ? tileConfigHtml(k, A.tileState) : { on: false, html: '' }), onSel: (k, v) => adSel(k, v), onUnlock: (k) => adUnlock(k), board: $('#m3-factor'), now: () => (A ? factorNow() : {}) }); a.simDash = createSimDash($('#m3-simdash'), { onCtl: () => cmdHandlers().onToggleCalc() });
   // 오른쪽 맨 위 광분포 시뮬레이션 ↕ 아래 광량 분포: 경계선 끌어 높이 조절(2026-10-30, 보는 사람별)
   mountSplit([$('#m3-simdash'), $('#m3-res')], { key: 'uds.m3.simSplit', dir: 'col', min: 80, init: [1, 3], onChange: () => window.dispatchEvent(new Event('resize')) });   // 아래 칸 = 기구 최적화 · 오른쪽 맨 위 = 광분포 시뮬레이션(항상 보임, 계산 제어 단추)
@@ -364,7 +365,8 @@ function makeJob() { return A ? jobFor(A.store.mspec, getMech3d().parts) : null;
 // 기구 최적화 중이면 미룸 — 점진 계산이 공유 Worker 에 장면을 보내면 실행이 '장면이 바뀜' 으로 실패. 끝나면 adRun 이 다시 부름
 function restartCalc() {
   if (A.ad?.running) { A.ad.deferred = true; return; }
-  A.timing = { start: 0, first: null, noise5: null }; A.prog.restart(makeJob);
+  if (A.adSeedSealed) { A.adSeed = null; A.adSeedSealed = false; }   // 적용 뒤에 또 바뀜 = 그 판정 값은 이제 맞지 않음
+  A.timing = { start: 0, first: null, noise5: null }; A.prog.restart(makeJob, () => { const s = A.adSeed; A.adSeed = null; A.adSeedSealed = false; return s; });
 }
 function guidance(snap) {
   const M = A.store.mspec, S = A.store.session;
@@ -386,7 +388,7 @@ function onCalc(snap) {
   if (T.start && snap.stats?.relNoise != null && snap.stats.relNoise <= 0.05 && T.noise5 == null) T.noise5 = (now - T.start) / 1000;
   updateLeakCheck(snap);
   A.results.update({ snap, observe: M.observe, message: guidance(snap), leds: ledSW(M, S.line), ledsOrig: (() => { const c = ledChangeNow(M, S.line); return c?.changed ? c.orig : []; })(), leak: leakText(A.checks.leak, M.parts.map((p) => p.name)) });
-  A.simDash?.sample(snap, snap.targetNoise ?? M.observe.targetNoise ?? 0.01, M.observe, M.parts.map((p) => p.name), M.parts.length, !!adState().running);
+  A.simDash?.sample(snap, snap.targetNoise ?? M.observe.targetNoise ?? 0.01, M.observe, M.parts.map((p) => p.name), M.parts.length, !!adState().running, M.parts.flatMap((p, i) => (isUntraced(p) ? [i] : [])));
   drawLightPaths();
   adDetectPath();
   monitorSummary();
@@ -621,11 +623,11 @@ function renderAuto() {
 function monitorSummary() {
   if (!A || !monitor) return;
   const st = A.ad, M = A.store.mspec, cell = (t, v, g) => `<b class="${Number.isFinite(v) && Number.isFinite(g) ? (v + 1e-9 >= g ? 'ok' : 'bad') : ''}">${t} ${Number.isFinite(v) ? v.toFixed(2) : '–'}</b>`;
-  if (st?.running) { monitor.setSummary(`<b>실행 중 ${Math.round((st.running.frac ?? 0) * 100)}%</b>`); return; }
-  const b = st?.result?.best, s = A.prog?.snapshot()?.stats;
-  if (!b && (!s || s.empty || s.relNoise > 0.05)) { monitor.setSummary('<span>계산 중</span>'); return; }   // 초반 값은 노이즈
+  if (st?.running) { monitor.setSummary(`<b>진행 ${Math.round((st.running.frac ?? 0) * 100)}%</b>`); return; }
+  const b = st?.result?.best, sn = A.prog?.snapshot(), s = sn?.stats, calc = ['running', 'pending', 'starting'].includes(sn?.state) ? `<b>계산 ${Math.round(simPct(s?.relNoise, sn.targetNoise))}%</b> ` : '';
+  if (!b && (!s || s.empty || s.relNoise > 0.05)) { monitor.setSummary(calc || '<span>계산 중</span>'); return; }   // 초반 값은 노이즈
   const U = b ? [b.Ulen, b.Uwid] : [s.Ulen, s.Uwid];
-  monitor.setSummary(`${b ? '<span>후보</span> ' : ''}${cell('길이', U[0], M.observe.targetLen)} ${cell('폭', U[1], M.observe.targetWid)}`);
+  monitor.setSummary(`${b ? '<b>진행 100%</b> <span>후보</span> ' : calc}${cell('길이', U[0], M.observe.targetLen)} ${cell('폭', U[1], M.observe.targetWid)}`);
 }
 function adStop() { const st = adState(); if (!st.running || !st.runner) return; st.runner.cancel(); setStatus('기구 최적화 중지됨'); A.optDash?.stop(); }
 // 실행 문맥 = 시작 때 스냅샷 { M0: mspec 복사, line, G, obs, rt: 기구 런타임, mp: ① 대상 부품 } — 평가·미리보기·적용이 모두 이것 기준
@@ -1068,10 +1070,10 @@ async function adRun(opt = {}) {
     async verify(d, { noise = null, from = null, screen = false, maxMs = 600000 } = {}) {   // screen = 화면 화질 격자로(칸이 작을수록 칸마다 광자가 적음 → 칸 비만큼 광자를 더). noise = 그 노이즈까지(잰 값에서 필요한 광자 수를 노이즈, 10 분 한도). 정밀 재판정(현재안·최종안): 250만 광자(최소 150만, 20초까지) — 광자가 적으면 균일도(최저÷최고)가 노이즈 때문에 낮게 나옴(6초 제한 때 0.69 vs 실제 0.78)
       const { M: Md, parts } = designScene(d, ctx);
       const scr = screen && !lowQ, gridK = scr && !from?.screen ? Math.max(G.ds / Gs.ds, G.cell / Gs.cell) : 1, capN = 4e8 * (scr ? { mid: 2, high: 4 }[obsS.quality] ?? 1 : 1);
-      const eff0 = currentVerified?.eff ?? snap0.photometry?.eff, r = await R.trace(adJob(Md, parts, scr ? ctxS : ctx), noise ? { N: Math.ceil(Math.min(capN, 1.1 * gridK * (from?.photons ?? 5e7) * ((from?.stats?.relNoise ?? 0.01) / noise) ** 2)), maxMs, minN: 1.5e6, chunkN: 2e5, batches: 10 } : { N: Math.ceil(Math.min(1.5e7, 5e6 * Math.max(1, 0.5 / (eff0 > 0 ? eff0 : 0.5)))), maxMs: d.shape?.kF ? 60000 : 45000, minN: 1.5e6, batches: 10 });   // 효율이 낮으면 관측면에 닿는 빛이 적어 광자를 더. 실측: 20 초(노이즈 2%) 판정 0.73~0.76 vs 수렴값 0.78~0.79 — 노이즈가 칸 최소·최대를 벌려 낮게 나오므로 시간을 늘림(2026-11-03). 입광면 보정 메쉬는 추적이 느려 같은 시간이면 노이즈가 커져 현재안과 공정하게 비교가 안 됨 → 시간 더
+      const eff0 = currentVerified?.eff ?? snap0.photometry?.eff, r = await R.trace(adJob(Md, parts, scr ? ctxS : ctx), noise ? { N: Math.ceil(Math.min(capN, 1.1 * gridK * (from?.photons ?? 5e7) * ((from?.stats?.relNoise ?? 0.01) / noise) ** 2)), maxMs, minN: 1.5e6, chunkN: 2e5, batches: 10, keepRaw: true } : { N: Math.ceil(Math.min(1.5e7, 5e6 * Math.max(1, 0.5 / (eff0 > 0 ? eff0 : 0.5)))), maxMs: d.shape?.kF ? 60000 : 45000, minN: 1.5e6, batches: 10, keepRaw: true });   // 효율이 낮으면 관측면에 닿는 빛이 적어 광자를 더. 실측: 20 초(노이즈 2%) 판정 0.73~0.76 vs 수렴값 0.78~0.79 — 노이즈가 칸 최소·최대를 벌려 낮게 나오므로 시간을 늘림(2026-11-03). 입광면 보정 메쉬는 추적이 느려 같은 시간이면 노이즈가 커져 현재안과 공정하게 비교가 안 됨 → 시간 더
       const stt = scr ? tallyStats(Gs, r.batches, obsS) : tallyStats(G, r.batches, obs);
       A.optDash?.evals('final', [{ label: verifyLabel(d), Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty }]);
-      return { stats: stt, eff: adEff(r), photons: r.photons, screen: scr };
+      return { stats: stt, eff: adEff(r), photons: r.photons, screen: scr, raw: scr || lowQ ? r.kept : null };
     },
     trace: (stage, list) => A.optDash?.evals(stage, list),   // 엔진이 직접 알리는 결과(② 배치 Solver 최선안·대안)
   };
@@ -1100,7 +1102,7 @@ async function adRun(opt = {}) {
     let nStep = null; if (M0.light.kind === 'step') { try { nStep = L.currentEmitters(M0, line).length; } catch { nStep = 0; } }
     const smI = sp >= 0 && M0.parts[sp]?.shapeMod ? sp : M0.parts.findIndex((p) => p.shapeMod), sm = smI >= 0 ? M0.parts[smI].shapeMod : null;   // 비교표 '현재' 열 — 이미 적용된 형상(표시만)
     st.resultOpen = false;   // 끝나면 결과 카드(요약)만 — 자세한 결과 창은 [자세히]
-    st.result = { shapeLimited: !!res.steps?.find((x) => x.stage === 'shapeField')?.limited, milkyRows: stages.milky ? milkyTable(res.steps ?? []) : null, targets: { len: obs.targetLen, wid: obs.targetWid }, design: res.best, feasible: res.feasible, reason: res.reason, hint: res.hint ?? null, shape: res.best.shape ?? null, screen: res.steps?.find((x) => x.stage === 'shapeScreen')?.gains ?? null, stepLeds: nStep, unchanged: !!res.unchanged, ctx, stages,
+    st.result = { seed: res.verified?.raw ?? null, shapeLimited: !!res.steps?.find((x) => x.stage === 'shapeField')?.limited, milkyRows: stages.milky ? milkyTable(res.steps ?? []) : null, targets: { len: obs.targetLen, wid: obs.targetWid }, design: res.best, feasible: res.feasible, reason: res.reason, hint: res.hint ?? null, shape: res.best.shape ?? null, screen: res.steps?.find((x) => x.stage === 'shapeScreen')?.gains ?? null, stepLeds: nStep, unchanged: !!res.unchanged, ctx, stages,
       added: opt.added ?? [], base: opt.base ?? null, clash: clashN,
       finish: stages.housing ? (() => { const c = { ...M0.parts[hp].finish, ...(M0.parts[hp].coating ? { coating: M0.parts[hp].coating } : {}) }; return { cur: c, best: res.best.finish ?? c }; })() : null, height: stages.height && hInfo ? { dz: res.best.dz ?? 0, gap: hInfo.gap } : null,
       cur: { ...cur, shape: sm ? { dt: sm.dt, h: sm.h, R: sm.R, e: sm.e ?? 0, c: sm.c ?? 0, kF: sm.kF ?? null } : null, Ulen: C?.stats?.Ulen, Uwid: C?.stats?.Uwid, eff: C?.eff ?? NaN, profile: C?.stats?.profile ?? null },
@@ -1112,7 +1114,7 @@ async function adRun(opt = {}) {
   // restart 는 일시정지 상태를 이어가므로(wantPaused) 사용자가 멈춘 게 아니면 resume(대기 중 resume = 일시정지 요청 해제)
   if (st.deferred) { st.deferred = false; restartCalc(); if (st.userPaused) A.prog.pause(); else A.prog.resume(); }
   A.meshShown = null; renderView(); renderAuto();
-  if (res && !res.cancelled && !R.stopped && st.result) A.optDash?.finish(!!res.feasible, res.feasible ? '' : (res.reason ?? '').slice(0, 80), st.result?.best?.eff);
+  if (res && !res.cancelled && !R.stopped && st.result) A.optDash?.finish(!!res.feasible, res.feasible ? '' : res.reason ?? '', st.result?.best?.eff, res.verified?.stats ?? null);
   return res && !res.cancelled && !R.stopped && st.result ? { feasible: !!res.feasible, stages } : null;
 }
 // 비교 중 3D 미리보기 — 결과마다 한 번 만들어 둠(meshKey 비교용 객체)
@@ -1138,10 +1140,11 @@ function adApply() {
   const finCh = fp != null && !(pf?.kind === d.finish.kind && (pf?.R ?? null) === (d.finish.R ?? null) && pc === (d.finish.coating ?? null));   // ④ 면 처리(특수 처리 표시 포함)가 다르면
   const dzCh = Math.abs(d.dz ?? 0) > 1e-9 && (M.light.kind === 'step' ? !!M.light.step : M.light.manual?.pcb?.kind === 'depth');   // ⑤ 이동 있음
   A.hist?.hold();   // 적용 한 번 = 되돌리기 한 칸(형상 적용은 오래 걸릴 수 있음)
+  A.adSeed = mod ? null : r.seed ?? null; A.adSeedSealed = false;   // 화면 = 최종 판정 값 그대로(다시 재면 노이즈로 판정이 뒤집힘). 형상 변경은 관측 라인을 다시 잡아 다시 계산
   const undo = { milky: milkyCh ? [mp, adClone(M.parts[mp].material)] : null, manual: lightCh ? adClone(Lm) : null, stepVirt: stepCh ? { v: adClone(sv) } : null, shape: mod ? [d.shape.part, adClone(M.parts[d.shape.part].shapeMod ?? null)] : null,
     finish: finCh ? [fp, adClone(pf), pc] : null, dz: dzCh ? (M.light.kind === 'step' ? { step: adClone({ offset: M.light.step.offset, emitters: M.light.step.emitters }) } : { depth: M.light.manual.pcb.depth }) : null };
   const tm = new Date();
-  st.applied = { ...r, catalog: reflCat(), at: `${tm.getHours()}:${String(tm.getMinutes()).padStart(2, '0')} 적용` };   // 적용 뒤 요약(이전 → 적용 후) — renderAutoPanel 이 compareHtml 과 같은 인자로 그림
+  st.applied = { ...r, seed: null, catalog: reflCat(), at: `${tm.getHours()}:${String(tm.getMinutes()).padStart(2, '0')} 적용` };   // 적용 뒤 요약(이전 → 적용 후) — renderAutoPanel 이 compareHtml 과 같은 인자로 그림
   st.result = null; A.meshShown = null;
   // 이번 실행에서 돌린 항목 = 🔒 고정(체크 해제) — 다음 실행은 나머지만. [되돌리기]·[다시 최적화] 로 풀림
   const ran = r.stages ?? {}, lockK = [ran.leds || ran.height ? 'position' : null, ran.housing ? 'housing' : null, ran.shape ? 'shape' : null, ran.milky ? 'milky' : null].filter(Boolean);
@@ -1156,7 +1159,8 @@ function adApply() {
   if (finCh) A.store.update('material', (m) => { applyFinish(m, d.finish); });
   if (dzCh) A.store.update('light', (m) => { applyDz(m, d.dz, r.ctx.line.frame.d); });   // STEP: 발광점도 같은 이동(재인식과 같음)
   A.hist?.release();
-  setStatus(undo.milky || undo.manual || undo.stepVirt || undo.shape || undo.finish || undo.dz ? '적용함 — 다시 계산 중' : '적용할 변경이 없음(지금 설계와 같음)');
+  A.adSeedSealed = true;
+  setStatus(undo.milky || undo.manual || undo.stepVirt || undo.shape || undo.finish || undo.dz ? (A.adSeed ? '적용함 — 최종 판정 값을 화면에 표시' : '적용함 — 다시 계산 중') : '적용할 변경이 없음(지금 설계와 같음)');
   renderAuto();
 }
 // 이 안에서 이어서(2026-10-30) — 결과를 적용한 뒤, 체크했지만 이번 실행에서 돌리지 않은 항목만 그 위에서 최적화(예: ③ 형상 결과 → ② 위치·① Milky).
@@ -1187,7 +1191,7 @@ function adApplyMilky(v) {
 function adApplyAlt() {
   const r = adState().result, a = r?.alt;
   if (!a) return;
-  Object.assign(r, { design: a.design, unchanged: false, best: { ...r.best, ...a.design, Ulen: a.Ulen, Uwid: a.Uwid, eff: a.eff } });
+  Object.assign(r, { seed: null, design: a.design, unchanged: false, best: { ...r.best, ...a.design, Ulen: a.Ulen, Uwid: a.Uwid, eff: a.eff } });
   adApply();
 }
 // 되돌리기 = 적용한 항목을 저장한 복사본으로 통째로 바꿈
@@ -1557,7 +1561,7 @@ export function openMaterialDb(tab = 'milky') {
   const dlg = document.createElement('div');
   dlg.className = 'zoom-modal m3-fitdlg m3-matdb';
   dlg.innerHTML = `<div class="zoom-modal-inner" role="dialog" aria-modal="true" aria-label="소재 DB 관리">
-    <div class="zoom-modal-hd"><span>소재 DB 관리 <span class="mut">관리자 · 여기서 넣은 소재는 부품의 소재 목록에 이름으로 나타남</span></span><button data-md-close>닫기</button></div>
+    <div class="zoom-modal-hd"><span>소재 DB 관리 <span class="mut">관리자 · 여기서 넣은 소재는 부품의 소재 목록에 이름으로 나타남</span></span><button data-md-close>✕ 닫기</button></div>
     <div class="m3-tabs" role="tablist">${MDB_TABS.map(([k, t]) => `<button type="button" role="tab" data-md-tab="${k}">${t}</button>`).join('')}</div>
     <div class="m3-fitdlg-body" data-md-body></div></div>`;
   document.body.appendChild(dlg);
@@ -1649,7 +1653,7 @@ function cmdHandlers() {
     },
     onAuto: () => adSetOpen(!adState().open),
     // 흐름 4·5단계 단추 — 해당 칸을 보여 주고 잠깐 강조(모니터가 열려 있으면 그 안에서)
-    onSim: () => flash($('#m3-simdash')),
+    onSim: () => A.results.toggleBig(),
     onOpt: () => monitor?.toggle(),   // ⑤ 기구 최적화 창 열고 닫기(기본 화면에는 최적화 칸 없음)
     adFlow: () => ({ running: !!A?.ad?.running, result: !!A?.ad?.result }),
     onExit: () => A.ctx.onExit(),

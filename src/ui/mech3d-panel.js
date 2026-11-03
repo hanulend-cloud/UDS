@@ -181,19 +181,18 @@ function partEditor(p, sel, dbList) {
   const face = sel.face, cat = sel.catalog ?? DEFAULT_FINISH_CATALOG, lim = finishLimit(p, cat), opaque = p.material.kind === 'opaque', tab = PART_TAB;
   // 면 처리(상세): 불투명 + 반사 소재 지정 → 종류는 소재가 정함 · 미지정 → 종류만 · 투과 부품 → 종류·반사율
   const partFin = !opaque ? finishRow(p.finish, 'part', false, lim)
-    : p.reflMaterial ? '<div class="mut m3-note">면 처리 종류는 반사 소재가 정함(기본 탭)</div>' : `<div class="m3-row"><span class="mut">부품 기본</span><select data-m3-finish="part" aria-label="부품 기본 면 처리 종류">${opts(FINISH_KINDS, p.finish?.kind)}</select></div>`;
+    : p.reflMaterial ? '<div class="mut m3-note">표면 종류는 반사 소재가 정함</div>' : `<div class="m3-row"><span class="mut">부품 기본</span><select data-m3-finish="part" aria-label="부품 기본 면 처리 종류">${opts(FINISH_KINDS, p.finish?.kind)}</select></div>`;
   const faceRow = face != null ? `<div class="m3-row"><span class="mut">선택한 면 #${face}${p.faceFinish[face] ? ' · 덮어씀' : ''}</span></div>${finishRow(p.faceFinish[face] ?? null, 'face', true, lim)}` : '';
   const nOver = Object.keys(p.faceFinish ?? {}).length;
-  const dSum = [nOver ? `면 ${nOver}개 별도` : '', p.shapeMod ? '형상 변경됨' : '', p.coating ? '특수 처리' : ''].filter(Boolean).join(' · ');
+  const dSum = p.shapeMod ? '형상 변경됨' : '';
   const tabs = `<div class="m3-tabs" role="tablist" aria-label="부품 속성">
     <button type="button" role="tab" data-m3-tab="basic" aria-selected="${tab === 'basic'}">기본</button>
     <button type="button" role="tab" data-m3-tab="detail" aria-selected="${tab === 'detail'}">상세${dSum ? ` <span class="m3-tab-s">${esc(dSum)}</span>` : ''}</button></div>`;
   const warn = `${overlapWarnHtml(sel.clearance)}${sel.xfMsg ? `<div class="m3-warn" role="status">${esc(sel.xfMsg)}</div>` : ''}`;
   const body = tab === 'basic'
     ? `${untraceHtml(p)}<div class="m3-card">${basicMaterialHtml(p, dbList, cat, sel)}</div>
-      <div class="m3-card"><div class="m3-sub">위치 · 크기 <span class="mut">mm</span></div>${xformEditor(p, sel.xfInfo, false, true)}${ledDistHtml(sel.clearance)}</div>`
-    : `${secHtml('finish', '면 처리 (면별)', face != null ? `면 #${face} 선택` : nOver ? `면 ${nOver}개 덮어씀` : '', `${partFin}${faceRow}<div class="mut m3-note">3D 뷰에서 면을 클릭하면 그 면만 다르게 지정할 수 있습니다</div>`)}
-      ${secHtml('xf', '크기·위치 상세 (가능 범위 · 비율 고정)', esc(xfSummaryText(p, sel.xfInfo)), xformEditor(p, sel.xfInfo, sel.lock))}
+      <div class="m3-card"><div class="m3-sub">표면 상태 <span class="mut">${face != null ? `면 #${face} 선택` : nOver ? `면 ${nOver}개 따로 지정` : ''}</span></div>${partFin}${faceRow}<div class="mut m3-note">3D 뷰에서 면을 클릭하면 그 면만 다르게 지정할 수 있습니다</div></div>`
+    : `<div class="m3-card"><div class="m3-sub">위치 · 크기 <span class="mut">mm · ${esc(xfSummaryText(p, sel.xfInfo))}</span></div>${xformEditor(p, sel.xfInfo, sel.lock)}${ledDistHtml(sel.clearance)}</div>
       ${secHtml('contact', '접촉면 (이 부품)', '', contactsForPartHtml(sel.contacts ?? [], sel.part, sel.names ?? []))}`;
   return `${warn}${tabs}<div class="m3-edit" role="tabpanel">${body}</div>`;
 }
@@ -281,7 +280,7 @@ export function renderPartProps(el, m, sel0, dbList, h) {
   const p = m.parts[sel.part];
   if (!p) { el.innerHTML = '<div class="mut">부품을 찾을 수 없음</div>'; return; }
   const fk = sel.face != null ? `${sel.part}:${sel.face}` : null;
-  if (fk && fk !== SEC_FACE) { SEC_OPEN.set('finish', true); PART_TAB = 'detail'; }   // 새 면 선택 → 상세 탭 · 면 처리 구역 자동 열기
+  if (fk && fk !== SEC_FACE) PART_TAB = 'basic';   // 새 면 선택 → 표면 상태가 있는 기본 탭
   SEC_FACE = fk;
   el.innerHTML = `<div class="m3-h m3-title${p.untrace ? ' m3-untr' : ''}" title="${esc(partHeaderText(p, sel.meshInfo ?? null))}">${esc(partTitleText(p, sel.meshInfo ?? null))}</div>${partEditor(p, sel, dbList)}`;
   const i = sel.part;

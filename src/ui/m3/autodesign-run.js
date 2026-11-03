@@ -32,7 +32,7 @@ export function createAdRunner({ ports, now = () => globalThis.performance?.now?
   // chunkN 기본 = Worker 마다 청크 2개쯤(후보당 광자가 적어도 모든 Worker 가 일하게)
   // crn(같은 난수 비교, 형상 후보용) = 시드 기준 — 청크 i 의 시드 crn+i · 크기 chunkN · 포트(쓰는 포트 i % 수) · 배치 i % batches 를 고정해
   // 후보마다 같은 광자 난수로 추적(후보 차이만 남음). 시간 제한·적응 청크 없음(N 전부)
-  async function trace(job, { N: N0, maxMs = Infinity, minN = 0, chunkN = Math.max(2000, Math.ceil(N0 / (2 * ports.length))), chunkMs = Math.min(500, maxMs / 5), batches = 8, rw = null, crn = null }) {
+  async function trace(job, { N: N0, maxMs = Infinity, minN = 0, chunkN = Math.max(2000, Math.ceil(N0 / (2 * ports.length))), chunkMs = Math.min(500, maxMs / 5), batches = 8, rw = null, crn = null, keepRaw = false }) {
     const N = Math.ceil(N0);   // 광자 수는 정수(소수면 GPU 가 'offset is out of bounds' 로 꺼짐)
     await prepare(job);
     if (crn != null) return traceCrn(job, { N, chunkN, batches, rw, crn });
@@ -40,6 +40,8 @@ export function createAdRunner({ ports, now = () => globalThis.performance?.now?
     const B = Array.from({ length: batches }, () => new Float64Array(nCell)), RB = rw ? Array.from({ length: batches }, () => new Float64Array(rw.milkies.length * nCell)) : null;
     const ledger = { emitted: 0, escaped: 0, absSurf: 0, absVol: 0, lost: 0, rrLoss: 0, rrGain: 0 }, sf = rw ? new Float64Array(rw.milkies.length) : null, sf2 = rw ? new Float64Array(rw.milkies.length) : null;
     const bIss = new Float64Array(batches), bDone = new Float64Array(batches);
+    // keepRaw = 점진 계산에 넘겨줄 원자료(광자 수를 곱한 합 · 면 전체 지도·칸 수·광경로 포함) — 화면이 최종 판정 값을 그대로 보여 주게
+    const K = keepRaw ? { batches: Array.from({ length: batches }, () => ({ acc: new Float64Array(nCell), accAll: new Float64Array(nCell), cnt: new Float64Array(nCell), n: 0, photons: 0 })), ledger: {}, leak: {}, paths: {}, nCell, photons: 0 } : null;
     let n = 0, issued = 0, k = 0;
     const t0 = now(), more = () => issued < N && !(now() - t0 >= maxMs && issued >= minN && k >= batches);
     // 시간 제한이면 첫 청크 = minN(없으면 N/10) 을 Worker 마다 2개로 — 그 뒤 잰 속도로 조절
@@ -58,13 +60,21 @@ export function createAdRunner({ ports, now = () => globalThis.performance?.now?
         const f = m / chunkN;   // 청크 결과 = 광속 1회분(광자 수 무관) → 광자 수 가중으로 더함(크기가 다른 청크·GPU 가 섞여도 배치 평균이 바름). 같은 크기면 f = 1
         for (let i = 0; i < nCell; i++) B[b][i] += r.acc[i] * f;
         for (const key in ledger) ledger[key] += r.ledger[key] * f;
+        if (K) {
+          const q = K.batches[b];
+          for (let i = 0; i < nCell; i++) { q.acc[i] += r.acc[i] * m; q.cnt[i] += r.cnt?.[i] ?? 0; if (r.accAll) q.accAll[i] += r.accAll[i] * m; }
+          q.n++; q.photons += m; K.photons += m;
+          for (const key in r.ledger) K.ledger[key] = (K.ledger[key] ?? 0) + r.ledger[key] * m;
+          for (const key in r.leak ?? {}) K.leak[key] = (K.leak[key] ?? 0) + r.leak[key] * m;
+          for (const key in r.paths ?? {}) K.paths[key] = (K.paths[key] ?? 0) + r.paths[key] * m;
+        }
         if (rw) { for (let i = 0; i < RB[b].length; i++) RB[b][i] += r.rw.acc[i] * f; for (let j = 0; j < sf.length; j++) { sf[j] += r.rw.sf[j]; sf2[j] += r.rw.sf2[j]; } n += r.rw.n; }
       }
     })));
     // 배치 무게가 다르면(청크 수·크기 차) 평균 광자 수로 정규화 — 합은 그대로(효율 = Σ/방출), 빈 배치는 뺌
     const keep = [...bDone.keys()].filter((b) => bDone[b] > 0), ref = issued / keep.length;
     const norm = (A) => keep.map((b) => { if (bDone[b] !== ref) { const s = ref / bDone[b]; for (let i = 0; i < A[b].length; i++) A[b][i] *= s; } return A[b]; });
-    return { batches: norm(B), rwBatches: RB ? norm(RB) : null, ledger, ess: rw ? essRatio(sf, sf2, n) : null, photons: issued, ms: now() - t0 };
+    return { batches: norm(B), rwBatches: RB ? norm(RB) : null, ledger, ess: rw ? essRatio(sf, sf2, n) : null, photons: issued, ms: now() - t0, kept: K ? { ...K, batches: K.batches.filter((q) => q.photons > 0) } : null };
   }
   async function traceCrn(job, { N, chunkN, batches, rw, crn }) {
     const nCell = job.scene.G.ns * job.scene.G.nw, act = ports.filter((p) => !p.off?.()), P = act.length ? act : ports, nC = Math.ceil(N / chunkN);

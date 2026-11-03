@@ -24,7 +24,7 @@ export function flowState(calc, stats, M, ad = {}) {
   const pass = has && stats.Ulen >= O.targetLen && (stats.Uwid == null || stats.Uwid >= O.targetWid);
   const res = has ? `${pc(stats.Ulen, O.targetLen)} / ${pc(stats.Uwid, O.targetWid)}` : '';
   const running = st === 'running' || st === 'pending' || st === 'starting', done = st === 'done';
-  const sim = running ? { text: `계산 중 ${Number.isFinite(rn) && rn > 0 ? Math.round(Math.min(1, tn / rn) * 100) : 0}%${res ? ` · ${res}` : ''}`, cls: 'run', done: false }
+  const sim = running ? { text: `계산 중 ${Number.isFinite(rn) && rn > 0 ? Math.round(Math.min(1, (tn / rn) ** 2) * 100) : 0}%${res ? ` · ${res}` : ''}`, cls: 'run', done: false }
     : st === 'paused' ? { text: `일시정지${res ? ` · ${res}` : ''}`, cls: '', done: false }
     : done && has ? { text: `${res} ${pass ? '목표 통과' : '목표 미달'}`, cls: pass ? 'ok' : 'bad', done: true }
     : { text: '–', cls: '', done: false };
@@ -40,8 +40,8 @@ export function mountCommandBar(el, h) {
   el.innerHTML = `<button type="button" class="m3-step" data-c="led" aria-pressed="false"><i>1</i> LED 지정</button><span class="m3-arrow">›</span>
     <button type="button" class="m3-step" data-c="obs" aria-pressed="false"><i>2</i> 관측면 지정</button><span class="m3-arrow">›</span>
     <button type="button" class="m3-step" data-c="tgt" aria-pressed="false"><i>3</i> 목표 설정 <span class="mut" data-tgt></span></button><span class="m3-arrow">›</span>
-    <button type="button" class="m3-step m3-flow" data-c="sim" title="지금 설계의 빛 분포·균일도 계산(자동 실행) — 결과: 길이 균일도 / 폭 균일도"><i>4</i> 광분포 시뮬레이션 <span data-flow="sim"></span></button><span class="m3-arrow">›</span>
-    <button type="button" class="m3-step m3-flow" data-c="opt" title="목표 미달이면 Milky·LED 위치·형상 후보를 찾아 적용 — 적용하면 4 광분포 시뮬레이션이 다시 검증"><i>5</i> 기구 최적화 <span data-flow="opt"></span></button>`;
+    <button type="button" class="m3-step m3-flow" data-c="sim" title="누르면 광시뮬레이션 창(진행 현황 · 2D · 1D) — 지금 설계의 빛 분포·균일도를 자동 계산"><i>4</i> 광분포 시뮬레이션 <span data-flow="sim"></span></button><span class="m3-arrow">›</span>
+    <button type="button" class="m3-step m3-flow" data-c="opt" title="목표 미달이면 Milky·LED 위치·형상 후보를 찾아 최종 화질로 판정 — 적용하면 그 값이 4 광분포 시뮬레이션에 그대로 나옴"><i>5</i> 기구 최적화 <span data-flow="opt"></span></button>`;
   const b = (k) => el.querySelector(`[data-c="${k}"]`);
   b('led').onclick = () => h.onLed();
   b('obs').onclick = () => h.onObs();

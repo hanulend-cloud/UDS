@@ -264,25 +264,24 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   const sel = { part: 1, face: null, clearance: clr, xfInfo: { center0: [0, 0, 0], size0: [10, 10, 2], lim: null }, catalog: catalogOf(null), meshInfo: null };
   renderPartProps(el, P, sel, [], {});
   // 기본 탭(처음): 소재 종류 · 반사 소재 · 반사율(최대) · 위치·크기 숫자만 · 경고 한 줄 — 접는 구역·가능 범위·비율 고정 없음
-  ok(/data-m3-tab="basic" aria-selected="true"/.test(html) && /value="opaque:pc-white" selected/.test(html) && html.includes('확산 반사 85% (최대 90%)') && !html.includes('data-m3-finishr') && html.includes('data-m3-xf="c0"') && html.includes('data-m3-xf="z2"')
-    && !html.includes('data-m3-sec=') && !html.includes('data-m3-xflock') && !html.includes('data-m3-refladd') && !html.includes('data-m3-kind') && !html.includes('가장 가까운') && html.includes('LED까지 <b class="led">1.5 mm</b>'), '기본 탭: 소재 이름 고르기 · 물성 한 줄(읽기 전용) · 위치·크기 · LED 까지 거리 + 경고');
+  ok(/data-m3-tab="basic" aria-selected="true"/.test(html) && /value="opaque:pc-white" selected/.test(html) && html.includes('확산 반사 85% (최대 90%)') && !html.includes('data-m3-finishr') && !html.includes('data-m3-xf="c0"') && html.includes('표면 상태') && html.includes('표면 종류는 반사 소재가 정함')
+    && !html.includes('data-m3-sec=') && !html.includes('data-m3-xflock') && !html.includes('data-m3-refladd') && !html.includes('data-m3-kind') && !html.includes('가장 가까운') && !html.includes('LED까지'), '기본 탭(소재·표면 상태만): 소재 이름 고르기 · 물성 한 줄(읽기 전용) · 위치·크기 · LED 까지 거리 + 경고');
   renderPartProps(el, P, { ...sel, admin: true }, [], {});
   ok(html.includes('data-m3-finishr="part"') && html.includes('상한 90%') && html.includes('관리자'), '관리자 모드: 숫자 물성 칸(반사율·상한)');
   setPartTab('detail'); renderPartProps(el, P, sel, [], {});
-  ok(['xf', 'finish'].every((k) => html.includes(`data-m3-sec="${k}"`)) && !html.includes('data-m3-sec="gap"') && !/<details[^>]* open/.test(html) && html.includes('<summary>'), '구역: 크기·위치 · 면 처리 = 기본 닫힘 · 간격 상세 없음');
+  ok(html.includes('data-m3-xf="c0"') && html.includes('data-m3-xf="z2"') && html.includes('data-m3-xflock') && html.includes('LED까지 <b class="led">1.5 mm</b>') && !html.includes('data-m3-sec="xf"') && !html.includes('data-m3-sec="finish"') && html.includes('data-m3-sec="contact"') && !html.includes('표면 상태'), '상세 탭: 위치·크기 · 접촉면(표면 상태는 기본 탭)');
   ok(html.includes('>부품 2 · ') || html.includes(`>${P.parts[1].name} · `), '제목 = 이름 · 크기');
-  ok(!html.includes('data-m3-pick') && !html.includes('data-m3-refladd') && !html.includes('data-m3-sec="refldb"') && html.includes('면 처리 종류는 반사 소재가 정함') && !html.includes('data-m3-finish="part"'), '상세 탭: 소재 고르기·DB 구역 없음 · 종류 선택 숨김');
-  secs.xf.open = true; secs.xf.toggle();
+  ok(!html.includes('data-m3-pick') && !html.includes('data-m3-refladd') && !html.includes('data-m3-sec="refldb"') && !html.includes('data-m3-finish="part"'), '상세 탭: 소재 고르기·DB 구역 없음 · 종류 선택 숨김');
+  secs.contact.open = true; secs.contact.toggle();
   renderPartProps(el, P, sel, [], {});
-  ok(/data-m3-sec="xf" open/.test(html) && !/data-m3-sec="gap" open/.test(html) && sectionOpen('xf'), '열린 구역: 다시 그려도 열림 유지(1)');
-  renderPartProps(el, P, sel, [], {});
-  ok(/data-m3-sec="xf" open/.test(html), '열린 구역: 다시 그려도 열림 유지(2)');
-  secs.xf.open = false; secs.xf.toggle(); renderPartProps(el, P, sel, [], {});
-  ok(!/data-m3-sec="xf" open/.test(html), '닫으면 닫힘 유지');
+  ok(/data-m3-sec="contact" open/.test(html) && sectionOpen('contact'), '열린 구역: 다시 그려도 열림 유지');
+  secs.contact.open = false; secs.contact.toggle(); renderPartProps(el, P, sel, [], {});
+  ok(!/data-m3-sec="contact" open/.test(html), '닫으면 닫힘 유지');
   renderPartProps(el, P, { ...sel, face: 3 }, [], {});
-  ok(/data-m3-sec="finish" open/.test(html) && html.includes('선택한 면 #3') && html.includes('data-m3-finish="face"'), '면 선택 → 면 처리 구역 자동 열기');
+  ok(/data-m3-tab="basic" aria-selected="true"/.test(html) && html.includes('선택한 면 #3') && html.includes('data-m3-finish="face"'), '면 선택 → 기본 탭의 표면 상태');
   const P0 = { ...P, parts: [P.parts[0], { ...P.parts[1], reflMaterial: undefined }] }; renderPartProps(el, P0, sel, [], {});
-  ok(html.includes('data-m3-finish="part"'), '반사 소재 미지정 → 면 처리 구역에 종류 선택');
+  ok(html.includes('data-m3-finish="part"'), '반사 소재 미지정 → 표면 상태에 종류 선택');
+  setPartTab('detail');
   renderPartProps(el, P, { ...sel, part: 0 }, [], {});
   ok(!html.includes('data-m3-mat="dbId"') && !html.includes('data-m3-fitdlg') && !html.includes('data-m3-mat="milky"'), 'Milky 상세: 소재 고르기 없음(기본 탭으로)');
   setPartTab('basic'); renderPartProps(el, P, { ...sel, part: 0 }, [], {});
@@ -469,13 +468,24 @@ done();
   const t = beforeAfterHtml('milky', { milky: 2, Ulen: 0.58, Uwid: 0.64 }, { label: 'Milky 3.50', Ulen: 0.82, Uwid: 0.71 }, 0.8, 0.8, 7);
   const okT = t.includes('Milky 2.00') && t.includes('<td class="chg">Milky 3.50') && /0\.82 <b class="od-ok">✓/.test(t) && /0\.71 <b class="od-bad">✕/.test(t) && t.includes('후보 7개') && beforeAfterHtml('shape', {}, null).includes('후보 없음');
   console.log(okB && okT ? 'PASS 설계 인자 현황 체크(켜기·설정) · 최적화 타일 전후 사양표' : (process.exitCode = 1, `FAIL 인자 체크/전후 ${okB} ${okT} ${t}`)); }
+{ const { simPlotSvg, simCaption, optMatrixHtml, topPaths } = await import('../src/ui/m3/opt-dash.js');
+  const obs = { targetLen: 0.8, targetWid: 0.8 }, H = [{ ph: 1e6, noise: 0.04, Ulen: 0.5, Uwid: 0.6 }, { ph: 4e6, noise: 0.02, Ulen: 0.7, Uwid: 0.75 }];
+  const svg = simPlotSvg(H, 0.01, obs, 300, 90), cap = simCaption(H, 0.01, obs, 'done');
+  if (!svg.includes('총 1,600만 광선') || !svg.includes('80%') || !svg.includes('od-ln2')) throw new Error(`진행 그래프: 총광선·목표·폭 곡선 ${svg}`);
+  if (!simCaption(H, 0.01, obs, 'paused').includes('광선 400만 / 총 1,600만') || !cap.includes('길이 70.0%') || !cap.includes('목표 80.0%')) throw new Error(`진행 설명: ${cap}`);
+  const stages = { milky: { status: 'done', frac: 1, text: '', evals: [{ label: 'Milky 1.5', Ulen: 0.76, Uwid: 0.84 }, { label: 'Milky 1.0', Ulen: 0.7, Uwid: 0.8 }] } };
+  const tiles = new Proxy(stages, { get: (o, k) => o[k] ?? { status: 'off', frac: 0, text: '', evals: [] } });
+  const mx = optMatrixHtml({ tiles, tgLen: 0.8, tgWid: 0.8, final: { Ulen: 0.81, Uwid: 0.85 } });
+  if (!mx.includes('최종 판정') || !mx.includes('Milky 1.5') || !mx.includes('0.81') || !mx.includes('<th>폭 최고</th>') || mx.includes('Milky 1.0')) throw new Error(`최적화 현황 표: ${mx}`);
+  const tp = topPaths({ ':0>1': 3, ':1': 1 }, 2, 3, [0]);
+  if (tp.length !== 1 || tp[0].parts.join() !== '1' || tp[0].share !== 1) throw new Error(`빛 계산 제외 부품은 광경로에서 뺌: ${JSON.stringify(tp)}`); }
 { const { flowState } = await import('../src/ui/m3/command-bar.js'); const t = flowState({ state: 'done' }, { Ulen: 0.795, Uwid: 0.83 }, { observe: { targetLen: 0.8, targetWid: 0.8 } }).sim.text;
   if (t !== '79.5% / 83% 목표 미달') throw new Error(`미달 표시 반올림: ${t}`); }
 { const { flowState } = await import('../src/ui/m3/command-bar.js');
   // 흐름 4 광분포 시뮬레이션 → 5 기구 최적화: 계산 중 % · 완료 통과/미달 · 미달이면 5 '필요' · 최적화 진행 중
   const M = { observe: { targetLen: 0.8, targetWid: 0.8, targetNoise: 0.01 } }, st = (a, b) => ({ Ulen: a, Uwid: b });
   const r1 = flowState({ state: 'running', stats: { relNoise: 0.02 } }, st(0.58, 0.64), M), r2 = flowState({ state: 'done' }, st(0.58, 0.64), M), r3 = flowState({ state: 'done' }, st(0.85, 0.9), M), r4 = flowState({ state: 'done' }, st(0.58, 0.64), M, { running: true });
-  console.log(r1.sim.text === '계산 중 50% · 58% / 64%' && r1.opt.text === '시뮬레이션 뒤' && r2.sim.cls === 'bad' && r2.sim.done && r2.opt.cls === 'need' && r3.sim.cls === 'ok' && r3.opt.done && r4.opt.text === '진행 중' && flowState(null, null, M).sim.text === '–'
+  console.log(r1.sim.text === '계산 중 25% · 58% / 64%' && r1.opt.text === '시뮬레이션 뒤' && r2.sim.cls === 'bad' && r2.sim.done && r2.opt.cls === 'need' && r3.sim.cls === 'ok' && r3.opt.done && r4.opt.text === '진행 중' && flowState(null, null, M).sim.text === '–'
     ? 'PASS 흐름 4 광분포 시뮬레이션 · 5 기구 최적화 상태' : (process.exitCode = 1, `FAIL 흐름 ${JSON.stringify([r1, r2, r3, r4])}`)); }
 { const { resultLineHtml, limitText } = await import('../src/ui/m3/autodesign-panel.js');
   // 결과 카드: 판정 한 단어 · 비교표 = 바뀐 사양 + 길이 균일도·폭 균일도·광 효율(안 바뀐 LED 줄 없음) · 한계 한 줄 · [자세히]
@@ -525,7 +535,7 @@ done();
   const order = STAGES.map(([k]) => k).join();
   const b = factorBoardHtml(null, { locked: { position: { txt: 'LED 17개' } }, leds: 'LED 17개', on: {} }, (k) => ({ on: false, box: `<input type="checkbox" data-ad="${k}">`, opt: '', why: '' }));
   const okLock = /✓ 고정/.test(b) && b.includes('data-adunlock="position"') && !b.includes('data-ad="position"') && b.includes('data-ad="shape"');
-  const S = { tgLen: 0.8, tgWid: 0.8, t0: 0, tiles: { position: { status: 'done', frac: 1, evals: [] }, housing: { status: 'off', evals: [] }, shape: { status: 'run', frac: 0.46, evals: [] }, milky: { status: 'off', evals: [] } },
+  const S = { tgLen: 0.8, tgWid: 0.8, t0: 0, tiles: { position: { status: 'done', frac: 1, evals: [{ label: '1열 17개', Ulen: 0.84, Uwid: 0.81 }] }, housing: { status: 'off', evals: [] }, shape: { status: 'run', frac: 0.46, evals: [] }, milky: { status: 'off', evals: [] } },
     seq: [{ k: 'position', label: '1열 17개', Ulen: 0.84, Uwid: 0.81 }], before: { Ulen: 0.55, Uwid: 0.62 }, log: [{ sec: 92, k: 'position', label: '1열 17개', Ulen: 0.84, Uwid: 0.81 }], locked: { milky: true } };
   const m = monitorHtml(S, 130);
   const okMon = m.indexOf('① 위치') < m.indexOf('③ 형상') && m.includes('46%') && /고정/.test(m) && m.includes('0.84') && m.includes('▲0.29') && m.includes('1열 17개') && m.includes('od-plot');

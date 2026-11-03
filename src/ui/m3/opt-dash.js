@@ -112,16 +112,35 @@ export function monitorHtml(S, sec = 0) {
   };
   const effB = S.effBest, eff0 = b0.eff;
   const effK = `<div class="om-k"><div class="mut">광 효율</div><b class="om-v">${Number.isFinite(effB) ? `${(effB * 100).toFixed(1)}%` : Number.isFinite(eff0) ? `${(eff0 * 100).toFixed(1)}%` : '–'}</b><div class="mut">${Number.isFinite(effB) && Number.isFinite(eff0) ? `시작 ${(eff0 * 100).toFixed(1)}%` : Number.isFinite(eff0) ? '시작값 · 최적안은 끝나면' : ''}</div></div>`;
-  const nm = Object.fromEntries(STAGES);
   const mmss = (t) => `${String((t / 60) | 0).padStart(2, '0')}:${String(t % 60 | 0).padStart(2, '0')}`;
-  const log = (S.log ?? []).slice(-8).reverse().map((l) => `<div class="om-l"><span class="mut">${mmss(l.sec)}</span> ${esc(nm[l.k] ?? '')} ${esc(l.label)} → <b>${f2(l.Ulen)}/${f2(l.Uwid)}</b> <span class="od-ok">최고 갱신</span></div>`).join('');
   const nEval = (S.seq ?? []).length;
-  return `<div class="od-h">${busy ? `진행 ${mmss(sec)}` : S.stopped ? '중지됨' : '끝남'} <span class="mut">· 시험한 후보 ${nEval}개${S.note ? ` · ${esc(S.note)}` : ''}</span></div>
+  const fin = S.final, cur = fin ?? best, uTxt = (l, v, t) => `${l} <b>${f2(v)}</b>${Number.isFinite(v) && Number.isFinite(t) ? ` (목표 ${f2(t)} ${v + 1e-9 >= t ? '<span class="od-ok">통과</span>' : '<span class="od-bad">미달</span>'})` : ''}`;
+  const uLine = cur ? `${uTxt('길이 균일도', cur.Ulen, tl)}, ${uTxt('폭 균일도', cur.Uwid, tw)}` : '';
+  const doing = S.note || (S.cur ? S.tiles[S.cur].text : '') || '준비하는 중';
+  const say = busy ? `<p><b>지금 하는 일</b> ${esc(doing)}</p>${uLine ? `<p><b>지금까지 가장 좋은 안</b> ${uLine}</p>` : ''}`
+    : S.stopped ? '<p><b>중지했습니다.</b> 찾던 안은 설계에 반영되지 않았습니다.</p>'
+    : `<p><b>${S.ended ? '목표를 통과한 안을 찾았습니다.' : '목표에 닿는 안을 찾지 못해 가장 가까운 안을 골랐습니다.'}</b></p>${uLine ? `<p><b>최종 판정</b> ${uLine}</p>` : ''}${!S.ended && S.note ? `<p class="mut">${esc(S.note)}</p>` : ''}<p class="mut">왼쪽 아래 결과에서 적용하면 이 값이 그대로 화면에 나옵니다.</p>`;
+  return `<div class="od-h">${busy ? `진행 ${mmss(sec)}` : S.stopped ? '중지됨' : `끝남 ${mmss((S.endSec ?? sec))}`} <span class="mut">· 시험한 후보 ${nEval}개</span></div>
     <div class="om-steps">${steps.join('<i class="om-ar">→</i>')}</div>
-    <div class="om-kpi">${kpi('길이 균일도', tl, best?.Ulen ?? b0.Ulen, b0.Ulen)}${kpi('폭 균일도', tw, best?.Uwid ?? b0.Uwid, b0.Uwid)}${effK}</div>
-    <div class="od-legend">색 = 항목 · 점 = 각 후보(길이 균일도) · 굵은 선 = 지금까지 최고 <i class="od-kt"></i>목표 <i style="border-color:#8a96a8"></i>시작</div>
+    <div class="om-say">${say}</div>
+    <div class="om-kpi">${kpi(fin ? '길이 균일도 최종' : '길이 균일도', tl, cur?.Ulen ?? b0.Ulen, b0.Ulen)}${kpi(fin ? '폭 균일도 최종' : '폭 균일도', tw, cur?.Uwid ?? b0.Uwid, b0.Uwid)}${effK}</div>
+    <div class="od-legend">그래프 보는 법: 점 하나 = 시험한 후보 하나 · 굵은 선 = 지금까지 최고 · 위로 갈수록 고름 <i class="od-kt"></i>목표 <i style="border-color:#8a96a8"></i>시작</div>
     <div class="od-plot"></div>
-    <div class="om-log"><div class="mut om-lh">기록 — 최고가 바뀐 순간</div>${log || '<div class="mut">아직 없음</div>'}</div>`;
+    ${optMatrixHtml(S)}`;
+}
+// 최적화 현황 표(순수, 2026-11-03) — 항목 × (상태 · 시험 후보 · 그 항목 최고 길이·폭 · 최고안). 마지막 줄 = 최종 판정(최종 화질)
+export function optMatrixHtml(S) {
+  const tl = S.tgLen, tw = S.tgWid, cell = (v, t) => (Number.isFinite(v) ? `<b class="${Number.isFinite(t) ? (v + 1e-9 >= t ? 'od-ok' : 'od-bad') : ''}">${f2(v)}</b>` : '<span class="mut">–</span>');
+  const row = (name, st, n, e, cls = '') => `<tr class="${cls}"><th>${name}</th><td>${st}</td><td>${n}</td><td>${cell(e?.Ulen, tl)}</td><td>${cell(e?.Uwid, tw)}</td><td class="om-mx-l">${esc(e?.label ?? '')}</td></tr>`;
+  const rows = STAGES.flatMap(([k, name]) => {
+    const t = S.tiles[k], locked = S.locked?.[k] && t.status === 'off';
+    if (t.status === 'off' && !locked) return [];
+    const st = locked ? '고정' : t.status === 'run' ? `진행 ${Math.round(t.frac * 100)}%` : t.status === 'done' ? '완료' : '대기';
+    let e = null; for (const q of t.evals) if (q.ok !== false && (!e || scoreOf(q, tl, tw) > scoreOf(e, tl, tw))) e = q;
+    return [row(name, st, t.evals.length || '–', e)];
+  });
+  const stF = S.final ? '완료' : S.stopped ? '중지' : '대기';
+  return `<div class="om-mx"><div class="mut om-lh">최적화 현황</div><table class="om-mx-t"><tr><th>항목</th><th>상태</th><th>시험 후보</th><th>길이 최고</th><th>폭 최고</th><th>최고안</th></tr>${rows.join('')}${row('최종 판정', stF, '–', S.final, 'om-mx-f')}</table></div>`;
 }
 // 후보의 점수(목표 대비 여유 — 둘 다 있으면 작은 쪽)
 const scoreOf = (e, tl, tw) => (e.ok === false || !Number.isFinite(e.Ulen) ? -Infinity : Math.min(e.Ulen - tl, Number.isFinite(e.Uwid) && Number.isFinite(tw) ? e.Uwid - tw : Infinity));
@@ -150,7 +169,7 @@ export function createOptDash(el, h = {}) {
     draw();
   }
   function evals(stage, list) { if (!S) return; const k = tileOf(stage); if (!k) { S.verify = list[list.length - 1] ?? S.verify; draw(); return; } const t = S.tiles[k]; t.evals.push(...list); for (const e of list) { const q = { ...e, k }; S.seq.push(q); if (q.ok !== false && Number.isFinite(q.Ulen) && (!S.bestE || scoreOf(q, S.tgLen, S.tgWid) > scoreOf(S.bestE, S.tgLen, S.tgWid))) { S.bestE = q; S.log.push({ sec: (performance.now() - S.t0) / 1000, k, label: q.label, Ulen: q.Ulen, Uwid: q.Uwid }); } } if (t.status === 'off' || t.status === 'wait') t.status = 'run'; draw(); }
-  function finish(ok, text = '', effBest = NaN) { if (!S) return; S.effBest = effBest; for (const [k] of STAGES) if (S.tiles[k].status === 'run') { S.tiles[k].status = 'done'; S.tiles[k].frac = 1; } S.note = text; S.ended = ok; draw(); }
+  function finish(ok, text = '', effBest = NaN, final = null) { if (!S) return; S.effBest = effBest; S.final = final; S.endSec = (performance.now() - S.t0) / 1000; for (const [k] of STAGES) if (S.tiles[k].status === 'run') { S.tiles[k].status = 'done'; S.tiles[k].frac = 1; } S.note = text; S.ended = ok; draw(); }
   function draw() { if (raf) return; raf = setTimeout(() => { raf = 0; render(); renderBoard(); }, 40); }   // setTimeout: 화면이 숨겨져도(다른 탭) 갱신 — rAF 는 멈춤
   // 높이 조절 손잡이(.m3-fac-split)는 남기고 내용만 바꿈
   function renderBoard() { if (!h.board) return; let c = h.board.querySelector('.fb-body'); if (!c) { c = document.createElement('div'); c.className = 'fb-body'; h.board.appendChild(c); } const nw = h.now?.() ?? {}; c.innerHTML = factorBoardHtml(S, nw, h.config); }
@@ -173,10 +192,11 @@ export function createOptDash(el, h = {}) {
 }
 
 // 광경로 순위(순수) — paths = { 'R:2>1': 가중 합 } → [{ parts:[번호], refl, share }] 비중 큰 순(기구 부품만, 같은 경로 합침)
-export function topPaths(paths, nMech, k = 3) {
+// skip = 빛 계산에서 뺀 부품 번호(그 부품은 빛이 그냥 지나가므로 경로에 넣지 않음)
+export function topPaths(paths, nMech, k = 3, skip = []) {
   const m = new Map(); let tot = 0;
   for (const [key, w] of Object.entries(paths ?? {})) {
-    const [r, sq] = key.split(':'), parts = (sq ? sq.split('>').map(Number) : []).filter((q) => q < nMech), refl = r === 'R', kk = `${refl ? 'R' : ''}:${parts.join('>')}`;
+    const [r, sq] = key.split(':'), parts = (sq ? sq.split('>').map(Number) : []).filter((q) => q < nMech && !skip.includes(q)), refl = r === 'R', kk = `${refl ? 'R' : ''}:${parts.join('>')}`;
     tot += w; const o = m.get(kk) ?? { parts, refl, w: 0 }; o.w += w; m.set(kk, o);
   }
   return tot > 0 ? [...m.values()].sort((a, b) => b.w - a.w).slice(0, k).map((o) => ({ parts: o.parts, refl: o.refl, share: o.w / tot })) : [];
@@ -208,14 +228,35 @@ export function reachDiag(ledger, leak, names = []) {
   return { reach, html: `<b>관측면에 도착한 빛 ${(reach * 100).toFixed(few ? 3 : 2)}%</b> — ${few ? '거의 없음(설정 확인 필요)' : '매우 적음(계산이 오래 걸림)'}. 빛이 간 곳: ${top.join(' · ') || '–'}${abs > 0.05 ? ` · 흡수 ${(abs * 100).toFixed(0)}%` : ''}
     ${few ? '' : '<div class="mut">관측면 쪽을 뺀 바깥면을 반사 처리(불투명 백색)하면 도착 빛이 늘어 빨라집니다</div>'}<div class="mut">확인: ① 관측면 화살표가 빛이 나오는 바깥쪽을 향하는지 ② LED 노란 점선(발광 방향)이 부품 쪽을 향하는지 ③ 관측면이 다른 부품에 덮여 있지 않은지 — 3D 의 주황 면 = 가장 많이 새는 곳</div>` };
 }
+// 진행 현황 그래프(순수, 2026-11-03) — 가로 = 광선 수(0 ~ 예상 총광선), 세로 = 균일도 %(점선 = 목표). H = [{ ph, noise, Ulen, Uwid }]
+export const simTotal = (last, tgt) => (last ? Math.max(last.ph, Number.isFinite(last.noise) ? last.ph * (last.noise / tgt) ** 2 : 0) : 0);
+export function simPlotSvg(H, tgt, obs, w, h) {
+  if (!(H?.length > 1)) return '';
+  const last = H[H.length - 1], total = simTotal(last, tgt), x0 = 34, x1 = w - 8, y0 = 6, y1 = h - 15, tl = obs?.targetLen, tw = obs?.targetWid;
+  const lo = Math.max(0, Math.floor(Math.min(tl ?? 1, tw ?? 1, last.Ulen ?? 1, last.Uwid ?? 1) * 10 - 2) / 10), Y = (v) => y0 + (1 - Math.max(0, (Math.min(1, v) - lo) / (1 - lo))) * (y1 - y0), X = (ph) => x0 + (ph / total) * (x1 - x0);
+  const line = (k, cls) => { const pl = H.filter((p) => Number.isFinite(p[k])).map((p) => `${X(p.ph).toFixed(1)},${Y(p[k]).toFixed(1)}`).join(' '); return pl ? `<polyline class="${cls}" points="${pl}"/>` : ''; };
+  const tg = [...new Set([tl, tw].filter(Number.isFinite))].map((t) => `<line class="od-tg" x1="${x0}" x2="${x1}" y1="${Y(t).toFixed(1)}" y2="${Y(t).toFixed(1)}"/><text class="od-ax" x="${x0 - 3}" y="${(Y(t) + 3).toFixed(1)}" text-anchor="end">${Math.round(t * 100)}%</text>`).join('');
+  const xNow = X(last.ph).toFixed(1);
+  return `<svg class="od-sim" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${tg}${line('Ulen', 'od-ln')}${line('Uwid', 'od-ln2')}
+    <line class="od-now" x1="${xNow}" x2="${xNow}" y1="${y0}" y2="${y1}"/>
+    <text class="od-ax" x="${x0 - 3}" y="${y0 + 7}" text-anchor="end">100%</text><text class="od-ax" x="${x0 - 3}" y="${y1}" text-anchor="end">${Math.round(lo * 100)}%</text>
+    <text class="od-ax" x="${x0}" y="${h - 3}">0</text><text class="od-ax" x="${x1}" y="${h - 3}" text-anchor="end">총 ${human(total)} 광선</text></svg>`;
+}
+// 그래프 위 설명 한 줄(순수) — 광선 수 / 총광선 · 지금 균일도 / 목표 · 오차
+export function simCaption(H, tgt, obs, state) {
+  const last = H[H.length - 1]; if (!last) return '광선 수 0';
+  const pc = (v) => (Number.isFinite(v) ? `${(v * 100).toFixed(1)}%` : '–'), u = `<span class="od-c1">길이 ${pc(last.Ulen)}</span> · <span class="od-c2">폭 ${pc(last.Uwid)}</span> · 목표 ${pc(obs?.targetLen)}${obs?.targetWid !== obs?.targetLen ? ` / ${pc(obs?.targetWid)}` : ''}`;
+  return `광선 ${human(last.ph)} / 총 ${human(state === 'done' ? last.ph : simTotal(last, tgt))} · ${u} · 오차 ${Number.isFinite(last.noise) ? `±${(last.noise * 100).toFixed(1)}%` : '–'} → 목표 ±${(tgt * 100).toFixed(1)}%${state === 'running' ? etaText(H, tgt).replace(/ · 필요 광선 ≈ [^·]*/, '') : ''}`;
+}
 // 오른쪽 맨 위 카드(항상 보임) — onCtl = 계산 제어 단추(일시정지·재개·다시 계산). 광경로 목록은 접는 칸
 export function createSimDash(el, { onCtl = null } = {}) {
   let H = [], tgt = 0.02, raf = 0, state = '', obs = null, P = [], names = [], reason = '';
   // names = 부품 이름, nMech = 기구 부품 수(LED STEP 부품 번호는 그 뒤 — 경로에서 뺌)
   let busy = false;   // 기구 최적화 중(점진 계산 일시정지)
   let diag = null;   // 빛 도달 진단(관측면 도달 < 1%)
-  function sample(snap, targetNoise, observe, nm = names, nMech = nm.length, adBusy = false) {
-    busy = adBusy; tgt = targetNoise ?? tgt; obs = observe ?? obs; state = snap?.state ?? ''; reason = snap?.reason ?? ''; names = nm; P = topPaths(snap?.paths, nMech);
+  let mini = null;   // 광시뮬레이션 창 안의 진행 현황 칸
+  function sample(snap, targetNoise, observe, nm = names, nMech = nm.length, adBusy = false, skip = []) {
+    busy = adBusy; tgt = targetNoise ?? tgt; obs = observe ?? obs; state = snap?.state ?? ''; reason = snap?.reason ?? ''; names = nm; P = topPaths(snap?.paths, nMech, 3, skip);
     const ph = snap?.photons ?? 0, st = snap?.stats;
     diag = ph >= 50000 ? reachDiag(snap?.ledger, snap?.leak, nm) : null;
     if (!st || st.empty || !ph) { if (!ph) H = []; draw(); return; }
@@ -226,21 +267,10 @@ export function createSimDash(el, { onCtl = null } = {}) {
   }
   function draw() { if (raf) return; raf = setTimeout(() => { raf = 0; render(); }, 40); }   // setTimeout: 화면이 숨겨져도(다른 탭) 갱신 — rAF 는 멈춤
   function render() {
-    const last = H[H.length - 1], pct = last ? simPct(last.noise, tgt) : 0;
-    // 그래프 = 오차 하나(목표 점선)만, 실제 칸 크기로 그림(글자가 늘어나지 않게). 균일도는 아래 결과 칸에 있어 뺌(2026-11-02)
-    const plot = el.querySelector('.od-simplot'), w = plot?.clientWidth || 300, h = plot?.clientHeight || 70, x0 = 30, x1 = w - 8, y0 = 6, y1 = h - 15;
-    let svg = '';
-    if (H.length > 1) {
-      const lp = (v) => Math.log10(Math.max(1, v)), a = lp(H[0].ph), b = lp(last.ph) || a + 1, X = (ph) => x0 + ((lp(ph) - a) / (b - a || 1)) * (x1 - x0);
-      const nmax = Math.max(tgt * 2, ...H.map((p) => p.noise).filter(Number.isFinite)), YN = (v) => y0 + (1 - Math.min(1, v / nmax)) * (y1 - y0);
-      const pl = H.filter((p) => Number.isFinite(p.noise)).map((p) => `${X(p.ph).toFixed(1)},${YN(p.noise).toFixed(1)}`).join(' ');
-      svg = `<svg class="od-sim" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
-        <line class="od-tg" x1="${x0}" x2="${x1}" y1="${YN(tgt).toFixed(1)}" y2="${YN(tgt).toFixed(1)}"/>
-        <polyline class="od-ln" points="${pl}"/>
-        <text class="od-ax" x="${x0 - 3}" y="${y0 + 7}" text-anchor="end">${(nmax * 100).toFixed(0)}%</text><text class="od-ax" x="${x0 - 3}" y="${y1}" text-anchor="end">0%</text>
-        <text class="od-ax" x="${x0}" y="${h - 3}">${H[0].ph.toLocaleString()}</text><text class="od-ax" x="${x1}" y="${h - 3}" text-anchor="end">${last.ph.toLocaleString()} 광선(로그)</text></svg>`;
-    }
-    const sTxt = { running: '계산 중', paused: '일시정지', done: reason === 'converged' ? '완료 — 목표 정확도 도달' : '계산 한도 도달 — 정확도 미달', pending: '대기', starting: '장면 준비' }[state] ?? state ?? '';
+    const last = H[H.length - 1], pct = state === 'done' ? 100 : last ? simPct(last.noise, tgt) : 0;
+    const plot = el.querySelector('.od-simplot'), svg = simPlotSvg(H, tgt, obs, plot?.clientWidth || 300, plot?.clientHeight || 70);
+    const row = simCaption(H, tgt, obs, state);
+    const sTxt = { running: '계산 중', paused: '일시정지', done: reason === 'adopted' ? '완료 — 기구 최적화 최종 판정 값' : reason === 'converged' ? '완료 — 목표 정확도 도달' : '계산 한도 도달 — 정확도 미달', pending: '대기', starting: '장면 준비' }[state] ?? state ?? '';
     const ctl = busy ? '기구 최적화 중' : calcLabel({ state, reason });
     // 틀은 한 번만 만들고 칸마다 바뀐 것만 고침 — 계산 중 갱신이 잦아도 단추 클릭·접는 칸이 끊기지 않게
     if (!el.querySelector('.od-simh')) {
@@ -254,14 +284,18 @@ export function createSimDash(el, { onCtl = null } = {}) {
     set('st', busy ? '기구 최적화 중 — 일시정지(끝나면 이어서)' : esc(sTxt));
     const btn = el.querySelector('[data-sim-ctl]'); if (btn) { if (btn.textContent !== ctl) btn.textContent = ctl; btn.disabled = busy; }
     set('pct', `${pct.toFixed(0)}%`); el.querySelector('[data-s="bar"]').style.width = `${pct.toFixed(0)}%`;
-    set('row', `오차 ${last && Number.isFinite(last.noise) ? `±${(last.noise * 100).toFixed(1)}%` : '–'} → 목표 ±${(tgt * 100).toFixed(1)}% · 광선 수 ${last ? last.ph.toLocaleString() : 0}${state === 'running' ? etaText(H, tgt) : ''}`);
+    set('row', row);
     const dg = el.querySelector('[data-s="diag"]'); if (dg) { dg.hidden = !diag; set('diag', diag?.html ?? ''); }
     set('svg', svg);
+    if (mini) {
+      const w = Math.max(240, mini.clientWidth - 2);
+      mini.innerHTML = `<div class="od-pct"><b>${pct.toFixed(0)}%</b><div class="od-bar od-bar-big"><i style="width:${pct.toFixed(0)}%"></i></div></div><div class="od-simcap">${row}</div><div class="od-simplot">${simPlotSvg(H, tgt, obs, w, 96)}</div>`;
+    }
     // 접힌 줄에는 주 광경로 한 줄 요약, 펼치면 광경로 목록
     set('sum', P.length ? `광경로 <span class="mut">${(P[0].share * 100).toFixed(0)}% ${esc(pathText(P[0], names))}</span>` : '광경로');
     set('paths', P.length ? `<div class="od-paths">${P.map((p) => `<div class="od-path"><span class="od-pbar"><i style="width:${(p.share * 100).toFixed(0)}%"></i></span><b>${(p.share * 100).toFixed(0)}%</b> ${esc(pathText(p, names))}</div>`).join('')}</div>` : '');
   }
   render();
   if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => draw()).observe(el);   // 칸 크기가 바뀌면 그래프를 그 크기로
-  return { sample, paths: () => P };
+  return { sample, paths: () => P, attach: (node) => { mini = node; draw(); } };
 }

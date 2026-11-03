@@ -960,3 +960,27 @@ body.booting::after { content: "불러오는 중…"; position: fixed; left: 50%
 input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background: rgba(247,144,9,.14); }
 .m3-big-in.min .m3-big-hd { gap: 8px; white-space: nowrap; }
 .m3-big-hd button, .m3-mon-hd button { white-space: nowrap; }
+
+/* 2026-11-03 — 기본·상세 탭 구분 · 창 제목 강조 · 시뮬레이션 결과 묶음 · 진행 현황 · 최적화 현황 표 */
+#mech3d-wrap .m3-tabs { gap: 3px; padding: 3px; margin: 4px 0 8px; background: var(--m3-head, #e9edf3); border: 1px solid var(--m3-line); border-radius: 8px; }
+#mech3d-wrap .m3-tabs [role=tab] { border: 0; border-radius: 6px; margin: 0; padding: 6px 4px; font-weight: 500; }
+#mech3d-wrap .m3-tabs [role=tab][aria-selected=true] { background: var(--m3-acc); color: #fff; border: 0; font-weight: 700; }
+#mech3d-wrap .m3-tabs [role=tab][aria-selected=true] .m3-tab-s { color: inherit; }
+.m3-mon-hd > b, .m3-big-hd > b, .m3-rmodal-hd > b, .err-dlg-hd > b, .zoom-modal-hd > span:first-child { font-size: 17px; font-weight: 800; letter-spacing: -.01em; }
+.m3-res-h { flex: none; font-size: 14px; font-weight: 800; padding: 2px 2px 2px 8px; border-left: 4px solid var(--m3-acc); }
+.m3-big-prog { flex: none; padding: 4px 2px 6px; border-bottom: 1px solid var(--m3-line, #d3d8e0); margin-bottom: 6px; font-size: 12px; }
+.m3-big-prog .od-simplot { height: 96px; }
+.m3-big-prog .od-simcap { margin: 2px 0; }
+.od-ln2 { fill: none; stroke: #d9822b; stroke-width: 1.6; }
+.od-now { stroke: #8a96a8; stroke-width: 1; stroke-dasharray: 2 2; }
+.od-c1 { color: #2f6fd0; font-weight: 600; } .od-c2 { color: #c26f1f; font-weight: 600; }
+.om-say { font-size: 12.5px; line-height: 1.55; margin: 6px 0; padding: 6px 9px; background: var(--m3-head, #f3f6fa); border-radius: 6px; }
+.om-say p { margin: 0 0 2px; }
+.om-mx { margin-top: 6px; font-size: 11.5px; border-top: 1px solid var(--m3-line); padding-top: 4px; overflow: auto; }
+.om-mx-t { width: 100%; border-collapse: collapse; }
+.om-mx-t th, .om-mx-t td { border: 1px solid var(--m3-line); padding: 2px 6px; text-align: center; white-space: nowrap; }
+.om-mx-t tr:first-child th { background: var(--m3-head, #e9edf3); font-weight: 600; }
+.om-mx-t tr th:first-child { text-align: left; font-weight: 600; }
+.om-mx-l { text-align: left !important; white-space: normal !important; }
+.om-mx-f td, .om-mx-f th { border-top: 2px solid var(--m3-acc); }
+.m3-mon-hd > b { white-space: nowrap; }

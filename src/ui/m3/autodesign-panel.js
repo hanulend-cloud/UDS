@@ -214,7 +214,7 @@ export function compareHtml(r) {
   const clash = r.clash > 0 ? `<div class="m3-clash" role="alert">이 안은 LED 몸체가 부품과 겹침(${r.clash}개) — 조립 불가라 적용하지 않음</div>` : '';
   const note = r.note ? `<div class="m3-warn">${esc(r.note)}</div>` : '';
   return `<div class="m3-h">${unchanged ? '현재안 유지' : feasible ? '최적안' : '가장 가까운 안'} <span class="mut">${esc(reason)}</span></div>${note}${boost}${clash}
-    <table class="m3-cmp"><tr><th></th><th>현재</th><th>최적</th></tr>
+    <table class="m3-cmp"><tr><th></th><th>현재</th><th>최적화 후</th></tr>
       ${cmpRows(r)}
     </table>${twoRow}${effDrop}${profileSvg(cur.profile, best.profile)}${screen ? `<div class="m3-row mut">${esc(screenSummary(screen))}</div>` : ''}
     ${altNote(r)}<div class="m3-row">${applyBtn(r, 'LED 몸체가 부품과 겹침')}${altBtn(r)}<button type="button" data-ad="cancel">취소</button>${shape ? '<button type="button" data-ad="step">STEP 내보내기</button>' : ''}${canRevert ? '<button type="button" data-ad="revert">되돌리기</button>' : ''}</div>`;
@@ -223,7 +223,7 @@ export function compareHtml(r) {
 export function appliedHtml(applied) {
   if (!applied) return '';
   return `<div class="m3-applied"><div class="m3-h">적용한 변경 <span class="mut">${esc(applied.at ?? '')} · 되돌리기 전까지 유지</span></div>
-    <table class="m3-cmp"><tr><th></th><th>이전</th><th>적용 후</th></tr>${cmpRows(applied)}</table></div>`;
+    <table class="m3-cmp"><tr><th></th><th>현재</th><th>최적화 후</th></tr>${cmpRows(applied)}</table></div>`;
 }
 
 // el 에 카드를 그리고 이벤트를 h 로 넘긴다. state = { avail, sel, running, result, names, canRevert, noLine, milkyPart }
@@ -264,7 +264,7 @@ export function resultLineHtml(r) {
   const rows = `${secRow('목표 지표')}${P.metric.join('')}${secRow('설계 최적화 항목')}${chg.length ? chg.join('') : '<tr><td colspan="3" class="mut">바뀐 항목 없음</td></tr>'}`;
   const lim = limitText(r.reason), clash = r.clash > 0 ? `<div class="m3-clash" role="alert">LED 몸체가 부품과 겹침(${r.clash}개) — 적용 불가</div>` : '';
   return `<div class="m3-rcard ${verdict[0]}"><div class="m3-rcard-hd"><b class="m3-rv">${verdict[1]}</b><span class="mut">${verdict[2]}</span></div>
-    <table class="m3-cmp m3-cmp-s"><tr><th></th><th>지금</th><th>최적 후보</th></tr>${rows}</table>${clash}
+    <table class="m3-cmp m3-cmp-s"><tr><th></th><th>현재</th><th>최적화 후</th></tr>${rows}</table>${clash}
     ${lim ? `<div class="m3-rlim">💡 한계: ${esc(lim)}</div>` : ''}
     ${milkyTableHtml(r.milkyRows, r.best?.milky, r.targets ?? {})}
     ${altNote(r)}<div class="m3-rbtn">${applyBtn(r, 'LED 몸체가 부품과 겹침')}${altBtn(r)}<button type="button" data-ad="cancel">취소</button>${r.clash > 0 ? '' : `<button type="button" data-ad="continue" title="${r.unchanged ? '지금 설계 그대로' : '이 안을 적용한 뒤'}, 체크했지만 이번에 돌리지 않은 항목(예: 위치·Milky)을 그 위에서 이어서 최적화">이 안에서 이어서 ▸</button>`}<span class="m3-ad-sp"></span><button type="button" data-ad="view" title="프로파일 비교·사유 전문">자세히 ▸</button></div></div>`;
@@ -272,7 +272,7 @@ export function resultLineHtml(r) {
 // el 에 그리고 이벤트를 h 로 넘김. state = { avail, sel, running, result, resultOpen, … } — 결과가 있으면 한 줄 + (열림) 결과 창
 export function renderAutoPanel(el, state, h) {
   const r = state.result, full = r ? compareHtml({ ...r, canRevert: state.canRevert, ...(state.catalog ? { catalog: state.catalog } : {}) }) : '';
-  const html = r ? `${resultLineHtml(r)}${state.resultOpen ? `<div class="m3-rmodal" role="dialog" aria-modal="true" aria-label="기구 최적화 결과"><div class="m3-rmodal-in"><div class="m3-rmodal-hd"><b>기구 최적화 결과</b><span class="m3-ad-sp"></span><button type="button" data-ad="hide">닫기 (결과는 남음)</button></div>
+  const html = r ? `${resultLineHtml(r)}${state.resultOpen ? `<div class="m3-rmodal" role="dialog" aria-modal="true" aria-label="기구 최적화 결과"><div class="m3-rmodal-in"><div class="m3-rmodal-hd"><b>기구 최적화 결과</b><span class="m3-ad-sp"></span><button type="button" data-ad="hide" title="결과는 남음">✕ 닫기</button></div>
       <div class="m3-rverdict ${r.unchanged ? '' : r.feasible ? 'ok' : 'bad'}">${r.unchanged ? `현재 설계보다 나은 안을 찾지 못함 — 현재안 유지${r.alt ? ' (찾은 후보가 뚜렷이 낫지 않음 — 원하면 [후보로 바꾸기])' : ''}` : r.feasible ? '✓ 목표 통과' : '✕ 목표 미달 — 가장 가까운 안'}</div>${full}</div></div>` : ''}` : autoCardHtml(state);
   const key = r ? html : autoCardHtml({ ...state, running: state.running ? { frac: 0, text: '' } : null });
   const bar = state.running && !r && el._adKey === key ? el.querySelector('.m3-ad-prog .bar') : null;
