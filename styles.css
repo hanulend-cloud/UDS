@@ -804,6 +804,7 @@ body.booting::after { content: "불러오는 중…"; position: fixed; left: 50%
 #mech3d-wrap[data-theme="dark"] { --m3-shell: #0f141d; --m3-panel: #161c28; --m3-edge: #2f3a4d; --m3-head: #1f2736; --m3-headtx: #c9d1de; --m3-simbg: #1a2130; }
 @media (min-width: 1025px) {
   .m3-main { gap: 8px; padding: 8px; background: var(--m3-shell); }
+  .m3-split-l { left: calc(var(--m3-l, 260px) + 8px); } .m3-split-r { right: calc(var(--m3-r, 430px) + 8px); }   /* 창 사이 틈에 — 스크롤바와 겹치지 않게 */
   .m3-left, .m3-vp, .m3-right { border: 1px solid var(--m3-edge); border-radius: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(16,24,40,.07); }
   .m3-left, .m3-right { background: var(--m3-panel); }
   .m3-left { border-right: 1px solid var(--m3-edge); }

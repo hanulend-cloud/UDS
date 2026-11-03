@@ -32,7 +32,7 @@ export function mountSplitter(main) {
       e.preventDefault(); h.setPointerCapture(e.pointerId); main.classList.add('m3-splitting');
       const box = main.getBoundingClientRect(), W = box.width, cur = splitPx(W, frac);
       const move = (ev) => {
-        const x = ev.clientX - box.left, nl = side === 'l' ? x : cur.l, nr = side === 'r' ? W - x : cur.r;
+        const cs = getComputedStyle(main), off = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.columnGap) || 0) / 2, x = ev.clientX - box.left, nl = side === 'l' ? x - off : cur.l, nr = side === 'r' ? W - x - off : cur.r;   // 손잡이 = 창 사이 틈 가운데
         frac = { l: nl / W, r: nr / W }; apply();
       };
       const up = () => {
