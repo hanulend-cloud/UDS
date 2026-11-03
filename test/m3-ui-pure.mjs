@@ -424,6 +424,13 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   ok(f.sim.cls === 'near' && f.sim.text.includes('목표 근처') && f.opt.text.includes('목표 근처'), `상단 표시: ${f.sim.text} / ${f.opt.text}`);
   const j = judgeText(0.802, 0.8, 0.004); ok(j.cls === 'near' && j.text.includes('근처') && j.text.includes('±0.008'), `결과 판: ${j.text}`);
 }
+{ // 전체 판정이 근처면 설명 문장도 근처로(엔진 사유의 '미달'이 남지 않게) · 하나라도 미달이면 그대로
+  const { STAGES, monitorHtml } = await import('../src/ui/m3/opt-dash.js');
+  const tiles = Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', text: '' }]));
+  const S = { tiles, seq: [], tgLen: 0.8, tgWid: 0.8, ended: false, endSec: 10, note: '균일도 최고 Milky 1.5에서도 길이 균일도 0.80 · 폭 균일도 0.84 — 목표 0.80 / 0.80 미달 · 한계: 길이 방향', b0: {} };
+  const near = monitorHtml({ ...S, final: { Ulen: 0.799, seLen: 0.004, Uwid: 0.84, seWid: 0.004 } }, 10), say = near.match(/om-say">([\s\S]*?)<\/div>/)[1];
+  ok(say.includes('목표 근처의 안') && !say.includes('미달</') && !say.includes('/ 0.80 미달') && say.includes('0.80 근처') && !say.includes('찾지 못해'), `근처 설명: ${say.replace(/<[^>]+>/g, '').slice(0, 90)}`);
+  const bad = monitorHtml({ ...S, final: { Ulen: 0.7, seLen: 0.004, Uwid: 0.84, seWid: 0.004 } }, 10); ok(bad.includes('찾지 못해') && bad.includes('/ 0.80 미달'), '미달이면 문구 그대로'); }
 done();
 
 { const { clearDbHtml } = await import('../src/ui/mech3d-panel.js');

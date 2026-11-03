@@ -120,7 +120,7 @@ export function monitorHtml(S, sec = 0) {
   const doing = S.note || (S.cur ? S.tiles[S.cur].text : '') || '준비하는 중';
   const say = busy ? `<p><b>지금 하는 일</b> ${esc(doing)}</p>${uLine ? `<p><b>지금까지 가장 좋은 안</b> ${uLine}</p>` : ''}`
     : S.stopped ? '<p><b>중지했습니다.</b> 찾던 안은 설계에 반영되지 않았습니다.</p>'
-    : `<p><b>${J.all === 'near' ? '목표 근처의 안을 찾았습니다. 차이가 노이즈보다 작아 통과·미달은 계산마다 달라질 수 있습니다.' : S.ended ? '목표를 통과한 안을 찾았습니다.' : '목표에 닿는 안을 찾지 못해 가장 가까운 안을 골랐습니다.'}</b></p>${uLine ? `<p><b>최종 판정</b> ${uLine}</p>` : ''}${!S.ended && S.note ? `<p class="mut">${esc(S.note)}</p>` : ''}<p class="mut">왼쪽 아래 결과에서 적용하면 이 값이 그대로 화면에 나옵니다.</p>`;
+    : `<p><b>${J.all === 'near' ? '목표 근처의 안을 찾았습니다. 차이가 노이즈보다 작아 통과·미달은 계산마다 달라질 수 있습니다.' : S.ended ? '목표를 통과한 안을 찾았습니다.' : '목표에 닿는 안을 찾지 못해 가장 가까운 안을 골랐습니다.'}</b></p>${uLine ? `<p><b>최종 판정</b> ${uLine}</p>` : ''}${!S.ended && S.note ? `<p class="mut">${esc(J.all === 'near' ? S.note.replace(/미달/g, '근처') : S.note)}</p>` : ''}<p class="mut">왼쪽 아래 결과에서 적용하면 이 값이 그대로 화면에 나옵니다.</p>`;
   return `<div class="od-h">${busy ? `진행 ${mmss(sec)}` : S.stopped ? '중지됨' : `끝남 ${mmss((S.endSec ?? sec))}`} <span class="mut">· 시험한 후보 ${nEval}개</span></div>
     <div class="om-steps">${steps.join('<i class="om-ar">→</i>')}</div>
     <div class="om-say">${say}</div>
