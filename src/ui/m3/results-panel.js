@@ -28,7 +28,7 @@ export function lumCard(st, ph, targetLum) {
   return { value: `${((mean / mx) * 100).toFixed(0)}%`, sub: '최대 대비(LED 광속 입력 시 cd/m²)', ratio: null, pass: null };
 }
 
-// 1D 곡선 표시 다듬기(순수, 2026-11-02) — 칸이 많은 방향의 들쭉날쭉한 잡음만 줄임. 판정·최저점·마우스 값·CSV 는 원자료 그대로.
+// 1D 곡선 표시 다듬기(순수, 2026-11-02) — 칸이 많은 방향의 들쭉날쭉한 노이즈만 줄임. 판정·최저점·마우스 값·CSV 는 원자료 그대로.
 // 예전 가우스 평활은 LED 리플 높이를 깎아 그림이 CSV 와 달랐음(76~100% → 81~96%, 그래서 뺐음) → 봉우리 높이를 지키는 Savitzky-Golay(2차)로, 리플을 5% 넘게 깎지 않는 창만
 export const SMOOTH_MIN_CELLS = 40, RIPPLE_KEEP = 0.95, SMOOTH_MAX_HALF = 16;
 const sgCoef = (m, j) => (3 * (3 * m * m + 3 * m - 1 - 5 * j * j)) / ((2 * m + 3) * (2 * m + 1) * (2 * m - 1));   // 창 ±m 칸, 가운데에서 j 칸
@@ -75,7 +75,7 @@ const lutIndex = (t) => Math.max(0, Math.min(255, Math.round(t * 255)));
 
 // 1D 프로파일(v2 평판 화면 수준) — 세로 = 최대 대비 %(최저·목표 아래까지 자동 확대, 10% 격자), 가로 = mm 눈금 격자,
 // 목표 하한(빨간 점선 + 값), LED 위치(아래 노란 삼각형), 최저점 표시(값·위치), 마우스 위치 읽기(hover = 칸 번호).
-// curves = [{ ys(0~1 원자료, NaN = 끊김), draw?(화면에 그리는 다듬은 곡선), color, dash?, name, band?(잡음 띠) }] — 첫 곡선이 판정 대상(최저점 표시). 모든 치수는 dpr 배
+// curves = [{ ys(0~1 원자료, NaN = 끊김), draw?(화면에 그리는 다듬은 곡선), color, dash?, name, band?(노이즈 띠) }] — 첫 곡선이 판정 대상(최저점 표시). 모든 치수는 dpr 배
 const niceStep = (span, want) => { const raw = span / want, p = 10 ** Math.floor(Math.log10(raw)); for (const m of [1, 2, 5, 10]) if (m * p >= raw) return m * p; return 10 * p; };
 // 세로 범위(%): 최저·목표보다 5% 아래를 10% 단위로 내림, 위 = 102 — 순수
 export function plotRange(curves, tg) {
@@ -135,7 +135,7 @@ function drawPlot(cv, curves, tg, { x0, x1, xl, leds = [], ledsOrig = [] }, dpr 
   // 곡선(칸 가운데)
   for (const c of curves) {
     const n = c.ys.length, X = (i) => pl + ((i + 0.5) / n) * PW;
-    if (c.band > 0) {   // 계산 잡음 범위(±2σ, 옅은 띠) — 원자료가 이 안에서 흔들리면 잡음, 띠 밖이면 실제 밝기 차(2026-10-30)
+    if (c.band > 0) {   // 계산 노이즈 범위(±2σ, 옅은 띠) — 원자료가 이 안에서 흔들리면 노이즈, 띠 밖이면 실제 밝기 차(2026-10-30)
       const k = 2 * c.band, seg = [], ly = c.draw ?? c.ys;
       ly.forEach((v, i) => { if (Number.isFinite(v)) seg.push(i); });
       if (seg.length > 1) {
@@ -275,7 +275,7 @@ export function lineTxt(G, map, pin, { name = '', quality = '', photons = null }
 // 1D 프로파일 TXT(탭 구분) — 그림마다 '# 제목' + 머리줄(x 이름, 곡선 이름) + x 칸 중심과 곡선별 값(최대 대비 %, 원자료 raw 우선, 값 없음 = 빈칸).
 // list = [{ title, v: { curves, opt:{ x0, x1, xl } } | null }] — v 없는 그림은 건너뜀 — 순수
 export function profileTxt(list) {
-  const f = (v) => String(+v.toFixed(3)), out = ['# UDS 1D 프로파일 — 값 = 최대 대비 %(원자료 · 화면 곡선은 잡음만 다듬어 그림) · 빈칸 = 값 없음'];
+  const f = (v) => String(+v.toFixed(3)), out = ['# UDS 1D 프로파일 — 값 = 최대 대비 %(원자료 · 화면 곡선은 노이즈만 다듬어 그림) · 빈칸 = 값 없음'];
   for (const { title, v } of list) {
     if (!v?.curves?.length) continue;
     const { x0, x1, xl } = v.opt, n = v.curves[0].ys.length, dx = (x1 - x0) / n;
@@ -446,7 +446,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
   q('map')._onPin = onPin;
   q('quality').onchange = (e) => onQuality?.(e.target.value);
   q('leak').onclick = () => onLeak?.();
-  // 2D = 칸 중심 값 그대로, 칸 사이만 선형 보간 · 1D = smoothCurve 로 잡음만 다듬어 그림(값은 원자료)
+  // 2D = 칸 중심 값 그대로, 칸 사이만 선형 보간 · 1D = smoothCurve 로 노이즈만 다듬어 그림(값은 원자료)
   const saveTxt = (txt, tag) => {   // 저장 형식 = Excel 용 CSV
     const nm = String(fileName() ?? 'uds'), a = document.createElement('a'), url = URL.createObjectURL(new Blob(['\ufeff' + toCsv(txt)], { type: 'text/csv;charset=utf-8' }));
     a.href = url; a.download = `${nm.replace(/[\\/:*?"<>|]/g, '_')}-${tag}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -546,7 +546,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     const s = big.el.querySelector('[data-big-q]'), b = big.el.querySelector('[data-pin-txt]');
     if (document.activeElement !== s) s.value = last?.observe?.quality ?? 'low';
     const su = big.el.querySelector('[data-big-sum]'), st0 = last?.snap?.stats, O = last?.observe, u = (t, v, g) => `<b class="${Number.isFinite(v) && Number.isFinite(g) ? (v + 1e-9 >= g ? 'ok' : 'bad') : ''}">${t} ${Number.isFinite(v) ? v.toFixed(2) : '–'}</b>`;
-    if (su) su.innerHTML = !st0 || st0.empty ? '' : st0.relNoise > 0.05 ? '<span>계산 중</span>' : `${u('길이', st0.Ulen, O?.targetLen)} ${u('폭', st0.Uwid, O?.targetWid)}`;   // 접었을 때 보이는 현재 결과(계산 초반 값은 잡음이라 숨김)
+    if (su) su.innerHTML = !st0 || st0.empty ? '' : st0.relNoise > 0.05 ? '<span>계산 중</span>' : `${u('길이', st0.Ulen, O?.targetLen)} ${u('폭', st0.Uwid, O?.targetWid)}`;   // 접었을 때 보이는 현재 결과(계산 초반 값은 노이즈가라 숨김)
     b.disabled = !pin; b.title = pin ? '고른 점을 지나는 길이·폭 방향 원자료(평활 없음, 2D 최대 대비 %)' : '2D 에서 점을 클릭하면 저장할 수 있음';
   };
   // onclick 대입(addEventListener 아님) — 패널을 다시 만들면(새 도면·프로젝트) 앞 패널의 처리를 대체. 쌓이면 큰 창이 2개 열리고 아래 창은 이전 계산 데이터였음
@@ -594,7 +594,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     const FG = fullG(G), mapF = st.mapAll ?? st.map, pp = pin ? pointProfiles(FG, mapF, pi, pj) : null, ring = G.closed ? '원주' : '길이', rad = G.closed ? '반경(폭)' : '폭';
     VIEW.map = { G: FG, map: mapF, leds, pin, smooth: true };
     VIEW.prof = plotView([{ ys: Array.from(st.profile, (v) => v / pm), color: '#1f6fd1', name: '폭 평균', band: st.relNoise ?? 0 }, ...(pp ? [{ ys: Array.from(pp.along), color: PIN_COLOR, name: `지정 점 w=${pin.w.toFixed(1)}` }] : [])], observe.targetLen, { x0: 0, x1: G.L, xl: 's (mm)', leds: leds.map((p) => p.s), ledsOrig: (args.ledsOrig ?? []).map((p) => p.s) });
-    q('psub').title = `${pin ? `폭 평균 + 지정 점(주황, ${ring} 방향) · 같은 점 다시 클릭 = 해제` : '폭 평균 · 2D 클릭 = 그 점 기준 곡선 추가'} · 옅은 띠 = 계산 잡음 범위 · 빨간 점선 = 목표 하한 · 곡선은 잡음만 살짝 다듬어 그림(LED 리플 높이 유지) · 최저점·마우스 값·CSV·판정 = 원자료`;
+    q('psub').title = `${pin ? `폭 평균 + 지정 점(주황, ${ring} 방향) · 같은 점 다시 클릭 = 해제` : '폭 평균 · 2D 클릭 = 그 점 기준 곡선 추가'} · 옅은 띠 = 계산 노이즈 범위 · 빨간 점선 = 목표 하한 · 곡선은 노이즈만 살짝 다듬어 그림(LED 리플 높이 유지) · 최저점·마우스 값·CSV·판정 = 원자료`;
     q('pinbtn').innerHTML = pin ? '<button type="button" class="m3-pintxt" data-pin-txt title="고른 점을 지나는 길이·폭 방향 원자료(평활 없음, 2D 최대 대비 %)">선택 선 CSV</button>' : '';
     paint('map', q('map')); paint('prof', q('prof'));
     gauge('ul', st.Ulen, observe.targetLen);

@@ -43,7 +43,7 @@ function layoutText0(r) {
 }
 
 // 반환 { feasible, n, rows, rowGap, total, positions:[{s,w}], kind, pitch, endMargin, ratio, stats, eff, margin, reason, alts:[…], evals, atCount(n) = 1열 n 개 최선 배치 | null(정밀 재계산 미달 때 개수 늘리기), limit = 'wid'(폭은 어떤 개수로도 못 닿음) | null }
-// safety = 통과 판정 여유(기저 추정은 광자 잡음이 있어 검증에서 0 근처 통과가 뒤집힘 — 이만큼 넘는 배치만 통과로 봄)
+// safety = 통과 판정 여유(기저 추정은 광자 노이즈가 있어 검증에서 0 근처 통과가 뒤집힘 — 이만큼 넘는 배치만 통과로 봄)
 // wCenter = 열 배치 기준 폭 위치(기준 LED 대비 mm, 2026-10-30) — 1열 = wCenter, 2열 = wCenter ± g. 후보 격자에 그 w 줄들이 있어야 함
 export function solveLayout(args) {
   const { G, obs, line, cand, maps, rowsOptions = [1, 2], gaps = [], nMax, emitted = 1, minGap = 2, pitchRange = null, timeBudget = 20000, now = () => Date.now(), safety = 0, sMargin = 0, wCenter = 0, inner = false, uniformOnly = false } = args;   // uniformOnly = 같은 피치만(끝 압축·자유 배치 안 함)

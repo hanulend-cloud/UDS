@@ -14,7 +14,7 @@ const G = { ns: 4, nw: 2, ds: 1, cell: 1, w0: -1, valid: new Uint8Array(8).fill(
 const obs = { faces: [], cone: 90, targetLen: 0.8, targetWid: 0.8 };
 const job = (k) => ({ sceneKey: `s${k}`, scene: { tag: k }, G, obs, nLeds: 2, fluxLm: 0 });
 const LED = { emitted: 1, escaped: 0.5, absSurf: 0.5, absVol: 0, lost: 0, rrLoss: 0, rrGain: 0 };
-// 응답: 첫 s 칸(셀 0,1) = 0.85, 나머지 1 — 시드마다 ±0.2% 흔들림 → 길이 균일도 ≈ 0.85, 잡음 ≪ 2%
+// 응답: 첫 s 칸(셀 0,1) = 0.85, 나머지 1 — 시드마다 ±0.2% 흔들림 → 길이 균일도 ≈ 0.85, 노이즈 ≪ 2%
 const make = (msg) => ({ sceneKey: msg.sceneKey, acc: Float64Array.from({ length: 8 }, (_, k) => (k < 2 ? 0.85 : 1) * (1 + 0.002 * Math.sin(msg.seed * 7 + k))), cnt: new Uint32Array(8).fill(10), ledger: { ...LED }, leak: { '0|0': 0.1 } });
 // 수동 포트: 청크 응답을 시험이 직접 보냄
 function manualPort() {
@@ -56,13 +56,13 @@ const OPT = { chunkN: 1000, fixedChunk: true, bins: 10, debounceMs: 500, tickMs:
   await T.advance(2000);
   ok(P.snapshot().state === 'idle' && P.snapshot().photons === 0 && a.log.length === n, '취소: idle, 남은 응답 무시, 새 청크 없음');
 }
-{   // 수렴 멈춤 · 목표만 바꾸면 판정만 · 광속 → 휘도 · 잡음 목표를 낮추면 재개
+{   // 수렴 멈춤 · 목표만 바꾸면 판정만 · 광속 → 휘도 · 노이즈 목표를 낮추면 재개
   const T = fakeTimers(), p = delayedPort(T);
   const P = createProgressive({ ports: [p], timers: T, opts: OPT });
   P.restart(job(1)); await T.advance(3000);
   const s = P.snapshot();
   ok(s.state === 'done' && s.reason === 'converged' && s.chunks >= 10 && s.chunks <= 25 && s.stats.relNoise <= 0.02 && s.stats.passLen === true,
-    `수렴: 청크 ${s.chunks}, 잡음 ${(s.stats.relNoise * 100).toFixed(3)}%, 길이 균일도 ${s.stats.Ulen.toFixed(3)} 합격`);
+    `수렴: 청크 ${s.chunks}, 노이즈 ${(s.stats.relNoise * 100).toFixed(3)}%, 길이 균일도 ${s.stats.Ulen.toFixed(3)} 합격`);
   const nScene = scenes(p).length, nCh = chunks(p).length;
   P.setJudge({ obs: { ...obs, targetLen: 0.9 } });
   const j = P.snapshot();
@@ -73,7 +73,7 @@ const OPT = { chunkN: 1000, fixedChunk: true, bins: 10, debounceMs: 500, tickMs:
   ok(L.lum > 0 && Math.abs(L.lum - (10 * 2 * L.eff) / (8e-6 * Math.PI)) < 1e-9 * L.lum, `광속 10 lm × 2개: 휘도 ${L.lum.toFixed(0)} cd/m² = Φ·eff/(A·π)`);
   ok(Math.abs(photometry(G, j.sum, j.ledger, { fluxLm: 10, nLeds: 2, cone: 30 }).lum - 4 * L.lum) < 1e-9 * L.lum, '원뿔 30°: sin²30° = 1/4 → 휘도 4배');
   P.setJudge({ targetNoise: 1e-6 });
-  ok(P.snapshot().state === 'running', '잡음 목표를 현재 잡음보다 낮추면 계산 재개');
+  ok(P.snapshot().state === 'running', '노이즈 목표를 현재 노이즈보다 낮추면 계산 재개');
   P.cancel();
 }
 {   // 일시정지 · 재개
@@ -115,7 +115,7 @@ const OPT = { chunkN: 1000, fixedChunk: true, bins: 10, debounceMs: 500, tickMs:
   ok(s.state === 'done' && s.reason === 'max' && s.chunks === 10, `점진 계산 끝: 청크 ${s.chunks}개`);
   ok(s.bins.every((b, i) => b.n === 1 && b.acc.every((v, k) => v === J.accs[i][k])), '배치 10개 = runJob 배치(비트 일치)');
   ok(s.stats.Ulen === ref.Ulen && s.stats.Uwid === ref.Uwid && s.stats.relNoise === ref.relNoise && s.stats.sWorst === ref.sWorst,
-    `판정 일치: 길이 균일도 ${ref.Ulen.toFixed(4)}, 폭 균일도 ${ref.Uwid?.toFixed(4)}, 잡음 ${(ref.relNoise * 100).toFixed(2)}%`);
+    `판정 일치: 길이 균일도 ${ref.Ulen.toFixed(4)}, 폭 균일도 ${ref.Uwid?.toFixed(4)}, 노이즈 ${(ref.relNoise * 100).toFixed(2)}%`);
   ok(Object.keys(J.ledger).every((k) => Math.abs(s.ledger[k] - J.ledger[k]) <= 1e-12 * Math.max(1, J.ledger[k])), '원장 합 일치(도착 순서 차이만)');
 }
 {   // 응답 없는 포트 → 제한 시간 뒤 error (장면 · 청크)
@@ -180,7 +180,7 @@ const OPT = { chunkN: 1000, fixedChunk: true, bins: 10, debounceMs: 500, tickMs:
 // 합성 MC 포트: 셀 k 의 광자당 기댓값 mu[k], 광자당 표준편차 sig — 청크 합 = N·mu + √N·sig·z(시드 결정적). 속도 rate 광자/ms → ms 보고
 const mu = [0.85, 0.85, 1, 1, 1, 1, 0.95, 0.95], sig = 2;
 function gauss(seed, k) { let x = Math.sin(seed * 12.9898 + k * 78.233) * 43758.5453; const u1 = x - Math.floor(x); x = Math.sin(seed * 39.3468 + k * 11.135) * 24634.6345; const u2 = x - Math.floor(x); return Math.sqrt(-2 * Math.log(u1 + 1e-12)) * Math.cos(2 * Math.PI * u2); }
-// 실제 엔진처럼 청크 결과 = 광원 광속 1회분(가중치 w0 = 1/N — 광자 수와 무관, 평균 mu·잡음 sig/√N), 개수 cnt 만 광자 수에 비례
+// 실제 엔진처럼 청크 결과 = 광원 광속 1회분(가중치 w0 = 1/N — 광자 수와 무관, 평균 mu·노이즈 sig/√N), 개수 cnt 만 광자 수에 비례
 const mcReply = (msg, rate) => ({ sceneKey: msg.sceneKey, acc: Float64Array.from(mu, (m, k) => m + sig * gauss(msg.seed, k) / Math.sqrt(msg.N)), cnt: new Uint32Array(8).fill(msg.N / 100), ledger: { ...LED, emitted: 1 }, leak: {}, ms: msg.N / rate });
 function mcPort(T, rate) {
   const log = [];
@@ -217,7 +217,7 @@ const perPhoton = (s) => Array.from(s.sum, (v) => v / (s.photons / 25000));   //
   const P = createProgressive({ ports: [p], timers: T, opts: { ...OPT, maxPhotons: 20000, targetNoise: 1e-9 } });
   P.restart(job(1)); await T.advance(5000);
   const s = P.snapshot(), ref = tallyStats(G, s.bins.map((b) => b.acc.map((v) => v / b.n)), obs);
-  ok(s.reason === 'max' && s.bins.every((b) => b.n === 2 && b.photons === 2000) && s.stats.Ulen === ref.Ulen && s.stats.relNoise === ref.relNoise, `같은 크기 20청크: 배치 ÷ 2 와 비트 일치 (잡음 ${(ref.relNoise * 100).toFixed(4)}%)`);
+  ok(s.reason === 'max' && s.bins.every((b) => b.n === 2 && b.photons === 2000) && s.stats.Ulen === ref.Ulen && s.stats.relNoise === ref.relNoise, `같은 크기 20청크: 배치 ÷ 2 와 비트 일치 (노이즈 ${(ref.relNoise * 100).toFixed(4)}%)`);
 }
 {   // 적응형 누적 평균 = 고정 25k 누적 평균 (3σ 안) — 청크 크기가 제각각이어도 광자 수 정규화로 치우침 없음
   const run = async (opts, rate) => {
@@ -233,7 +233,7 @@ const perPhoton = (s) => Array.from(s.sum, (v) => v / (s.photons / 25000));   //
   ok(mA.every((v, k) => Math.abs(v - mF[k]) <= tol && Math.abs(v - mu[k]) <= tol), `셀 평균 일치(3σ = ${tol.toExponential(1)}): 최대 차 ${Math.max(...mA.map((v, k) => Math.abs(v - mF[k]))).toExponential(1)}`);
   const se = Math.hypot(F.stats.seLen ?? 0, A_.stats.seLen ?? 0);
   ok(Math.abs(A_.stats.Ulen - F.stats.Ulen) <= 3 * se && Math.abs(A_.stats.Ulen - 0.85) <= 3 * (A_.stats.seLen ?? 0) + 1e-3, `길이 균일도 일치: 적응 ${A_.stats.Ulen.toFixed(4)} · 고정 ${F.stats.Ulen.toFixed(4)} (3σ ${(3 * se).toFixed(4)})`);
-  ok(Math.abs(A_.stats.relNoise / F.stats.relNoise - 1) < 0.5, `잡음 추정 비슷: 적응 ${(A_.stats.relNoise * 100).toFixed(3)}% · 고정 ${(F.stats.relNoise * 100).toFixed(3)}%`);
+  ok(Math.abs(A_.stats.relNoise / F.stats.relNoise - 1) < 0.5, `노이즈 추정 비슷: 적응 ${(A_.stats.relNoise * 100).toFixed(3)}% · 고정 ${(F.stats.relNoise * 100).toFixed(3)}%`);
 }
 {   // 포트별 시작: 장면이 늦은 포트가 있어도 준비된 포트는 바로 청크 · 늦은 포트는 준비되면 합류 · 청크는 포트당 1개만 진행
   const T = fakeTimers(), a = delayedPort(T), lateRes = [];
@@ -250,5 +250,21 @@ const perPhoton = (s) => Array.from(s.sum, (v) => v / (s.photons / 25000));   //
   const seq = m.log.map((x) => x.type).join(',');
   ok(seq === 'scene,chunk,scene,chunk' && m.log[3].sceneKey === 's2', `다시 시작: 진행 중 청크 1개 뒤에 새 장면, 그다음 새 청크 (${seq})`);
   Q.cancel(); P.cancel();
+}
+{ // 목표 바로 아래면 1% 에서 멈추지 않고 0.5% 까지(2026-11-03) · 통과면 그대로 멈춤
+  const fr = (x) => x - Math.floor(x), noisy = (msg) => ({ ...make(msg), acc: Float64Array.from({ length: 8 }, (_, k) => (k < 2 ? 0.85 : 1) * (1 + 0.3 * (fr(Math.sin(msg.seed * 12.9898 + k * 78.233) * 43758.5) - 0.5))) });
+  const port = (T) => { const log = []; return { log, send(msg) { log.push(msg); return msg.type === 'scene' ? Promise.resolve({ sceneKey: msg.sceneKey, ready: true }) : new Promise((res) => T.setTimeout(() => res(noisy(msg)), 100)); } }; };
+  const T = fakeTimers(), P = createProgressive({ ports: [port(T)], timers: T, opts: { ...OPT, targetNoise: 0.02 } });
+  P.restart(job(1)); await T.advance(5000);
+  const s0 = P.snapshot(), tg = s0.stats.Ulen + 0.01;
+  ok(s0.state === 'done' && s0.targetNoise === 0.02 && s0.stats.relNoise > 0.005 && s0.stats.relNoise <= 0.02, `통과: 설정한 노이즈에서 멈춤 (${(s0.stats.relNoise * 100).toFixed(2)}%)`);
+  P.setJudge({ obs: { ...obs, targetLen: tg } });
+  ok(P.snapshot().state === 'running' && P.snapshot().targetNoise === 0.005, '목표를 바로 위로 올리면 0.5% 까지 계산 재개');
+  P.cancel();
+  const T2 = fakeTimers(), Q = createProgressive({ ports: [port(T2)], timers: T2, opts: { ...OPT, targetNoise: 0.02 } });
+  Q.restart({ ...job(2), obs: { ...obs, targetLen: 1.02 } }); await T2.advance(5000);
+  const s1 = Q.snapshot();
+  ok(s1.state === 'done' && s1.targetNoise === 0.02 && s1.stats.relNoise > 0.005, `먼 미달: 설정한 노이즈에서 멈춤 (길이 ${s1.stats.Ulen.toFixed(2)})`);
+  Q.cancel();
 }
 done();

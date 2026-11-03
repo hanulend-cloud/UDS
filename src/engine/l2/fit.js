@@ -12,7 +12,7 @@ import { L2_G, MUA_RESIN, KAPPA } from './material.js';
 
 const DEG = Math.PI / 180;
 const dOmega = (k) => 2 * Math.PI * (Math.cos(angEdgeDeg(k) * DEG) - Math.cos(angEdgeDeg(k + 1) * DEG));
-// 모양 비교 격자: 5~10° 풀링 1개 + 10~80° 5° bin 14개 (1° bin 은 MC 잡음이 커서 풀링)
+// 모양 비교 격자: 5~10° 풀링 1개 + 10~80° 5° bin 14개 (1° bin 은 MC 노이즈가 커서 풀링)
 const SHAPE_BINS = [[5, 10], ...Array.from({ length: 14 }, (_, i) => [10 + 5 * i, 15 + 5 * i])];
 
 export function parseAngleCsv(text) {

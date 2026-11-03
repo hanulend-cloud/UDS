@@ -1,5 +1,5 @@
 // P4 단계 실행기(가짜 io): node test/mech3d-autodesign.mjs
-import { pickLateral, runAutoDesign, shapeScore, halving, smoothU, halvingTotal, sameDesign, screenShapeVars, shapeTotal, pickVariant, refineShapeCurve, refineShapeField, fieldError, fieldResponse, ledPhase, shapeModes, foldMap, solveBox, solveShapeModes, curveDirection, shapeSize } from '../src/engine/mech3d/autodesign.js';
+import { lateralCoarse, lateralFine, pickLateral, runAutoDesign, shapeScore, halving, smoothU, halvingTotal, sameDesign, screenShapeVars, shapeTotal, pickVariant, refineShapeCurve, refineShapeField, fieldError, fieldResponse, ledPhase, shapeModes, foldMap, solveBox, solveShapeModes, curveDirection, shapeSize } from '../src/engine/mech3d/autodesign.js';
 import { shapeVarRanges, gridCandidates, curveAt } from '../src/engine/mech3d/shape-opt.js';
 import { candidateGrid } from '../src/engine/mech3d/basis.js';
 import { milkyRows } from '../src/engine/mech3d/milky-search.js';
@@ -87,7 +87,7 @@ const peakRows = (ms, top, { len = 0.5, wid = 0.5, Uw = () => 0.9 } = {}) => ms.
   const best = await halving(Array.from({ length: 27 }, (_, k) => ({ k })), evalFn2, obs, [[27, 6e4, 2500], [6, 2e5, 4000], [2, 6e5, 6000]]);
   ok(seen.map((x) => x.join(':')).join(',') === '27:60000:2500,6:200000:4000,2:600000:6000' && best.cand.k === 25, `압축 27→6→2(광자·시간 제한 단계별): 최고 k=${best.cand.k}(제약 위반 26 제외)`);
   ok(shapeScore({ stats: st(0.85, 0.7), eff: 0.4, ok: true }, obs) > shapeScore({ stats: st(0.79, 0.9), eff: 0.9, ok: true }, obs), '점수: 목표 만족이 우선, 그다음 효율'); }
-{ // 평활 길이 균일도: 3행 이동평균 — 한 칸 잡음 골짜기에 덜 민감, profile 없으면 Ulen
+{ // 평활 길이 균일도: 3행 이동평균 — 한 칸 노이즈 골짜기에 덜 민감, profile 없으면 Ulen
   const prof = Float64Array.from([1, 1, 1, 0.4, 1, 1, NaN, 1]);
   const u = smoothU({ profile: prof, Ulen: 0.4 });
   ok(Math.abs(u - 0.8) < 1e-9, `smoothU: 골짜기 0.4 → 이동평균 ${u.toFixed(3)} (= 0.8)`);
@@ -109,7 +109,7 @@ const peakRows = (ms, top, { len = 0.5, wid = 0.5, Uw = () => 0.9 } = {}) => ms.
   const g = r.steps.find((x) => x.stage === 'guard');
   ok(r.best.shape === null && r.unchanged && r.reason === '현재안보다 나은 설계를 찾지 못함 — 현재안 유지' && !r.feasible && r.verified.stats.Ulen === 0.75, `현재안 유지: ${r.reason}`);
   ok(g && g.tried.shape.dt === -1 && g.triedVerified.stats.Ulen === 0.69, '시도한 최적안·검증값은 steps(guard)에'); }
-{ // ① 도 같음: 잡음으로 고른 Milky 가 현재안과 같은 수준(차 < 0.01) → 현재안 유지(현재 통과면 feasible)
+{ // ① 도 같음: 노이즈로 고른 Milky 가 현재안과 같은 수준(차 < 0.01) → 현재안 유지(현재 통과면 feasible)
   const io = { milkyRows: async (d, ms) => rowsOf(ms), verify: async () => ({ stats: st(0.85, 0.9), eff: 0.8 }), progress() {}, cancelled: () => false };
   const r = await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 3, count: 5, pitch: 0, shape: null }, milkyMax: 5 }, io);
   ok(r.best.milky === 3 && r.unchanged && r.feasible && /현재안 유지/.test(r.reason), `① 이득 없음 → 현재 Milky ${r.best.milky} 유지`); }
@@ -139,7 +139,7 @@ const peakRows = (ms, top, { len = 0.5, wid = 0.5, Uw = () => 0.9 } = {}) => ms.
   ok(r.best.shape.c > 0 && !r.unchanged && plans.at(-1).total === shapeTotal(13, 5) + 18, `최종 형상 c=${r.best.shape?.c}, 분모 ${plans.at(-1)?.total}`);
   const io2 = { ...io, evalShapes: mk(() => 0), verify: async () => ({ stats: st(0.75, 0.9), eff: 0.5 }) };
   const r2 = await runAutoDesign({ stages: { shape: true }, obs, current: cur, shapePart: 0, shapeRanges: rg }, io2);
-  ok(r2.unchanged && r2.best.shape === null && r2.reason === '형상 변수의 효과가 잡음 수준 — 현재 형상 유지', `효과 없음 → 현재안 유지: ${r2.reason}`); }
+  ok(r2.unchanged && r2.best.shape === null && r2.reason === '형상 변수의 효과가 노이즈 수준 — 현재 형상 유지', `효과 없음 → 현재안 유지: ${r2.reason}`); }
 { // h 선별 → R 도 격자에 포함 (R 은 선별 후보에 안 나옴)
   const rg = shapeVarRanges({ t0: 2, pitch: 5, hasCenters: true }), seen = [];
   const evalFn = async (cands) => { seen.push(cands); return cands.map((c) => ({ cand: c, stats: st(0.6 + (c.h > 0 ? 0.3 : 0), 0.9), eff: 0.5, ok: true })); };
@@ -297,7 +297,7 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   const obs = { targetLen: 0.9, targetWid: 0.9 }, mk = (U) => ({ Ulen: U, Uwid: 0.9, profile: null });
   const evalFn = async (cands) => cands.map((c) => ({ cand: c, ok: true, eff: 0.1, stats: mk(c.dt === 2 ? 0.80 : c.dt === 0.5 ? 0.795 : 0.7) }));
   const best = await halving([{ dt: 2 }, { dt: 0.5 }, { dt: 0 }], evalFn, obs, [[3, 1, 1]]);
-  ok(best.cand.dt === 0.5 && Math.abs(shapeSize({ dt: -1, h: 0.5, kL: [0.2, -0.7], kW: [0.1] }) - 2.3) < 1e-12, `잡음 수준 차이면 작은 변경 dt ${best.cand.dt}`);
+  ok(best.cand.dt === 0.5 && Math.abs(shapeSize({ dt: -1, h: 0.5, kL: [0.2, -0.7], kW: [0.1] }) - 2.3) < 1e-12, `노이즈 수준 차이면 작은 변경 dt ${best.cand.dt}`);
 }
 { // 이미 적용한 형상(shapeStart)에서 이어서: ③ 를 다시 돌려도 적용 형상이 후보에 들어가 더 나으면 유지(원본에서 새로 시작해 잃지 않음)
   const rg = shapeVarRanges({ t0: 2, pitch: 5, hasCenters: false }), start = { dt: 0, h: 0, R: 1, e: 0.7, c: 0 }, seen = [];
@@ -307,7 +307,7 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   const r = await runAutoDesign({ stages: { shape: true }, obs: { targetLen: 0.8, targetWid: 0.8 }, current: { milky: 3, count: 5, pitch: 0, shape: null }, shapePart: 0, shapeRanges: rg, shapeStart: start, curve: false }, io);
   ok(seen.some(good) && good(r.best.shape ?? {}), `적용 형상(끝단 +0.7) 후보 포함 → 최종 ${JSON.stringify(r.best.shape)}`);
 }
-{ // ② LED 폭 위치 이동(2026-10-30): 후보 이동량을 빠르게 비교 → 최고(잡음 수준이면 덜 옮긴 쪽) → 그 위치 중심으로 배치 탐색
+{ // ② LED 폭 위치 이동(2026-10-30): 후보 이동량을 빠르게 비교 → 최고(노이즈 수준이면 덜 옮긴 쪽) → 그 위치 중심으로 배치 탐색
   const G = { ns: 100, nw: 1, ds: 1, cell: 1, w0: -0.5, L: 100, closed: false, winS: 10, area: new Float64Array(100).fill(1), valid: new Uint8Array(100).fill(1) }, line = { length: 100, closed: false };
   const gain = { 0: 0.55, '-6': 0.6, '-12': 0.9, '-14': 0.895 }, seenW = [];
   const io = { progress() {}, cancelled: () => false, verify: async (d) => ({ stats: { Ulen: d.wCenter === -12 ? 0.9 : 0.55, Uwid: 0.9 }, eff: 0.2 }),
@@ -323,7 +323,7 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   const R = (o) => Object.entries(o).map(([c, Uwid]) => ({ cand: { wCenter: +c }, ok: true, stats: { Ulen: 0.5, Uwid } })), O = { targetLen: 0.8, targetWid: 0.7 };
   ok(pickLateral(R({ 0: 0.74, '-6': 0.9 }), O) === 0, '폭이 이미 통과 = 옮기지 않음');
   ok(pickLateral(R({ 0: 0.6, '-6': 0.75, '-12': 0.9 }), O) === -6, '폭 부족 = 목표를 넘는 후보 중 가장 덜 옮김');
-  ok(pickLateral(R({ 0: 0.5, '-6': 0.62, '-12': 0.615 }), O) === -6 && pickLateral(R({ 0: 0.5, '-6': 0.55, '-12': 0.62 }), O) === -12, '아무것도 못 넘으면 최고값(잡음 수준이면 덜 옮김)');
+  ok(pickLateral(R({ 0: 0.5, '-6': 0.62, '-12': 0.615 }), O) === -6 && pickLateral(R({ 0: 0.5, '-6': 0.55, '-12': 0.62 }), O) === -12, '아무것도 못 넘으면 최고값(노이즈 수준이면 덜 옮김)');
   ok(pickLateral([], O) === null, '후보 없음 = null');
 }
 { // ② 정밀 재계산 미달 → 1열로 LED 를 하나씩 늘려 목표에 닿는 가장 적은 개수(2026-11-02) — 기저는 7개로 통과라 하지만 실제로는 10개부터 통과
@@ -398,4 +398,40 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   ok(rL.limited && rL.best === st0 && nEv === 11, `형상 응답이 없으면 모드만 재고 멈춤 (평가 ${nEv})`);
   const rB = await solveShapeModes(st0, async (cands) => cands.map((cd) => ({ cand: cd, ok: false, why: '간섭' })), O, { G, ns: 21, nw: 5, W: 5, ledS, N: 1, maxMs: 1 });
   ok(rB.best === st0 && rB.pred === null, '모든 모드가 제약 위반이면 그대로'); }
+{ // 판정 근처 최종안은 노이즈 0.5% 로 다시 계산해 판정(2026-11-03) — 먼 현재안은 다시 계산 안 함
+  const obs2 = { targetLen: 0.8, targetWid: 0.8 }, U = (m) => (m >= 2 ? 0.79 : 0.6), calls = [];
+  const io = (hi) => ({ milkyRows: async (d, ms) => rowsOf(ms, U), progress() {}, cancelled: () => false, verify: async (d, o) => { calls.push([d.milky, o?.noise ?? null]); return { stats: { Ulen: o?.noise ? hi : U(d.milky), Uwid: 0.85, empty: false, relNoise: o?.noise ?? 0.01 }, eff: 0.2, photons: 1e7 }; } });
+  const r = await runAutoDesign({ stages: { milky: true }, obs: obs2, current: { milky: 1 }, milkyMax: 3 }, io(0.81));
+  ok(r.feasible && r.verified.stats.Ulen === 0.81 && calls.filter((c) => c[1]).length === 1 && calls.filter((c) => c[1])[0][1] === 0.005, `1% 0.79 → 0.5% 0.81 = 통과 (${JSON.stringify(calls)})`);
+  calls.length = 0;
+  const r2 = await runAutoDesign({ stages: { milky: true }, obs: obs2, current: { milky: 1 }, milkyMax: 3 }, io(0.795));
+  ok(!r2.feasible && r2.verified.stats.Ulen === 0.795 && /0\.79|0\.80/.test(r2.reason), `0.5% 에서도 미달이면 미달 — ${r2.reason}`);
+}
+{ // 폭 위치: 2 mm 로 훑고 최고 위치의 ±1 mm 만 더(2026-11-03)
+  const cs = [0, -1, -2, -3, -4, -5, -6, 1, 2];
+  ok(lateralCoarse(cs).join() === '0,-2,-4,-6,2' && lateralFine(cs, -4).sort((a, b) => a - b).join() === '-5,-3' && lateralFine([0, -2, -3], -2).join() === '-3', '1차 짝수 · 2차 ±1 mm 중 후보에 있는 것만');
+  const gain = { 0: 0.55, '-1': 0.56, '-2': 0.7, '-3': 0.8, '-4': 0.72 }, asked = [];
+  const G = { ns: 100, nw: 1, ds: 1, cell: 1, w0: -0.5, L: 100, closed: false, winS: 10, area: new Float64Array(100).fill(1), valid: new Uint8Array(100).fill(1) }, line = { length: 100, closed: false };
+  const io = { progress() {}, cancelled: () => false, verify: async () => ({ stats: { Ulen: 0.9, Uwid: 0.9 }, eff: 0.2 }),
+    evalLateral: async (d, list) => { asked.push(list.join()); return list.map((c) => ({ cand: { wCenter: c }, ok: true, eff: 0.2, stats: { Ulen: 0.5, Uwid: gain[c] } })); },
+    basis: async (d) => { const cand = candidateGrid(line, { sStep: 2, wOffsets: [d.wCenter ?? 0] }); return { cand, emitted: 1, gaps: [], sMargin: 0, maps: cand.map(({ s }) => Float32Array.from({ length: 100 }, (_, i) => Math.exp(-((i + 0.5 - s) ** 2) / 72))) }; } };
+  const r = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.7, targetWid: 0.95 }, current: { milky: 1, count: 5, pitch: 0 }, G, line, nMax: 20, lateral: [0, -1, -2, -3, -4] }, io);
+  const lat = r.steps.find((x) => x.stage === 'ledsLateral');
+  ok(lat.pick === -3 && asked.length === 2 && asked[0] === '0,-2,-4', `2 단계 비교로 -3 고름 (${asked.join(' | ')} → ${lat.pick})`);
+}
+{ // ② 근처 후보가 여럿이면 적은 개수부터 0.5% 로 재서 처음 통과한 안(2026-11-03) · 모두 미달이면 가장 가까운 안
+  const G = { ns: 100, nw: 1, ds: 1, cell: 1, w0: -0.5, L: 100, closed: false, winS: 10, area: new Float64Array(100).fill(1), valid: new Uint8Array(100).fill(1) }, line = { length: 100, closed: false };
+  const cand = candidateGrid(line, { sStep: 2 }), maps = cand.map(({ s }) => Float32Array.from({ length: 100 }, (_, i) => Math.exp(-((i + 0.5 - s) ** 2) / 200))), B = { cand, maps, emitted: 1, gaps: [], sMargin: 0 };
+  const run = async (hi) => { const fine = []; const r = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0.5 }, current: { milky: 1, count: 5, pitch: 0, rows: 1 }, G, line, nMax: 30, rowsOptions: [1], ladderMs: 1e9 },
+    { progress() {}, cancelled: () => false, basis: async () => B, verify: async (d, o) => { const n = d.count; if (o?.noise) fine.push(n); return { stats: { Ulen: o?.noise ? hi(n) : n === 5 ? 0.4 : 0.785, Uwid: 0.9, empty: false, relNoise: o?.noise ?? 0.011 }, eff: 0.2, photons: 1e7 }; } }); return { r, fine }; };
+  const a = await run((n) => (n >= Infinity ? 0 : 0.79)), first = a.fine[0];
+  ok(a.fine.length >= 2 && a.fine.length <= 3 && [...a.fine].sort((x, y) => x - y).join() === a.fine.join() && !a.r.feasible, `전부 미달: 적은 개수부터 ${a.fine.join()} (최대 3개)`);
+  const b = await run((n) => (n > first ? 0.81 : 0.79));
+  ok(b.r.feasible && b.r.best.count > first && b.r.verified.stats.Ulen === 0.81 && b.fine.length === 2, `개수 ${b.fine.join()}: 두 번째가 통과 → 그 안 (${b.r.best.count}개)`);
+}
+{ // ⑤ 높이 범위는 ② 로 옮긴 자리에서 다시 잼(2026-11-03)
+  const seen = [], io = { progress() {}, cancelled: () => false, verify: async (d) => ({ stats: st(d.dz === 3 ? 0.9 : 0.5, 0.9), eff: 0.5 }), heightRange: (d) => { seen.push(d.tag); return [0, 3]; }, evalVariants: async (d, cands) => cands.map((c) => ({ cand: c, ok: true, eff: 0.5, stats: st(c.dz === 3 ? 0.9 : 0.5, 0.9) })) };
+  const r = await runAutoDesign({ stages: { height: true }, obs, current: { milky: 1, tag: 'x' }, heightRange: [0, 1] }, io);
+  ok(seen[0] === 'x' && r.best.dz === 3, `옮긴 자리 범위 [0, 3] 으로 후보 (+${r.best.dz})`);
+}
 done();

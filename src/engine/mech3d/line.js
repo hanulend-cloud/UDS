@@ -473,13 +473,13 @@ function quadSmooth(pts, closed, m0) {
 }
 
 // 열린 경로 끝 구간(연장점 + 겹침 2mm)의 국소 선형 회귀(호 길이 ±1mm). 연장점은 마지막 평활 뒤에 붙으므로
-// 단면 중점의 ½셀 잡음이 그대로 남아 끝 선분을 수 도 기울인다 → 여기서 다듬는다(가운데 구간은 손대지 않음).
+// 단면 중점의 ½셀 노이즈가 그대로 남아 끝 선분을 수 도 기울인다 → 여기서 다듬는다(가운데 구간은 손대지 않음).
 function endSmooth(pts, k0, k1, h = 1) {
   const n = pts.length / 2, cum = new Float64Array(n), out = pts.slice();
   for (let i = 1; i < n; i++) cum[i] = cum[i - 1] + Math.hypot(pts[2 * i] - pts[2 * i - 2], pts[2 * i + 1] - pts[2 * i - 1]);
   const det = (X) => X[0][0] * (X[1][1] * X[2][2] - X[1][2] * X[2][1]) - X[0][1] * (X[1][0] * X[2][2] - X[1][2] * X[2][0]) + X[0][2] * (X[1][0] * X[2][1] - X[1][1] * X[2][0]);
   // 곡률 항(s²)은 넓은 창(±2.5h)의 2차 맞춤에서 얻고, 위치·기울기는 좁은 창(±h)의 1차 맞춤으로 얻는다:
-  // 1차만 쓰면 굽은 끝에서 가로로 치우쳐 구간 경계가 꺾이고, 2차만 쓰면 끝점 기울기가 잡음에 약하다.
+  // 1차만 쓰면 굽은 끝에서 가로로 치우쳐 구간 경계가 꺾이고, 2차만 쓰면 끝점 기울기가 노이즈에 약하다.
   const quad = (i, H) => {
     const M = [0, 0, 0, 0, 0], bx = [0, 0, 0], by = [0, 0, 0];
     for (let j = 0; j < n; j++) { const s = cum[j] - cum[i]; if (s < -H) continue; if (s > H) break; let p = 1; for (let e = 0; e < 5; e++) { M[e] += p; p *= s; } for (let e = 0, q = 1; e < 3; e++, q *= s) { bx[e] += q * pts[2 * j]; by[e] += q * pts[2 * j + 1]; } }
@@ -488,7 +488,7 @@ function endSmooth(pts, k0, k1, h = 1) {
     return [c2(bx), c2(by)];
   };
   const fit = (i) => {
-    // 곡률 항은 양쪽 창이 다 들어가는 가장 가까운 점에서 잰다(끝에서 한쪽 창 2차 맞춤은 잡음을 크게 키움)
+    // 곡률 항은 양쪽 창이 다 들어가는 가장 가까운 점에서 잰다(끝에서 한쪽 창 2차 맞춤은 노이즈를 크게 키움)
     let ic = i; while (ic < n - 1 && cum[ic] < 2.5 * h) ic++; while (ic > 0 && cum[n - 1] - cum[ic] < 2.5 * h) ic--;
     const [cx, cy] = quad(ic, 2.5 * h);
     let S = 0, Ss = 0, Sss = 0, Sx = 0, Sy = 0, Ssx = 0, Ssy = 0;
@@ -609,7 +609,7 @@ export function recognizeLine(parts, faces, dir) {
   const raw = []; for (const k of path) raw.push(R.x0 + ((k % R.nx) + 0.5) * cell, R.y0 + (((k / R.nx) | 0) + 0.5) * cell);
   let pts = smoothResample(raw, closed, 0.25 / cell, 0.25);
   // 두 번: 첫 결과(골격보다 곧은 중심선)의 법선으로 다시 재면 넓어진 구간 가장자리의 기운 단면이 없어진다
-  // 마지막은 국소 2차 회귀(±1.5mm): 단면 중점의 ½셀 잡음을 지워 접선(toSW/fromSW 의 w 방향)을 안정시키되, 이동평균과 달리 호 반경을 줄이지 않는다
+  // 마지막은 국소 2차 회귀(±1.5mm): 단면 중점의 ½셀 노이즈를 지워 접선(toSW/fromSW 의 w 방향)을 안정시키되, 이동평균과 달리 호 반경을 줄이지 않는다
   for (let pass = 0; pass < 2; pass++) pts = smoothResample(recenter(pts, closed, RC, dtC), closed, pass ? 1 : 3, 0.25);
   pts = quadSmooth(pts, closed, 6);
   if (!closed) { const st = straightFit(pts, RC, width); if (st) pts = st; }   // 거의 곧은 띠 = 곧은 중심선(폭이 구간마다 달라도 꺾이지 않게)
@@ -638,11 +638,11 @@ export function recognizeLine(parts, faces, dir) {
         const x2 = x + 0.25 * tx, y2 = y + 0.25 * ty; if (!inside(x2, y2)) break;
         const c = midAt(x2, y2, -ty, tx, lim);
         if (!c || c[0] > 1.15 * w0 + 2 * cell || c[0] / 2 - Math.abs(c[1]) < 0.475 * w0 - cell) break;   // 단면이 끝면에 걸려 짧아지면(또는 끝 모서리에서 길어지면) 곧게
-        // 가로 보정은 한 걸음에 ±max(셀, 0.05) 로 제한: 끝면에 걸린 단면(크게 치우침)이나 가장자리 잡음이 방향을 꺾지 못하게
+        // 가로 보정은 한 걸음에 ±max(셀, 0.05) 로 제한: 끝면에 걸린 단면(크게 치우침)이나 가장자리 노이즈가 방향을 꺾지 못하게
         const cl = Math.max(cell, 0.05), u = Math.max(-cl, Math.min(cl, c[1]));
         const x3 = x2 - u * ty, y3 = y2 + u * tx; if (!inside(x3, y3)) break;
         hist.push(x, y); x = x3; y = y3; add.push(x, y);
-        // 단면 중점의 양자화 잡음(±½셀)이 방향을 흔들지 않도록 2mm 전 점과 이은 방향을 쓴다
+        // 단면 중점의 양자화 노이즈(±½셀)이 방향을 흔들지 않도록 2mm 전 점과 이은 방향을 쓴다
         // 끝 접선 = 최근 1mm 현의 방향 + 그 앞 1mm 현과의 차이의 절반(굽은 끝에서 현 방향이 뒤처지는 것 보정)
         const H = hist.length, p1x = hist[H - 8], p1y = hist[H - 7], p2x = hist[H - 16], p2y = hist[H - 15];
         if (p2x !== undefined) {
@@ -669,7 +669,7 @@ export function recognizeLine(parts, faces, dir) {
     const th = 0.5 * Math.atan2(2 * sxy, sxx - syy), tx = Math.cos(th), ty = Math.sin(th);
     let dev = 0, ss = 0; for (let i = 0; i < n; i++) { const e = Math.abs(-ty * (P[2 * i] - mx) + tx * (P[2 * i + 1] - my)); dev = Math.max(dev, e); ss += e * e; }
     const tol = Math.max(0.05, cell);
-    if (Math.sqrt(ss / n) <= tol && dev <= 3 * tol) {   // RMS ≤ tol, 최대 ≤ 3·tol (가장자리 잡음에 견딤)
+    if (Math.sqrt(ss / n) <= tol && dev <= 3 * tol) {   // RMS ≤ tol, 최대 ≤ 3·tol (가장자리 노이즈에 견딤)
       const sgn = (P[2 * n - 2] - P[0]) * tx + (P[2 * n - 1] - P[1]) * ty >= 0 ? 1 : -1, t2 = [sgn * tx, sgn * ty];
       const s0 = (P[0] - mx) * t2[0] + (P[1] - my) * t2[1], s1 = (P[2 * n - 2] - mx) * t2[0] + (P[2 * n - 1] - my) * t2[1];
       result = lineFromData({ ...data, kind: 'line', a: [mx + s0 * t2[0], my + s0 * t2[1]], t: t2, length: s1 - s0 });

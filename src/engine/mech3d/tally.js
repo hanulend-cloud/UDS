@@ -7,6 +7,16 @@
 // w 격자 폭은 영역의 최대 국소 폭(래스터 거리장 최댓값) + 2칸. 유효 = 면적 ≥ 0.5·ds·cw.
 // 2D 분포·1D 프로파일 화질 = 정사각 칸 크기(2026-10-30): 저 1.5 · 중 1.0 · 고 0.5 mm — 칸이 작을수록 칸당 광자가 줄어 같은 정확도까지 광자가 더 필요.
 // 짧은 면은 길이 10칸 이상, 좁은 면은 폭 4칸 이상이 되게 그 방향만 더 잘게(판정에 칸 수가 모자라지 않게)
+// 판정 노이즈(2026-11-03) — 균일도(칸 최저÷최고)는 노이즈만큼 낮게 나옴(실측 같은 설계: 노이즈 1% 0.78~0.79, 0.5% 0.81). 그래서 목표 바로 아래(JUDGE_BAND 안) 미달은 0.5% 까지 계산해 판정. 통과는 더 계산해도 오르기만 하고, 먼 미달은 안 바뀌니 그대로
+export const JUDGE_NOISE = 0.005, JUDGE_BAND = 0.03;
+export function nearTarget(s, obs) {
+  if (!s || s.empty || !Number.isFinite(s.Ulen)) return false;
+  const m = Math.min(s.Ulen - obs.targetLen, s.Uwid == null ? Infinity : s.Uwid - obs.targetWid);
+  return m < 0 && m >= -JUDGE_BAND;
+}
+export const judgeNoise = (s, obs, noise) => (nearTarget(s, obs) ? Math.min(noise, JUDGE_NOISE) : noise);
+// 균일도 표시 — 미달인데 반올림하면 목표와 같아 보일 때만 세 자리(0.795 ✕)
+export const fmtJudge = (v, t) => (!Number.isFinite(v) ? '–' : v < t && +v.toFixed(2) >= t ? v.toFixed(3) : v.toFixed(2));
 export const GRID_QUALITY = { low: { cell: 1.5 }, mid: { cell: 1 }, high: { cell: 0.5 } };
 export function autoCells(L, width, quality) {
   const c = (GRID_QUALITY[quality] ?? GRID_QUALITY.low).cell;
@@ -42,7 +52,7 @@ export function tallyGeometry(line, obs) {
   }
   const valid = new Uint8Array(ns * nw);
   // 유효 = 가장자리 제외 뒤 남은 길이(sLen) 기준 면적 절반 이상(2026-11-02) — 칸 전체 기준이면 끝 칸이 화질에 따라 빠져 균일도가 갈렸음(예: 1 mm 칸만 어두운 끝 구간을 건너뜀).
-  // 남은 길이가 칸의 25% 미만인 끝 조각은 뺌(면적이 작아 잡음만 큼)
+  // 남은 길이가 칸의 25% 미만인 끝 조각은 뺌(면적이 작아 노이즈만 큼)
   for (let i = 0; i < ns; i++) {
     const sLen = line.closed ? ds : Math.min((i + 1) * ds, L - edge) - Math.max(i * ds, edge);
     if (sLen < 0.25 * ds - 1e-9) continue;
@@ -54,7 +64,7 @@ export function tallyGeometry(line, obs) {
     for (let j = 0; j < nw; j++) { const k = i * nw + j; if (area[k] > 0 && area[k] >= need) valid[k] = 1; }
   }
   const validAll = new Uint8Array(ns * nw);
-  for (let k = 0; k < validAll.length; k++) if (areaAll[k] >= 0.1 * ds * cell) validAll[k] = 1;   // 면이 칸의 10% 이상 걸치면 값을 냄(더 작은 조각은 잡음만 큼)
+  for (let k = 0; k < validAll.length; k++) if (areaAll[k] >= 0.1 * ds * cell) validAll[k] = 1;   // 면이 칸의 10% 이상 걸치면 값을 냄(더 작은 조각은 노이즈만 큼)
   // pixOk: 집계 가능한 래스터 픽셀(마스크 안, 경계에서 edgeExcl 이상, 열린 라인이면 끝 제외) — 집계기가 래스터 없이(Worker) 쓰도록 G 에 담음
   return { ns, nw, ds, cell, w0, valid, area, validAll, areaAll, L, closed: line.closed, winS: obs.winS ?? Math.max(5, L / 10), pix: { x0: R.x0, y0: R.y0, cell: R.cell, nx: R.nx, ny: R.ny }, pixOk, pixAll: R.mask };
 }
@@ -108,9 +118,9 @@ export function makeAccumulator(G, line, obs, rw = null) {
 // accs: 배치별 누적(같은 광자 수). 값 = 셀 출사/면적(상대 휘도).
 // 길이 균일도: s 칸별(폭 방향 유효 셀 면적가중 평균)의 min/max. 폭 균일도: s 창(길이 winS, 유효 s 범위를 균등 분할, 닫힌 경로는 순환)마다
 //   창 평균 폭 프로파일(w 칸별 Σ출사/Σ면적, 창 안 면적이 가득 찬 값의 ≥ 50% 인 w 칸만)의 min/max 를 구하고 그 최저를 취한다.
-// relNoise = U 를 만드는 값들의 잡음: 길이 프로파일 s 칸(폭 방향 합) · 폭 판정 창의 w 칸(창 안 s 합) 각각 (배치 간 표준편차/평균)/√B 의 중앙값 중 큰 쪽
-//   — min/max 의 낮은 쪽 편향을 만드는 잡음의 크기. 예전엔 2D 칸 하나하나의 잡음이라, 관측면이 좁고 효율이 낮으면(ㄱ자 Milky 출구 등)
-//   필요한 광자가 수억 개가 되어 수렴하지 않았다(2026-10-28). relNoiseCell = 2D 칸 잡음(색지도 얼룩 참고용).
+// relNoise = U 를 만드는 값들의 노이즈: 길이 프로파일 s 칸(폭 방향 합) · 폭 판정 창의 w 칸(창 안 s 합) 각각 (배치 간 표준편차/평균)/√B 의 중앙값 중 큰 쪽
+//   — min/max 의 낮은 쪽 편향을 만드는 노이즈의 크기. 예전엔 2D 칸 하나하나의 노이즈가라, 관측면이 좁고 효율이 낮으면(ㄱ자 Milky 출구 등)
+//   필요한 광자가 수억 개가 되어 수렴하지 않았다(2026-10-28). relNoiseCell = 2D 칸 노이즈(색지도 얼룩 참고용).
 export function tallyStats(G, accs, obs, cnts = null) {
   const B = accs.length, nCell = G.ns * G.nw, { ns, nw, ds, area, valid } = G;
   let nValid = 0; for (let k = 0; k < nCell; k++) if (valid[k]) nValid++;
@@ -153,7 +163,7 @@ export function tallyStats(G, accs, obs, cnts = null) {
   if (B >= 2) for (let k = 0; k < nCell; k++) if (valid[k] && sum[k] > 0) { let m = sum[k] / B, v = 0; for (const a of accs) v += (a[k] - m) ** 2; rel.push(Math.sqrt(v / (B - 1)) / m / Math.sqrt(B)); }
   const med = (a) => { a.sort((x, y) => x - y); return a.length ? a[a.length >> 1] : null; };
   const relNoiseCell = med(rel);
-  // 길이 프로파일 s 칸 · 폭 창 w 칸의 배치 간 잡음
+  // 길이 프로파일 s 칸 · 폭 창 w 칸의 배치 간 노이즈
   const relOf = (vals) => { const v = vals.filter(Number.isFinite); if (v.length < 2 || v.length < B) return null; const m = v.reduce((s, x) => s + x, 0) / v.length; if (!(m > 0)) return null; return Math.sqrt(v.reduce((s, x) => s + (x - m) ** 2, 0) / (v.length - 1)) / m / Math.sqrt(v.length); };
   const relRows = [], relCols = [];
   if (B >= 2) {

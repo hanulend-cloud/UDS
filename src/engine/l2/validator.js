@@ -23,8 +23,8 @@ export function validateTable(table, refAD) {
     checks.push({ id: 'V3', ok: d <= 0.005, value: d, limit: 0.005, note: `해석해 ${Tc.toFixed(4)}` });
   }
 
-  // V4: τ' 증가 → T 비증가(MC 잡음 허용 0.003), HPA 비감소 — 역전이 max(2°, z·σ) 를 넘으면 실패
-  //     (σ = 두 추정치 MC 통계 불확도 합성. 근-Lambertian 평탄부에서 ±1~1.5° 요동은 통계 잡음)
+  // V4: τ' 증가 → T 비증가(MC 노이즈 허용 0.003), HPA 비감소 — 역전이 max(2°, z·σ) 를 넘으면 실패
+  //     (σ = 두 추정치 MC 통계 불확도 합성. 근-Lambertian 평탄부에서 ±1~1.5° 요동은 통계 노이즈)
   //     z = 다중비교 Bonferroni 임계(α=0.05 / 비교 수) — 비교가 수백 개라 3σ 로는 우연 초과가 기대값 ~0.3건.
   {
     const taus = [...G.tauR, 30, 50, 100, 300, 1000];

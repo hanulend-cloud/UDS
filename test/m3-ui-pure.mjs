@@ -340,7 +340,7 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   ok([1e5, 1e6, 2e6, 5e6, 1e7].every((t) => f(t, 15) * t * b <= B), '예산(4 GB) 안');
 }
 
-{ // 1D 곡선 다듬기: 칸이 많을 때만 · LED 리플 높이 유지 · 잡음 감소 · 원자료 불변
+{ // 1D 곡선 다듬기: 칸이 많을 때만 · LED 리플 높이 유지 · 노이즈 감소 · 원자료 불변
   const { smoothCurve, smoothHalf, sgGain, ledGapCells, profileTxt } = await import('../src/ui/m3/results-panel.js');
   ok(smoothHalf(39, 8) === 0 && smoothHalf(11, null) === 0 && smoothHalf(77, null) === 2 && smoothHalf(77, 3) === 0, '칸 < 40 = 안 함(폭 방향) · LED 모르면 5칸 · 5칸으로도 리플이 깎이면 안 함');
   const a = smoothHalf(77, 7.7), b = smoothHalf(232, 23);
@@ -350,7 +350,7 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   const rng = (y) => Math.max(...y) - Math.min(...y), rms = (y) => Math.sqrt(y.slice(20, N - 20).reduce((t, v, i) => t + (v - clean[i + 20]) ** 2, 0) / (N - 40));
   const pure = smoothCurve(clean, m);
   ok(rng(pure.slice(20, N - 20)) / rng(clean) >= 0.95, `깨끗한 리플 높이 ${(rng(pure.slice(20, N - 20)) / rng(clean) * 100).toFixed(1)}% 유지`);
-  ok(rms(sm) < 0.8 * rms(noisy), `잡음 감소 ${rms(noisy).toFixed(4)} → ${rms(sm).toFixed(4)}`);
+  ok(rms(sm) < 0.8 * rms(noisy), `노이즈 감소 ${rms(noisy).toFixed(4)} → ${rms(sm).toFixed(4)}`);
   const line = Array.from({ length: 50 }, (_, i) => 0.2 + 0.01 * i), sl = smoothCurve(line, 3);
   ok(sl.every((v, i) => Math.abs(v - line[i]) < 1e-12), '직선·기울기는 그대로(끝단 어두움을 왜곡 안 함)');
   const gap = [0.5, 0.6, 0.7, NaN, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 0.9, 0.8], sg = smoothCurve(gap, 2);
@@ -399,6 +399,12 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   ok(h.includes('data-v="1.525"') && h.includes('data-v="1.025"'), '버튼 값이 표 값과 정확히 같음');
 }
 
+{ // 용어: 노이즈로 통일(2026-11-03)
+  const { readFileSync, readdirSync, statSync } = await import('node:fs');
+  const walk = (d) => readdirSync(d).flatMap((f) => { const p = `${d}/${f}`; return statSync(p).isDirectory() ? walk(p) : /\.(js|html)$/.test(f) ? [p] : []; });
+  const bad = walk('src').filter((p) => /(?<!붙)\uC7A1\uC74C/.test(readFileSync(p, 'utf8')));
+  if (bad.length) throw new Error(`src 에 옛 용어 남음 ${bad.slice(0, 3).join()}`);
+}
 done();
 
 { const { clearDbHtml } = await import('../src/ui/mech3d-panel.js');

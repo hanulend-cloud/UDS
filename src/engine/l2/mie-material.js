@@ -97,7 +97,7 @@ export function fitParticle(mainTable, entry, bead, host, { lambda_um = 0.55, N 
   const phi = volumeFractionFromMus(best.opt, mus);
   // 지름 식별성: J ≤ J_min + 1 (Δχ²=1, 1σ) 인 d 범위. 2배 넘게 퍼지면 데이터로 지름을 특정할 수 없음
   // 평가점 사이를 log d 선형 보간해 J = J_min + 1 교차점을 찾는다(평가점만 쓰면 날카로운 최소에서 범위가 0 으로 보임)
-  // 불확도 보정: σ 가 응답표 MC 잡음을 포함하지 않으므로 Δχ² 임계를 잔차로 스케일(χ²_min/dof, 표준 관행)
+  // 불확도 보정: σ 가 응답표 MC 노이즈를 포함하지 않으므로 Δχ² 임계를 잔차로 스케일(χ²_min/dof, 표준 관행)
   const nObs = entry.samples.reduce((n, sm) => n + ['T', 'R', 'haze', 'hpa'].filter((k) => sm[k] != null).length + (sm.curve ? 1 : 0), 0);
   const dof = Math.max(1, nObs - (best.f.free.mua ? 3 : 2));
   const dChi = Math.max(1, best.J / dof);

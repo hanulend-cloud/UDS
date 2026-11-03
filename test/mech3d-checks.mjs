@@ -1,7 +1,7 @@
 // 설계 점검(합성 형상): node test/mech3d-checks.mjs
 import { buildSceneMesh } from '../src/engine/mech3d/runtime.js';
 import { defaultPart, setPartMaterial } from '../src/engine/mech3d/materials.js';
-import { insidePart, triBoxOverlap, coneDirs, checkInterference, checkReach, checkThinWall, checkLeak, mergeLeak, runGeomChecks } from '../src/engine/mech3d/checks.js';
+import { insidePart, triBoxOverlap, coneDirs, checkInterference, boxTravel, checkReach, checkThinWall, checkLeak, mergeLeak, runGeomChecks } from '../src/engine/mech3d/checks.js';
 import { boxMesh, ok, done } from './mech3d-util.mjs';
 
 const mk = (meshes, kinds) => ({ rt: buildSceneMesh('t', meshes), mspec: { parts: kinds.map((k, i) => setPartMaterial(defaultPart(i, `p${i}`, 1), k)) } });
@@ -89,5 +89,15 @@ const mk = (meshes, kinds) => ({ rt: buildSceneMesh('t', meshes), mspec: { parts
   a.mspec.checks = { minWall: 0.4, minReach: 0.5, maxLeak: 0.2 };
   const R = runGeomChecks({ rt: a.rt, mspec: a.mspec, emitters: [{ pos: [10, 10, 0], axis: [0, 0, 1] }], bodies: [], obsParts: new Set([0]), beam: 120 });
   ok(R.interference.status === 'ok' && R.reach.status === 'ok' && R.wall.status === 'ok' && Math.abs(R.wall.min - 0.5) < 1e-4, 'runGeomChecks: 최소 살두께 기준 0.4 이면 0.5mm 정상');
+}
+{   // LED 외곽 상자로 잰 이동 가능 거리(2026-11-03) — 상태 표시줄 간섭과 같은 기준이라 최적화가 경고 나는 높이를 고르지 않음
+  const { rt } = mk([boxMesh(-1, -1, 5, 42, 22, 1), boxMesh(30, 0, 0, 2, 20, 6)], ['opaque', 'opaque']);
+  const body = { led: 0, lo: [8, 8, 0], hi: [11, 11, 1] };
+  const t = boxTravel({ rt, bodies: [body], d: [0, 0, 1], maxD: 10 });
+  ok(Math.abs(t - 4) <= 0.11, `판까지 ${t.toFixed(2)} mm`);
+  ok(boxTravel({ rt, bodies: [body], d: [0, 0, -1], maxD: 3 }) === 3, '막는 것 없음 = 한도까지');
+  const side = { led: 1, lo: [29.5, 8, 0], hi: [30.5, 11, 1] };
+  ok(boxTravel({ rt, bodies: [side], d: [0, 0, 1], maxD: 3 }) === 3, '처음부터 겹친 부품은 이동을 막지 않음(새 겹침만)');
+  ok(boxTravel({ rt, bodies: [], d: [0, 0, 1], maxD: 3 }) === 3, '몸체 없음 = 한도까지');
 }
 done();

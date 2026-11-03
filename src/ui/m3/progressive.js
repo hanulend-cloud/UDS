@@ -4,7 +4,7 @@
 // 적응형에서는 청크 c ≥ bins 를 보낸 광자가 가장 적은 배치에 넣는다(크기가 제각각이어도 배치 무게가 고르게).
 // 청크 크기: 기본은 적응형 — 포트마다 minChunk 로 시작해 잰 속도로 다음 청크를 ≈chunkMs 분량으로(minChunk~maxChunk).
 //   fixedChunk: true 면 chunkN 고정(runJob 과 비트 일치 시험용).
-import { tallyStats } from '../../engine/mech3d/tally.js';
+import { tallyStats, judgeNoise } from '../../engine/mech3d/tally.js';
 
 export const PROG_DEFAULTS = { chunkN: 25000, fixedChunk: false, minChunk: 1000, maxChunk: 50000, chunkMs: 500, bins: 10, targetNoise: 0.02, maxPhotons: 1e8, debounceMs: 500, tickMs: 1000, seedBase: 1, maxIgnored: 16, sceneTimeoutMs: 60000, chunkTimeoutMs: 30000 };
 export const chunkSeed = (seedBase, c) => seedBase * 7919 + c;
@@ -108,14 +108,14 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
       }
     } finally { if (busy[k] === g) busy[k] = 0; }
   }
-  // 배치 고르기 — 고정 크기: c % bins(runJob 규약). 적응형: 보낸 광자가 가장 적은 배치(배치 무게를 고르게 → 잡음 추정이 덜 부풀음)
+  // 배치 고르기 — 고정 크기: c % bins(runJob 규약). 적응형: 보낸 광자가 가장 적은 배치(배치 무게를 고르게 → 노이즈 추정이 덜 부풀음)
   function pickBin(c) {
     if (o.fixedChunk || c < o.bins) return c % o.bins;
     let b = 0; for (let i = 1; i < o.bins; i++) if (binIssued[i] < binIssued[b]) b = i;
     return b;
   }
   // 청크 결과는 광자 수와 무관하게 '광원 광속 1회분'(가중치 w0 = flux/N) — 광자 수 가중(f = N/chunkN)으로 더해야 크기가 다른 청크(적응형·GPU)가 섞여도
-  // 배치 평균이 바르다(예전엔 청크 개수 가중 → GPU 큰 청크가 섞이면 배치 간 차가 커져 잡음이 수렴하지 않음, 2026-10-27). 고정 크기면 f = 1(runJob 과 비트 일치)
+  // 배치 평균이 바르다(예전엔 청크 개수 가중 → GPU 큰 청크가 섞이면 배치 간 차가 커져 노이즈가 수렴하지 않음, 2026-10-27). 고정 크기면 f = 1(runJob 과 비트 일치)
   function accumulate(b, N, r) {
     const n = r.acc.length, f = N / o.chunkN;
     const B = bins[b] ?? (bins[b] = { acc: new Float64Array(n), accAll: new Float64Array(n), cnt: new Float64Array(n), n: 0, photons: 0 });
@@ -142,11 +142,12 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
     for (const B of filled) for (let k = 0; k < sum.length; k++) sum[k] += B.acc[k];
     return { stats, sum, photometry: photometry(job.G, sum, ledger, { fluxLm: job.fluxLm ?? 0, nLeds: job.nLeds ?? 0, cone: job.obs.cone ?? 90 }) };
   }
+  const goal = () => (job?.obs ? judgeNoise(snap?.stats, job.obs, o.targetNoise) : o.targetNoise);   // 목표 바로 아래면 더 낮은 노이즈까지
   function onTick() {
     if (!job) return;
     snap = compute();
     const rn = snap.stats?.relNoise;
-    if (state === 'running' && doneChunks >= o.bins && rn != null && rn <= o.targetNoise) { finish('converged'); return; }
+    if (state === 'running' && doneChunks >= o.bins && rn != null && rn <= goal()) { finish('converged'); return; }
     emit();
   }
   function finish(r) { state = 'done'; reason = r; stopTick(); snap = compute(); emit(); }
@@ -161,14 +162,14 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
     if (state !== 'paused') return;
     state = 'running'; startTick(); emit(); pumpAll(gen);
   }
-  // 목표만 바뀜 — 누적 데이터로 판정만 다시. 잡음 목표를 현재 잡음보다 낮추면(수렴 멈춤 상태) 계산 재개
+  // 목표만 바뀜 — 누적 데이터로 판정만 다시. 노이즈 목표를 현재 노이즈보다 낮추면(수렴 멈춤 상태) 계산 재개
   function setJudge({ obs = null, targetNoise = null, fluxLm = null } = {}) {
     if (targetNoise != null) o.targetNoise = targetNoise;
     if (job) {
       job = { ...job, obs: obs ? { ...job.obs, targetLen: obs.targetLen, targetWid: obs.targetWid } : job.obs, fluxLm: fluxLm ?? job.fluxLm };
       snap = compute();
       const rn = snap.stats?.relNoise;
-      if (state === 'done' && reason === 'converged' && rn != null && rn > o.targetNoise && photons < cap()) {
+      if (state === 'done' && reason === 'converged' && rn != null && rn > goal() && photons < cap()) {
         state = 'running'; reason = null; startTick(); emit(); pumpAll(gen); return;
       }
     }
@@ -188,7 +189,7 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
       state, reason, error, photons, chunks: doneChunks, ignored, sceneKey: job?.sceneKey ?? null,
       stats: snap?.stats ?? null, sum: snap?.sum ?? null, photometry: snap?.photometry ?? null,
       ledger: { ...ledger }, leak: { ...leak }, paths: { ...paths }, bins: bins.map((b) => b && { acc: b.acc, n: b.n, photons: b.photons }),
-      G: job?.G ?? null, obs: job?.obs ?? null, targetNoise: o.targetNoise,
+      G: job?.G ?? null, obs: job?.obs ?? null, targetNoise: goal(),
     };
   }
   return { restart, pause, resume, cancel, dispose, setJudge, snapshot };

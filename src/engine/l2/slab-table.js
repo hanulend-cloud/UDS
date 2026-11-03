@@ -213,11 +213,11 @@ export function kernelRms(rad) {
 }
 
 // 투과 광도 I(θ) 가 I(0)/2 가 되는 반광각 HPA(°). 비산란 성분은 0~1° bin 에 포함(측정기 분해능 ~1° 가정).
-// MC 각분포는 bin 입체각이 작은 정면부일수록 광자가 적어 잡음이 크다(근-Lambertian 에서 0~5° 에 ≈0.8%).
+// MC 각분포는 bin 입체각이 작은 정면부일수록 광자가 적어 노이즈가 크다(근-Lambertian 에서 0~5° 에 ≈0.8%).
 // → I(0) 는 5° 부터 시작해 산란 광자 MIN_CNT 개 이상이 모일 때까지(최대 30°) 콘을 넓혀 풀링한 평균 광도,
 //   10° 이후 bin 은 이웃 3-bin 가중 평균으로 평활. 확산근사(무한 통계)는 그대로.
 const MIN_CNT = 400;
-// { hpa, sigma } — sigma = MC 통계 불확도(°): 풀링 I(0) 와 교차점 부근 bin 의 상대 잡음 √(1/n₀+1/n_c) 를 기울기로 환산
+// { hpa, sigma } — sigma = MC 통계 불확도(°): 풀링 I(0) 와 교차점 부근 bin 의 상대 노이즈 √(1/n₀+1/n_c) 를 기울기로 환산
 export function hpaStats(q) {
   const dO = (k) => 2 * Math.PI * (Math.cos(angEdgeDeg(k) * DEG) - Math.cos(angEdgeDeg(k + 1) * DEG));
   const nS = q.nScat ?? Infinity, cnt = (k) => q.ang[k] * nS;

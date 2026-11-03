@@ -28,7 +28,7 @@ for (const x of [5, 36]) {
   ok(Math.abs(ph.gNum - ph.g) < 2e-3 && Math.abs(s / N - ph.g) < 3e-3, `x=${x}: g ${ph.g.toFixed(4)} · 표 적분 ${ph.gNum.toFixed(4)} · 샘플 평균 ${(s / N).toFixed(4)}`);
 }
 
-// MC 위상함수 훅: HG 를 표 샘플러로 넣으면 해석 HG 와 같은 결과(잡음 내)
+// MC 위상함수 훅: HG 를 표 샘플러로 넣으면 해석 HG 와 같은 결과(노이즈 내)
 {
   const g = 0.9, K = 4096;
   const sample = (u) => { const f = (1 - g * g) / (1 - g + 2 * g * u); return (1 + g * g - f * f) / (2 * g); };

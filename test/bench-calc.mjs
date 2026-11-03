@@ -1,4 +1,4 @@
-// 계산 수렴 진단(진단용): ㄱ자 Milky 확산 부품 + LED 40 → 왼쪽 위 출구(관측면) — 광자당 시간 · 관측면 도달률 · 잡음 수렴
+// 계산 수렴 진단(진단용): ㄱ자 Milky 확산 부품 + LED 40 → 왼쪽 위 출구(관측면) — 광자당 시간 · 관측면 도달률 · 노이즈 수렴
 // node test/bench-calc.mjs [Milky=2] [광자=200000]
 import initOpenCascade from 'opencascade.js/dist/node.js';
 import { readFileSync, existsSync, writeFileSync } from 'node:fs';
@@ -44,4 +44,4 @@ for (let b = 0; b < B; b++) {
 }
 const st = tallyStats(G, accs, { ...obs, targetLen: 0.8, targetWid: 0.8 }, cnts);
 console.log(`광자 ${Ntot} · ${Math.round(ms)} ms (${Math.round(Ntot / ms * 1000)} 광자/s, 1 스레드) · 관측면 출사 ${(esc / emitted * 100).toFixed(1)}%`);
-console.log(`칸 잡음 ${(st.relNoise * 100).toFixed(1)}% → 2% 까지 필요 광자 ≈ ${Math.round(Ntot * (st.relNoise / 0.02) ** 2).toLocaleString()} · 길이 균일도 ${st.Ulen.toFixed(2)} ± ${(st.seLen ?? 0).toFixed(3)} · 폭 균일도 ${st.Uwid?.toFixed(2)} ± ${(st.seWid ?? 0).toFixed(3)}`);
+console.log(`칸 노이즈 ${(st.relNoise * 100).toFixed(1)}% → 2% 까지 필요 광자 ≈ ${Math.round(Ntot * (st.relNoise / 0.02) ** 2).toLocaleString()} · 길이 균일도 ${st.Ulen.toFixed(2)} ± ${(st.seLen ?? 0).toFixed(3)} · 폭 균일도 ${st.Uwid?.toFixed(2)} ± ${(st.seWid ?? 0).toFixed(3)}`);

@@ -1,5 +1,5 @@
 // 관측 집계: node test/mech3d-tally.mjs
-import { tallyGeometry, makeAccumulator, tallyStats, windowProfile, autoCells } from '../src/engine/mech3d/tally.js';
+import { fmtJudge, nearTarget, judgeNoise, JUDGE_NOISE, tallyGeometry, makeAccumulator, tallyStats, windowProfile, autoCells } from '../src/engine/mech3d/tally.js';
 import { recognizeLine, lightData, lineFromData } from '../src/engine/mech3d/line.js';
 import { rng } from '../src/engine/l2/mc-slab.js';
 import { runMC3D } from '../src/engine/mech3d/mc3d.js';
@@ -29,10 +29,10 @@ for (let b = 0; b < B; b++) {
 }
 const S = tallyStats(G, accs, obs), want = (20 + 0.75) / (20 + 99.25);   // 끝 칸은 [0.5,1] 만 집계 → 무게중심 0.75 / 99.25
 ok(Math.abs(S.Ulen - want) < 0.01, `길이 방향 U ${S.Ulen.toFixed(4)} (해석 ${want.toFixed(4)}), σ ${S.seLen.toFixed(4)}`);
-ok(S.Uwid > 0.7 && S.Uwid <= 1, `폭 방향 최저 U ${S.Uwid.toFixed(3)} @ s=${S.sWorst.toFixed(1)}mm (균일 + 셀 잡음)`);
+ok(S.Uwid > 0.7 && S.Uwid <= 1, `폭 방향 최저 U ${S.Uwid.toFixed(3)} @ s=${S.sWorst.toFixed(1)}mm (균일 + 셀 노이즈)`);
 const rr = S.profile[75] / S.profile[25], r2 = Math.max(rr, 1 / rr), want2 = (20 + 75.5) / (20 + 25.5);   // 라인 진행 방향과 무관하게 비교
 ok(!S.passLen && S.profile.length === 100 && Math.abs(r2 / want2 - 1) < 0.03, `판정·프로파일(길이 ${S.passLen ? '합격' : '불합격'}, 칸 75/25 비 ${r2.toFixed(3)} / 해석 ${want2.toFixed(3)})`);
-ok(S.counted === nV && S.noiseWarn === false, `집계 셀 ${S.counted}, 잡음 경고 없음(상대 잡음 ${S.relNoise.toFixed(4)})`);
+ok(S.counted === nV && S.noiseWarn === false, `집계 셀 ${S.counted}, 노이즈 경고 없음(상대 노이즈 ${S.relNoise.toFixed(4)})`);
 {   // 광자별 상태: 광자 0 이 관측면을 나간 뒤 사라지고, 광자 1 이 탈출해도 광자 0 의 지점에 집계되면 안 됨
   const a = makeAccumulator(G, line, obs);
   a.onExit(0, 1, 50, 3, 2, 0, 0, 1, 1, 0); a.onEscape(50, 3, 5, 0, 0, 1, 1, 1);
@@ -71,19 +71,19 @@ ok(S.counted === nV && S.noiseWarn === false, `집계 셀 ${S.counted}, 잡음 �
   }
   ok(n > 0 && out === 0, `테이퍼 4→12: 격자 밖 픽셀 ${out}/${n}, w 열 ${GT.nw}`);
 }
-{   // 희박 데이터(합성 출사 2000개): 칸 잡음이 커서 경고를 내야 함
+{   // 희박 데이터(합성 출사 2000개): 칸 노이즈가 커서 경고를 내야 함
   const r2 = rng(3), ac = [];
   for (let b = 0; b < 10; b++) { const a = makeAccumulator(G, line, obs); for (let k = 0; k < 200; k++) { const x = r2() * 100, y = r2() * 6; a.onExit(0, 1, x, y, 2, 0, 0, 1, 1, k); a.onEscape(x, y, 3, 0, 0, 1, 1, k); } ac.push(a.acc); }
   const sp = tallyStats(G, ac, obs);
-  ok(sp.noiseWarn === true && sp.relNoise > 0.1, `희박 데이터(2000개) → 잡음 경고, 상대 잡음 ${sp.relNoise.toFixed(2)}`);
+  ok(sp.noiseWarn === true && sp.relNoise > 0.1, `희박 데이터(2000개) → 노이즈 경고, 상대 노이즈 ${sp.relNoise.toFixed(2)}`);
   const two = tallyStats(G, ac.slice(0, 2), obs);
   ok(two.seLen === null && two.seWid === null, '배치 <3 → seLen/seWid null');
 }
 {   // 경계 처리
   const e = tallyStats(G, [new Float64Array(G.ns * G.nw), new Float64Array(G.ns * G.nw)], obs);
-  ok(e.noiseWarn === true && e.counted === 0, '집계 0 → 잡음 경고');
+  ok(e.noiseWarn === true && e.counted === 0, '집계 0 → 노이즈 경고');
   const one = tallyStats(G, [new Float64Array(G.ns * G.nw).fill(1)], obs);
-  ok(one.noiseWarn === true, '배치 1개 → 잡음 경고');
+  ok(one.noiseWarn === true, '배치 1개 → 노이즈 경고');
   const noDir = makeAccumulator(G, line, { ...obs, dir: null }); noDir.onExit(0, 1, 50, 3, 2, 0, 0, 1, 1, 0); noDir.onEscape(50, 3, 5, 0, 0, 1, 1, 0);
   ok(noDir.acc.some((v) => v > 0), 'obs.dir null → 라인 관측 방향 사용');
   const nar = recognizeLine([topFaceMesh(rectTris(0, 0, 100, 1.4), 2)], [{ part: 0, face: 1 }], [0, 0, 1]);
@@ -107,10 +107,10 @@ ok(S.counted === nV && S.noiseWarn === false, `집계 셀 ${S.counted}, 잡음 �
   ok(Array.isArray(S.win) && wp.length === G.nw && f.length >= 2 && Math.abs(Math.min(...f) / Math.max(...f) - S.Uwid) < 1e-12,
     `windowProfile: 창 [${S.win}] 유효 ${f.length}칸, min/max = Uwid ${S.Uwid.toFixed(4)}`);
 }
-{ // 잡음 = U 를 만드는 줄·열 기준 — 2D 칸 하나보다 작다(폭 방향 칸 수만큼 합쳐짐). 같은 광자 수면 √nw 쯤
+{ // 노이즈 = U 를 만드는 줄·열 기준 — 2D 칸 하나보다 작다(폭 방향 칸 수만큼 합쳐짐). 같은 광자 수면 √nw 쯤
   const r = rng(7), B = 10, accs3 = Array.from({ length: B }, () => { const a = new Float64Array(G.ns * G.nw); for (let k = 0; k < a.length; k++) if (G.valid[k]) { let s = 0; for (let n = 0; n < 50; n++) s += r() < 0.5 ? 1 : 0; a[k] = (s / 50) * G.area[k]; } return a; });
   const S3 = tallyStats(G, accs3, obs);
-  ok(S3.relNoise > 0 && S3.relNoiseCell > 0 && S3.relNoise < S3.relNoiseCell * 0.8, `잡음: 줄·열 ${(S3.relNoise * 100).toFixed(2)}% < 칸 ${(S3.relNoiseCell * 100).toFixed(2)}%`);
+  ok(S3.relNoise > 0 && S3.relNoiseCell > 0 && S3.relNoise < S3.relNoiseCell * 0.8, `노이즈: 줄·열 ${(S3.relNoise * 100).toFixed(2)}% < 칸 ${(S3.relNoiseCell * 100).toFixed(2)}%`);
 }
 // 화질(2026-10-30) = 정사각 칸 크기: 저 1.5 · 중 1.0 · 고 0.5 mm. 짧은 면은 길이 10칸 이상, 좁은 면은 폭 4칸 이상이 되게 더 잘게
 {
@@ -154,5 +154,14 @@ ok(S.counted === nV && S.noiseWarn === false, `집계 셀 ${S.counted}, 잡음 �
   const N = recognizeLine([topFaceMesh(rectTris(0, 0, 100, 1.2), 2)], [{ part: 0, face: 1 }], [0, 0, 1]), Gn = tallyGeometry(N, { faces: [{ part: 0, face: 1 }], dir: [0, 0, 1], cone: 10, edgeExcl: 0.5, targetLen: 0.8, targetWid: 0.5, cellS: 1, cellW: 1 });
   let nv = 0; for (let k = 0; k < Gn.valid.length; k++) nv += Gn.valid[k];
   ok(nv === 0, `좁은 면: 칸의 절반 미만만 걸치면 칸 없음 (유효 ${nv})`);
+}
+{ // 판정 노이즈(2026-11-03): 칸 최저÷최고는 노이즈만큼 낮게 나옴(실측 1%: 0.78~0.79, 0.5%: 0.81) — 목표 바로 아래면 0.5% 까지, 통과·먼 미달은 그대로
+  const O = { targetLen: 0.8, targetWid: 0.8 };
+  ok(nearTarget({ Ulen: 0.78, Uwid: 0.85 }, O) && nearTarget({ Ulen: 0.9, Uwid: 0.78 }, O), '목표 바로 아래 = 근처(낮은 쪽 기준)');
+  ok(!nearTarget({ Ulen: 0.81, Uwid: 0.85 }, O) && !nearTarget({ Ulen: 0.6, Uwid: 0.85 }, O) && !nearTarget({ Ulen: 0.78, Uwid: 0.5 }, O) && !nearTarget({ empty: true, Ulen: 0.78 }, O), '통과·먼 미달·빈 결과 = 근처 아님');
+  ok(judgeNoise({ Ulen: 0.78, Uwid: 0.85 }, O, 0.01) === JUDGE_NOISE && judgeNoise({ Ulen: 0.81, Uwid: 0.85 }, O, 0.01) === 0.01 && judgeNoise({ Ulen: 0.78, Uwid: 0.85 }, O, 0.002) === 0.002, '근처만 0.5% 로 · 사용자가 더 낮게 정했으면 그 값');
+}
+{ // 목표 바로 아래 값이 반올림으로 목표처럼 보이지 않게
+  ok(fmtJudge(0.7952, 0.8) === '0.795' && fmtJudge(0.81, 0.8) === '0.81' && fmtJudge(0.72, 0.8) === '0.72' && fmtJudge(0.8, 0.8) === '0.80' && fmtJudge(NaN, 0.8) === '–' && fmtJudge(0.7952) === '0.80', '미달인데 0.80 으로 보일 때만 세 자리');
 }
 done();

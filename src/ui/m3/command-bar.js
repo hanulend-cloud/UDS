@@ -19,7 +19,7 @@ export function stepState(M) {
 // 흐름 4·5단계 상태(순수, 2026-10-29) — 4 광분포 시뮬레이션(지금 설계의 빛 분포·균일도) → 5 기구 최적화(후보를 찾아 적용 → 4 가 다시 검증)
 // calc = 점진 계산 스냅숏, stats = 그 결과, ad = { running, result } (기구 최적화). 반환 { sim:{ text, cls, done }, opt:{ text, cls, done } }
 export function flowState(calc, stats, M, ad = {}) {
-  const O = M.observe, st = calc?.state ?? 'idle', rn = calc?.stats?.relNoise ?? stats?.relNoise, tn = O.targetNoise ?? 0.01;
+  const O = M.observe, st = calc?.state ?? 'idle', rn = calc?.stats?.relNoise ?? stats?.relNoise, tn = calc?.targetNoise ?? O.targetNoise ?? 0.01;
   const has = !!stats && !stats.empty, pc = (v) => (Number.isFinite(v) ? `${Math.round(v * 100)}%` : '–');
   const pass = has && stats.Ulen >= O.targetLen && (stats.Uwid == null || stats.Uwid >= O.targetWid);
   const res = has ? `${pc(stats.Ulen)} / ${pc(stats.Uwid)}` : '';

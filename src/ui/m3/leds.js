@@ -42,7 +42,7 @@ export function recognizeLeds(M, ref) {
   if (!parts) throw new Error('LED STEP 메쉬가 없음 — 다시 불러오세요');
   if (!(ref.part >= 0 && ref.part < parts.length)) throw new Error('기준 LED 번호가 범위 밖');
   const vol = (i) => parts[i].volume ?? meshStats(parts[i]).volume;
-  const leds = findLeds(parts, ref.part), allLeds = leds.length === parts.length;   // 도면 광원 = 같은 LED 만(PCB 없음) — 부피 최대 판정은 수치 잡음
+  const leds = findLeds(parts, ref.part), allLeds = leds.length === parts.length;   // 도면 광원 = 같은 LED 만(PCB 없음) — 부피 최대 판정은 수치 노이즈
   if (!allLeds && parts.length > 1 && parts.every((_, i) => vol(i) <= vol(ref.part))) throw new Error('가장 큰 부품(PCB 로 보임)은 기준 LED 가 될 수 없음 — LED 렌즈 면을 클릭하세요');
   const pcb = pcbIndex(parts, leds);
   if (pcb === ref.part) throw new Error('PCB 로 인식된 부품은 기준 LED 가 될 수 없음');

@@ -78,7 +78,7 @@ const beam = { flux: 1, sample: (r) => [4.5 + r(), 4.5 + r(), -1, 0, 0, 1] };
       const va = rwAccs[j].map(row), vd = dir.map(row);
       if (mean(va) + mean(vd) > 0) zRow = Math.max(zRow, zOf(va, vd));
     }
-    // U = 행 최소/최대 — 재가중은 가중치 꼬리 때문에 행 잡음이 커서(ESS<1) 같은 광자 수에서 최솟값이 낮게 나온다(평균 편향 아님: 총광량·행 z 로 확인). 실제 탐색은 광자를 늘리고 최종안을 직접 계산으로 재판정한다.
+    // U = 행 최소/최대 — 재가중은 가중치 꼬리 때문에 행 노이즈가 커서(ESS<1) 같은 광자 수에서 최솟값이 낮게 나온다(평균 편향 아님: 총광량·행 z 로 확인). 실제 탐색은 광자를 늘리고 최종안을 직접 계산으로 재판정한다.
     const dU = Math.abs(a.Ulen - d.Ulen), dUmax = 0.03, zRowMax = 3.5 + 0.5 * Math.log10(F.G.ns);
     ok(ess[j] >= 0.3 && zTot < 3 && zRow < zRowMax && dU <= dUmax, `A-1 Milky ${m}: |ΔU| ${dU.toFixed(3)} ≤ ${dUmax.toFixed(3)} · ESS ${ess[j].toFixed(2)} · 총광량 z ${zTot.toFixed(2)} · 행 최대 z ${zRow.toFixed(2)} < ${zRowMax.toFixed(2)} · U 재가중 ${a.Ulen.toFixed(3)} vs 직접 ${d.Ulen.toFixed(3)}`);
   } }
@@ -102,7 +102,7 @@ const beam = { flux: 1, sample: (r) => [4.5 + r(), 4.5 + r(), -1, 0, 0, 1] };
   ok(margin({ Ulen: 0.9, Uwid: 0.3 }, { targetLen: 0.8 }) === 0.9 - 0.8 && !Number.isNaN(margin({ Ulen: 0.9, Uwid: 0.3 }, { targetLen: 0.8 })), 'targetWid 없음 → 폭 무시(NaN 아님)');
   const R = (milky, m, trusted = true) => ({ milky, margin: m, trusted, Ulen: 0, Uwid: null });
   const pb = pickMilky([R(1, -0.2), R(2, -0.1), R(3, 0.05), R(4, -0.05), R(5, -0.02), R(6, 0.1), R(7, 0.2)], obs);
-  ok(pb.milky > 5 && pb.milky <= 6, `단발 통과(잡음)는 무시 — 지속 통과 Milky ${pb.milky}`);
+  ok(pb.milky > 5 && pb.milky <= 6, `단발 통과(노이즈)는 무시 — 지속 통과 Milky ${pb.milky}`);
   const pg = pickMilky([R(1, -0.2), R(2, -0.1, false), R(3, 0.1), R(4, 0.2)], obs);
   ok(pg.feasible && pg.milky === 3, `신뢰 안 되는 행이 사이에 있으면 보간 안 함 → ${pg.milky}`); }
 { const a = milkyAxis(3); ok(a.length === 21 && Math.abs(a[0] - 2.75) < 1e-9 && Math.abs(a[20] - 3.25) < 1e-9, `milkyAxis(3) 기본 창 21점 2.75~3.25: ${a[0]}~${a[20]}`); }

@@ -306,7 +306,7 @@ function l2GridConv(psf, NX, NY, stepX, stepY) {
 
 // L2 측벽(밀키 수지, 확산 반사율 R = R_d) 보정(2026-10-13): 열린 PSF 중첩(LED 만) + ΔW, ΔW = [벽 solve − 열린 solve](거친 격자).
 // 벽 solve 는 갭 전달이 벽에 맞은 빛을 램버시안 재방출(cavity-solver wallDiffuse), 슬래브 옆면은 탈출 — 형상 MC 'diffuse' 벽과 같은 물리.
-// 예전 거울 LED(전 높이 정반사 R) 근사는 벽이 가까우면 균일도 과대(벽 10mm: +1.2~1.5%p, 잡음 맞춤 VS7M). 두 solve 의 같은 이산화 오차는 차에서 상쇄.
+// 예전 거울 LED(전 높이 정반사 R) 근사는 벽이 가까우면 균일도 과대(벽 10mm: +1.2~1.5%p, 노이즈 맞춤 VS7M). 두 solve 의 같은 이산화 오차는 차에서 상쇄.
 const _wallDelta = new Map();
 // 슬래브 측방 커널(확산 입사 행, 흡수 축소 포함)의 1D 주변분포 한쪽 꼬리 T₁(s) = P(Δx > s) — 등방 2D 반경 분포에서 (1/π)·acos(s/r) 적분.
 const _edgeTail = new Map();

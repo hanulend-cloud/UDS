@@ -1,7 +1,7 @@
 // 아래 칸 대시보드 — ① 기구 최적화 진행(6 항목 타일) ② 시뮬레이션 진행현황(수렴 그래프).
 // 최적화: app.js 의 기구 최적화 io 가 progress(stage, frac, text) · evals(stage, [{label, Ulen, Uwid, ok, why}]) 를 부른다.
 // 타일마다 상태(대기·진행 %·완료·건너뜀) · 시험 중 값 → 지금까지 최고 · 후보별 길이/폭 균일도 점 그래프(목표선) · 진행 막대.
-// 시뮬레이션: 점진 계산 스냅숏마다 sample(snap, targetNoise) — 광선 수에 따른 잡음 %·길이/폭 균일도 추정과 진행률 %(잡음이 목표에 닿으면 100%).
+// 시뮬레이션: 점진 계산 스냅숏마다 sample(snap, targetNoise) — 광선 수에 따른 노이즈 %·길이/폭 균일도 추정과 진행률 %(노이즈가 목표에 닿으면 100%).
 import { calcLabel } from './command-bar.js';
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 // 계산 순서대로(엔진: 위치 → 케이스 면 → 형상 → Milky, 2026-10-30) — 번호도 이 순서
@@ -182,7 +182,7 @@ export function topPaths(paths, nMech, k = 3) {
   return tot > 0 ? [...m.values()].sort((a, b) => b.w - a.w).slice(0, k).map((o) => ({ parts: o.parts, refl: o.refl, share: o.w / tot })) : [];
 }
 export const pathText = (p, names) => `LED → ${p.parts.map((q) => names[q] ?? `부품 ${q + 1}`).join(' → ')}${p.parts.length ? ' → ' : ''}관측면${p.refl ? ' (케이스 반사 포함)' : ''}`;
-// 시뮬레이션 진행현황 — 광선 수에 따른 잡음(%)·U 추정 · 진행률(잡음이 목표에 닿으면 100%)
+// 시뮬레이션 진행현황 — 광선 수에 따른 노이즈(%)·U 추정 · 진행률(노이즈가 목표에 닿으면 100%)
 export function simPct(relNoise, target) { return Number.isFinite(relNoise) && relNoise > 0 ? Math.max(0, Math.min(100, (target / relNoise) ** 2 * 100)) : 0; }
 // 남은 계산 예상(순수) — 오차는 광선 수의 제곱근에 반비례 → 필요 광선 = 지금 × (오차/목표)². 속도 = 최근 10초 광선 증가
 const human = (n) => (n >= 1e8 ? `${(n / 1e8).toFixed(1)}억` : n >= 1e4 ? `${Math.round(n / 1e4).toLocaleString()}만` : String(Math.round(n)));

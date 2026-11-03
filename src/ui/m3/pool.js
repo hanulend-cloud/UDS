@@ -8,7 +8,7 @@ const TIMEOUT = 10 * 60 * 1000;
 const gpuAllowed = () => { try { return !!globalThis.navigator?.gpu && localStorage.getItem('uds.gpu') !== '0'; } catch { return !!globalThis.navigator?.gpu; } };
 
 // 큰 도면 메모리 상한(2026-11-02) — 도면은 Worker 마다 따로 들고 있어 '삼각형 수 × Worker 수' 만큼 메모리를 씀. 탭이 약 7.5 GB 에서 메모리 부족으로 죽었음(크래시 덤프).
-// 동시에 장면을 드는 Worker 수를 줄여 넘지 않게(느려질 뿐 결과는 같음). 실측 Worker 하나 ≈ 145 B/삼각형 — 쓰레기 수거 지연을 더해 2배로 잡음
+// 동시에 장면을 드는 Worker 수를 줄여 넘지 않게(느려질 뿐 결과는 같음). 실측 Worker 하나 ≈ 145 B/삼각형 — 쓰레기 수거 지연을 더해 2배로 노이즈
 export const SCENE_BUDGET = 4e9, SCENE_BYTES_PER_TRI = 300;
 export const sceneWorkerLimit = (tris, size) => Math.max(1, Math.min(size, Math.floor(SCENE_BUDGET / (SCENE_BYTES_PER_TRI * Math.max(1, tris)))));
 const sceneTris = (m) => [...(m.mechParts ?? []), ...(m.ledParts ?? [])].reduce((n, p) => n + (p.triangles?.length ?? 0) / 3, 0);

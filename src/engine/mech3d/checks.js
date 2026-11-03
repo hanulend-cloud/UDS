@@ -71,6 +71,15 @@ export function checkInterference({ rt, mspec = null, emitters = [], bodies = []
   return { status: bad ? 'bad' : items.length ? 'warn' : 'ok', count: items.length, items };
 }
 
+// 몸체 외곽 상자가 d 방향으로 새 겹침 없이 갈 수 있는 거리(step 단위, 한도 maxD) — ① 간섭과 같은 기준. 처음부터 겹친 것은 막지 않음
+export function boxTravel({ rt, mspec = null, bodies = [], d, maxD, exclude = [], step = 0.1 }) {
+  if (!bodies.length) return maxD;
+  const hits = (t) => checkInterference({ rt, mspec, bodies: bodies.map((b) => ({ led: b.led, lo: b.lo.map((v, k) => v + t * d[k]), hi: b.hi.map((v, k) => v + t * d[k]) })), exclude }).items.filter((x) => x.kind !== 'potted').length;
+  const n0 = hits(0);
+  for (let t = step; t < maxD; t += step) if (hits(t) > n0) return t - step;
+  return hits(maxD) > n0 ? maxD - step : maxD;
+}
+
 // 축 axis 둘레 반각 halfDeg 원뿔 안 n 방향(cos 균등 + 황금각 나선, 결정적)
 export function coneDirs(axis, halfDeg, n) {
   const al = Math.hypot(...axis), a = axis.map((v) => v / al), t = Math.abs(a[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];

@@ -1,6 +1,7 @@
 // P4 자동설계 단계 실행기 — spec §1·§2. 순서 ② → ⑤ LED 높이 → ④ 케이스 면 → ① → ③(§2.3c), 체크 안 한 항목은 현재 값 고정. 계산은 io 가 맡는다(Worker / 시험 가짜).
 // ① 재가중 창은 기준 ±0.25(ESS 한계, spec §2.1). U(Milky) 는 단봉형(§2.1a) — 거친 탐색으로 최고점을 지나면 멈추고, 오르는 구간에서만 할선/이분으로 최소 통과 Milky. ② 는 기준(①·④ 함께면 거친 최고점 Milky ≤ 5·케이스 최고 등급, §2.2c)에서 최소 개수를 구한 뒤 ④·① 이 고른다.
 // io.milkyRows(d, ms, { precise }) — precise = 경계가 든 창의 재추적(광자 많이). 결과 { feasible, best(design), steps:[{stage, …}], reason, verified, current(현재안 io.verify), cancelled }
+import { nearTarget, fmtJudge, JUDGE_NOISE } from './tally.js';
 import { hasCurve, hasField } from './shape-opt.js';
 import { milkyAxis } from './reweight.js';
 import { pickMilky, margin } from './milky-search.js';
@@ -10,7 +11,7 @@ import { gridCandidates } from './shape-opt.js';
 import { gradeOf, heightCandidates } from './housing-led.js';
 
 export const MILKY_STEP = 0.025, MILKY_ITERS = 8;
-// 평활 길이 균일도 — 길이 프로파일 3행 이동평균(NaN 행 제외)의 min/max. 한 칸 잡음 골짜기(min 통계 편향)에 덜 민감. profile 없으면 Ulen
+// 평활 길이 균일도 — 길이 프로파일 3행 이동평균(NaN 행 제외)의 min/max. 한 칸 노이즈 골짜기(min 통계 편향)에 덜 민감. profile 없으면 Ulen
 export function smoothU(stats) {
   const p = stats?.profile;
   if (!p || !p.length) return stats?.Ulen ?? 0;
@@ -38,7 +39,7 @@ export const sameDesign = (a, b) => ['count', 'pitch', 'milky'].every((k) => (a?
 
 // 단계적 압축: schedule = [[남길 수(첫 단계는 전체), 광자 수, 후보당 시간 제한 ms?]…]. 각 단계 결과 점수로 다음 단계 후보를 줄임
 export const SHAPE_SCHEDULE = [[27, 6e4, 2500], [6, 2e5, 4000], [2, 6e5, 6000]];
-// ③ 평가 광자 예산 — 광 효율(관측면 도달 / 방출)이 낮으면 관측면에 닿는 광자가 적어 균일도(최저÷최고)가 잡음으로 크게 낮아짐
+// ③ 평가 광자 예산 — 광 효율(관측면 도달 / 방출)이 낮으면 관측면에 닿는 광자가 적어 균일도(최저÷최고)가 노이즈로 크게 낮아짐
 // (효율 10%·6만 광자 → '변경 없음' 후보 길이 균일도 0.36 vs 정밀 0.60, 2026-10-29). 기준 효율 50% 대비 부족한 만큼(최대 10배) 광자·시간을 늘림
 export function shapeBudget(eff) {
   const k = Number.isFinite(eff) && eff > 0 ? Math.min(10, Math.max(1, 0.5 / eff)) : 1;
@@ -87,7 +88,7 @@ export async function refineShapeCurve(best, evalFn, obs, { nL = 7, nW = 3, A0 =
   }
   return { best: cur, tried };
 }
-// ③ 길이 방향 광량 오차(순수, 2026-11-02) — 절점 ns 의 (광량/평균 − 1), + = 밝음. 행 평균이라 칸 잡음이 작음. 빛이 안 닿는 절점 = 0
+// ③ 길이 방향 광량 오차(순수, 2026-11-02) — 절점 ns 의 (광량/평균 − 1), + = 밝음. 행 평균이라 칸 노이즈가 작음. 빛이 안 닿는 절점 = 0
 export function fieldError(stats, G, ns) {
   const p = Array.from(stats?.profile ?? []), f = p.filter(Number.isFinite), m = f.length ? f.reduce((x, y) => x + y, 0) / f.length : 0, out = new Array(ns).fill(0);
   if (!(m > 0)) return out;
@@ -99,7 +100,7 @@ export function fieldError(stats, G, ns) {
   }
   return out;
 }
-// ③ 감도(순수) — 시험 이동(절점별 평균 dv) 전후 오차 변화의 회귀. slope < 0 = 두꺼우면 어두워짐, r = 상관(작으면 잡음). 실측 확산판: −2~3 %/mm
+// ③ 감도(순수) — 시험 이동(절점별 평균 dv) 전후 오차 변화의 회귀. slope < 0 = 두꺼우면 어두워짐, r = 상관(작으면 노이즈). 실측 확산판: −2~3 %/mm
 export function fieldResponse(e0, e1, dv) {
   const n = dv.length, y = e1.map((v, i) => v - e0[i]), mx = dv.reduce((t, v) => t + v, 0) / n, my = y.reduce((t, v) => t + v, 0) / n; let xx = 0, xy = 0, yy = 0;
   for (let i = 0; i < n; i++) { xx += (dv[i] - mx) ** 2; xy += (dv[i] - mx) * (y[i] - my); yy += (y[i] - my) ** 2; }
@@ -156,7 +157,7 @@ export function shapeModes(ledS, L, W, closed, ns, nw) {
     return { name, v: v.map((x) => x / pk) };
   });
 }
-// 판정 지도를 잡음이 작은 벡터로 — 가운데 구간은 LED 위상으로 접어(nP 칸 × 폭 nB 칸), 양 끝(1.5 피치)은 길이 칸 평균. 값 = ln(광량/전체 평균). 칸 13개를 겹치므로 잡음 ↓
+// 판정 지도를 노이즈가 작은 벡터로 — 가운데 구간은 LED 위상으로 접어(nP 칸 × 폭 nB 칸), 양 끝(1.5 피치)은 길이 칸 평균. 값 = ln(광량/전체 평균). 칸 13개를 겹치므로 노이즈 ↓
 export function foldMap(stats, G, ledS, W, { nP = 8, nB = 4 } = {}) {
   const p = (ledS.at(-1) - ledS[0]) / (ledS.length - 1), end = G.closed ? 0 : Math.min(1.5 * p, G.L / 4), nE = G.closed ? 0 : 6, n = nP * nB + 2 * nE, t = new Float64Array(n), c = new Float64Array(n);
   let sum = 0, cnt = 0;
@@ -231,7 +232,7 @@ export async function halving(cands, evalFn, obs, schedule = SHAPE_SCHEDULE, can
     if (cancelled()) return null;
     const res = (await evalFn(pool, schedule[s][1], schedule[s][2])).filter((r) => r.ok).sort((a, b) => shapeScore(b, obs) - shapeScore(a, obs));
     if (!res.length) return null;
-    // 마지막 단계: 최고 점수와 SCORE_EPS 이내(잡음 수준)면 형상 변화가 가장 작은 안(형상 변경 최소화, 2026-10-29)
+    // 마지막 단계: 최고 점수와 SCORE_EPS 이내(노이즈 수준)면 형상 변화가 가장 작은 안(형상 변경 최소화, 2026-10-29)
     last = s < schedule.length - 1 ? res[0] : res.filter((r) => shapeScore(r, obs) >= shapeScore(res[0], obs) - SCORE_EPS).reduce((a, r) => (shapeSize(r.cand) < shapeSize(a.cand) ? r : a));
     pool = res.slice(0, schedule[s + 1]?.[0] ?? 1).map((r) => r.cand);
   }
@@ -244,7 +245,7 @@ export const shapeSize = (c) => ['dt', 'h', 'e', 'c'].reduce((t, k) => t + Math.
 export const shapeTotal = (nScreen, nGrid, schedule = SHAPE_SCHEDULE) => nScreen + halvingTotal(nGrid, schedule);
 // ③ 1단계 변수 선별 — 현재 형상 + 변수별 하한/상한 하나씩(R 은 h 와 묶음: h 후보는 R=mid). 이득 = max(점수(lo), 점수(hi)) − 점수(현재) ≥ eps 인 상위 keep 개
 // 격자 차원 예산 budget(기본 3 → 3^3 = 27 이하): h 는 R 과 함께라 2, 나머지 1 — 이득 순으로 예산 안에 드는 것만
-// eps 0.02: 6만 광자 선별의 잡음(±0.01 안팎)보다 큰 이득만 형상 변수로 — 잡음 수준 이득으로 금형 변경을 권하지 않게
+// eps 0.02: 6만 광자 선별의 노이즈(±0.01 안팎)보다 큰 이득만 형상 변수로 — 노이즈 수준 이득으로 금형 변경을 권하지 않게
 export async function screenShapeVars(evalFn, ranges, obs, { N = 6e4, maxMs = 2500, eps = 0.02, keep = 3, budget = 3 } = {}) {
   const rd = (v) => Math.round(v * 1e4) / 1e4, Rm = ranges.R ? rd((ranges.R[0] + ranges.R[1]) / 2) : 1, zero = { dt: 0, h: 0, R: Rm, e: 0, c: 0 };
   const names = Object.keys(ranges).filter((k) => k !== 'R'), cands = [zero], tag = [-1];
@@ -300,7 +301,7 @@ async function searchMilky(d, cfg, io, steps, mCap, { lo = 0.25, hi = mCap, pts 
     io.progress?.('milky', f0 + (1 - f0) * it / MILKY_ITERS, `최소 Milky 탐색 (기준 ${m0.toFixed(2)})`);
     const ms = milkyAxis(m0, MILKY_STEP, mCap);
     let rows = await io.milkyRows(d, ms), pick = pickMilky(rows, cfg.obs), precise = false;
-    if (pick.feasible && pick.edge === null) {   // 창 안에 경계 — 같은 창을 광자를 늘려 다시(잡음으로 경계가 흔들리지 않게)
+    if (pick.feasible && pick.edge === null) {   // 창 안에 경계 — 같은 창을 광자를 늘려 다시(노이즈로 경계가 흔들리지 않게)
       if (io.cancelled?.()) return null;
       io.progress?.('milky', it / MILKY_ITERS, `Milky 경계 정밀 확인 (기준 ${m0.toFixed(2)})`);
       rows = await io.milkyRows(d, ms, { precise: true }); pick = pickMilky(rows, cfg.obs); precise = true;
@@ -405,7 +406,7 @@ function ledAlternatives(r, two) {
 }
 // 상한: ① 탐색 = cfg.milkyMax ?? 9.9 · ② 기준 Milky = cfg.milkyMax ?? max(현재, 5)(계산 시간) — spec §2.1a
 export const MILKY_SEARCH_MAX = 9.9;
-// 후보 지도 길이 방향 3칸 평균(제자리, 칸 ≥ 40 일 때만) — 후보당 광자가 적어 칸마다 잡음이 큼(잡음을 불균일로 착각하면 개수가 늘어남). 유효 칸만
+// 후보 지도 길이 방향 3칸 평균(제자리, 칸 ≥ 40 일 때만) — 후보당 광자가 적어 칸마다 노이즈가 큼(노이즈를 불균일로 착각하면 개수가 늘어남). 유효 칸만
 const two0 = (B) => typeof B.cand?.[0] === 'object';
 export function smoothMapsS(maps, G) {
   if (!G || !(G.ns >= 40) || !G.valid) return maps;
@@ -418,9 +419,13 @@ export function smoothMapsS(maps, G) {
   });
 }
 // 폭 위치 고르기(2026-11-02, 순수) — 균일도가 부족한 방향으로만, 필요한 만큼만 옮김: 지금 위치가 이미 통과면 그대로 ·
-// 목표 + 여유(후보 값은 광자가 적어 재계산에서 내려갈 수 있음)를 넘는 후보 중 가장 덜 옮긴 것 · 그런 후보가 없으면 최고값(잡음 수준이면 덜 옮긴 쪽).
+// 목표 + 여유(후보 값은 광자가 적어 재계산에서 내려갈 수 있음)를 넘는 후보 중 가장 덜 옮긴 것 · 그런 후보가 없으면 최고값(노이즈 수준이면 덜 옮긴 쪽).
 // 점수 = 폭 균일도(폭 판정 없으면 길이) — 폭 위치는 주로 폭 분포를 바꾸고 길이는 뒤의 개수·간격이 맞춤
 export const LATERAL_MARGIN = 0.03;
+// 폭 위치 2 단계(2026-11-03): 2 mm 로 훑고 최고 위치의 ±1 mm 만 더 비교 — 1 mm 전부 재는 시간의 절반 정도로 같은 간격
+const SHARPEN_MAX = 3;   // ② 후보를 0.5% 로 재는 개수 상한 — 하나에 몇 분
+export const lateralCoarse = (cs) => cs.filter((c) => c % 2 === 0);
+export const lateralFine = (cs, pick) => cs.filter((c) => Math.abs(c - pick) === 1);
 export function pickLateral(res, obs) {
   const wid = (x) => x.stats?.Uwid, sc = (x) => (wid(x) ?? x.stats?.Ulen ?? -Infinity), okR = (res ?? []).filter((x) => x.ok);
   if (!okR.length) return null;
@@ -438,7 +443,7 @@ export async function runAutoDesign(cfg, io) {
   const stop = () => io.cancelled?.();
   if (stop()) return { cancelled: true };
   io.progress?.('current', 0, '현재안 계산');   // 비교표 '현재' 열 — 최종안과 같은 추정기(io.verify). 수렴한 점진 결과가 있으면 재사용
-  const currentVerified = cfg.currentVerified ?? await io.verify(d);
+  let currentVerified = cfg.currentVerified ?? await io.verify(d);
   if (stop()) return { cancelled: true };
   const hasFin = 'finish' in d, fin0 = d.finish;   // ④ 전에 되돌릴 현재 케이스 면
   if (stages.leds) {   // ② — 함께 켠 ①·④ 는 유리한 쪽에서 개수를 정함(spec §2.2c): ① → 거친 최고점 Milky(≤ 상한), ④ → 케이스 최고 등급
@@ -458,7 +463,9 @@ export async function runAutoDesign(cfg, io) {
     // 최고 점수(SCORE_EPS 안이면 덜 옮긴 쪽) 를 중심으로 아래 배치 탐색. 관측면이 광원에서 비켜 있으면(꺾인 확산판) 이것이 가장 큰 효과
     if (cfg.lateral?.length > 1 && io.evalLateral) {
       io.progress?.('leds', 0, `LED 폭 위치 후보 ${cfg.lateral.length}개 비교`);
-      const res = await io.evalLateral(d, cfg.lateral);
+      const res0 = await io.evalLateral(d, lateralCoarse(cfg.lateral));
+      if (stop()) return { cancelled: true };
+      const pick0 = pickLateral(res0, obs), fine = pick0 == null ? [] : lateralFine(cfg.lateral, pick0), res = fine.length ? [...res0, ...await io.evalLateral(d, fine)] : res0;
       if (stop()) return { cancelled: true };
       const pick = pickLateral(res, obs);
       steps.push({ stage: 'ledsLateral', pick, results: (res ?? []).map((x) => ({ wCenter: x.cand.wCenter, ok: x.ok, Ulen: x.stats?.Ulen ?? null, Uwid: x.stats?.Uwid ?? null, eff: x.eff })) });
@@ -466,12 +473,12 @@ export async function runAutoDesign(cfg, io) {
     }
     io.progress?.('leds', 0, 'LED 후보 위치 추적');
     const B = await io.basis(d);
-    if (B.maps && two0(B)) smoothMapsS(B.maps, cfg.G);   // 후보 지도의 칸 잡음을 줄임 — 배치 비교는 칸 하나가 아니라 곡선 모양이 중요
+    if (B.maps && two0(B)) smoothMapsS(B.maps, cfg.G);   // 후보 지도의 칸 노이즈를 줄임 — 배치 비교는 칸 하나가 아니라 곡선 모양이 중요
     if (stop()) return { cancelled: true };
     // 후보가 {s, w} 면 (s, w) 격자 — 열 수·열 간격까지(searchLeds2, nMax = 총수 상한), 숫자면 1열(기존)
     const two = typeof B.cand[0] === 'object', a = { G: cfg.G, obs, line: cfg.line, cand: B.cand, maps: B.maps, pitchRange: cfg.pitchRange ?? null, nMax: cfg.nMax, emitted: B.emitted, ...(B.minGap ? { minGap: B.minGap } : {}) };   // minGap = 이웃 LED 몸체가 겹치지 않는 최소 피치
     // (s, w) 격자 = 배치 Solver(같은 피치+끝 여백 → 끝 압축 → 자유 위치, spec 2026-10-20 led-layout-solver) · 숫자 격자 = 1열 기존 탐색
-    // 균일한 구조 = 균일한 피치(2026-11-02, 설계자 원칙) — 끝 압축·자유 배치는 잡음 낀 후보 지도에 맞춰 간격을 제멋대로 바꿈(실측: 안쪽 불균일 4.3% vs 등간격 2.8%). cfg.uniformPitch = false 일 때만 비균등
+    // 균일한 구조 = 균일한 피치(2026-11-02, 설계자 원칙) — 끝 압축·자유 배치는 노이즈 낀 후보 지도에 맞춰 간격을 제멋대로 바꿈(실측: 안쪽 불균일 4.3% vs 등간격 2.8%). cfg.uniformPitch = false 일 때만 비균등
     const { atCount, limit, ...r } = two ? solveLayout({ ...a, uniformOnly: cfg.uniformPitch !== false, wCenter: d.wCenter ?? 0, rowsOptions: cfg.rowsOptions ?? [1, 2], gaps: cfg.rowsOptions && !cfg.rowsOptions.includes(2) ? [] : B.gaps ?? [],   // rowsOptions [1] = 1열만(재료비)
        sMargin: B.sMargin ?? 0, timeBudget: cfg.layoutBudget ?? 20000, safety: cfg.layoutSafety ?? 0.02 }) : searchLeds({ ...a, spare: 1 });
     steps.push({ stage: 'leds', ...r });
@@ -485,9 +492,9 @@ export async function runAutoDesign(cfg, io) {
     if (atCount) ledMore = (n) => { const e = atCount(n); return e?.positions?.length ? lay(e) : null; };
     if (!r.feasible) { feasible = false; reason = r.reason; }
   }
-  const evalV = (cands, N, ms) => io.evalVariants(d, cands, N, ms), uText = (s) => `길이 균일도 ${s.Ulen.toFixed(2)}${s.Uwid == null ? '' : ` · 폭 균일도 ${s.Uwid.toFixed(2)}`}`;
+  const evalV = (cands, N, ms) => io.evalVariants(d, cands, N, ms), uText = (s) => `길이 균일도 ${fmtJudge(s.Ulen, obs.targetLen)}${s.Uwid == null ? '' : ` · 폭 균일도 ${fmtJudge(s.Uwid, obs.targetWid)}`}`;
   if (stages.height && cfg.heightRange) {   // ⑤ LED 높이 — 후보 { dz }(0 = 현재), 점수 최고
-    const cands = heightCandidates(cfg.heightRange, 7).map((dz) => ({ dz }));
+    const cands = heightCandidates(await io.heightRange?.(d) ?? cfg.heightRange, 7).map((dz) => ({ dz }));   // 범위는 ② 로 옮긴 자리 기준 — 처음 자리로 재면 벽 때문에 좁게 나옴(실측 +0.96 mm vs +3.9 mm)
     io.progress?.('height', 0, `LED 높이 후보 ${cands.length}개 평가`);
     const r = await pickVariant(cands, evalV, obs, { prefer: 'best', cancelled: stop, progress: (f, t) => io.progress?.('height', f, `LED 높이 ${t}`) });
     if (stop()) return { cancelled: true };
@@ -541,7 +548,7 @@ export async function runAutoDesign(cfg, io) {
     if (stop()) return { cancelled: true };
     steps.push({ stage: 'shapeScreen', gains: sc.gains, vars: sc.vars, results: (sc.results ?? []).map((r) => ({ cand: r.cand, ok: r.ok, why: r.why ?? null, Ulen: r.stats?.Ulen ?? null, Uwid: r.stats?.Uwid ?? null })) });   // results = 후보별 판정(진단·설명용)
     shapeZero = (sc.results ?? []).find((r) => r.ok && ['dt', 'h', 'e', 'c'].every((k) => !(r.cand[k] ?? 0))) ?? null;
-    if (!sc.vars.length) { shapeNone = true; io.shapePlan?.({ screen: nScreen, grid: 0, total: nScreen + nCurve }); feasible = margin(currentVerified.stats, obs) >= 0; reason = '형상 변수의 효과가 잡음 수준 — 현재 형상 유지'; }
+    if (!sc.vars.length) { shapeNone = true; io.shapePlan?.({ screen: nScreen, grid: 0, total: nScreen + nCurve }); feasible = margin(currentVerified.stats, obs) >= 0; reason = '형상 변수의 효과가 노이즈 수준 — 현재 형상 유지'; }
     else {
       const gv = sc.vars.includes('h') && rg.R ? [...sc.vars, 'R'] : sc.vars, nR = gv.includes('R') ? 3 : 1;
       shapeCands = gridCandidates(gv, rg, 5 ** sc.vars.length * nR <= 45 ? 5 : 3);   // 변수가 적으면 중간값(±½)까지 5단계, 많으면 3단계(후보 ≤ 27)
@@ -566,7 +573,7 @@ export async function runAutoDesign(cfg, io) {
     if (shapeNone || !shapeCands?.length) { shapeNone = false; shapeCands = [{ dt: 0, h: 0, R: Rm, e: 0, c: 0 }, st]; }
     else if (!shapeCands.some((c) => key(c) === key(st))) shapeCands = [...shapeCands, st];
   }
-  if (stages.shape && shapeNone && shapeZero && nCurve) {   // 선별 변수 효과가 잡음 수준이어도 곡선은 시도
+  if (stages.shape && shapeNone && shapeZero && nCurve) {   // 선별 변수 효과가 노이즈 수준이어도 곡선은 시도
     const best = await curveStage(shapeZero);
     if (best === undefined) return { cancelled: true };
     if (best !== shapeZero) {
@@ -613,7 +620,14 @@ export async function runAutoDesign(cfg, io) {
   }
   if (stop()) return { cancelled: true };
   io.progress?.('verify', 0, '최종안 정밀 재계산');
-  if (sameDesign(d, cfg.current)) {   // 현재안이 최선 — 현재안이 목표 미달이면 이유를 비워 두지 않음
+  const sharpen = async (e, v) => {   // 목표 바로 아래면 노이즈 0.5% 로 다시 재서 판정 — 값이 노이즈로 낮게 나와 통과안을 미달로 판정하는 것을 막음
+    if (v.sharp || !nearTarget(v.stats, obs) || !(v.stats.relNoise > JUDGE_NOISE * 1.1) || stop()) return v;
+    io.progress?.('verify', 0.9, `목표 근처 — 노이즈 ${JUDGE_NOISE * 100}% 까지 다시 계산(몇 분 걸림)`);
+    return { ...await io.verify(e, { noise: JUDGE_NOISE, from: v }), sharp: true };
+  };
+  if (sameDesign(d, cfg.current)) {
+    currentVerified = await sharpen(cfg.current, currentVerified);
+    if (stop()) return { cancelled: true };   // 현재안이 최선 — 현재안이 목표 미달이면 이유를 비워 두지 않음
     const okCur = margin(currentVerified.stats, obs) >= 0, cs = currentVerified.stats;
     const why = reason || (okCur ? '' : `현재 설계가 최선 — 목표 미달(길이 균일도 ${cs.Ulen.toFixed(2)}${cs.Uwid == null ? '' : ` · 폭 균일도 ${cs.Uwid.toFixed(2)}`})`);
     return { feasible: feasible && okCur, best: { ...cfg.current }, steps, reason: why, verified: currentVerified, current: currentVerified, unchanged: true, cancelled: false, hint };
@@ -650,7 +664,7 @@ export async function runAutoDesign(cfg, io) {
         n++;
       }
     }
-    // 후보 추정은 잡음으로 개수를 많이 잡기 쉬움 — 적은 쪽도 정밀 재계산으로 확인(최종 목표 = LED 를 많이 쓰지 않음). 통과면 통과하는 동안, 못 닿으면 나빠지지 않는 동안 줄임
+    // 후보 추정은 노이즈로 개수를 많이 잡기 쉬움 — 적은 쪽도 정밀 재계산으로 확인(최종 목표 = LED 를 많이 쓰지 않음). 통과면 통과하는 동안, 못 닿으면 나빠지지 않는 동안 줄임
     if (ledMore && !tried.slice(1).some((t) => mgOf(t) >= 0)) {
       const t0 = Date.now(), best0 = Math.max(...tried.map(mgOf)), passed = best0 >= 0;
       let n = Math.min(...tried.map((t) => totalLeds(t.design))) - 1;
@@ -667,8 +681,17 @@ export async function runAutoDesign(cfg, io) {
     }
     steps.push({ stage: 'ledsVerify', tried });
     const fewestPass = () => { const P = tried.filter((t) => mgOf(t) >= 0); return P.length ? P.reduce((a, b) => (totalLeds(b.design) < totalLeds(a.design) ? b : a)) : null; };
-    const near = () => { const top = Math.max(...tried.map(mgOf)); return tried.filter((t) => mgOf(t) >= top - SCORE_EPS).reduce((a, b) => (totalLeds(b.design) < totalLeds(a.design) ? b : a)); };   // 못 닿으면 가장 가까운 안 — 차이가 잡음 수준이면 적은 개수
-    const pick = fewestPass() ?? (more ? near() : tried.reduce((a, b) => (scV(b.verified) > scV(a.verified) ? b : a)));
+    const near = () => { const top = Math.max(...tried.map(mgOf)); return tried.filter((t) => mgOf(t) >= top - SCORE_EPS).reduce((a, b) => (totalLeds(b.design) < totalLeds(a.design) ? b : a)); };   // 못 닿으면 가장 가까운 안 — 차이가 노이즈 수준이면 적은 개수
+    // 1% 로는 미달이어도 근처 후보는 노이즈로 낮게 나온 것일 수 있음 — 적은 개수부터 최대 3개를 0.5% 로 재서 처음 통과한 안
+    if (!fewestPass()) {
+      const pool = tried.filter((t) => nearTarget(t.verified.stats, obs)).sort((a, b) => totalLeds(a.design) - totalLeds(b.design)).slice(0, SHARPEN_MAX);
+      for (const t of pool) {
+        t.verified = await sharpen(t.design, t.verified);
+        if (stop()) return { cancelled: true };
+        if (mgOf(t) >= 0) break;
+      }
+    }
+    const sharp = tried.filter((t) => t.verified.sharp), pick = fewestPass() ?? (sharp.length ? sharp.reduce((a, b) => (mgOf(b) > mgOf(a) + SCORE_EPS ? b : a)) : more ? near() : tried.reduce((a, b) => (scV(b.verified) > scV(a.verified) ? b : a)));
     d = pick.design; verified = pick.verified;
     if (more && mgOf(pick) < 0) {
       const s = verified.stats, wid = s.Uwid != null && s.Uwid - obs.targetWid < s.Ulen - obs.targetLen;
@@ -676,7 +699,11 @@ export async function runAutoDesign(cfg, io) {
     }
   }
   if (ledLimit && margin(verified.stats, obs) < 0 && mgFix(verified.stats) >= 0) reason = `길이 목표는 LED ${totalLeds(d)}개로 통과, 폭은 미달 — ${uText(verified.stats)} · 한계: 폭 방향 확산 부족(LED 개수로는 안 오름) — Milky·형상으로 보완`;
-  // 잡음 방어(①②③ 공통): 검증값이 현재안보다 SCORE_EPS 이상 낫지 않으면 현재안 유지. 둘 다 통과면 총 LED 수(rows·count) 감소도 이득
+  verified = await sharpen(d, verified);
+  if (stop()) return { cancelled: true };
+  currentVerified = await sharpen(cfg.current, currentVerified);   // 같은 노이즈로 비교
+  if (stop()) return { cancelled: true };
+  // 노이즈 방어(①②③ 공통): 검증값이 현재안보다 SCORE_EPS 이상 낫지 않으면 현재안 유지. 둘 다 통과면 총 LED 수(rows·count) 감소도 이득
   const sc = (v) => shapeScore({ ok: !v.stats.empty, stats: v.stats, eff: v.eff }, obs);
   const fewer = margin(verified.stats, obs) >= 0 && margin(currentVerified.stats, obs) >= 0 && totalLeds(d) < totalLeds(cfg.current);
   // 폭이 못 닿을 때: 길이가 새로 통과했거나 같은 통과에 개수가 줄면 이득(폭이 나빠지지 않을 때만) — 점수는 낮은 쪽(폭)에 묶여 안 변함
@@ -687,14 +714,14 @@ export async function runAutoDesign(cfg, io) {
     steps.push({ stage: 'guard', tried: d, triedVerified: verified, triedReason: reason });
     return { feasible: margin(currentVerified.stats, obs) >= 0, best: { ...cfg.current }, steps, reason: `현재안보다 나은 설계를 찾지 못함 — 현재안 유지${reason ? ` (${reason})` : ''}`, verified: currentVerified, current: currentVerified, unchanged: true, cancelled: false, hint };
   }
-  // 판정·문구는 정밀 재계산 값 기준(후보 평가값은 광자가 적어 잡음이 큼)
+  // 판정·문구는 정밀 재계산 값 기준(후보 평가값은 광자가 적어 노이즈가 큼)
   const vs = verified.stats, ok = margin(vs, obs) >= 0;
   if (ok) { feasible = true; reason = ''; }
   else {   // 단계가 통과로 끝났어도 정밀 재계산 미달이면 불가
     feasible = false;
     const vt = uText(vs);
     if (reason.startsWith('형상 최적안도')) reason = `형상 최적안도 목표 미달 — ${vt}`;
-    else if (!reason) reason = `최종 정밀 재계산에서 목표 미달 — ${vt} (후보 평가와 차이: 잡음·LED 몸체 영향)`;
+    else if (!reason) reason = `최종 정밀 재계산에서 목표 미달 — ${vt} (후보 평가와 차이: 노이즈·LED 몸체 영향)`;
     else {   // 문구 속 균일도는 정밀 재계산 값 하나만(후보 선별값·④ 함께 쓰기 선별값은 뺌 — 두 숫자가 섞이면 헷갈림)
       reason = reason.replace(/( · ④ 케이스 .*?) 와 함께 쓰면 길이 균일도 [\d.]+( · 폭 균일도 [\d.]+)?/, '$1 를 함께 쓰면 나아짐');
       reason = /길이 균일도 [\d.]+( · 폭 균일도 [\d.]+)?/.test(reason) ? reason.replace(/길이 균일도 [\d.]+( · 폭 균일도 [\d.]+)?/, vt) : `${reason} — ${vt}`;

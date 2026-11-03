@@ -64,20 +64,20 @@ if (run('VS7M')) {
       // 블록(3×3 노드) 평균, 중심 80%
       const blocks = (f) => { const out = []; for (let J = 0; J + 2 < NX; J += 3) for (let I = 0; I + 2 < NX; I += 3) { const cxn = (I + 1) / (NX - 1), cyn = (J + 1) / (NX - 1); if (Math.abs(cxn - 0.5) > 0.4 || Math.abs(cyn - 0.5) > 0.4) continue; let v = 0; for (let b = 0; b < 3; b++) for (let a = 0; a < 3; a++) v += f[(J + b) * NX + I + a]; out.push(v / 9); } return out; };
       const st = (f) => { const v = blocks(f); return { mean: v.reduce((p, q) => p + q, 0) / v.length, U: Math.min(...v) / Math.max(...v) }; };
-      // MC 지도 잡음은 U(=블록 min/max)를 낮게 편향시킨다(블록 상대 표준오차 ~0.8% → 700블록 min/max 로 −3%p 대).
+      // MC 지도 노이즈는 U(=블록 min/max)를 낮게 편향시킨다(블록 상대 표준오차 ~0.8% → 700블록 min/max 로 −3%p 대).
       // 대칭 배치(LED·벽이 x·y 거울 + x↔y 대칭)는 8중 대칭 평균 지도로 판정 — 분산 1/8. (2026-10-13 진단: 원 51.8% vs 대칭 55.4%)
       const symm = (f) => { const o = new Float64Array(NX * NX), F = (i, j) => f[j * NX + i]; for (let j = 0; j < NX; j++) for (let i = 0; i < NX; i++) { const I = NX - 1 - i, J = NX - 1 - j; o[j * NX + i] = (F(i, j) + F(I, j) + F(i, J) + F(I, J) + F(j, i) + F(J, i) + F(j, I) + F(J, I)) / 8; } return o; };
       const mcJ = c.symmetric ? symm(mc) : mc, sMraw = st(mc);
       const sF = st(fast.field), sM = st(mcJ), per = res.map((r) => st(c.symmetric ? symm(r.map) : r.map)), sdU = Math.sqrt(per.reduce((a, q) => a + (q.U - sM.U) ** 2, 0) / (NW - 1) / NW);
-      // 잡음 맞춤 비교: MC 판정 지도(대칭 평균)의 블록별 표준오차를 워커 간 분산으로 구해, 같은 잡음을 PSF 블록에 입힌 U 기댓값과 비교
-      // — min/max 의 잡음 편향(대칭 평균 후에도 ~1.5%p)을 양쪽에 같게 만들어 모델 차이만 남긴다.
+      // 노이즈 맞춤 비교: MC 판정 지도(대칭 평균)의 블록별 표준오차를 워커 간 분산으로 구해, 같은 노이즈를 PSF 블록에 입힌 U 기댓값과 비교
+      // — min/max 의 노이즈 편향(대칭 평균 후에도 ~1.5%p)을 양쪽에 같게 만들어 모델 차이만 남긴다.
       const bwJ = res.map((r) => blocks(c.symmetric ? symm(r.map) : r.map)), bmJ = blocks(mcJ), seJ = bmJ.map((m, k) => { let v = 0; for (const b of bwJ) v += (b[k] - m) ** 2; return Math.sqrt(v / (NW - 1) / NW) / m; });
       const noisyU = (f) => { const bF = blocks(f); let a = 12345, uN = 0; const ND = 400, u = () => ((a = (a * 1103515245 + 12345) >>> 0) + 0.5) / 4294967296, gauss = () => Math.sqrt(-2 * Math.log(u())) * Math.cos(2 * Math.PI * u());
         for (let d = 0; d < ND; d++) { let lo = Infinity, hi = 0; for (let k = 0; k < bF.length; k++) { const v = bF[k] * (1 + seJ[k] * gauss()); if (v < lo) lo = v; if (v > hi) hi = v; } uN += lo / hi / ND; } return uN; };
       const uN = noisyU(fast.field);
       let dm = Math.abs(sF.mean / sM.mean - 1), du = Math.abs(uN - sM.U), wallOut = null;
       if (process.env.DUMP) (await import('node:fs')).writeFileSync(process.env.DUMP, JSON.stringify({ mc: blocks(mcJ), raw: blocks(mc), psf: blocks(fast.field), se: seJ, wall: (() => { const wm = new Float64Array(NX * NX); for (const r of res) if (r.wmap) for (let k = 0; k < wm.length; k++) wm[k] += r.wmap[k] / NW; return blocks(c.symmetric ? symm(wm) : wm); })(), ledger: res.reduce((a, r) => { for (const q in r.ledger) a[q] = (a[q] ?? 0) + r.ledger[q] / NW; return a; }, {}) }));
-      console.log(`   잡음 맞춤: PSF+MC잡음 U 기댓값 ${(uN * 100).toFixed(1)}% vs MC ${(sM.U * 100).toFixed(1)}% (PSF 무잡음 ${(sF.U * 100).toFixed(1)}%, 블록 표준오차 중앙값 ${([...seJ].sort((a, b) => a - b)[seJ.length >> 1] * 100).toFixed(2)}%)`);
+      console.log(`   노이즈 맞춤: PSF+MC노이즈 U 기댓값 ${(uN * 100).toFixed(1)}% vs MC ${(sM.U * 100).toFixed(1)}% (PSF 무노이즈 ${(sF.U * 100).toFixed(1)}%, 블록 표준오차 중앙값 ${([...seJ].sort((a, b) => a - b)[seJ.length >> 1] * 100).toFixed(2)}%)`);
       if (process.argv.includes('--map')) {
         const bF = blocks(process.env.MAPF === 'corr' && globalThis.__fc ? globalThis.__fc : fast.field), bM = blocks(mcJ), nb = Math.round(Math.sqrt(bF.length)), mF = bF.reduce((a, v) => a + v) / bF.length, mMm = bM.reduce((a, v) => a + v) / bM.length;
         for (let j = 0; j < nb; j += 2) console.log('   ' + Array.from({ length: nb }, (_, i) => ((bF[j * nb + i] / mF) / (bM[j * nb + i] / mMm)).toFixed(3)).filter((_, i) => i % 2 === 0).join(' ') + '   | MC/평균 ' + Array.from({ length: nb }, (_, i) => (bM[j * nb + i] / mMm).toFixed(2)).filter((_, i) => i % 2 === 0).join(' '));
@@ -101,7 +101,7 @@ if (run('VS7M')) {
         const sB = st(comb);
         console.log(`   결합(PSF 열린 × 벽/열린 비): 평균 ${(sB.mean / sM.mean).toFixed(4)}·U ${(sB.U * 100).toFixed(1)}%`);
       }
-      if (process.argv.includes('--noise')) {   // MC 블록 잡음: 워커 간 블록값 표준오차(상대) + 8중 대칭 평균 지도의 U(대칭 배치 전용)
+      if (process.argv.includes('--noise')) {   // MC 블록 노이즈: 워커 간 블록값 표준오차(상대) + 8중 대칭 평균 지도의 U(대칭 배치 전용)
         const bw = res.map((r) => blocks(r.map)), bm = blocks(mc), se = bm.map((m, k) => { let v = 0; for (const b of bw) v += (b[k] - m) ** 2; return Math.sqrt(v / (NW - 1) / NW) / m; }).sort((a, b) => a - b);
         const sym = new Float64Array(NX * NX), F = (f, i, j) => f[j * NX + i];
         for (let j = 0; j < NX; j++) for (let i = 0; i < NX; i++) { const I = NX - 1 - i, J = NX - 1 - j; sym[j * NX + i] = (F(mc, i, j) + F(mc, I, j) + F(mc, i, J) + F(mc, I, J) + F(mc, j, i) + F(mc, J, i) + F(mc, j, I) + F(mc, J, I)) / 8; }
@@ -115,7 +115,7 @@ if (run('VS7M')) {
         const f0 = milkyShapeField(c.geom, 12, c.leds, grid, { table, mat, rhoB, intensity, intensityKey: 'lam1', I0: 1, uniform: c.uniform, symmetric: c.symmetric, rWover: 0 });
         const fc = Float64Array.from(f0.field, (v, k) => Math.max(0, v + wd.d[k]));
         const sC = st(fc);
-        console.log(`   확산벽 보정[생산 l2WallDelta ${Date.now() - T0}ms](R=${R.toFixed(3)}): 평균 ${(sC.mean / sM.mean).toFixed(4)}·U ${(sC.U * 100).toFixed(1)}%·잡음맞춤 ${(noisyU(fc) * 100).toFixed(1)}% (MC ${(sM.U * 100).toFixed(1)}%, 거울 LED 잡음맞춤 ${(uN * 100).toFixed(1)}%)`);
+        console.log(`   확산벽 보정[생산 l2WallDelta ${Date.now() - T0}ms](R=${R.toFixed(3)}): 평균 ${(sC.mean / sM.mean).toFixed(4)}·U ${(sC.U * 100).toFixed(1)}%·노이즈맞춤 ${(noisyU(fc) * 100).toFixed(1)}% (MC ${(sM.U * 100).toFixed(1)}%, 거울 LED 노이즈맞춤 ${(uN * 100).toFixed(1)}%)`);
         wallOut = { dm: Math.abs(sC.mean / sM.mean - 1), du: Math.abs(noisyU(fc) - sM.U) };
       }
       if (process.argv.includes('--wallcorr')) {   // 벽 보정 시험: 필드 × [벽 접기 solve / 열린 solve(거울 광원)] — 거친 격자, 같은 이산화

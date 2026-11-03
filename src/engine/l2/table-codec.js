@@ -1,4 +1,4 @@
-// 슬래브 표 압축 코덱(2026-10-13): Float32 가수 12비트 반올림(상대 오차 ≤1.2e-4 ≪ MC 잡음 ~1e-3) + 바이트 평면 분리(shuffle)
+// 슬래브 표 압축 코덱(2026-10-13): Float32 가수 12비트 반올림(상대 오차 ≤1.2e-4 ≪ MC 노이즈 ~1e-3) + 바이트 평면 분리(shuffle)
 // → gzip(Node zlib / 브라우저 DecompressionStream). 12.9MB → 4.3MB. gzip 은 환경별 호출측에서.
 export const TABLE_ENCODING = 'f32m12-shuffle-gzip';
 const KEEP = 12;

@@ -1,4 +1,5 @@
 // 기구 최적화 카드 — spec P4 §3. 체크 5개(①~⑤) · ③·④ 대상 부품 · [실행]/[중지] · 진행 · 현재|최적 비교 · [적용][취소][되돌리기][STEP]
+import { fmtJudge } from '../../engine/mech3d/tally.js';
 import { stepRefEmitter } from '../../engine/mech3d/virtual-leds.js';   // 가상 배치 기준 LED(엔진과 같은 규칙)
 import { setPartFinish } from '../../engine/mech3d/materials.js';
 import { FINISH_GRADES, gradeOf, DEFAULT_FINISH_CATALOG } from '../../engine/mech3d/housing-led.js';
@@ -29,7 +30,7 @@ export function overallFrac(stages, stage, frac) {
 }
 // 남은 시간 — 진행 10% 이상부터 경과 ÷ 진행률로 추정
 export const etaText = (elapsedMs, frac) => (frac >= 0.1 && frac < 1 ? `남은 약 ${Math.max(1, Math.round((elapsedMs * (1 - frac)) / frac / 1000))}초` : '');
-// ① 현재안 재사용 — 점진 계산이 같은 장면(집계 격자 G 동일)에서 잡음 목표에 도달('done')했으면 { stats, eff }, 아니면 null
+// ① 현재안 재사용 — 점진 계산이 같은 장면(집계 격자 G 동일)에서 노이즈 목표에 도달('done')했으면 { stats, eff }, 아니면 null
 export function reusableCurrent(snap, G) {
   const s = snap?.stats, eff = snap?.photometry?.eff;
   if (snap?.state !== 'done' || !snap.sceneKey || snap.G !== G || !s || s.empty || !(s.relNoise <= snap.targetNoise) || !Number.isFinite(eff)) return null;
@@ -189,8 +190,8 @@ function cmpParts({ cur, best, shape, stepLeds = null, finish = null, height = n
   const tc = stepLeds != null && cur.stepOrig !== false ? stepLeds : ledTotal(cur), tb = best.stepOrig === true ? tc : ledTotal(best);
   const tot = Number.isFinite(tc) && Number.isFinite(tb) && tb !== tc ? ` <b class="m3-tot">· 총 ${tb}개 (${tb > tc ? '+' : ''}${tb - tc})</b>` : '';
   const metric = [
-    tr(`길이 균일도${tg?.len != null ? ` <span class="mut">목표 ${f2(tg.len)}</span>` : ''}`, f2(cur.Ulen), f2(best.Ulen), `${dl(cur.Ulen, best.Ulen)}${passMark(best.Ulen, tg?.len)}`),
-    tr(`폭 균일도${tg?.wid != null ? ` <span class="mut">목표 ${f2(tg.wid)}</span>` : ''}`, f2(cur.Uwid), f2(best.Uwid), `${dl(cur.Uwid, best.Uwid)}${passMark(best.Uwid, tg?.wid)}`),
+    tr(`길이 균일도${tg?.len != null ? ` <span class="mut">목표 ${f2(tg.len)}</span>` : ''}`, fmtJudge(cur.Ulen, tg?.len), fmtJudge(best.Ulen, tg?.len), `${dl(cur.Ulen, best.Ulen)}${passMark(best.Ulen, tg?.len)}`),
+    tr(`폭 균일도${tg?.wid != null ? ` <span class="mut">목표 ${f2(tg.wid)}</span>` : ''}`, fmtJudge(cur.Uwid, tg?.wid), fmtJudge(best.Uwid, tg?.wid), `${dl(cur.Uwid, best.Uwid)}${passMark(best.Uwid, tg?.wid)}`),
     tr('광 효율', `${f2(cur.eff * 100)}%`, `${f2(best.eff * 100)}%`, dl(cur.eff, best.eff, 100, '%p')),
   ];
   const design = [
@@ -227,7 +228,7 @@ export function appliedHtml(applied) {
 
 // el 에 카드를 그리고 이벤트를 h 로 넘긴다. state = { avail, sel, running, result, names, canRevert, noLine, milkyPart }
 // 실행 중 카드 구조가 같으면 진행 막대·문구만 바꿈(갱신마다 innerHTML 을 다시 만들지 않게)
-// '현재안 유지'인데 시험한 후보가 있으면(차이가 잡음 수준·더 나쁨) [후보로 바꾸기] — 후보 값을 함께 보임. [적용] = 추천안이 있을 때만, 이때는 숨김(같은 뜻의 단추 둘로 헷갈림, 2026-11-02)
+// '현재안 유지'인데 시험한 후보가 있으면(차이가 노이즈 수준·더 나쁨) [후보로 바꾸기] — 후보 값을 함께 보임. [적용] = 추천안이 있을 때만, 이때는 숨김(같은 뜻의 단추 둘로 헷갈림, 2026-11-02)
 const altBtn = (r) => (r.unchanged && r.alt ? `<button type="button" data-ad="applyAlt" title="추천은 지금 설계 유지 — 그래도 찾은 후보로 바꾸려면 누름">후보로 바꾸기${r.alt.milky != null ? ` (Milky ${(+r.alt.milky).toFixed(2)})` : ''} · ${f2(r.alt.Ulen)}/${f2(r.alt.Uwid)}</button>` : '');
 const altNote = (r) => (r.unchanged && r.alt ? `<div class="m3-rlim">찾은 후보 길이 ${f2(r.alt.Ulen)} · 폭 ${f2(r.alt.Uwid)} (지금 ${f2(r.cur?.Ulen)} · ${f2(r.cur?.Uwid)}) — 지금보다 뚜렷이 낫지 않아 지금 설계 유지를 추천</div>` : '');
 const applyBtn = (r, clashTitle) => (r.unchanged ? '' : `<button type="button" data-ad="apply"${r.clash > 0 ? ` disabled title="${clashTitle}"` : ''}>적용</button>`);

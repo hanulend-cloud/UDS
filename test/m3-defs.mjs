@@ -4,7 +4,7 @@ import { ok, done } from './mech3d-util.mjs';
 
 ok(defaultLight().spec.fluxLm === 0, 'LED 광속 기본 0(상대값)');
 const o = defaultObserve();
-ok(o.targetLum === null && o.targetNoise === 0.01 && o.cone === 90, `관측 기본: 목표 휘도 없음, 잡음 목표 1%, 원뿔 90° (${JSON.stringify(o)})`);
+ok(o.targetLum === null && o.targetNoise === 0.01 && o.cone === 90, `관측 기본: 목표 휘도 없음, 노이즈 목표 1%, 원뿔 90° (${JSON.stringify(o)})`);
 ok(JSON.stringify(defaultChecks()) === '{"minWall":0.8,"minReach":0.5,"maxLeak":0.2}', '점검 기준 기본값');
 const old = {
   light: { kind: 'none', solder: '백색', spec: { model: 'lambertian', beam: 120, sizeX: 2, sizeY: 2 }, step: null, manual: { pcb: { kind: 'depth', depth: 10 }, count: 10, pitch: 0, side: 'direct' } },

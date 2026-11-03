@@ -16,7 +16,7 @@ import { setPartMaterial, setPartMaterialParam, CLEAR_BASE, applyClearEntry, cle
 import { lineFromData, lightData, obsDirection } from '../../engine/mech3d/line.js';
 import { tallyGeometry, tallyStats, autoCells } from '../../engine/mech3d/tally.js';
 import { bounds } from '../../engine/mech3d/mesh.js';
-import { runGeomChecks, checkLeak } from '../../engine/mech3d/checks.js';
+import { runGeomChecks, checkInterference, boxTravel, checkLeak } from '../../engine/mech3d/checks.js';
 import { createStore, PHYSICS, GEOM_CHECK, PERSIST_TAGS } from './store.js';
 import { createProgressive } from './progressive.js';
 import { createPool } from './pool.js';
@@ -385,7 +385,7 @@ function onCalc(snap) {
   if (T.start && snap.stats?.relNoise != null && snap.stats.relNoise <= 0.05 && T.noise5 == null) T.noise5 = (now - T.start) / 1000;
   updateLeakCheck(snap);
   A.results.update({ snap, observe: M.observe, message: guidance(snap), leds: ledSW(M, S.line), ledsOrig: (() => { const c = ledChangeNow(M, S.line); return c?.changed ? c.orig : []; })(), leak: leakText(A.checks.leak, M.parts.map((p) => p.name)) });
-  A.simDash?.sample(snap, M.observe.targetNoise ?? 0.01, M.observe, M.parts.map((p) => p.name), M.parts.length, !!adState().running);
+  A.simDash?.sample(snap, snap.targetNoise ?? M.observe.targetNoise ?? 0.01, M.observe, M.parts.map((p) => p.name), M.parts.length, !!adState().running);
   drawLightPaths();
   adDetectPath();
   monitorSummary();
@@ -622,7 +622,7 @@ function monitorSummary() {
   const st = A.ad, M = A.store.mspec, cell = (t, v, g) => `<b class="${Number.isFinite(v) && Number.isFinite(g) ? (v + 1e-9 >= g ? 'ok' : 'bad') : ''}">${t} ${Number.isFinite(v) ? v.toFixed(2) : '–'}</b>`;
   if (st?.running) { monitor.setSummary(`<b>실행 중 ${Math.round((st.running.frac ?? 0) * 100)}%</b>`); return; }
   const b = st?.result?.best, s = A.prog?.snapshot()?.stats;
-  if (!b && (!s || s.empty || s.relNoise > 0.05)) { monitor.setSummary('<span>계산 중</span>'); return; }   // 초반 값은 잡음
+  if (!b && (!s || s.empty || s.relNoise > 0.05)) { monitor.setSummary('<span>계산 중</span>'); return; }   // 초반 값은 노이즈
   const U = b ? [b.Ulen, b.Uwid] : [s.Ulen, s.Uwid];
   monitor.setSummary(`${b ? '<span>후보</span> ' : ''}${cell('길이', U[0], M.observe.targetLen)} ${cell('폭', U[1], M.observe.targetWid)}`);
 }
@@ -683,12 +683,12 @@ function shapeModFor({ dt, h, R, e = 0, c = 0, kL = null, kW = null, kF = null }
 function designClash(d, ctx, M0, rt, line) {
   if (M0.light.kind !== 'step') return 0;
   try {
-    const cnt = (M, mech) => { const lay = L.stepLayout(M, line); return (lay?.leds ?? []).filter((k) => lay.parts[k] && interferenceKeys(lay.parts[k], mech, [], []).size > 0).length; };
+    const cnt = (M, mech) => { const lay = L.stepLayout(M, line); return Math.max(boxClashN(M, line, rt), (lay?.leds ?? []).filter((k) => lay.parts[k] && interferenceKeys(lay.parts[k], mech, [], []).size > 0).length); };
     const { M, parts } = designScene(d, ctx);
     return Math.max(0, cnt(M, parts) - cnt(M0, rt.parts));
   } catch { return 0; }
 }
-// ② LED 폭 위치 이동 후보(2026-10-30) — LED STEP 만. 지금 배치(s 목록)를 폭 c(기준 LED 대비 mm)로 옮겨 봄: −16~+16 mm, 2 mm 간격.
+// ② LED 폭 위치 이동 후보(2026-10-30) — LED STEP 만. 지금 배치(s 목록)를 폭 c(기준 LED 대비 mm)로 옮겨 봄: −16~+16 mm, 1 mm 간격.
 // 받는 조건: (1) LED 몸체가 기구 부품과 새로 겹치지 않음 (2) 몸체 양쪽 가장자리 아래가 원래와 같은 높이의 면(PCB 위 — 가장자리 밖으로 떠 있지 않음).
 // 광원으로 옮긴 원래 LED·추적 제외 부품은 검사에서 뺌. 반환 { cs:[0 포함], ss } | null
 function lateralCandidates(M0, line, rt, ctx) {
@@ -702,9 +702,9 @@ function lateralCandidates(M0, line, rt, ctx) {
   const half = ledHalfWidth(M0, line) * 0.9, down = (p) => { const h = intersectRay(rt.bvh, p[0], p[1], p[2], -n[0], -n[1], -n[2], 1e-6, Infinity, -1, -1, mask); return h ? h.t : Infinity; };
   const t0 = down(ref.pos), cs = [0];
   const clashN = (c) => { const { M, parts } = designScene({ ...ctx.cur, positions: ss.map((s) => ({ s, w: c })), count: ss.length, rows: 1, rowGap: 0, stepVirt: true }, ctx); const lay = L.stepLayout(M, line);
-    return { lay, n: (lay?.leds ?? []).filter((k) => lay.parts[k] && C_interf(lay.parts[k], mech)).length }; };
+    return { lay, n: Math.max(boxClashN(M, line, rt), (lay?.leds ?? []).filter((k) => lay.parts[k] && C_interf(lay.parts[k], mech)).length) }; };
   let base = 0; try { base = clashN(0).n; } catch { return null; }
-  for (let c = -16; c <= 16; c += 2) {
+  for (let c = -16; c <= 16; c++) {   // 1 mm 간격(2026-11-03) — 비교는 엔진이 2 mm 로 훑고 ±1 mm
     if (!c) continue;
     try {
       const { lay, n: nc } = clashN(c); if (nc > base) continue;
@@ -845,6 +845,25 @@ const adEff = (r) => { let t = 0; for (const b of r.batches) for (const v of b) 
 // ⑤ 높이 범위 [아래, 위](관측 방향 d 이동량 mm) + gap(현재 발광점 → 관측 부품 +d 축 거리 최소, 모르면 NaN)
 // LED STEP(원래·가상) = LED 부품(PCB 포함) 각각을 기구 부품에 대해 travelDistance(이미 겹친 상대는 뺌) · 직접 배치(깊이) = 발광점 ±d 광선
 const rayT = (m, p, d) => (m?.bvh ? intersectRay(m.bvh, p[0], p[1], p[2], d[0], d[1], d[2], 1e-6, Infinity)?.t ?? Infinity : Infinity);
+// LED 외곽 상자가 부품과 겹치는 LED 수(상태 표시줄 ① 간섭과 같은 기준) — 렌즈가 둥글어 메쉬로는 비켜 가도(여유 0.05 mm) 상자가 겹치면 경고가 뜨므로 최적화도 같은 기준으로 피함
+const ledPcbEx = (M, line, rt) => { const pcb = L.stepLayout(M, line)?.pcb ?? -1; return pcb >= 0 ? [rt.parts.length + pcb] : []; };
+const boxClashN = (M, line, rt) => new Set(checkInterference({ rt, mspec: M, bodies: L.ledBodies(M, line), exclude: ledPcbEx(M, line, rt) }).items.filter((x) => x.kind !== 'potted').map((x) => x.led)).size;
+// ② 로 옮긴 자리의 ⑤ 범위(2026-11-03) — 같은 구조라 LED 5개만, 하나 잴 때마다 화면에 양보(전부 재면 12.9 초 멈춤 실측). 직접 배치·실패 = 처음 범위
+async function adHeightRangeAt(M, line, rt, fallback) {
+  if (M.light.kind !== 'step') return fallback;
+  try {
+    const d = line.frame.d, nd = d.map((v) => -v), mech = rt.parts, all = L.ledPartsNow(M, line) ?? [], pick = all.length > 5 ? [0, 1, 2, 3, 4].map((i) => all[Math.round((i * (all.length - 1)) / 4)]) : all;
+    if (!pick.length) return fallback;
+    const bs = L.ledBodies(M, line), bPick = bs.length > 5 ? [0, 1, 2, 3, 4].map((i) => bs[Math.round((i * (bs.length - 1)) / 4)]) : bs, ex = ledPcbEx(M, line, rt);
+    let up = boxTravel({ rt, mspec: M, bodies: bPick, d, maxD: 10, exclude: ex }), down = boxTravel({ rt, mspec: M, bodies: bPick, d: nd, maxD: 10, exclude: ex });
+    for (const p of pick) {
+      await new Promise((res) => setTimeout(res, 0));
+      const pre = interferenceKeys(p, mech, [], []), obs = mech.map((m, j) => (pre.has(`p:${j}`) ? null : m));
+      up = Math.min(up, travelDistance(p, obs, d, 10)); down = Math.min(down, travelDistance(p, obs, nd, 10));
+    }
+    return ledHeightRange({ up, down });
+  } catch { return fallback; }
+}
 function adHeightInfo(M0, line, rt) {
   const d = line.frame.d, nd = d.map((v) => -v), mech = rt.parts, em = L.currentEmitters(M0, line);
   let up = Infinity, down = Infinity;
@@ -927,7 +946,7 @@ async function adRun(opt = {}) {
     height: st.sel.height && avail.height.ok, housing: st.sel.housing && avail.housing.ok && avail.housing.parts.includes(st.sel.housingPart) };
   st.milkyPart = adMilkyPart(M0, avail);
   const hpSel = avail.housing?.parts?.includes(st.sel.housingPart) ? st.sel.housingPart : defaultHousingPart(M0, adInfo().boxes);   // 보완으로 ④ 를 더했으면 기본 케이스 부품
-  // 최적화 판정 격자 = 늘 저화질(2026-11-02) — 고화질 칸(0.5 mm)으로 짧게 평가하면 잡음이 '불균일' 로 보여 값이 크게 낮게 나오고(실측 길이 균일도 0.65 vs 정밀 0.76)
+  // 최적화 판정 격자 = 늘 저화질(2026-11-02) — 고화질 칸(0.5 mm)으로 짧게 평가하면 노이즈가 '불균일' 로 보여 값이 크게 낮게 나오고(실측 길이 균일도 0.65 vs 정밀 0.76)
   // LED 를 너무 많이 쓰거나 간격이 제멋대로가 됨. 화면 화질은 그대로, 최적화 평가만
   const lowQ = (M0.observe.quality ?? 'low') === 'low', obs = tallyObs({ ...M0.observe, quality: 'low' }, M0.observe.dir ?? line.frame.d), G = lowQ ? geometry(tallyObs(M0.observe, M0.observe.dir ?? line.frame.d)) : tallyGeometry(line, obs), sp = st.sel.shapePart, hp = stages.housing ? hpSel : -1;
   let hInfo = null; if (stages.height) { try { hInfo = adHeightInfo(M0, line, rt); } catch { stages.height = false; } }   // 범위 계산 실패 = ⑤ 생략
@@ -958,7 +977,7 @@ async function adRun(opt = {}) {
   let shapeI = 0, shapeScr = 0, shapeTot = 1;
   const progress = (stage, frac, text) => {   // 전체 진행률(단계 무게) + 남은 시간
     if (A !== a || R.stopped) return;
-    const f = overallFrac(stages, stage, frac), eta = etaText(performance.now() - t0, f);
+    const f = overallFrac(stages, stage, frac), eta = /몇 분/.test(text) ? '' : etaText(performance.now() - t0, f);
     const tx = opt.added?.length ? `보완 ${opt.step ?? ''} (${opt.added.join(' + ')}) · ${text}` : text;
     A.optDash?.progress(stage, frac, tx);
     st.running = { frac: f, text: eta ? `${tx} · ${eta}` : tx }; renderAuto();
@@ -1007,7 +1026,7 @@ async function adRun(opt = {}) {
         const thin = minThickness(H, mod) < Math.min(minWall, (t00 ??= minThickness(H, { ...mod, dt: 0, h: 0, e: 0, c: 0, kL: null, kW: null, kF: null })) - 1e-3);   // 칸 중심 + LED 중심. 원래부터 얇은 자리(뾰족한 가장자리 등)는 더 얇아질 때만 탈락 — 전에는 변형 없는 안까지 탈락할 수 있었음
         const clash = !thin && newInterference(parts[sp], others, lp, before, 0.05) != null;   // 새 겹침 또는 기존보다 0.05 mm 넘게 깊어짐 — 찾는 즉시 멈춤(깊은 겹침도 빠르게)
         if (thin || clash) { out.push({ cand: c, ok: false, why: thin ? '살두께' : '간섭' }); A.optDash?.evals('shape', [{ label: shapeText(c), ok: false, why: thin ? '살두께' : '간섭' }]); continue; }
-        // 같은 난수 비교(crn) — 형상 후보마다 같은 광자 난수(시드·청크·포트 고정)로 추적해 후보 차이만 남김(잡음 ↓). N 전부(시간 제한 없음)
+        // 같은 난수 비교(crn) — 형상 후보마다 같은 광자 난수(시드·청크·포트 고정)로 추적해 후보 차이만 남김(노이즈 ↓). N 전부(시간 제한 없음)
         const r = await R.trace(adJob(Md, parts, ctx), { N, batches: 4, crn: SHAPE_CRN }), stt = tallyStats(G, r.batches, obs);
         out.push({ cand: c, ok: !stt.empty, stats: stt, eff: adEff(r) });
         A.optDash?.evals('shape', [{ label: shapeText(c), Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty }]);
@@ -1038,12 +1057,13 @@ async function adRun(opt = {}) {
       }
       return out;
     },
-    async verify(d) {   // 정밀 재판정(현재안·최종안): 250만 광자(최소 150만, 20초까지) — 광자가 적으면 균일도(최저÷최고)가 잡음 때문에 낮게 나옴(6초 제한 때 0.69 vs 실제 0.78)
+    heightRange: (d) => adHeightRangeAt(designScene(d, ctx).M, line, rt, hInfo?.range ?? [0, 0]),   // ⑤ 후보 범위 = ② 로 옮긴 자리 기준
+    async verify(d, { noise = null, from = null } = {}) {   // noise = 그 노이즈까지(잰 값에서 필요한 광자 수를 노이즈, 10 분 한도). 정밀 재판정(현재안·최종안): 250만 광자(최소 150만, 20초까지) — 광자가 적으면 균일도(최저÷최고)가 노이즈 때문에 낮게 나옴(6초 제한 때 0.69 vs 실제 0.78)
       const { M: Md, parts } = designScene(d, ctx);
-      const eff0 = currentVerified?.eff ?? snap0.photometry?.eff, r = await R.trace(adJob(Md, parts, ctx), { N: Math.ceil(Math.min(1.5e7, 5e6 * Math.max(1, 0.5 / (eff0 > 0 ? eff0 : 0.5)))), maxMs: d.shape?.kF ? 60000 : 45000, minN: 1.5e6, batches: 10 });   // 효율이 낮으면 관측면에 닿는 빛이 적어 광자를 더. 실측: 20 초(잡음 2%) 판정 0.73~0.76 vs 수렴값 0.78~0.79 — 잡음이 칸 최소·최대를 벌려 낮게 나오므로 시간을 늘림(2026-11-03). 입광면 보정 메쉬는 추적이 느려 같은 시간이면 잡음이 커져 현재안과 공정하게 비교가 안 됨 → 시간 더
+      const eff0 = currentVerified?.eff ?? snap0.photometry?.eff, r = await R.trace(adJob(Md, parts, ctx), noise ? { N: Math.ceil(Math.min(4e8, 1.1 * (from?.photons ?? 5e7) * ((from?.stats?.relNoise ?? 0.01) / noise) ** 2)), maxMs: 600000, minN: 1.5e6, chunkN: 2e5, batches: 10 } : { N: Math.ceil(Math.min(1.5e7, 5e6 * Math.max(1, 0.5 / (eff0 > 0 ? eff0 : 0.5)))), maxMs: d.shape?.kF ? 60000 : 45000, minN: 1.5e6, batches: 10 });   // 효율이 낮으면 관측면에 닿는 빛이 적어 광자를 더. 실측: 20 초(노이즈 2%) 판정 0.73~0.76 vs 수렴값 0.78~0.79 — 노이즈가 칸 최소·최대를 벌려 낮게 나오므로 시간을 늘림(2026-11-03). 입광면 보정 메쉬는 추적이 느려 같은 시간이면 노이즈가 커져 현재안과 공정하게 비교가 안 됨 → 시간 더
       const stt = tallyStats(G, r.batches, obs);
       A.optDash?.evals('final', [{ label: verifyLabel(d), Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty }]);
-      return { stats: stt, eff: adEff(r) };
+      return { stats: stt, eff: adEff(r), photons: r.photons };
     },
     trace: (stage, list) => A.optDash?.evals(stage, list),   // 엔진이 직접 알리는 결과(② 배치 Solver 최선안·대안)
   };
@@ -1075,7 +1095,7 @@ async function adRun(opt = {}) {
       finish: stages.housing ? (() => { const c = { ...M0.parts[hp].finish, ...(M0.parts[hp].coating ? { coating: M0.parts[hp].coating } : {}) }; return { cur: c, best: res.best.finish ?? c }; })() : null, height: stages.height && hInfo ? { dz: res.best.dz ?? 0, gap: hInfo.gap } : null,
       cur: { ...cur, shape: sm ? { dt: sm.dt, h: sm.h, R: sm.R, e: sm.e ?? 0, c: sm.c ?? 0, kF: sm.kF ?? null } : null, Ulen: C?.stats?.Ulen, Uwid: C?.stats?.Uwid, eff: C?.eff ?? NaN, profile: C?.stats?.profile ?? null },
       best: { ...res.best, ...(stp ? { stepOrig: !res.best.stepVirt } : {}), Ulen: res.verified.stats.Ulen, Uwid: res.verified.stats.Uwid, eff: res.verified.eff, profile: res.verified.stats.profile ?? null } };
-    const gd = res.unchanged ? res.steps?.find((x) => x.stage === 'guard') : null;   // 찾은 후보가 현재안보다 잡음 수준만큼만 나음 — 원하면 적용
+    const gd = res.unchanged ? res.steps?.find((x) => x.stage === 'guard') : null;   // 찾은 후보가 현재안보다 노이즈 수준만큼만 나음 — 원하면 적용
     if (gd?.tried && gd.triedVerified?.stats) st.result.alt = { design: gd.tried, Ulen: gd.triedVerified.stats.Ulen, Uwid: gd.triedVerified.stats.Uwid, eff: gd.triedVerified.eff, milky: gd.tried.milky };
   }
   // Worker 에 기구 최적화 장면이 올라가 있음 — 진행 중이던 계산·실행 중 편집은 다시 시작, 끝난 계산은 그대로.
@@ -1772,7 +1792,7 @@ function renderAll(tag = 'all') {
 function renderStatus() {
   const S = A.store.session, M = A.store.mspec;
   const lt = S.ledSel != null && A.ledTotal ? `LED ${ledRows(ledsNow()).find((r) => r.n === S.ledSel)?.rank ?? S.ledSel + 1}/${A.ledTotal}` : '';
-  renderStatusBar($('#m3-status'), { calc: S.calc, targetNoise: M.observe.targetNoise ?? 0.01, checks: A.checks, focus: S.focusCheck, text: lt && S.status ? `${lt} · ${S.status}` : lt || S.status }, {
+  renderStatusBar($('#m3-status'), { calc: S.calc, targetNoise: S.calc?.targetNoise ?? M.observe.targetNoise ?? 0.01, checks: A.checks, focus: S.focusCheck, text: lt && S.status ? `${lt} · ${S.status}` : lt || S.status }, {
     onCheck: (id) => A.store.update('session', (_, s) => { s.focusCheck = s.focusCheck === id ? null : id; }),
   });
 }

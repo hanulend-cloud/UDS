@@ -3,7 +3,7 @@
 //   [0 탈출(1/0), 1 마지막 출사 부품(−1 없음), 2 그 면, 3-5 출사점, 6-8 탈출 방향, 9 탈출 가중치, 10 tL, 11 tK,
 //    12 불투명 면 반사 여부, 13-17 들어간 투과 부품 차례(−1 빈칸), 18 면 흡수, 19 체적 흡수, 20 소실, 21 RR 손실, 22 RR 이득, 23 예비]
 // 기록을 job.runChunkGpu 가 CPU 집계기(tally.makeAccumulator)에 그대로 넣으므로 집계·광경로·새는 빛 규칙은 CPU 와 같다.
-// 정밀도: GPU 는 f32 — 좌표를 장면 중심 기준으로 옮기고 tMin = 2e-5 mm(CPU 1e-9)로 둔다. 결과는 CPU 와 잡음 범위에서 같다(시험: test/gpu-vs-cpu 브라우저 점검).
+// 정밀도: GPU 는 f32 — 좌표를 장면 중심 기준으로 옮기고 tMin = 2e-5 mm(CPU 1e-9)로 둔다. 결과는 CPU 와 노이즈 범위에서 같다(시험: test/gpu-vs-cpu 브라우저 점검).
 import { coinFlags } from './mc3d.js';
 
 export const REC = 24;

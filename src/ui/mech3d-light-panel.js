@@ -239,7 +239,7 @@ export function renderObserveProps(el, m, ui, h) {
     ${nF ? `<div class="m3-card"><div class="m3-sub">보는 방향 <span class="mut">${O.dir ? '(직접 지정)' : '(자동 = 면에 수직)'}</span></div>
       <div class="m3-row">x<input type="number" step="0.1" value="${numIn(ui.dir?.[0], 3)}" data-lp-dir="0"> y<input type="number" step="0.1" value="${numIn(ui.dir?.[1], 3)}" data-lp-dir="1"> z<input type="number" step="0.1" value="${numIn(ui.dir?.[2], 3)}" data-lp-dir="2"> ${O.dir ? '<button data-lp-dirauto>자동으로</button>' : ''}</div></div>` : ''}
     <div class="m3-card"><div class="m3-sub">보는 범위</div>
-      <div class="m3-row"><label>보는 각도 ±</label><input type="number" min="2" max="90" step="1" value="${O.cone}" data-lp-obs="cone">° <span class="mut">90 = 모든 방향(확산면 밝기) · 좁히면 정면에서 본 밝기(계산 잡음 큼)</span></div>
+      <div class="m3-row"><label>보는 각도 ±</label><input type="number" min="2" max="90" step="1" value="${O.cone}" data-lp-obs="cone">° <span class="mut">90 = 모든 방향(확산면 밝기) · 좁히면 정면에서 본 밝기(계산 노이즈 큼)</span></div>
       <div class="m3-row"><label>가장자리 제외</label><input type="number" min="0" step="0.1" value="${O.edgeExcl}" data-lp-obs="edgeExcl">mm <span class="mut">테두리 근처는 균일도 판정에서 뺌</span></div></div>
     <div class="m3-card"><div class="m3-sub">계산 격자 <span class="mut">(빈칸 = 자동)</span></div>
       <div class="m3-row"><label>길이 칸</label><input type="number" min="0.2" step="0.5" value="${O.cellS ?? ''}" placeholder="${autoPh(ui.auto?.cellS)}" data-lp-obs="cellS" data-lp-auto>mm <label>폭 칸</label><input type="number" min="0.1" step="0.1" value="${O.cellW ?? ''}" placeholder="${autoPh(ui.auto?.cellW)}" data-lp-obs="cellW" data-lp-auto>mm</div>
@@ -283,7 +283,7 @@ export function reflDbHtml(cat, ui = {}) {
 }
 const DB_ADD = new WeakMap();   // 패널 요소 → 측정값 추가 중인 id
 
-// 목표 노드: 균일도(길이·폭) · 평균 휘도 · 잡음 목표 · 설계 점검 기준
+// 목표 노드: 균일도(길이·폭) · 평균 휘도 · 노이즈 목표 · 설계 점검 기준
 // h = { onTarget(key, v|null), onCheckParam(key, v), onCatalog(id, key, v), onReflDb(op, id?, arg?) } — % 칸(data-lp-pct)은 0~1 로 바꿔 넘김 · cat = 반사 소재표 행(catalogOf(DB))
 // onReflDb op: 'rename'(id, 이름) · 'samples'(id, { values, cond, note } → 오류 문구|없음) · 'remove'(id) · 'copy'(id) · 'export' · 'import'(_, 텍스트)
 // 목표 노드(쉽게): 길이·폭 균일도 % 두 칸 + (선택) 밝기 목표. 계산 오차·설계 점검 기준은 접는 구역. 반사 소재 DB 는 부품 상세 탭으로 옮김
