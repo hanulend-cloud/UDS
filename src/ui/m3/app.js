@@ -29,6 +29,7 @@ import { mountSplitter, mountDockSplitter, mountFacSplitter } from './splitter.j
 import { createOptDash, createSimDash, simPct } from './opt-dash.js';
 import { geomQuery, geomLimit, geomClash } from './geom-client.js';
 import { renderPropertyPanel } from './property-panel.js';
+import { watchNumInputs } from './num-fit.js';
 import { meshInfo, clearDbHtml, clearAddFormHtml, reflAddFormHtml, wireMaterialDb, dbFormState } from '../mech3d-panel.js';
 import { isAdmin } from '../../model/admin.js';
 import { renderAdvanced } from '../l2-advanced.js';
@@ -1797,6 +1798,7 @@ function renderAll(tag = 'all') {
   }, lay, M.light.kind === 'none' ? [] : ledRows(LS));
   const pi = S.node?.startsWith('part:') ? +S.node.slice(5) : -1, clr = pi >= 0 ? clearanceOf(pi) : null;
   if (clr !== A.clrShown) { A.clrShown = clr; renderMarkers(); }
+  watchNumInputs($('#m3-props'));
   if (tag !== 'view') renderPropertyPanel($('#m3-props'), M, S, { admin: isAdmin(), dbList: A.ctx.materialDb()?.list() ?? [], catalog: reflCat(), clearList: clearUser(), clearUsed: M.parts.reduce((o, p) => { const id = p.material?.matId; if (id) o[id] = (o[id] ?? 0) + 1; return o; }, {}), milkyUsed: M.parts.reduce((o, p) => { const id = p.material?.kind === 'milky' && p.material.dbId; if (id) o[id] = (o[id] ?? 0) + 1; return o; }, {}), auto: autoGrid(), dir: M.observe.dir ?? S.line?.frame.d, lineInfo: lineInfo(), clearance: clr, xfInfo: pi >= 0 ? xformInfoOf(pi) : null, meshInfo: pi >= 0 ? partMeshInfo(pi) : null, xfMsg: S.xfMsg?.part === pi ? S.xfMsg.text : '', lay: lay ?? null, led: S.node === 'leds' && S.ledSel != null ? ledUi(LS, S.ledSel) : null, ...(S.node === 'leds' ? { ledList: ledRows(LS), ledGap: minFinite(ledGaps(LS.em)), ledChange: ledChangeNow() } : {}) }, propHandlers());
   if (tag === 'session' || tag === 'all') renderMarkers();
   A.cmd.update(S, M);

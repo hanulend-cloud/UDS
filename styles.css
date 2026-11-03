@@ -279,7 +279,8 @@ main:has(#mech3d-wrap:not([hidden])) { grid-template-rows: minmax(0, 1fr); }
 .m3-left { border-right: 1px solid var(--m3-line); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; }
 .m3-tree { padding: 10px; border-bottom: 1px solid var(--m3-line); overflow: auto; max-height: 42vh; }
 .m3-props { padding: 10px; overflow: auto; }
-.m3-props input[type=number] { width: 60px; }
+.m3-props input[type=number] { width: 60px; max-width: 100%; box-sizing: border-box; padding: 1px 4px; font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; -moz-appearance: textfield; }   /* 폭 = num-fit.js */
+.m3-props input[type=number]::-webkit-inner-spin-button, .m3-props input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }   /* 화살표가 숫자를 가림 — 키보드 ↑↓ 는 그대로 */
 .m3-props .m3-row label { color: var(--m3-mut); min-width: 66px; }
 .m3-h { font-size: 11px; color: var(--m3-mut); margin: 2px 0 6px; }
 .m3-node { padding: 3px 6px; border-radius: 6px; cursor: pointer; display: flex; gap: 6px; align-items: center; }
@@ -291,7 +292,7 @@ main:has(#mech3d-wrap:not([hidden])) { grid-template-rows: minmax(0, 1fr); }
 .m3-node.child { padding-left: 22px; }
 .m3-xf { display: grid; grid-template-columns: auto repeat(3, minmax(0, 1fr)); gap: 3px 4px; align-items: center; font-size: 12px; margin: 2px 0 4px; }
 .m3-xf b { font-weight: 600; text-align: center; color: var(--m3-mut); }
-.m3-xf input { width: 100%; min-width: 0; box-sizing: border-box; }
+.m3-xf input { min-width: 0; box-sizing: border-box; justify-self: center; }
 .m3-xf .mut { text-align: center; }
 .m3-xf .m3-lim { font-size: 10.5px; color: var(--m3-mut); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .m3-xfhint { font-size: 11px; color: var(--m3-mut); margin: 0 0 3px; }
