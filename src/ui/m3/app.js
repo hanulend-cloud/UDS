@@ -48,6 +48,7 @@ import { virtualEmittersAt, stepRefEmitter } from '../../engine/mech3d/virtual-l
 import { rw4 } from '../../engine/mech3d/layout-solver.js';
 import { heightsFor, deformPart, refinedFor, minThickness, pathFromLine, swOnPath, ledEll, lineVarH, splineInput, partFrame, bumpCenters, fieldThickness, clampField } from '../../engine/mech3d/shape-opt.js';
 import { interferenceKeys, newInterference, travelDistance } from '../../engine/mech3d/clearance.js';
+import { pacer } from '../../engine/mech3d/yield.js';
 import { scaleMoveMesh, isIdentityXform } from '../../engine/mech3d/xform.js';
 import { defaultChecks } from '../../engine/mech3d/defs.js';
 import { validAdjust } from '../../engine/mech3d/led-adjust.js';
@@ -680,18 +681,19 @@ function shapeModFor({ dt, h, R, e = 0, c = 0, kL = null, kW = null, kF = null }
   return { frame: { u: F.u, v: F.v, d: F.d }, dt, h, R, e, c, ...(kL?.some((v) => v) ? { kL } : {}), ...(kW?.some((v) => v) ? { kW } : {}), ...(kF?.v?.some((v) => v) ? { kF } : {}), centers, cell: 0.5, path: P.path, halfW: P.halfW, closed: P.closed, L: P.L, ell };
 }
 // 최종안의 LED 몸체가 기구 부품과 새로 겹치는 수(LED STEP) — 현재안에 이미 있던 겹침은 뺌. 0 = 없음
-function designClash(d, ctx, M0, rt, line) {
+async function designClash(d, ctx, M0, rt, line) {
   if (M0.light.kind !== 'step') return 0;
   try {
-    const cnt = (M, mech) => { const lay = L.stepLayout(M, line); return Math.max(boxClashN(M, line, rt), (lay?.leds ?? []).filter((k) => lay.parts[k] && interferenceKeys(lay.parts[k], mech, [], []).size > 0).length); };
+    const tick = pacer();   // LED 마다 화면에 양보(40 개면 3.3 초 걸림)
+    const cnt = async (M, mech) => { const lay = L.stepLayout(M, line); let n = 0; for (const k of lay?.leds ?? []) { await tick(); if (lay.parts[k] && interferenceKeys(lay.parts[k], mech, [], []).size > 0) n++; } await tick(); return Math.max(boxClashN(M, line, rt), n); };
     const { M, parts } = designScene(d, ctx);
-    return Math.max(0, cnt(M, parts) - cnt(M0, rt.parts));
+    return Math.max(0, await cnt(M, parts) - await cnt(M0, rt.parts));
   } catch { return 0; }
 }
 // ② LED 폭 위치 이동 후보(2026-10-30) — LED STEP 만. 지금 배치(s 목록)를 폭 c(기준 LED 대비 mm)로 옮겨 봄: −16~+16 mm, 1 mm 간격.
 // 받는 조건: (1) LED 몸체가 기구 부품과 새로 겹치지 않음 (2) 몸체 양쪽 가장자리 아래가 원래와 같은 높이의 면(PCB 위 — 가장자리 밖으로 떠 있지 않음).
 // 광원으로 옮긴 원래 LED·추적 제외 부품은 검사에서 뺌. 반환 { cs:[0 포함], ss } | null
-function lateralCandidates(M0, line, rt, ctx) {
+async function lateralCandidates(M0, line, rt, ctx) {
   if (M0.light.kind !== 'step' || !line) return null;
   let em = []; try { em = L.currentEmitters(M0, line); } catch { return null; }
   const ref = stepRefEmitter(M0.light.step); if (!em.length || !ref) return null;
@@ -704,8 +706,10 @@ function lateralCandidates(M0, line, rt, ctx) {
   const clashN = (c) => { const { M, parts } = designScene({ ...ctx.cur, positions: ss.map((s) => ({ s, w: c })), count: ss.length, rows: 1, rowGap: 0, stepVirt: true }, ctx); const lay = L.stepLayout(M, line);
     return { lay, n: Math.max(boxClashN(M, line, rt), (lay?.leds ?? []).filter((k) => lay.parts[k] && C_interf(lay.parts[k], mech)).length) }; };
   let base = 0; try { base = clashN(0).n; } catch { return null; }
+  const tick = pacer();
   for (let c = -16; c <= 16; c++) {   // 1 mm 간격(2026-11-03) — 비교는 엔진이 2 mm 로 훑고 ±1 mm
     if (!c) continue;
+    await tick();
     try {
       const { lay, n: nc } = clashN(c); if (nc > base) continue;
       const es = lay.emitters ?? [], pick = [es[0], es[Math.floor(es.length / 2)], es.at(-1)].filter(Boolean);
@@ -864,11 +868,13 @@ async function adHeightRangeAt(M, line, rt, fallback) {
     return ledHeightRange({ up, down });
   } catch { return fallback; }
 }
-function adHeightInfo(M0, line, rt) {
+async function adHeightInfo(M0, line, rt) {
   const d = line.frame.d, nd = d.map((v) => -v), mech = rt.parts, em = L.currentEmitters(M0, line);
   let up = Infinity, down = Infinity;
   if (M0.light.kind === 'step') {
+    const tick = pacer();   // LED 마다 화면에 양보(40 개면 1.9 초 걸림)
     for (const p of L.ledPartsNow(M0, line) ?? []) {
+      await tick();
       const pre = interferenceKeys(p, mech, [], []), obs = mech.map((m, j) => (pre.has(`p:${j}`) ? null : m));
       up = Math.min(up, travelDistance(p, obs, d, 10)); down = Math.min(down, travelDistance(p, obs, nd, 10));
     }
@@ -949,7 +955,6 @@ async function adRun(opt = {}) {
   // 최적화 판정 격자 = 늘 저화질(2026-11-02) — 고화질 칸(0.5 mm)으로 짧게 평가하면 노이즈가 '불균일' 로 보여 값이 크게 낮게 나오고(실측 길이 균일도 0.65 vs 정밀 0.76)
   // LED 를 너무 많이 쓰거나 간격이 제멋대로가 됨. 화면 화질은 그대로, 최적화 평가만
   const lowQ = (M0.observe.quality ?? 'low') === 'low', obs = tallyObs({ ...M0.observe, quality: 'low' }, M0.observe.dir ?? line.frame.d), G = lowQ ? geometry(tallyObs(M0.observe, M0.observe.dir ?? line.frame.d)) : tallyGeometry(line, obs), sp = st.sel.shapePart, hp = stages.housing ? hpSel : -1;
-  let hInfo = null; if (stages.height) { try { hInfo = adHeightInfo(M0, line, rt); } catch { stages.height = false; } }   // 범위 계산 실패 = ⑤ 생략
   const ctx = { M0, line, G, obs, rt, mp: st.milkyPart };
   const R = (st.runner = createAdRunner({ ports: A.pool.ports(), chunkTimeoutMs: 90000 }));   // 높은 Milky 청크는 30 초를 넘기기도 함
   // 같은 Worker 를 쓰므로 점진 계산은 멈춤 — 대기(디바운스) 중이면 장면을 곧 보내므로 취소. 사용자 일시정지 여부는 기억(끝나고 그대로)
@@ -957,6 +962,7 @@ async function adRun(opt = {}) {
   st.userPaused = ps === 'paused'; st.deferred = ['paused', 'running', 'pending', 'starting'].includes(ps);
   if (ps === 'pending') A.prog.cancel(); else A.prog.pause();
   st.running = { frac: 0, text: '준비' }; st.result = null; A.meshShown = null; renderView(); renderAuto();
+  let hInfo = null; if (stages.height) { try { hInfo = await adHeightInfo(M0, line, rt); } catch { stages.height = false; } if (A !== a) return null; }   // 범위 계산 실패 = ⑤ 생략. 실행 중 표시(running) 뒤에 해야 양보하는 동안 두 번 실행되지 않음
   // LED STEP: 현재 = 가상이면 그 개수·피치, 아니면 현재 발광점 수·0(stepOrig = 원래 위치) · stepVirt = 설계가 가상 배치인가(② 가 STEP 에서 돌면 엔진이 true)
   const stp = M0.light.kind === 'step', sv0 = stp ? M0.light.step?.virtual ?? null : null, sv = sv0 && !sv0.positions ? sv0 : null;   // STEP 에서 편집한 배치(positions) = 원래 배치처럼 '현재 그대로'
   let nOrig = 0; if (stp && !sv) { try { nOrig = L.currentEmitters(M0, line).length; } catch { nOrig = 0; } }
@@ -965,7 +971,7 @@ async function adRun(opt = {}) {
   ctx.cur = cur;
   // ② LED 폭 위치 이동 후보(PCB 위·간섭 없음) — 위치 단계를 켰고 LED STEP 일 때만
   let latS = null, lateral = null;
-  if (stages.leds) { progress0('LED 폭 위치 후보 찾는 중'); try { const lc = lateralCandidates(M0, line, rt, ctx); if (lc) { lateral = lc.cs; latS = lc.ss; } } catch { lateral = null; } }
+  if (stages.leds) { progress0('LED 폭 위치 후보 찾는 중'); try { const lc = await lateralCandidates(M0, line, rt, ctx); if (lc) { lateral = lc.cs; latS = lc.ss; } } catch { lateral = null; } if (A !== a) return null; }
   // ④ 후보 = 반사 소재 상한 안(+ 특수 허용 시 특수 처리) — 소재 미지정 = 전체 등급(spec P4 §2.3d)
   const finCands = (k) => finishCandidatesFor({ catalog: reflCat(), materialId: M0.parts[k].reflMaterial, current: M0.parts[k].finish, allowSpecial: !!st.sel.housingSpecial });
   const finishCands = stages.housing ? finCands(hp) : null;
@@ -1083,6 +1089,8 @@ async function adRun(opt = {}) {
     }, io);
   } catch (e) { if (A === a && !R.stopped) setStatus(`기구 최적화 실패: ${e.message}`); }
   if (A !== a) return;   // 그사이 이탈
+  const clashN = res && !res.cancelled && !R.stopped ? await designClash(res.best, ctx, M0, rt, line) : 0;   // running 을 끄기 전에 — 양보하는 동안 다시 실행되지 않게
+  if (A !== a) return;
   globalThis.__adLast = res;   // 진단용(콘솔에서 단계별 결과 확인)
   st.running = null; st.runner = null;
   if (res && !res.cancelled && !R.stopped) {
@@ -1091,7 +1099,7 @@ async function adRun(opt = {}) {
     const smI = sp >= 0 && M0.parts[sp]?.shapeMod ? sp : M0.parts.findIndex((p) => p.shapeMod), sm = smI >= 0 ? M0.parts[smI].shapeMod : null;   // 비교표 '현재' 열 — 이미 적용된 형상(표시만)
     st.resultOpen = false;   // 끝나면 결과 카드(요약)만 — 자세한 결과 창은 [자세히]
     st.result = { shapeLimited: !!res.steps?.find((x) => x.stage === 'shapeField')?.limited, milkyRows: stages.milky ? milkyTable(res.steps ?? []) : null, targets: { len: obs.targetLen, wid: obs.targetWid }, design: res.best, feasible: res.feasible, reason: res.reason, hint: res.hint ?? null, shape: res.best.shape ?? null, screen: res.steps?.find((x) => x.stage === 'shapeScreen')?.gains ?? null, stepLeds: nStep, unchanged: !!res.unchanged, ctx, stages,
-      added: opt.added ?? [], base: opt.base ?? null, clash: designClash(res.best, ctx, M0, rt, line),
+      added: opt.added ?? [], base: opt.base ?? null, clash: clashN,
       finish: stages.housing ? (() => { const c = { ...M0.parts[hp].finish, ...(M0.parts[hp].coating ? { coating: M0.parts[hp].coating } : {}) }; return { cur: c, best: res.best.finish ?? c }; })() : null, height: stages.height && hInfo ? { dz: res.best.dz ?? 0, gap: hInfo.gap } : null,
       cur: { ...cur, shape: sm ? { dt: sm.dt, h: sm.h, R: sm.R, e: sm.e ?? 0, c: sm.c ?? 0, kF: sm.kF ?? null } : null, Ulen: C?.stats?.Ulen, Uwid: C?.stats?.Uwid, eff: C?.eff ?? NaN, profile: C?.stats?.profile ?? null },
       best: { ...res.best, ...(stp ? { stepOrig: !res.best.stepVirt } : {}), Ulen: res.verified.stats.Ulen, Uwid: res.verified.stats.Uwid, eff: res.verified.eff, profile: res.verified.stats.profile ?? null } };

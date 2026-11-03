@@ -1,6 +1,7 @@
 // ② LED 배치 Solver: node test/mech3d-layout-solver.mjs
-import { solveLayout, uniformPositions, compressedPositions, layoutText, SNAP } from '../src/engine/mech3d/layout-solver.js';
+import { solveLayout, solveLayoutAsync, uniformPositions, compressedPositions, layoutText, SNAP } from '../src/engine/mech3d/layout-solver.js';
 import { candidateGrid, searchLeds2 } from '../src/engine/mech3d/basis.js';
+import { pacer, yieldNow } from '../src/engine/mech3d/yield.js';
 import { ok, done } from './mech3d-util.mjs';
 
 const line = { length: 100, closed: false };
@@ -78,4 +79,18 @@ const gapsOk = (r, g) => ss(r).every((x, i, a) => i === 0 || x - a[i - 1] >= g -
   ok(r.atCount(r.n + 1).kind === 'uniform' && (f.kind !== 'uniform' || f.n === r.n), `개수 늘리기도 같은 피치 · 제한 없을 때 ${layoutText(f)}`);
 }
 
+{ // 화면 양보(2026-11-03): 비동기 풀이 = 동기 풀이와 같은 결과, 도중에 차례를 넘김 · 중지 가능
+  const A = { G, obs: { targetLen: 0.8, targetWid: 0 }, line, cand, maps: mk(0.3), rowsOptions: [1], nMax: 12, uniformOnly: true, timeBudget: 1e9 };
+  const key = ({ atCount, ...r }) => JSON.stringify(r);
+  const r0 = solveLayout(A); let ticks = 0;
+  const r1 = await solveLayoutAsync(A, { tick: async () => { ticks++; } });
+  ok(key(r0) === key(r1) && r1.evals > 10 && ticks > 0.9 * r1.evals, `같은 결과 · 평가 ${r1.evals}회 · 양보 기회 ${ticks}회`);
+  ok(JSON.stringify(r1.atCount(5).positions) === JSON.stringify(r0.atCount(5).positions), '개수 지정 풀이도 같음');
+  let n = 0; const r2 = await solveLayoutAsync(A, { tick: async () => {}, cancelled: () => ++n > 5 });
+  ok(r2 === null && n === 6, '중지하면 바로 멈춤(null)');
+  let t = 0, yields = 0; const tick = pacer(30, () => t, async () => { yields++; });
+  await tick(); t = 29; await tick(); const y0 = yields; t = 31; await tick(); await tick();
+  ok(y0 === 0 && yields === 1, '30 ms 가 지났을 때만 차례를 넘김');
+  await yieldNow(); ok(true, 'yieldNow 끝남');
+}
 done();

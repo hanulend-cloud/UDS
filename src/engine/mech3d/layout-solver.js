@@ -45,7 +45,19 @@ function layoutText0(r) {
 // 반환 { feasible, n, rows, rowGap, total, positions:[{s,w}], kind, pitch, endMargin, ratio, stats, eff, margin, reason, alts:[…], evals, atCount(n) = 1열 n 개 최선 배치 | null(정밀 재계산 미달 때 개수 늘리기), limit = 'wid'(폭은 어떤 개수로도 못 닿음) | null }
 // safety = 통과 판정 여유(기저 추정은 광자 노이즈가 있어 검증에서 0 근처 통과가 뒤집힘 — 이만큼 넘는 배치만 통과로 봄)
 // wCenter = 열 배치 기준 폭 위치(기준 LED 대비 mm, 2026-10-30) — 1열 = wCenter, 2열 = wCenter ± g. 후보 격자에 그 w 줄들이 있어야 함
-export function solveLayout(args) {
+// 동기 풀이(시험·개수 지정) · 비동기 풀이(앱 — 평가 수만 번이 화면을 6~13 초 멈췄음, 2026-11-03). 평가 사이마다 yield 하는 생성기 하나를 둘이 함께 씀
+const drain = (g) => { let r; do r = g.next(); while (!r.done); return r.value; };
+export const solveLayout = (args) => drain(solveLayoutSteps(args));
+export async function solveLayoutAsync(args, { tick = async () => {}, cancelled = () => false } = {}) {
+  const g = solveLayoutSteps(args);
+  for (;;) {
+    const r = g.next();
+    if (r.done) return r.value;
+    if (cancelled()) return null;
+    await tick();
+  }
+}
+function* solveLayoutSteps(args) {
   const { G, obs, line, cand, maps, rowsOptions = [1, 2], gaps = [], nMax, emitted = 1, minGap = 2, pitchRange = null, timeBudget = 20000, now = () => Date.now(), safety = 0, sMargin = 0, wCenter = 0, inner = false, uniformOnly = false } = args;   // uniformOnly = 같은 피치만(끝 압축·자유 배치 안 함)
   const sm = line.closed ? 0 : Math.max(0, sMargin);   // 끝 여유: 첫·끝 LED 중심 ≥ sm(몸체가 끝벽에 닿지 않게)
   const L = line.length, closed = !!line.closed, nCell = G.ns * G.nw, t0 = now(), RO = [...new Set(rowsOptions)].sort((a, b) => a - b);
@@ -61,24 +73,24 @@ export function solveLayout(args) {
     return { n: ss.length, rows, rowGap: rows === 2 ? g : 0, wCenter: rw4(wCenter), total: pos.length, positions: pos, ss: ss2, kind, stats: st, eff: tot / (emitted * pos.length), margin: margin(st, obs), pitch: 0, endMargin: null, ratio: null, ...extra };
   };
   // 단계 1: 같은 피치(끝 여백 격자 1 mm → 최고점 ±1 mm 를 0.25 mm) · 닫힌 라인 = L/n 균등(시작 위치 4개)
-  function stage1(n, rows, g) {
+  function* stage1(n, rows, g) {
     let best = null;
     if (closed) {
-      for (let k = 0; k < 4; k++) { const s0 = (k * L) / (4 * n), r = ev(Array.from({ length: n }, (_, i) => snapS(s0 + (i * L) / n, L) % L).sort((a, b) => a - b), rows, g, 'uniform', { pitch: 0 }); if (r && better(r, best)) best = r; }
+      for (let k = 0; k < 4; k++) { const s0 = (k * L) / (4 * n), r = ev(Array.from({ length: n }, (_, i) => snapS(s0 + (i * L) / n, L) % L).sort((a, b) => a - b), rows, g, 'uniform', { pitch: 0 }); if (r && better(r, best)) best = r; yield; }
       return best;
     }
     if (n === 1) return ev([snapS(L / 2, L)], rows, g, 'uniform', { pitch: 0, endMargin: L / 2 });
     let eLo = sm, eHi = (L - (n - 1) * gMin) / 2;
     if (pitchRange) { eLo = Math.max(eLo, (L - (n - 1) * pitchRange.max) / 2); eHi = Math.min(eHi, (L - (n - 1) * pitchRange.min) / 2); }
     if (eHi < eLo - 1e-9) return null;
-    const tryE = (e) => { const ss = uniformPositions(L, n, e); if (!okGaps(ss, gMin, L, sm)) return; const r = ev(ss, rows, g, 'uniform', { pitch: +(ss[1] - ss[0]).toFixed(2), endMargin: ss[0] }); if (r && better(r, best)) best = r; };
-    for (let e = eLo; e <= eHi + 1e-9; e += 1) tryE(e);
-    tryE(eHi);
-    if (best) { const c = best.endMargin; for (let e = Math.max(eLo, c - 1); e <= Math.min(eHi, c + 1) + 1e-9; e += SNAP) tryE(e); }
+    const tryE = function* (e) { const ss = uniformPositions(L, n, e); if (!okGaps(ss, gMin, L, sm)) return; const r = ev(ss, rows, g, 'uniform', { pitch: +(ss[1] - ss[0]).toFixed(2), endMargin: ss[0] }); if (r && better(r, best)) best = r; yield; };
+    for (let e = eLo; e <= eHi + 1e-9; e += 1) yield* tryE(e);
+    yield* tryE(eHi);
+    if (best) { const c = best.endMargin; for (let e = Math.max(eLo, c - 1); e <= Math.min(eHi, c + 1) + 1e-9; e += SNAP) yield* tryE(e); }
     return best;
   }
   // 단계 2: 끝 압축(열린 라인, n ≥ 4) — 비율 a × 끝 여백 격자(1 mm)
-  function stage2(n, rows, g) {
+  function* stage2(n, rows, g) {
     if (closed || n < 4) return null;
     let best = null;
     for (const a of RATIOS) for (let e = sm; e <= L / 2; e += 1) {
@@ -86,11 +98,12 @@ export function solveLayout(args) {
       if (!okGaps(ss, gMin, L, sm)) continue;
       const r = ev(ss, rows, g, 'endCompress', { endMargin: ss[0], ratio: a });
       if (r && better(r, best)) best = r;
+      yield;
     }
     return best;
   }
   // 단계 3: 자유 위치 — 대칭 쌍(i, n−1−i)을 ±δ 로 옮겨 여유가 좋아지면 받아들임(열린 라인)
-  function stage3(start, rows, g) {
+  function* stage3(start, rows, g) {
     if (closed || !start || start.n < 2) return null;
     let cur = { ...start, kind: 'free' }, ss = [...start.ss];
     const n = ss.length;
@@ -101,18 +114,19 @@ export function solveLayout(args) {
         if (!okGaps(tr, gMin, L, sm)) continue;
         const r = ev(tr, rows, g, 'free', { endMargin: tr[0] });
         if (r && better(r, cur)) { cur = r; ss = tr; moved = true; }
+        yield;
       }
       if (!moved || now() - t0 > timeBudget) break;
     }
     return cur.ss === start.ss ? null : cur;
   }
-  function solveN(n, rows, g) {
-    const s1 = stage1(n, rows, g);
+  function* solveN(n, rows, g) {
+    const s1 = yield* stage1(n, rows, g);
     if (uniformOnly) return s1;
     if (!s1 || s1.margin >= safety || s1.margin < HOPELESS + safety || now() - t0 > timeBudget) return s1;
-    const s2 = stage2(n, rows, g);
+    const s2 = yield* stage2(n, rows, g);
     if (s2 && s2.margin >= safety) return s2;
-    const s3 = stage3(better(s2 ?? s1, s1) && s2 ? s2 : s1, rows, g);
+    const s3 = yield* stage3(better(s2 ?? s1, s1) && s2 ? s2 : s1, rows, g);
     return [s1, s2, s3].filter(Boolean).reduce((a, b) => (better(b, a) ? b : a));
   }
   const rank = (a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || b.margin - a.margin || b.eff - a.eff;
@@ -125,19 +139,19 @@ export function solveLayout(args) {
     for (const rows of RO) {
       if (T % rows) continue;
       if (!found && atT.some((r) => r.rows < rows)) break;   // 같은 총수: 1열 통과면 2열은 안 봄
-      for (const g of rows === 1 ? [0] : gaps) { const r = solveN(T / rows, rows, g); if (r) (r.margin >= safety ? atT : miss).push(r); }
+      for (const g of rows === 1 ? [0] : gaps) { const r = yield* solveN(T / rows, rows, g); if (r) (r.margin >= safety ? atT : miss).push(r); }
     }
     atT.sort(rank);
     if (!found && atT.length) { found = atT[0]; foundT = T; pass.push(...atT.slice(1)); }
     else if (found) spare.push(...atT);
   }
   const strip = ({ ss, ...r }) => r;
-  const atCount = (n) => { const r = RO.includes(1) ? solveN(n, 1, 0) : null; return r ? strip(r) : null; };
+  const atCount = (n) => { const r = RO.includes(1) ? drain(solveN(n, 1, 0)) : null; return r ? strip(r) : null; };
   if (found) return { feasible: true, ...strip(found), reason: '', alts: [...pass, ...spare].slice(0, 2).map(strip), evals, atCount };
   // 폭이 어떤 개수로도 못 닿으면(limit 'wid') 폭을 빼고 다시 풂 — 여유(낮은 쪽)가 폭에 묶이면 길이를 못 맞추고, 안 오르는 폭 때문에 개수만 잔뜩 늘어남(2026-11-02)
   const best = (k) => Math.max(...miss.map((r) => r.stats[k] ?? Infinity)), limit = inner || !miss.length ? null : best('Uwid') < (obs.targetWid ?? -Infinity) + safety ? 'wid' : null;
   if (limit) {
-    const q = solveLayout({ ...args, inner: true, obs: { ...obs, targetWid: null } });
+    const q = yield* solveLayoutSteps({ ...args, inner: true, obs: { ...obs, targetWid: null } });
     if (q.positions?.length) {
       const { feasible, reason: _r, alts, evals: e2, atCount: at2, limit: _l, ...b } = q, s = b.stats;
       return { feasible: false, ...b, margin: margin(s, obs), reason: `LED 개수를 늘려도 폭 목표에 못 닿음 — 길이가 가장 적게 통과하는 ${layoutText(b)}: 길이 균일도 ${s.Ulen.toFixed(2)}${s.Uwid == null ? '' : ` · 폭 균일도 ${s.Uwid.toFixed(2)}`} — 폭 방향 확산 부족: ③ 형상 또는 Milky 상향 권장`, alts: [], evals: evals + e2, atCount: at2, limit };

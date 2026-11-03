@@ -6,7 +6,8 @@ import { hasCurve, hasField } from './shape-opt.js';
 import { milkyAxis } from './reweight.js';
 import { pickMilky, margin } from './milky-search.js';
 import { searchLeds } from './basis.js';
-import { solveLayout, layoutText } from './layout-solver.js';
+import { solveLayoutAsync, layoutText } from './layout-solver.js';
+import { pacer } from './yield.js';
 import { gridCandidates } from './shape-opt.js';
 import { gradeOf, heightCandidates } from './housing-led.js';
 
@@ -479,8 +480,10 @@ export async function runAutoDesign(cfg, io) {
     const two = typeof B.cand[0] === 'object', a = { G: cfg.G, obs, line: cfg.line, cand: B.cand, maps: B.maps, pitchRange: cfg.pitchRange ?? null, nMax: cfg.nMax, emitted: B.emitted, ...(B.minGap ? { minGap: B.minGap } : {}) };   // minGap = 이웃 LED 몸체가 겹치지 않는 최소 피치
     // (s, w) 격자 = 배치 Solver(같은 피치+끝 여백 → 끝 압축 → 자유 위치, spec 2026-10-20 led-layout-solver) · 숫자 격자 = 1열 기존 탐색
     // 균일한 구조 = 균일한 피치(2026-11-02, 설계자 원칙) — 끝 압축·자유 배치는 노이즈 낀 후보 지도에 맞춰 간격을 제멋대로 바꿈(실측: 안쪽 불균일 4.3% vs 등간격 2.8%). cfg.uniformPitch = false 일 때만 비균등
-    const { atCount, limit, ...r } = two ? solveLayout({ ...a, uniformOnly: cfg.uniformPitch !== false, wCenter: d.wCenter ?? 0, rowsOptions: cfg.rowsOptions ?? [1, 2], gaps: cfg.rowsOptions && !cfg.rowsOptions.includes(2) ? [] : B.gaps ?? [],   // rowsOptions [1] = 1열만(재료비)
-       sMargin: B.sMargin ?? 0, timeBudget: cfg.layoutBudget ?? 20000, safety: cfg.layoutSafety ?? 0.02 }) : searchLeds({ ...a, spare: 1 });
+    const solved = two ? await solveLayoutAsync({ ...a, uniformOnly: cfg.uniformPitch !== false, wCenter: d.wCenter ?? 0, rowsOptions: cfg.rowsOptions ?? [1, 2], gaps: cfg.rowsOptions && !cfg.rowsOptions.includes(2) ? [] : B.gaps ?? [],   // rowsOptions [1] = 1열만(재료비)
+       sMargin: B.sMargin ?? 0, timeBudget: cfg.layoutBudget ?? 20000, safety: cfg.layoutSafety ?? 0.02 }, { tick: pacer(), cancelled: stop }) : searchLeds({ ...a, spare: 1 });
+    if (!solved) return { cancelled: true };
+    const { atCount, limit, ...r } = solved;
     steps.push({ stage: 'leds', ...r });
     if (two) io.trace?.('leds', [r, ...(r.alts ?? [])].filter((e) => e.positions?.length).map((e, i) => ({ label: `${i ? '대안 ' : ''}${layoutText(e)}`, Ulen: e.stats?.Ulen, Uwid: e.stats?.Uwid, ok: true })));   // 대시보드: 배치 Solver 최선안·대안(기저 추정)
     const lay = (e) => two
