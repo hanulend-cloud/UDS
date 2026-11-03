@@ -1,3 +1,4 @@
+import { judgeStats } from '../../engine/mech3d/tally.js';
 // 아래 칸 대시보드 — ① 기구 최적화 진행(6 항목 타일) ② 시뮬레이션 진행현황(수렴 그래프).
 // 최적화: app.js 의 기구 최적화 io 가 progress(stage, frac, text) · evals(stage, [{label, Ulen, Uwid, ok, why}]) 를 부른다.
 // 타일마다 상태(대기·진행 %·완료·건너뜀) · 시험 중 값 → 지금까지 최고 · 후보별 길이/폭 균일도 점 그래프(목표선) · 진행 막대.
@@ -114,12 +115,12 @@ export function monitorHtml(S, sec = 0) {
   const effK = `<div class="om-k"><div class="mut">광 효율</div><b class="om-v">${Number.isFinite(effB) ? `${(effB * 100).toFixed(1)}%` : Number.isFinite(eff0) ? `${(eff0 * 100).toFixed(1)}%` : '–'}</b><div class="mut">${Number.isFinite(effB) && Number.isFinite(eff0) ? `시작 ${(eff0 * 100).toFixed(1)}%` : Number.isFinite(eff0) ? '시작값 · 최적안은 끝나면' : ''}</div></div>`;
   const mmss = (t) => `${String((t / 60) | 0).padStart(2, '0')}:${String(t % 60 | 0).padStart(2, '0')}`;
   const nEval = (S.seq ?? []).length;
-  const fin = S.final, cur = fin ?? best, uTxt = (l, v, t) => `${l} <b>${f2(v)}</b>${Number.isFinite(v) && Number.isFinite(t) ? ` (목표 ${f2(t)} ${v + 1e-9 >= t ? '<span class="od-ok">통과</span>' : '<span class="od-bad">미달</span>'})` : ''}`;
-  const uLine = cur ? `${uTxt('길이 균일도', cur.Ulen, tl)}, ${uTxt('폭 균일도', cur.Uwid, tw)}` : '';
+  const fin = S.final, cur = fin ?? best, J = fin ? judgeStats(fin, { targetLen: tl, targetWid: tw }) : {}, uTxt = (l, v, t, j) => `${l} <b>${f2(v)}</b>${Number.isFinite(v) && Number.isFinite(t) ? ` (목표 ${f2(t)} ${j === 'near' ? '<span class="od-near">근처</span>' : v + 1e-9 >= t ? '<span class="od-ok">통과</span>' : '<span class="od-bad">미달</span>'})` : ''}`;
+  const uLine = cur ? `${uTxt('길이 균일도', cur.Ulen, tl, J.len)}, ${uTxt('폭 균일도', cur.Uwid, tw, J.wid)}` : '';
   const doing = S.note || (S.cur ? S.tiles[S.cur].text : '') || '준비하는 중';
   const say = busy ? `<p><b>지금 하는 일</b> ${esc(doing)}</p>${uLine ? `<p><b>지금까지 가장 좋은 안</b> ${uLine}</p>` : ''}`
     : S.stopped ? '<p><b>중지했습니다.</b> 찾던 안은 설계에 반영되지 않았습니다.</p>'
-    : `<p><b>${S.ended ? '목표를 통과한 안을 찾았습니다.' : '목표에 닿는 안을 찾지 못해 가장 가까운 안을 골랐습니다.'}</b></p>${uLine ? `<p><b>최종 판정</b> ${uLine}</p>` : ''}${!S.ended && S.note ? `<p class="mut">${esc(S.note)}</p>` : ''}<p class="mut">왼쪽 아래 결과에서 적용하면 이 값이 그대로 화면에 나옵니다.</p>`;
+    : `<p><b>${J.all === 'near' ? '목표 근처의 안을 찾았습니다. 차이가 노이즈보다 작아 통과·미달은 계산마다 달라질 수 있습니다.' : S.ended ? '목표를 통과한 안을 찾았습니다.' : '목표에 닿는 안을 찾지 못해 가장 가까운 안을 골랐습니다.'}</b></p>${uLine ? `<p><b>최종 판정</b> ${uLine}</p>` : ''}${!S.ended && S.note ? `<p class="mut">${esc(S.note)}</p>` : ''}<p class="mut">왼쪽 아래 결과에서 적용하면 이 값이 그대로 화면에 나옵니다.</p>`;
   return `<div class="od-h">${busy ? `진행 ${mmss(sec)}` : S.stopped ? '중지됨' : `끝남 ${mmss((S.endSec ?? sec))}`} <span class="mut">· 시험한 후보 ${nEval}개</span></div>
     <div class="om-steps">${steps.join('<i class="om-ar">→</i>')}</div>
     <div class="om-say">${say}</div>

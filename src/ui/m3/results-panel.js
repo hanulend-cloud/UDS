@@ -4,7 +4,7 @@ import { simPct } from './opt-dash.js';
 // 결과 패널 — spec 2026-10-15 m3-cad-ui §2(시안 m3-ui-mockup 오른쪽):
 // ① 2D 광량 분포(관측면 펼침 s×w) + 평균 광량(목표 대비)·광 효율 ② 길이 1D 프로파일(목표선) + 길이 균일도 ③ 폭 1D 프로파일(최저 창) + 폭 균일도.
 // update({ snap(progressive snapshot), observe(spec.mech3d.observe), message(안내 | ''), leds?: [{s, w}](LED 위치 — 프로파일 아래 표시) })
-import { windowProfile } from '../../engine/mech3d/tally.js';
+import { windowProfile, uVerdict, uBand } from '../../engine/mech3d/tally.js';
 import { ramp, NO_DATA } from './colormap.js';
 
 export const DEFAULT_GUIDE = '관측면을 지정하면 결과가 여기에 표시됩니다.';
@@ -13,8 +13,9 @@ const fl100 = (v) => Math.floor(v * 100 + 1e-9);
 export const fmtU = (v) => (Number.isFinite(v) ? (fl100(v) / 100).toFixed(2) : '–');
 const finiteMax = (a) => { let m = -Infinity; for (const v of a) if (Number.isFinite(v) && v > m) m = v; return m; };
 // 판정도 표시된(내림) 값끼리 비교한다 — 화면에 0.80 / 목표 0.80 인데 "미달"이 뜨는 일이 없게
-export function judgeText(v, tg) {
+export function judgeText(v, tg, se = null, relNoise = null) {
   if (!Number.isFinite(v)) return { cls: '', text: `목표 ${fmtU(tg)}` };
+  if (uVerdict(v, tg, se, relNoise) === 'near') return { cls: 'near', text: `목표 ${fmtU(tg)} · 근처 (오차 ±${uBand(v, se, relNoise).toFixed(3)})` };
   const vi = fl100(v), ti = fl100(tg), ok = vi >= ti;
   return { cls: ok ? 'ok' : 'bad', text: `목표 ${fmtU(tg)} · ${ok ? '합격' : `미달 −${(Math.max(1, ti - vi) / 100).toFixed(2)}`}` };
 }
@@ -565,10 +566,11 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     if (t.style.left !== l) t.style.left = l;
   };
   const resetGauge = (g) => { g.querySelector('.f').style.width = '0%'; };
-  const gauge = (key, v, tg) => {
-    const j = judgeText(v, tg);
+  const gauge = (key, v, tg, se, relNoise) => {
+    const j = judgeText(v, tg, se, relNoise);
     q(key).textContent = fmtU(v); q(key).className = `v ${j.cls}`; q(`${key}j`).textContent = j.text;
     fill(q(`${key}g`), Number.isFinite(v) ? v * 100 : 0, j.cls === 'ok', tg * 100);
+    q(`${key}g`).querySelector('.f').classList.toggle('near', j.cls === 'near');
   };
   function clear(message) {
     VIEW.map = VIEW.prof = VIEW.wprof = null; if (big) for (const k of KINDS) clearCanvas(big.cvs[k]);
@@ -600,7 +602,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     q('psub').title = `${pin ? `폭 평균 + 지정 점(주황, ${ring} 방향) · 같은 점 다시 클릭 = 해제` : '폭 평균 · 2D 클릭 = 그 점 기준 곡선 추가'} · 옅은 띠 = 계산 노이즈 범위 · 빨간 점선 = 목표 하한 · 곡선은 노이즈만 살짝 다듬어 그림(LED 리플 높이 유지) · 최저점·마우스 값·CSV·판정 = 원자료`;
     q('pinbtn').innerHTML = pin ? '<button type="button" class="m3-pintxt" data-pin-txt title="고른 점을 지나는 길이·폭 방향 원자료(평활 없음, 2D 최대 대비 %)">선택 선 CSV</button>' : '';
     paint('map', q('map')); paint('prof', q('prof'));
-    gauge('ul', st.Ulen, observe.targetLen);
+    gauge('ul', st.Ulen, observe.targetLen, st.seLen, st.relNoise);
     if (pp && (st.Uwid == null || !st.win)) {   // 폭 판정이 없어도 지정 점의 폭(원형 = 반경) 방향 곡선은 보여 줌
       VIEW.wprof = plotView([{ ys: Array.from(pp.across), color: PIN_COLOR, name: `지정 점 s=${pin.s.toFixed(1)}` }], null, { x0: G.w0, x1: G.w0 + G.nw * G.cell, xl: 'w (mm)', leds: [] });
       paint('wprof', q('wprof')); resetGauge(q('uwg'));
@@ -614,7 +616,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
       VIEW.wprof = plotView([{ ys: Array.from(wp, (v) => v / wm), color: '#1f6fd1', name: `최저 창 s=${st.sWorst.toFixed(0)}`, band: st.relNoise ?? 0 }, { ys: Array.from(wa, (v) => v / wam), color: '#3fae7a', dash: [4, 3], name: '길이 전체 평균' }, ...(pp ? [{ ys: Array.from(pp.across), color: PIN_COLOR, name: `지정 점 s=${pin.s.toFixed(1)}` }] : [])],
         observe.targetWid, { x0: G.w0, x1: G.w0 + G.nw * G.cell, xl: 'w (mm)', leds: [...new Set(leds.map((p) => +p.w.toFixed(2)))] });
       paint('wprof', q('wprof'));
-      gauge('uw', st.Uwid, observe.targetWid);
+      gauge('uw', st.Uwid, observe.targetWid, st.seWid, st.relNoise);
       q('wsub').title = `최저 창 s = ${st.sWorst.toFixed(1)} mm${pp ? ` · 지정 점 s = ${pin.s.toFixed(1)} mm(주황, ${rad} 방향)` : ''}`;
     }
     const lc = lumCard(st, snap.photometry, observe.targetLum);

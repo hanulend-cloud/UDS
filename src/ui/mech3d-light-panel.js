@@ -4,6 +4,7 @@ import { ledDeltaText, pitchText } from './m3/led-change.js';
 import { stepRefEmitter } from '../engine/mech3d/virtual-leds.js';
 import { clampRowGap, rowGapOptions } from '../engine/mech3d/placement.js';
 import { catalogOf } from '../engine/mech3d/housing-led.js';
+import { uVerdict } from '../engine/mech3d/tally.js';
 import { MEAS_CONDS, reflStatusText } from '../model/reflect-db.js';
 import { secHtml, wireSections } from './mech3d-panel.js';
 import { BEAM_PRESETS, beamPreset } from './m3/led-select.js';
@@ -225,8 +226,9 @@ export function renderLedProps(el, m, ui, h) {
 // ui = { pick, lineInfo, lineErr, auto:{cellS,cellW,winS}|null, dir }, h = { onPick, onClearObs(), onRetryLine(), onObsDir(v|null), onObs(key, v|null) }
 export function renderObserveProps(el, m, ui, h) {
   const O = m.observe, C = m.checks ?? {}, R = ui.result ?? null, tab = LP_TAB.obs;
-  const pass = (v, tg) => (Number.isFinite(v) ? `<b class="${v + 1e-9 >= tg ? 'ok' : 'bad'}">${(Math.floor(v * 100 + 1e-9) / 100).toFixed(2)}</b>` : '<span class="mut">–</span>');
-  const verdict = (v, tg) => (Number.isFinite(v) ? (v + 1e-9 >= tg ? ' <span class="ok">✓</span>' : ` <span class="bad" title="목표까지 ${(tg - v).toFixed(2)}">✕</span>`) : '');
+  const vd = (v, tg, se) => uVerdict(v, tg, se, R?.relNoise);
+  const pass = (v, tg, se) => (Number.isFinite(v) ? `<b class="${vd(v, tg, se)}">${(Math.floor(v * 100 + 1e-9) / 100).toFixed(2)}</b>` : '<span class="mut">–</span>');
+  const verdict = (v, tg, se) => (!Number.isFinite(v) ? '' : vd(v, tg, se) === 'near' ? ' <span class="near" title="목표와의 차이가 노이즈보다 작음">≈ 근처</span>' : v + 1e-9 >= tg ? ' <span class="ok">✓</span>' : ` <span class="bad" title="목표까지 ${(tg - v).toFixed(2)}">✕</span>`);
   const ln = ui.line ?? null, nF = O.faces.length;
   const state = !nF ? '<span class="warn">아직 지정 안 함</span>' : ui.lineErr ? `<span class="warn">면 ${nF}개 · 라인 인식 실패</span>` : ln ? `<b>면 ${nF}개</b> · ${esc(ui.lineInfo ?? '')}` : `면 ${nF}개 · <span class="mut">라인 인식 중</span>`;
   // 기본 탭(2026-10-30 정리, 2026-11-03 목표 통합): ① 어디를 보나(면 지정·상태) ② 목표와 지금 결과(한 표) · 밝기 목표
@@ -237,8 +239,8 @@ export function renderObserveProps(el, m, ui, h) {
       ${ui.lineErr ? `<div class="m3-row warn">${esc(ui.lineErr)}</div>` : ''}</div>
     <div class="m3-card"><div class="m3-sub">목표와 지금 결과</div>
       <table class="m3-cmp m3-obs-t"><tr><th></th><th>목표</th><th>지금${O.faces.length ? '' : ' <span class="mut">(관측면 먼저)</span>'}</th></tr>
-        <tr><th>길이 균일도</th><td><input type="number" min="0" max="1" step="0.05" value="${O.targetLen}" data-lp-tgt="targetLen" aria-label="길이 균일도 목표"></td><td>${pass(R?.Ulen, O.targetLen)}${verdict(R?.Ulen, O.targetLen)}</td></tr>
-        <tr><th>폭 균일도</th><td><input type="number" min="0" max="1" step="0.05" value="${O.targetWid}" data-lp-tgt="targetWid" aria-label="폭 균일도 목표"></td><td>${pass(R?.Uwid, O.targetWid)}${verdict(R?.Uwid, O.targetWid)}</td></tr></table>
+        <tr><th>길이 균일도</th><td><input type="number" min="0" max="1" step="0.05" value="${O.targetLen}" data-lp-tgt="targetLen" aria-label="길이 균일도 목표"></td><td>${pass(R?.Ulen, O.targetLen, R?.seLen)}${verdict(R?.Ulen, O.targetLen, R?.seLen)}</td></tr>
+        <tr><th>폭 균일도</th><td><input type="number" min="0" max="1" step="0.05" value="${O.targetWid}" data-lp-tgt="targetWid" aria-label="폭 균일도 목표"></td><td>${pass(R?.Uwid, O.targetWid, R?.seWid)}${verdict(R?.Uwid, O.targetWid, R?.seWid)}</td></tr></table>
       <div class="m3-row mut">균일도 = 가장 어두운 곳 ÷ 가장 밝은 곳 (1 = 완전히 고름)</div>
       <div class="m3-row"><label>밝기 목표</label><input type="number" min="0" step="10" value="${O.targetLum ?? ''}" placeholder="없음" data-lp-tgt="targetLum" data-lp-auto aria-label="평균 휘도 목표 cd/m²"> cd/m² <span class="mut">선택 · LED 밝기(lm) 입력 필요</span></div></div>`;
   // 상세 탭: 보는 방향 · 보는 범위 · 계산 · 설계 점검 기준(라인 상태·다시 인식은 기본 탭)

@@ -15,6 +15,17 @@ export function nearTarget(s, obs) {
   return m < 0 && m >= -JUDGE_BAND;
 }
 export const judgeNoise = (s, obs, noise) => (nearTarget(s, obs) ? Math.min(noise, JUDGE_NOISE) : noise);
+// 화면 판정(2026-11-04) — 목표와의 차이가 노이즈보다 작으면 통과·미달을 가를 수 없어 '근처'. 같은 설계 고화질 3회 실측 0.7925 · 0.802 · 0.8027(표준오차 ≈ 0.004) → 표준오차의 2배.
+// 표시만 바꿈 — 최적화의 후보 선택(margin)은 그대로
+export const NEAR_SE = 2;
+export const uBand = (v, se, relNoise) => NEAR_SE * (Number.isFinite(se) && se > 0 ? se : Number.isFinite(relNoise) && relNoise > 0 ? relNoise * v : 0);
+export const uVerdict = (v, t, se, relNoise) => (!Number.isFinite(v) || !Number.isFinite(t) ? '' : Math.abs(v - t) < uBand(v, se, relNoise) ? 'near' : v + 1e-9 >= t ? 'ok' : 'bad');
+// 길이·폭 판정 + 전체(하나라도 미달 = bad, 아니면 하나라도 근처 = near)
+export function judgeStats(s, obs) {
+  if (!s || s.empty) return { len: '', wid: '', all: '' };
+  const len = uVerdict(s.Ulen, obs.targetLen, s.seLen, s.relNoise), wid = s.Uwid == null ? '' : uVerdict(s.Uwid, obs.targetWid, s.seWid, s.relNoise);
+  return { len, wid, all: len === 'bad' || wid === 'bad' ? 'bad' : len === 'near' || wid === 'near' ? 'near' : 'ok' };
+}
 // 균일도 표시 — 미달인데 반올림하면 목표와 같아 보일 때만 세 자리(0.795 ✕)
 export const fmtJudge = (v, t) => (!Number.isFinite(v) ? '–' : v < t && +v.toFixed(2) >= t ? v.toFixed(3) : v.toFixed(2));
 export const GRID_QUALITY = { low: { cell: 1.5 }, mid: { cell: 1 }, high: { cell: 0.5 } };

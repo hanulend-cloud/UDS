@@ -412,6 +412,18 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   ok(ledDeltaXYZ(c.rows[0]) === '' && ledDeltaXYZ(c.rows[1]) === 'Δx +2 Δz −1' && ledDeltaXYZ(c.rows[2]) === '추가' && ledDeltaXYZ(null) === '', `Δ 표시: ${ledDeltaXYZ(c.rows[1])}`);
   ok(ledDeltaXYZ({ state: 'same', d: [0, 0, 3] }) === 'Δz +3', '높이만 바뀌어도 표시');
 }
+{ // 목표 근처(2026-11-04): 차이가 표준오차의 2배보다 작으면 통과·미달을 가르지 않음
+  const { uVerdict, judgeStats } = await import('../src/engine/mech3d/tally.js');
+  const { flowState } = await import('../src/ui/m3/command-bar.js');
+  ok(uVerdict(0.7925, 0.8, 0.004) === 'near' && uVerdict(0.8027, 0.8, 0.004) === 'near' && uVerdict(0.75, 0.8, 0.004) === 'bad' && uVerdict(0.85, 0.8, 0.004) === 'ok', '실측 3회 값은 모두 근처, 먼 값은 그대로');
+  ok(uVerdict(0.795, 0.8, null, 0.005) === 'near' && uVerdict(0.79, 0.8, null, 0.005) === 'bad', '표준오차 없으면 노이즈로');
+  ok(uVerdict(0.799, 0.8) === 'bad' && uVerdict(0.8, 0.8) === 'ok' && uVerdict(NaN, 0.8) === '', '노이즈를 모르면 지금처럼');
+  const O = { targetLen: 0.8, targetWid: 0.8 };
+  ok(judgeStats({ Ulen: 0.75, seLen: 0.004, Uwid: 0.801, seWid: 0.004 }, O).all === 'bad' && judgeStats({ Ulen: 0.802, seLen: 0.004, Uwid: 0.84, seWid: 0.004 }, O).all === 'near' && judgeStats({ Ulen: 0.85, seLen: 0.004, Uwid: 0.84, seWid: 0.004 }, O).all === 'ok', '하나라도 미달 = 미달, 아니면 하나라도 근처 = 근처');
+  const f = flowState({ state: 'done' }, { Ulen: 0.802, seLen: 0.004, Uwid: 0.84, seWid: 0.004 }, { observe: O });
+  ok(f.sim.cls === 'near' && f.sim.text.includes('목표 근처') && f.opt.text.includes('목표 근처'), `상단 표시: ${f.sim.text} / ${f.opt.text}`);
+  const j = judgeText(0.802, 0.8, 0.004); ok(j.cls === 'near' && j.text.includes('근처') && j.text.includes('±0.008'), `결과 판: ${j.text}`);
+}
 done();
 
 { const { clearDbHtml } = await import('../src/ui/mech3d-panel.js');
@@ -500,6 +512,7 @@ done();
   const r = { unchanged: false, feasible: false, reason: '목표 미달 (균일도 최고 … · 한계: 길이 방향 — 끝단이 가장 어두움 · ④ 케이스)', targets: { len: 0.8, wid: 0.8 },
     cur: { count: 40, pitch: 10, milky: 1.43, Ulen: 0.61, Uwid: 0.6, eff: 0.107 }, best: { count: 40, pitch: 10, milky: 1.8, Ulen: 0.66, Uwid: 0.62, eff: 0.1 } };
   const h = resultLineHtml(r);
+  { const hn = resultLineHtml({ ...r, targets: { ...(r.targets ?? {}), len: 0.8, wid: 0.8, judge: { all: 'near', len: 'near', wid: 'ok' } } }); if (!hn.includes('m3-rcard near') || !hn.includes('목표 근처') || !hn.includes('≈')) throw new Error('결과 카드 근처 표시'); }
   console.log(h.includes('m3-rcard bad') && h.includes('목표 미달') && h.includes('<th>Milky') && !h.includes('<th>LED') && h.includes('<th>길이 균일도') && h.includes('<th>광 효율') && h.includes('💡 한계: 길이 방향 — 끝단이 가장 어두움') && h.includes('data-ad="view"') && limitText('없음') === ''
     ? 'PASS 기구 최적화 결과 카드(판정·바뀐 사양만·한계 한 줄)' : (process.exitCode = 1, `FAIL 결과 카드 ${h}`)); }
 { const { milkyTable, milkyTableHtml } = await import('../src/ui/m3/autodesign-panel.js');

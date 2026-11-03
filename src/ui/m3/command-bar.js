@@ -1,3 +1,4 @@
+import { judgeStats } from '../../engine/mech3d/tally.js';
 // 명령 막대 — ① LED 지정 ② 관측면 지정 ③ 목표 설정(사용 순서). 나머지는 상단 메뉴. calcLabel = 계산 카드의 제어 단추 문구
 // h = { onLed(), onObs(), onTarget() }
 export function calcLabel(calc) {
@@ -21,17 +22,18 @@ export function stepState(M) {
 export function flowState(calc, stats, M, ad = {}) {
   const O = M.observe, st = calc?.state ?? 'idle', rn = calc?.stats?.relNoise ?? stats?.relNoise, tn = calc?.targetNoise ?? O.targetNoise ?? 0.01;
   const has = !!stats && !stats.empty, pc = (v, t) => (!Number.isFinite(v) ? '–' : v < t && Math.round(v * 100) >= t * 100 ? `${(v * 100).toFixed(1)}%` : `${Math.round(v * 100)}%`);   // 미달인데 반올림하면 목표와 같아 보일 때만 소수 한 자리(79.5%)
-  const pass = has && stats.Ulen >= O.targetLen && (stats.Uwid == null || stats.Uwid >= O.targetWid);
+  const J = has ? judgeStats(stats, O).all : '', pass = J === 'ok';
   const res = has ? `${pc(stats.Ulen, O.targetLen)} / ${pc(stats.Uwid, O.targetWid)}` : '';
   const running = st === 'running' || st === 'pending' || st === 'starting', done = st === 'done';
   const sim = running ? { text: `계산 중 ${Number.isFinite(rn) && rn > 0 ? Math.round(Math.min(1, (tn / rn) ** 2) * 100) : 0}%${res ? ` · ${res}` : ''}`, cls: 'run', done: false }
     : st === 'paused' ? { text: `일시정지${res ? ` · ${res}` : ''}`, cls: '', done: false }
-    : done && has ? { text: `${res} ${pass ? '목표 통과' : '목표 미달'}`, cls: pass ? 'ok' : 'bad', done: true }
+    : done && has ? { text: `${res} ${pass ? '목표 통과' : J === 'near' ? '목표 근처' : '목표 미달'}`, cls: pass ? 'ok' : J === 'near' ? 'near' : 'bad', done: true }
     : { text: '–', cls: '', done: false };
   const opt = ad.running ? { text: '진행 중', cls: 'run', done: false }
     : ad.result ? { text: '결과 확인 · 적용', cls: 'run', done: false }
     : !sim.done ? { text: '시뮬레이션 뒤', cls: '', done: false }
     : pass ? { text: '불필요(목표 통과)', cls: 'ok', done: true }
+    : J === 'near' ? { text: '선택 — 목표 근처', cls: 'near', done: false }
     : { text: '필요 — 목표 미달', cls: 'need', done: false };
   return { sim, opt };
 }

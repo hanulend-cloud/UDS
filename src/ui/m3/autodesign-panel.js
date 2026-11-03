@@ -180,7 +180,7 @@ const dl = (a, b, k = 1, u = '') => { if (!Number.isFinite(a) || !Number.isFinit
 // 총 LED 수(2열 = 열 수 × 열당, 위치 목록 = 그 수)
 const ledTotal = (x) => (x?.positions?.length ? x.positions.length : Number.isFinite(x?.count) ? x.count * (x.rows === 2 ? 2 : 1) : NaN);
 // 비교표 줄(현재 → 최적/적용 후) — compareHtml 과 적용 뒤 요약(appliedHtml)이 같이 씀
-const passMark = (v, t) => (Number.isFinite(v) && Number.isFinite(t) ? (v + 1e-9 >= t ? ' <b class="ok">✓</b>' : ' <b class="bad">✕</b>') : '');
+const passMark = (v, t, j) => (Number.isFinite(v) && Number.isFinite(t) ? (j === 'near' ? ' <b class="near" title="목표와의 차이가 노이즈보다 작음">≈</b>' : v + 1e-9 >= t ? ' <b class="ok">✓</b>' : ' <b class="bad">✕</b>') : '');
 // targets = { len, wid } — 균일도 줄에 목표·통과(✓/✕)
 function cmpParts({ cur, best, shape, stepLeds = null, finish = null, height = null, catalog = DEFAULT_FINISH_CATALOG, targets: tg = null }) {
   const tr = (label, a, b, d = '') => `<tr><th>${label}</th><td>${a}</td><td class="${a !== b ? 'chg' : ''}">${b}${d}</td></tr>`;
@@ -190,8 +190,8 @@ function cmpParts({ cur, best, shape, stepLeds = null, finish = null, height = n
   const tc = stepLeds != null && cur.stepOrig !== false ? stepLeds : ledTotal(cur), tb = best.stepOrig === true ? tc : ledTotal(best);
   const tot = Number.isFinite(tc) && Number.isFinite(tb) && tb !== tc ? ` <b class="m3-tot">· 총 ${tb}개 (${tb > tc ? '+' : ''}${tb - tc})</b>` : '';
   const metric = [
-    tr(`길이 균일도${tg?.len != null ? ` <span class="mut">목표 ${f2(tg.len)}</span>` : ''}`, fmtJudge(cur.Ulen, tg?.len), fmtJudge(best.Ulen, tg?.len), `${dl(cur.Ulen, best.Ulen)}${passMark(best.Ulen, tg?.len)}`),
-    tr(`폭 균일도${tg?.wid != null ? ` <span class="mut">목표 ${f2(tg.wid)}</span>` : ''}`, fmtJudge(cur.Uwid, tg?.wid), fmtJudge(best.Uwid, tg?.wid), `${dl(cur.Uwid, best.Uwid)}${passMark(best.Uwid, tg?.wid)}`),
+    tr(`길이 균일도${tg?.len != null ? ` <span class="mut">목표 ${f2(tg.len)}</span>` : ''}`, fmtJudge(cur.Ulen, tg?.len), fmtJudge(best.Ulen, tg?.len), `${dl(cur.Ulen, best.Ulen)}${passMark(best.Ulen, tg?.len, tg?.judge?.len)}`),
+    tr(`폭 균일도${tg?.wid != null ? ` <span class="mut">목표 ${f2(tg.wid)}</span>` : ''}`, fmtJudge(cur.Uwid, tg?.wid), fmtJudge(best.Uwid, tg?.wid), `${dl(cur.Uwid, best.Uwid)}${passMark(best.Uwid, tg?.wid, tg?.judge?.wid)}`),
     tr('광 효율', `${f2(cur.eff * 100)}%`, `${f2(best.eff * 100)}%`, dl(cur.eff, best.eff, 100, '%p')),
   ];
   const design = [
@@ -259,7 +259,7 @@ export function milkyTableHtml(rows, chosen, tg = {}) {
 // 한계 한 줄 · [적용] [그래도 적용] [취소] [자세히](프로파일·사유 전문 = 결과 창)
 export const limitText = (reason) => { const m = /한계:\s*([^·)]+)/.exec(String(reason ?? '')); return m ? m[1].trim() : ''; };
 export function resultLineHtml(r) {
-  const verdict = r.unchanged ? ['keep', '현재안 유지', '더 나은 안 없음'] : r.feasible ? ['ok', '목표 통과', '최적안을 찾음'] : ['bad', '목표 미달', '가장 가까운 안'];
+  const verdict = r.unchanged ? ['keep', '현재안 유지', '더 나은 안 없음'] : r.targets?.judge?.all === 'near' ? ['near', '목표 근처', '통과·미달을 가를 수 없는 차이'] : r.feasible ? ['ok', '목표 통과', '최적안을 찾음'] : ['bad', '목표 미달', '가장 가까운 안'];
   const P = cmpParts(r), chg = P.design.filter((x) => x.includes('class="chg"'));   // 설계 항목 = 바뀐 것만, 목표 지표 = 늘
   const rows = `${secRow('목표 지표')}${P.metric.join('')}${secRow('설계 최적화 항목')}${chg.length ? chg.join('') : '<tr><td colspan="3" class="mut">바뀐 항목 없음</td></tr>'}`;
   const lim = limitText(r.reason), clash = r.clash > 0 ? `<div class="m3-clash" role="alert">LED 몸체가 부품과 겹침(${r.clash}개) — 적용 불가</div>` : '';
@@ -273,7 +273,7 @@ export function resultLineHtml(r) {
 export function renderAutoPanel(el, state, h) {
   const r = state.result, full = r ? compareHtml({ ...r, canRevert: state.canRevert, ...(state.catalog ? { catalog: state.catalog } : {}) }) : '';
   const html = r ? `${resultLineHtml(r)}${state.resultOpen ? `<div class="m3-rmodal" role="dialog" aria-modal="true" aria-label="기구 최적화 결과"><div class="m3-rmodal-in"><div class="m3-rmodal-hd"><b>기구 최적화 결과</b><span class="m3-ad-sp"></span><button type="button" data-ad="hide" title="결과는 남음">✕ 닫기</button></div>
-      <div class="m3-rverdict ${r.unchanged ? '' : r.feasible ? 'ok' : 'bad'}">${r.unchanged ? `현재 설계보다 나은 안을 찾지 못함 — 현재안 유지${r.alt ? ' (찾은 후보가 뚜렷이 낫지 않음 — 원하면 [후보로 바꾸기])' : ''}` : r.feasible ? '✓ 목표 통과' : '✕ 목표 미달 — 가장 가까운 안'}</div>${full}</div></div>` : ''}` : autoCardHtml(state);
+      <div class="m3-rverdict ${r.unchanged ? '' : r.targets?.judge?.all === 'near' ? 'near' : r.feasible ? 'ok' : 'bad'}">${r.unchanged ? `현재 설계보다 나은 안을 찾지 못함 — 현재안 유지${r.alt ? ' (찾은 후보가 뚜렷이 낫지 않음 — 원하면 [후보로 바꾸기])' : ''}` : r.targets?.judge?.all === 'near' ? '≈ 목표 근처 — 목표와의 차이가 노이즈보다 작음' : r.feasible ? '✓ 목표 통과' : '✕ 목표 미달 — 가장 가까운 안'}</div>${full}</div></div>` : ''}` : autoCardHtml(state);
   const key = r ? html : autoCardHtml({ ...state, running: state.running ? { frac: 0, text: '' } : null });
   const bar = state.running && !r && el._adKey === key ? el.querySelector('.m3-ad-prog .bar') : null;
   if (bar) {
