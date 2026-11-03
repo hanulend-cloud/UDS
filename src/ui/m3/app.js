@@ -953,12 +953,13 @@ async function adRun(opt = {}) {
   st.milkyPart = adMilkyPart(M0, avail);
   const hpSel = avail.housing?.parts?.includes(st.sel.housingPart) ? st.sel.housingPart : defaultHousingPart(M0, adInfo().boxes);   // 보완으로 ④ 를 더했으면 기본 케이스 부품
   // 최적화 판정 격자 = 늘 저화질(2026-11-02) — 고화질 칸(0.5 mm)으로 짧게 평가하면 노이즈가 '불균일' 로 보여 값이 크게 낮게 나오고(실측 길이 균일도 0.65 vs 정밀 0.76)
-  // LED 를 너무 많이 쓰거나 간격이 제멋대로가 됨. 화면 화질은 그대로, 최적화 평가만
+  // LED 를 너무 많이 쓰거나 간격이 제멋대로가 됨. 화면 화질은 그대로, 최적화 평가만. 후보를 고른 뒤 최종 판정만 화면 화질 격자(Gs)로(io.verify screen, 2026-11-03)
   const lowQ = (M0.observe.quality ?? 'low') === 'low', obs = tallyObs({ ...M0.observe, quality: 'low' }, M0.observe.dir ?? line.frame.d), G = lowQ ? geometry(tallyObs(M0.observe, M0.observe.dir ?? line.frame.d)) : tallyGeometry(line, obs), sp = st.sel.shapePart, hp = stages.housing ? hpSel : -1;
   const ctx = { M0, line, G, obs, rt, mp: st.milkyPart };
+  const obsS = lowQ ? obs : tallyObs(M0.observe, M0.observe.dir ?? line.frame.d), Gs = lowQ ? G : geometry(obsS), ctxS = { ...ctx, G: Gs, obs: obsS };
   const R = (st.runner = createAdRunner({ ports: A.pool.ports(), chunkTimeoutMs: 90000 }));   // 높은 Milky 청크는 30 초를 넘기기도 함
   // 같은 Worker 를 쓰므로 점진 계산은 멈춤 — 대기(디바운스) 중이면 장면을 곧 보내므로 취소. 사용자 일시정지 여부는 기억(끝나고 그대로)
-  const snap0 = A.prog.snapshot(), ps = snap0.state, currentVerified = reusableCurrent(snap0, G);   // 수렴한 점진 결과 = 현재안(verify 생략)
+  const snap0 = A.prog.snapshot(), ps = snap0.state, currentVerified = reusableCurrent(snap0, G), curS = lowQ ? null : reusableCurrent(snap0, Gs), currentScreen = curS ? { ...curS, sharp: true } : null;   // 수렴한 점진 결과 = 현재안(verify 생략)
   st.userPaused = ps === 'paused'; st.deferred = ['paused', 'running', 'pending', 'starting'].includes(ps);
   if (ps === 'pending') A.prog.cancel(); else A.prog.pause();
   st.running = { frac: 0, text: '준비' }; st.result = null; A.meshShown = null; renderView(); renderAuto();
@@ -1064,12 +1065,13 @@ async function adRun(opt = {}) {
       return out;
     },
     heightRange: (d) => adHeightRangeAt(designScene(d, ctx).M, line, rt, hInfo?.range ?? [0, 0]),   // ⑤ 후보 범위 = ② 로 옮긴 자리 기준
-    async verify(d, { noise = null, from = null } = {}) {   // noise = 그 노이즈까지(잰 값에서 필요한 광자 수를 노이즈, 10 분 한도). 정밀 재판정(현재안·최종안): 250만 광자(최소 150만, 20초까지) — 광자가 적으면 균일도(최저÷최고)가 노이즈 때문에 낮게 나옴(6초 제한 때 0.69 vs 실제 0.78)
+    async verify(d, { noise = null, from = null, screen = false, maxMs = 600000 } = {}) {   // screen = 화면 화질 격자로(칸이 작을수록 칸마다 광자가 적음 → 칸 비만큼 광자를 더). noise = 그 노이즈까지(잰 값에서 필요한 광자 수를 노이즈, 10 분 한도). 정밀 재판정(현재안·최종안): 250만 광자(최소 150만, 20초까지) — 광자가 적으면 균일도(최저÷최고)가 노이즈 때문에 낮게 나옴(6초 제한 때 0.69 vs 실제 0.78)
       const { M: Md, parts } = designScene(d, ctx);
-      const eff0 = currentVerified?.eff ?? snap0.photometry?.eff, r = await R.trace(adJob(Md, parts, ctx), noise ? { N: Math.ceil(Math.min(4e8, 1.1 * (from?.photons ?? 5e7) * ((from?.stats?.relNoise ?? 0.01) / noise) ** 2)), maxMs: 600000, minN: 1.5e6, chunkN: 2e5, batches: 10 } : { N: Math.ceil(Math.min(1.5e7, 5e6 * Math.max(1, 0.5 / (eff0 > 0 ? eff0 : 0.5)))), maxMs: d.shape?.kF ? 60000 : 45000, minN: 1.5e6, batches: 10 });   // 효율이 낮으면 관측면에 닿는 빛이 적어 광자를 더. 실측: 20 초(노이즈 2%) 판정 0.73~0.76 vs 수렴값 0.78~0.79 — 노이즈가 칸 최소·최대를 벌려 낮게 나오므로 시간을 늘림(2026-11-03). 입광면 보정 메쉬는 추적이 느려 같은 시간이면 노이즈가 커져 현재안과 공정하게 비교가 안 됨 → 시간 더
-      const stt = tallyStats(G, r.batches, obs);
+      const scr = screen && !lowQ, gridK = scr && !from?.screen ? Math.max(G.ds / Gs.ds, G.cell / Gs.cell) : 1, capN = 4e8 * (scr ? { mid: 2, high: 4 }[obsS.quality] ?? 1 : 1);
+      const eff0 = currentVerified?.eff ?? snap0.photometry?.eff, r = await R.trace(adJob(Md, parts, scr ? ctxS : ctx), noise ? { N: Math.ceil(Math.min(capN, 1.1 * gridK * (from?.photons ?? 5e7) * ((from?.stats?.relNoise ?? 0.01) / noise) ** 2)), maxMs, minN: 1.5e6, chunkN: 2e5, batches: 10 } : { N: Math.ceil(Math.min(1.5e7, 5e6 * Math.max(1, 0.5 / (eff0 > 0 ? eff0 : 0.5)))), maxMs: d.shape?.kF ? 60000 : 45000, minN: 1.5e6, batches: 10 });   // 효율이 낮으면 관측면에 닿는 빛이 적어 광자를 더. 실측: 20 초(노이즈 2%) 판정 0.73~0.76 vs 수렴값 0.78~0.79 — 노이즈가 칸 최소·최대를 벌려 낮게 나오므로 시간을 늘림(2026-11-03). 입광면 보정 메쉬는 추적이 느려 같은 시간이면 노이즈가 커져 현재안과 공정하게 비교가 안 됨 → 시간 더
+      const stt = scr ? tallyStats(Gs, r.batches, obsS) : tallyStats(G, r.batches, obs);
       A.optDash?.evals('final', [{ label: verifyLabel(d), Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty }]);
-      return { stats: stt, eff: adEff(r), photons: r.photons };
+      return { stats: stt, eff: adEff(r), photons: r.photons, screen: scr };
     },
     trace: (stage, list) => A.optDash?.evals(stage, list),   // 엔진이 직접 알리는 결과(② 배치 Solver 최선안·대안)
   };
@@ -1085,7 +1087,7 @@ async function adRun(opt = {}) {
       stages, obs, G, line, current: cur, milkyMax: st.sel.milkyMax ?? null, housingProbe, finishText: (f) => finishText(f, reflCat()), nMax: Math.max(1, Math.min(60, Math.floor(line.length / 2))), pitchRange: null, stepMode: stp, currentIrregular: stages.leds && (() => { try { const q = pitchOf(L.currentEmitters(M0, line).map((e) => { const [s, w] = line.toSW(...line.to2D(e.pos)); return { s, w }; })); return !q.uniform; } catch { return false; } })(),
       shapePart: sp, shapeField,
       shapeStart: stages.shape && M0.parts[sp]?.shapeMod ? (({ dt, h, R, e, c, kL, kW, kF }) => ({ dt, h, R, e, c, kL, kW, kF }))(M0.parts[sp].shapeMod) : null,   // 이미 적용한 형상에서 이어서
-      lateral, rowsOptions: st.sel.oneRow ? [1] : [1, 2], currentVerified, heightRange: hInfo?.range ?? null, housingPart: hp, finishCands, ledsAtCurrentMilky: !!opt.added?.length,
+      lateral, rowsOptions: st.sel.oneRow ? [1] : [1, 2], currentVerified, screenGrid: !lowQ, currentScreen, heightRange: hInfo?.range ?? null, housingPart: hp, finishCands, ledsAtCurrentMilky: !!opt.added?.length,
     }, io);
   } catch (e) { if (A === a && !R.stopped) setStatus(`기구 최적화 실패: ${e.message}`); }
   if (A !== a) return;   // 그사이 이탈

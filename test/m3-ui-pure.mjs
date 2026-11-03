@@ -469,6 +469,8 @@ done();
   const t = beforeAfterHtml('milky', { milky: 2, Ulen: 0.58, Uwid: 0.64 }, { label: 'Milky 3.50', Ulen: 0.82, Uwid: 0.71 }, 0.8, 0.8, 7);
   const okT = t.includes('Milky 2.00') && t.includes('<td class="chg">Milky 3.50') && /0\.82 <b class="od-ok">✓/.test(t) && /0\.71 <b class="od-bad">✕/.test(t) && t.includes('후보 7개') && beforeAfterHtml('shape', {}, null).includes('후보 없음');
   console.log(okB && okT ? 'PASS 설계 인자 현황 체크(켜기·설정) · 최적화 타일 전후 사양표' : (process.exitCode = 1, `FAIL 인자 체크/전후 ${okB} ${okT} ${t}`)); }
+{ const { flowState } = await import('../src/ui/m3/command-bar.js'); const t = flowState({ state: 'done' }, { Ulen: 0.795, Uwid: 0.83 }, { observe: { targetLen: 0.8, targetWid: 0.8 } }).sim.text;
+  if (t !== '79.5% / 83% 목표 미달') throw new Error(`미달 표시 반올림: ${t}`); }
 { const { flowState } = await import('../src/ui/m3/command-bar.js');
   // 흐름 4 광분포 시뮬레이션 → 5 기구 최적화: 계산 중 % · 완료 통과/미달 · 미달이면 5 '필요' · 최적화 진행 중
   const M = { observe: { targetLen: 0.8, targetWid: 0.8, targetNoise: 0.01 } }, st = (a, b) => ({ Ulen: a, Uwid: b });

@@ -20,9 +20,9 @@ export function stepState(M) {
 // calc = 점진 계산 스냅숏, stats = 그 결과, ad = { running, result } (기구 최적화). 반환 { sim:{ text, cls, done }, opt:{ text, cls, done } }
 export function flowState(calc, stats, M, ad = {}) {
   const O = M.observe, st = calc?.state ?? 'idle', rn = calc?.stats?.relNoise ?? stats?.relNoise, tn = calc?.targetNoise ?? O.targetNoise ?? 0.01;
-  const has = !!stats && !stats.empty, pc = (v) => (Number.isFinite(v) ? `${Math.round(v * 100)}%` : '–');
+  const has = !!stats && !stats.empty, pc = (v, t) => (!Number.isFinite(v) ? '–' : v < t && Math.round(v * 100) >= t * 100 ? `${(v * 100).toFixed(1)}%` : `${Math.round(v * 100)}%`);   // 미달인데 반올림하면 목표와 같아 보일 때만 소수 한 자리(79.5%)
   const pass = has && stats.Ulen >= O.targetLen && (stats.Uwid == null || stats.Uwid >= O.targetWid);
-  const res = has ? `${pc(stats.Ulen)} / ${pc(stats.Uwid)}` : '';
+  const res = has ? `${pc(stats.Ulen, O.targetLen)} / ${pc(stats.Uwid, O.targetWid)}` : '';
   const running = st === 'running' || st === 'pending' || st === 'starting', done = st === 'done';
   const sim = running ? { text: `계산 중 ${Number.isFinite(rn) && rn > 0 ? Math.round(Math.min(1, tn / rn) * 100) : 0}%${res ? ` · ${res}` : ''}`, cls: 'run', done: false }
     : st === 'paused' ? { text: `일시정지${res ? ` · ${res}` : ''}`, cls: '', done: false }

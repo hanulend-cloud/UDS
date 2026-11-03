@@ -434,4 +434,28 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   const r = await runAutoDesign({ stages: { height: true }, obs, current: { milky: 1, tag: 'x' }, heightRange: [0, 1] }, io);
   ok(seen[0] === 'x' && r.best.dz === 3, `옮긴 자리 범위 [0, 3] 으로 후보 (+${r.best.dz})`);
 }
+{ // 최종 판정 = 화면 화질 격자(2026-11-03): 저화질 격자 통과여도 화면 격자로 다시 재서 판정
+  const calls = [], io = { milkyRows: async (d, ms) => rowsOf(ms), verify: async (d, o = {}) => { calls.push(o); return o.screen ? { stats: { ...st(0.795, 0.9), relNoise: o.noise }, eff: 0.5, photons: 1e7 } : { stats: { ...st(0.82, 0.9), relNoise: 0.01 }, eff: 0.5, photons: 1e7 }; }, progress() {}, cancelled: () => false };
+  const r = await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 3, count: 5, pitch: 0, shape: null }, milkyMax: 5, screenGrid: true }, io);
+  ok(!r.feasible && r.verified.stats.Ulen === 0.795 && r.verified.stats.relNoise === 0.005 && calls.some((o) => o.screen && o.noise === 0.005), `화면 격자 0.795 = 미달(저화질 0.82 통과여도) · 노이즈 ${r.verified.stats.relNoise}`);
+  ok(r.current.stats.Ulen === 0.795, '현재안도 같은 화면 격자로 비교'); }
+{ // 화면 격자 통과 = 통과, 먼 값은 목표 노이즈(1%)까지만 · 점진 결과가 있으면 현재안은 다시 재지 않음
+  const calls = [], cs = { stats: { ...st(0.7, 0.9), relNoise: 0.01 }, eff: 0.5, sharp: true }, io = { milkyRows: async (d, ms) => rowsOf(ms), verify: async (d, o = {}) => { calls.push(o); return { stats: { ...st(o.screen ? 0.85 : 0.82, 0.9), relNoise: o.noise ?? 0.01 }, eff: 0.5, photons: 1e7 }; }, progress() {}, cancelled: () => false };
+  const r = await runAutoDesign({ stages: { milky: true }, obs: { ...obs, targetNoise: 0.01 }, current: { milky: 3, count: 5, pitch: 0, shape: null }, milkyMax: 5, screenGrid: true, currentScreen: cs }, io);
+  const sc = calls.filter((o) => o.screen);
+  ok(r.feasible && r.verified.stats.Ulen === 0.85 && sc.length === 1 && sc[0].noise === 0.01 && r.current === cs, `통과 ${r.verified.stats.Ulen} · 화면 격자 ${sc.length}회 · 현재안 재사용`); }
+{ // 화면 격자 미달 = 더 많은 LED 를 화면 격자로 확인해 처음 통과한 안 · 끝까지 미달이면 화면 격자 값으로 미달
+  const G = { ns: 100, nw: 1, ds: 1, cell: 1, w0: -0.5, L: 100, closed: false, winS: 10, area: new Float64Array(100).fill(1), valid: new Uint8Array(100).fill(1) }, line = { length: 100, closed: false };
+  const cand = candidateGrid(line, { sStep: 2 }), maps = cand.map(({ s }) => Float32Array.from({ length: 100 }, (_, i) => Math.exp(-((i + 0.5 - s) ** 2) / 200))), B = { cand, maps, emitted: 1, gaps: [], sMargin: 0 };
+  const run = async (hi) => { const seen = []; const r = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0.5 }, current: { milky: 1, count: 3, pitch: 0, rows: 1 }, G, line, nMax: 30, rowsOptions: [1], ladderMs: 1e9, screenGrid: true },
+    { progress() {}, cancelled: () => false, basis: async () => B, verify: async (d, o = {}) => { if (o.screen) seen.push(d.count); return { stats: { Ulen: o.screen ? hi(d.count) : d.count === 3 ? 0.4 : 0.85, Uwid: 0.9, empty: false, relNoise: o.noise ?? 0.01 }, eff: 0.2, photons: 1e7 }; } }); return { r, seen }; };
+  const a = await run(() => 0.79), first = a.seen[0];
+  ok(!a.r.feasible && a.r.verified.stats.Ulen === 0.79, `끝까지 미달 → 화면 격자 값으로 미달 (${a.seen.join()})`);
+  const b = await run((n) => (n === 3 ? 0.4 : n > first ? 0.81 : 0.79));
+  ok(b.r.feasible && b.r.best.count > first && b.r.verified.stats.Ulen === 0.81, `저화질 통과 ${first}개가 화면 격자 미달 → ${b.r.best.count}개 (${b.seen.join()})`);
+}
+{ // 화면 격자 판정: 목표에서 먼 안은 시간 한도까지만(현재안 40개가 10 분 걸렸음) · 가까운 안은 한도 없음
+  const calls = [], io = { milkyRows: async (d, ms) => rowsOf(ms), verify: async (d, o = {}) => { if (o.screen) calls.push([d.milky, o.maxMs]); return { stats: { ...st(d.milky === 3 ? 0.45 : 0.85, 0.9), relNoise: o.noise ?? 0.03 }, eff: 0.5, photons: 1e7 }; }, progress() {}, cancelled: () => false };
+  const r = await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 3, count: 5, pitch: 0, shape: null }, milkyMax: 5, screenGrid: true }, io);
+  ok(calls.length === 2 && calls.find((c) => c[0] === 3)?.[1] === 60000 && calls.find((c) => c[0] !== 3)?.[1] === undefined && r.feasible, `먼 현재안만 60 초 한도 (${JSON.stringify(calls)})`); }
 done();

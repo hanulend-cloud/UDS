@@ -1,7 +1,7 @@
 // P4 자동설계 단계 실행기 — spec §1·§2. 순서 ② → ⑤ LED 높이 → ④ 케이스 면 → ① → ③(§2.3c), 체크 안 한 항목은 현재 값 고정. 계산은 io 가 맡는다(Worker / 시험 가짜).
 // ① 재가중 창은 기준 ±0.25(ESS 한계, spec §2.1). U(Milky) 는 단봉형(§2.1a) — 거친 탐색으로 최고점을 지나면 멈추고, 오르는 구간에서만 할선/이분으로 최소 통과 Milky. ② 는 기준(①·④ 함께면 거친 최고점 Milky ≤ 5·케이스 최고 등급, §2.2c)에서 최소 개수를 구한 뒤 ④·① 이 고른다.
 // io.milkyRows(d, ms, { precise }) — precise = 경계가 든 창의 재추적(광자 많이). 결과 { feasible, best(design), steps:[{stage, …}], reason, verified, current(현재안 io.verify), cancelled }
-import { nearTarget, fmtJudge, JUDGE_NOISE } from './tally.js';
+import { nearTarget, fmtJudge, JUDGE_NOISE, JUDGE_BAND } from './tally.js';
 import { hasCurve, hasField } from './shape-opt.js';
 import { milkyAxis } from './reweight.js';
 import { pickMilky, margin } from './milky-search.js';
@@ -424,6 +424,7 @@ export function smoothMapsS(maps, G) {
 // 점수 = 폭 균일도(폭 판정 없으면 길이) — 폭 위치는 주로 폭 분포를 바꾸고 길이는 뒤의 개수·간격이 맞춤
 export const LATERAL_MARGIN = 0.03;
 // 폭 위치 2 단계(2026-11-03): 2 mm 로 훑고 최고 위치의 ±1 mm 만 더 비교 — 1 mm 전부 재는 시간의 절반 정도로 같은 간격
+const FAR_MARGIN = 0.1, FAR_MS = 60000;
 const SHARPEN_MAX = 3;   // ② 후보를 0.5% 로 재는 개수 상한 — 하나에 몇 분
 export const lateralCoarse = (cs) => cs.filter((c) => c % 2 === 0);
 export const lateralFine = (cs, pick) => cs.filter((c) => Math.abs(c - pick) === 1);
@@ -628,8 +629,19 @@ export async function runAutoDesign(cfg, io) {
     io.progress?.('verify', 0.9, `목표 근처 — 노이즈 ${JUDGE_NOISE * 100}% 까지 다시 계산(몇 분 걸림)`);
     return { ...await io.verify(e, { noise: JUDGE_NOISE, from: v }), sharp: true };
   };
+  // 최종 판정 = 화면 화질 격자(2026-11-03) — 최적화 격자(저화질)에서 통과해도 화면에서 미달로 나오지 않게, 화면과 같은 규칙(목표 노이즈, 목표 근처면 0.5%)으로 잼
+  const judge = async (e, v) => {
+    if (!cfg.screenGrid) return sharpen(e, v);
+    if (v.sharp || stop()) return v;
+    io.progress?.('verify', 0.9, '최종 화질로 판정(몇 분 걸림)');
+    // 목표에서 먼 안(LED 많은 현재안은 효율이 낮아 1% 까지 10 분도 모자람)은 판정이 안 바뀌니 시간 한도까지만
+    let r = await io.verify(e, { noise: obs.targetNoise ?? 0.01, from: v, screen: true, ...(margin(v.stats, obs) < -FAR_MARGIN ? { maxMs: FAR_MS } : {}) });
+    if (nearTarget(r.stats, obs) && r.stats.relNoise > JUDGE_NOISE * 1.1 && !stop()) r = await io.verify(e, { noise: JUDGE_NOISE, from: r, screen: true });
+    return { ...r, sharp: true };
+  };
+  const judgeCurrent = (v) => (cfg.screenGrid && cfg.currentScreen ? cfg.currentScreen : judge(cfg.current, v));
   if (sameDesign(d, cfg.current)) {
-    currentVerified = await sharpen(cfg.current, currentVerified);
+    currentVerified = await judgeCurrent(currentVerified);
     if (stop()) return { cancelled: true };   // 현재안이 최선 — 현재안이 목표 미달이면 이유를 비워 두지 않음
     const okCur = margin(currentVerified.stats, obs) >= 0, cs = currentVerified.stats;
     const why = reason || (okCur ? '' : `현재 설계가 최선 — 목표 미달(길이 균일도 ${cs.Ulen.toFixed(2)}${cs.Uwid == null ? '' : ` · 폭 균일도 ${cs.Uwid.toFixed(2)}`})`);
@@ -689,12 +701,29 @@ export async function runAutoDesign(cfg, io) {
     if (!fewestPass()) {
       const pool = tried.filter((t) => nearTarget(t.verified.stats, obs)).sort((a, b) => totalLeds(a.design) - totalLeds(b.design)).slice(0, SHARPEN_MAX);
       for (const t of pool) {
-        t.verified = await sharpen(t.design, t.verified);
+        t.verified = await judge(t.design, t.verified);
         if (stop()) return { cancelled: true };
         if (mgOf(t) >= 0) break;
       }
     }
-    const sharp = tried.filter((t) => t.verified.sharp), pick = fewestPass() ?? (sharp.length ? sharp.reduce((a, b) => (mgOf(b) > mgOf(a) + SCORE_EPS ? b : a)) : more ? near() : tried.reduce((a, b) => (scV(b.verified) > scV(a.verified) ? b : a)));
+    const sharp = tried.filter((t) => t.verified.sharp), pick0 = fewestPass() ?? (sharp.length ? sharp.reduce((a, b) => (mgOf(b) > mgOf(a) + SCORE_EPS ? b : a)) : more ? near() : tried.reduce((a, b) => (scV(b.verified) > scV(a.verified) ? b : a)));
+    let pick = pick0;
+    if (cfg.screenGrid && ledMore) {   // 최적화 격자 통과안이 화면 격자에서 조금 미달이면 LED 를 늘려 화면 격자로 확인(최대 SHARPEN_MAX 개)
+      pick.verified = await judge(pick.design, pick.verified);
+      let left = SHARPEN_MAX - 1;
+      for (let n = totalLeds(pick.design) + 1; left > 0 && mgOf(pick) < 0 && mgOf(pick) >= -JUDGE_BAND && n <= cfg.nMax; n++) {
+        if (stop()) return { cancelled: true };
+        const known = tried.find((t) => totalLeds(t.design) === n), L = known ? null : ledMore(n);
+        if (!known && !L) continue;
+        io.progress?.('verify', 0.9, `최종 화질 미달 — LED ${n}개로 늘려 재확인(몇 분 걸림)`);
+        const t = known ?? { design: { ...d, ...L }, verified: await io.verify({ ...d, ...L }) };
+        if (!known) { tried.push(t); more = true; }
+        t.verified = await judge(t.design, t.verified);
+        left--;
+        if (mgOf(t) >= 0 || mgOf(t) > mgOf(pick) + SCORE_EPS) pick = t;
+      }
+      if (stop()) return { cancelled: true };
+    }
     d = pick.design; verified = pick.verified;
     if (more && mgOf(pick) < 0) {
       const s = verified.stats, wid = s.Uwid != null && s.Uwid - obs.targetWid < s.Ulen - obs.targetLen;
@@ -702,9 +731,9 @@ export async function runAutoDesign(cfg, io) {
     }
   }
   if (ledLimit && margin(verified.stats, obs) < 0 && mgFix(verified.stats) >= 0) reason = `길이 목표는 LED ${totalLeds(d)}개로 통과, 폭은 미달 — ${uText(verified.stats)} · 한계: 폭 방향 확산 부족(LED 개수로는 안 오름) — Milky·형상으로 보완`;
-  verified = await sharpen(d, verified);
+  verified = await judge(d, verified);
   if (stop()) return { cancelled: true };
-  currentVerified = await sharpen(cfg.current, currentVerified);   // 같은 노이즈로 비교
+  currentVerified = await judgeCurrent(currentVerified);   // 같은 격자·노이즈로 비교
   if (stop()) return { cancelled: true };
   // 노이즈 방어(①②③ 공통): 검증값이 현재안보다 SCORE_EPS 이상 낫지 않으면 현재안 유지. 둘 다 통과면 총 LED 수(rows·count) 감소도 이득
   const sc = (v) => shapeScore({ ok: !v.stats.empty, stats: v.stats, eff: v.eff }, obs);
