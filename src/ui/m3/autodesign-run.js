@@ -5,6 +5,8 @@
 import { essRatio } from '../../engine/mech3d/reweight.js';
 
 const MIN_CHUNK = 1000;
+// 앞 계산에 이어도 되는 원자료 — 같은 설계(sig) · 같은 격자(screen)일 때만. 아니면 null = 처음부터
+export const resumable = (from, sig, screen) => (from?.raw && from.sig === sig && !!from.screen === !!screen ? from.raw : null);
 // 응답 시간 제한(progressive.js 와 같음): 장면 60초 · 청크 30초. cancel() = 기다리던 send 도 바로 '중지' 로 끝냄
 // 한 Worker 루프가 실패하면 같은 호출의 다른 루프도 새 청크를 보내지 않고 첫 오류를 다시 던짐
 export function createAdRunner({ ports, now = () => globalThis.performance?.now?.() ?? Date.now(), sceneTimeoutMs = 60000, chunkTimeoutMs = 30000, timers = globalThis }) {
@@ -32,7 +34,7 @@ export function createAdRunner({ ports, now = () => globalThis.performance?.now?
   // chunkN 기본 = Worker 마다 청크 2개쯤(후보당 광자가 적어도 모든 Worker 가 일하게)
   // crn(같은 난수 비교, 형상 후보용) = 시드 기준 — 청크 i 의 시드 crn+i · 크기 chunkN · 포트(쓰는 포트 i % 수) · 배치 i % batches 를 고정해
   // 후보마다 같은 광자 난수로 추적(후보 차이만 남음). 시간 제한·적응 청크 없음(N 전부)
-  async function trace(job, { N: N0, maxMs = Infinity, minN = 0, chunkN = Math.max(2000, Math.ceil(N0 / (2 * ports.length))), chunkMs = Math.min(500, maxMs / 5), batches = 8, rw = null, crn = null, keepRaw = false }) {
+  async function trace(job, { N: N0, maxMs = Infinity, minN = 0, chunkN = Math.max(2000, Math.ceil(N0 / (2 * ports.length))), chunkMs = Math.min(500, maxMs / 5), batches = 8, rw = null, crn = null, keepRaw = false, resume = null }) {
     const N = Math.ceil(N0);   // 광자 수는 정수(소수면 GPU 가 'offset is out of bounds' 로 꺼짐)
     await prepare(job);
     if (crn != null) return traceCrn(job, { N, chunkN, batches, rw, crn });
@@ -43,6 +45,16 @@ export function createAdRunner({ ports, now = () => globalThis.performance?.now?
     // keepRaw = 점진 계산에 넘겨줄 원자료(광자 수를 곱한 합 · 면 전체 지도·칸 수·광경로 포함) — 화면이 최종 판정 값을 그대로 보여 주게
     const K = keepRaw ? { batches: Array.from({ length: batches }, () => ({ acc: new Float64Array(nCell), accAll: new Float64Array(nCell), cnt: new Float64Array(nCell), n: 0, photons: 0 })), ledger: {}, leak: {}, paths: {}, nCell, photons: 0 } : null;
     let n = 0, issued = 0, k = 0;
+    // resume = 앞 계산의 keepRaw 원자료에 이어서: N 은 전체 광자 수, 모자란 만큼만 새로 추적. 청크 시드는 계속 늘어나 앞 광자와 겹치지 않음. 앞 결과는 복사해 그대로 둠
+    if (resume && !rw && resume.nCell === nCell && resume.batches.length <= batches) {
+      resume.batches.forEach((q, b) => {
+        for (let i = 0; i < nCell; i++) B[b][i] = q.acc[i] / chunkN;
+        bIss[b] = bDone[b] = q.photons; issued += q.photons; k += q.n;
+        if (K) { const c = K.batches[b]; c.acc.set(q.acc); c.accAll.set(q.accAll); c.cnt.set(q.cnt); c.n = q.n; c.photons = q.photons; }
+      });
+      for (const key in ledger) ledger[key] = (resume.ledger[key] ?? 0) / chunkN;
+      if (K) { K.photons = issued; K.ledger = { ...resume.ledger }; K.leak = { ...resume.leak }; K.paths = { ...resume.paths }; }
+    }
     const t0 = now(), more = () => issued < N && !(now() - t0 >= maxMs && issued >= minN && k >= batches);
     // 시간 제한이면 첫 청크 = minN(없으면 N/10) 을 Worker 마다 2개로 — 그 뒤 잰 속도로 조절
     const size0 = timed ? Math.min(chunkN, Math.max(MIN_CHUNK, Math.ceil(Math.max(minN, N / 10) / (2 * ports.length)))) : chunkN;

@@ -59,7 +59,7 @@ export function mountCommandBar(el, h) {
       if (stats !== undefined) lastStats = stats;
       toggle(b('led'), S.pick === 'led' || S.pick === 'ledx' || S.pick === 'mled');
       toggle(b('obs'), S.pick === 'obs');
-      toggle(b('tgt'), S.node === 'target');
+      toggle(b('tgt'), S.node === 'obs' && S.pick !== 'obs');
       if (!M) return;
       const st = stepState(M);
       [['led', st.led, '1'], ['obs', st.obs, '2'], ['tgt', st.tgOk, '3']].forEach(([k, d, n]) => { const x = b(k); x.classList.toggle('done', d); const i = x.querySelector('i'); if (i.textContent !== (d ? '✓' : n)) i.textContent = d ? '✓' : n; });

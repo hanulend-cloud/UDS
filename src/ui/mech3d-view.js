@@ -49,19 +49,20 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     const r = new THREE.WebGLRenderer({ canvas: gizmo, antialias: true, alpha: true }), s = new THREE.Scene(), c = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
     c.up.set(0, 0, 1); s.add(new THREE.AxesHelper(1.2));
     const lbl = (t, col, p) => {
-      const cv = document.createElement('canvas'); cv.width = cv.height = 64;
-      const x = cv.getContext('2d'); x.fillStyle = col; x.font = 'bold 44px sans-serif'; x.fillText(t, 16, 46);
+      const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+      const x = cv.getContext('2d'); x.font = '900 104px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.lineJoin = 'round';   // 어두운·밝은 배경 모두 보이게 어두운 테두리
+      x.lineWidth = 18; x.strokeStyle = '#0b0f17'; x.strokeText(t, 64, 68); x.fillStyle = col; x.fillText(t, 64, 68);
       const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
-      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex })); sp.position.set(...p); sp.scale.set(0.5, 0.5, 0.5); s.add(sp);
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false })); sp.position.set(...p); sp.scale.set(0.95, 0.95, 0.95); s.add(sp);
     };
-    lbl('X', '#ff5555', [1.5, 0, 0]); lbl('Y', '#55dd55', [0, 1.5, 0]); lbl('Z', '#5599ff', [0, 0, 1.5]);
+    lbl('X', '#ff6b6b', [1.5, 0, 0]); lbl('Y', '#5fe07a', [0, 1.5, 0]); lbl('Z', '#6fb0ff', [0, 0, 1.5]);
     gz = { r, s, c };
   }
   const render = () => {
     if (pathItems.length) pathLayout();   // 광경로 화살표·글씨 = 화면 px 크기
     if (obsUi) obsLayout();
     renderer.render(scene, camera);
-    if (gz) { gz.c.position.copy(camera.position).sub(controls.target).normalize().multiplyScalar(4); gz.c.up.copy(camera.up); gz.c.lookAt(0, 0, 0); gz.r.render(gz.s, gz.c); }
+    if (gz) { gz.c.position.copy(camera.position).sub(controls.target).normalize().multiplyScalar(5.6); gz.c.up.copy(camera.up); gz.c.lookAt(0, 0, 0); gz.r.render(gz.s, gz.c); }
   };
   // 원근 near/far 를 모델 둘레로 좁힌다(r≈700mm 같은 큰 모델에서 깊이 정밀도) — 카메라 ~ 모델 중심 거리 기준.
   // (controls.target 은 이동(pan)으로 모델에서 멀어질 수 있어 모델 중심을 쓴다.) 정투영은 거리가 고정이라 setView 값 그대로

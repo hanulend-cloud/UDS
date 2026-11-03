@@ -21,12 +21,19 @@ export function ledChange(orig, cur) {
   const rows = cur.map((c, i) => {
     if (!ci.has(i)) return { n: c.n ?? i, s: c.s, w: c.w, state: 'added', ds: 0, dw: 0 };
     const o = orig[ci.get(i)], ds = c.s - o.s, dw = c.w - o.w;
-    return { n: c.n ?? i, s: c.s, w: c.w, state: Math.hypot(ds, dw) < SAME ? 'same' : 'moved', ds, dw };
+    return { n: c.n ?? i, s: c.s, w: c.w, state: Math.hypot(ds, dw) < SAME ? 'same' : 'moved', ds, dw, d: c.pos && o.pos ? [0, 1, 2].map((k) => c.pos[k] - o.pos[k]) : null };
   });
   const removed = orig.filter((_, j) => !oi.has(j)), moved = rows.filter((r) => r.state === 'moved').length, added = rows.filter((r) => r.state === 'added').length;
   return { changed: moved + added + removed.length > 0, nOrig: orig.length, nCur: cur.length, moved, added, removed: removed.length, removedList: removed, rows, byN: new Map(rows.map((r) => [r.n, r])), orig, pitchOrig: po, pitchCur: pitchOf(cur) };
 }
 // 표·트리에 붙이는 짧은 글 — 그대로 = ''
+// 부품 리스트 LED 줄 — 원설계 대비 3D 좌표 차이(mm), 바뀐 축만. 그대로 = ''
+export function ledDeltaXYZ(r) {
+  if (!r) return '';
+  if (r.state === 'added') return '추가';
+  if (!r.d) return ledDeltaText(r);
+  return r.d.map((v, k) => (Math.abs(v) >= SAME ? `Δ${'xyz'[k]} ${v > 0 ? '+' : '−'}${f1(Math.abs(v))}` : '')).filter(Boolean).join(' ');
+}
 export function ledDeltaText(r) {
   if (!r || r.state === 'same') return '';
   if (r.state === 'added') return '추가';

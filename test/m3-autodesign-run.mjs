@@ -1,5 +1,5 @@
 // 기구 최적화 Worker io(가짜 포트): node test/m3-autodesign-run.mjs
-import { createAdRunner } from '../src/ui/m3/autodesign-run.js';
+import { createAdRunner, resumable } from '../src/ui/m3/autodesign-run.js';
 import { ok, done } from './mech3d-util.mjs';
 
 const nCell = 4;
@@ -85,4 +85,24 @@ const fakePorts = (log, delay = 0) => Array.from({ length: 3 }, (_, w) => ({ sen
   const R = createAdRunner({ ports: fakePorts([]) }), r = await R.trace({ sceneKey: 'kr', scene: { G: { ns: 2, nw: 2 } } }, { N: 60000, chunkN: 10000, batches: 4, keepRaw: true });
   ok(r.kept.nCell === nCell && r.kept.photons === 60000 && r.kept.batches.reduce((a, b) => a + b.acc[0], 0) === 60000 && r.kept.ledger.emitted === 60000 * 10000 && r.kept.batches.reduce((a, b) => a + b.n, 0) === 6, '원자료 합 = 광자 수');
   const r0 = await R.trace({ sceneKey: 'kr', scene: { G: { ns: 2, nw: 2 } } }, { N: 1000, chunkN: 1000, batches: 1 }); ok(r0.kept === null, '평소에는 원자료 없음'); }
+{ // resume = 앞 계산에 이어서: N 은 전체 광자 수 · 모자란 만큼만 새로 추적 · 결과는 처음부터 계산한 것과 같은 크기 · 앞 결과는 그대로
+  const log = [], R = createAdRunner({ ports: fakePorts(log) }), job = { sceneKey: 'rs', scene: { G: { ns: 2, nw: 2 } } }, opt = { chunkN: 10000, batches: 4, keepRaw: true };
+  const a = await R.trace(job, { N: 20000, ...opt }), a0 = a.kept.batches.map((q) => q.acc[0]);
+  log.length = 0;
+  const b = await R.trace(job, { N: 60000, ...opt, resume: a.kept });
+  ok(log.filter((x) => x.endsWith('chunk')).length === 4 && b.photons === 60000, `모자란 만큼만 추적 (청크 ${log.filter((x) => x.endsWith('chunk')).length}개, 광자 ${b.photons})`);
+  const c = await R.trace(job, { N: 60000, ...opt }), sum = (r) => r.batches.reduce((x, B) => x + B[0], 0);
+  ok(sum(b) === sum(c) && b.ledger.emitted === c.ledger.emitted && b.batches.length === 4, `이어서 = 처음부터 (${sum(b)} / ${sum(c)}, 방출 ${b.ledger.emitted} / ${c.ledger.emitted})`);
+  ok(b.kept.photons === 60000 && b.kept.ledger.emitted === c.kept.ledger.emitted && b.kept.batches.reduce((x, q) => x + q.n, 0) === 6, '인계 원자료도 전체 광자');
+  ok(a.kept.photons === 20000 && a.kept.batches.every((q, k) => q.acc[0] === a0[k]), '앞 결과는 바뀌지 않음');
+  // 실제 청크처럼 방출 = 광속 1회분(광자 수 무관): 청크 크기가 달라도 효율(지도 합 ÷ 방출)이 그대로여야 함
+  const flux = [{ send: async (m) => (m.type === 'scene' ? { ready: true } : { acc: new Float64Array(nCell).fill(0.25), cnt: new Uint32Array(nCell), ledger: { emitted: 1, escaped: 0.5, absSurf: 0, absVol: 0, lost: 0, rrLoss: 0, rrGain: 0 }, ms: 1 }) }], RF = createAdRunner({ ports: flux });
+  const a1 = await RF.trace(job, { N: 20000, chunkN: 7000, batches: 4, keepRaw: true }), d = await RF.trace(job, { N: 60000, chunkN: 5000, batches: 4, resume: a1.kept }), effOf = (r) => r.batches.reduce((x, B) => x + B.reduce((y, v) => y + v, 0), 0) / r.ledger.emitted;
+  ok(Math.abs(effOf(d) - 1) < 1e-12 && d.photons === 60000 && Math.abs(d.ledger.emitted - 12) < 1e-9, `청크 크기가 달라도 효율 그대로 (${effOf(d)}, 방출 ${d.ledger.emitted})`);
+  log.length = 0; const e = await R.trace(job, { N: 10000, ...opt, resume: a.kept });
+  ok(log.filter((x) => x.endsWith('chunk')).length === 0 && e.photons === 20000, '이미 충분하면 새로 추적 안 함');
+  log.length = 0; const f = await R.trace(job, { N: 20000, ...opt, resume: { ...a.kept, nCell: 99 } });
+  ok(log.filter((x) => x.endsWith('chunk')).length === 2 && f.photons === 20000, '격자가 다르면 무시하고 처음부터');
+  const raw = { nCell: 4 }, from = { raw, sig: 'A', screen: true };
+  ok(resumable(from, 'A', true) === raw && resumable(from, 'B', true) === null && resumable(from, 'A', false) === null && resumable({ sig: 'A', screen: true }, 'A', true) === null && resumable(null, 'A', true) === null && resumable({ raw, sig: 'A' }, 'A', false) === raw, '같은 설계 · 같은 격자일 때만 이어서'); }
 done();

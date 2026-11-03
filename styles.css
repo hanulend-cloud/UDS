@@ -286,6 +286,8 @@ main:has(#mech3d-wrap:not([hidden])) { grid-template-rows: minmax(0, 1fr); }
 .m3-node:hover { background: #f2f4f8; }
 .m3-node.sel { background: var(--m3-accbg); color: var(--m3-acc); }
 .m3-node .b { margin-left: auto; font-size: 11px; color: var(--m3-mut); }
+.m3-node.m3-top { margin-bottom: 6px; padding-bottom: 7px; border-bottom: 1px solid var(--m3-line); border-radius: 6px 6px 0 0; font-weight: 600; }
+.m3-node.m3-top > :first-child, .m3-node.m3-top .m3-lbl { white-space: nowrap; flex: none; } .m3-node.m3-top .m3-badge, .m3-node.m3-top .b { text-align: right; font-weight: 400; }
 .m3-node.child { padding-left: 22px; }
 .m3-xf { display: grid; grid-template-columns: auto repeat(3, minmax(0, 1fr)); gap: 3px 4px; align-items: center; font-size: 12px; margin: 2px 0 4px; }
 .m3-xf b { font-weight: 600; text-align: center; color: var(--m3-mut); }
@@ -938,6 +940,7 @@ body.booting::after { content: "불러오는 중…"; position: fixed; left: 50%
 .m3-ledd.added { color: #16a34a; font-weight: 600; }
 .m3-node.chg .m3-lbl { color: #f79009; font-weight: 600; }
 .m3-node.chg > :not(.m3-lbl):not(button) { color: #f79009; }
+#mech3d-wrap:not([data-theme="dark"]) .m3-node.chg > .m3-badge { color: #a15c07; }
 
 /* 떠 있는 창: 상하좌우·모서리 크기 조절 · 접으면 제목과 현재 결과만 */
 .m3-rz { position: absolute; z-index: 5; touch-action: none; }
@@ -974,12 +977,13 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 .od-ln2 { fill: none; stroke: #d9822b; stroke-width: 1.6; }
 .od-now { stroke: #8a96a8; stroke-width: 1; stroke-dasharray: 2 2; }
 .od-c1 { color: #2f6fd0; font-weight: 600; } .od-c2 { color: #c26f1f; font-weight: 600; }
-.om-say { font-size: 12.5px; line-height: 1.55; margin: 6px 0; padding: 6px 9px; background: var(--m3-head, #f3f6fa); border-radius: 6px; }
+.om-say { font-size: 12.5px; line-height: 1.55; margin: 6px 0; padding: 6px 9px; background: #f3f6fa; color: #20262f; border-radius: 6px; }
+.om-say .od-ok { color: #1c8a55; } .om-say .od-bad { color: #c0392b; } .om-say .mut { color: #5a6475; }
 .om-say p { margin: 0 0 2px; }
 .om-mx { margin-top: 6px; font-size: 11.5px; border-top: 1px solid var(--m3-line); padding-top: 4px; overflow: auto; }
 .om-mx-t { width: 100%; border-collapse: collapse; }
 .om-mx-t th, .om-mx-t td { border: 1px solid var(--m3-line); padding: 2px 6px; text-align: center; white-space: nowrap; }
-.om-mx-t tr:first-child th { background: var(--m3-head, #e9edf3); font-weight: 600; }
+.om-mx-t tr:first-child th { background: var(--m3-head, #e9edf3); color: var(--m3-headtx, #3b4658); font-weight: 600; }
 .om-mx-t tr th:first-child { text-align: left; font-weight: 600; }
 .om-mx-l { text-align: left !important; white-space: normal !important; }
 .om-mx-f td, .om-mx-f th { border-top: 2px solid var(--m3-acc); }

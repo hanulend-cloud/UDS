@@ -22,10 +22,10 @@ const M = {
 // 기구 최적화 왼쪽 칸 + 가운데 타일(항목 스위치·설정)을 합친 HTML — 카드 시험용
 const card = (o) => autoCardHtml(o) + ['milky', 'leds', 'shape', 'housing', 'height'].map((k) => tileConfigHtml(k, o).html).join('');
 { const N = treeNodes(M, { node: 'part:0', line: { kind: 'line', closed: false, length: 116, width: 16 } });
-  ok(N.map((n) => n.id).join() === 'target,parts,part:0,part:1,light,leds,obs' && N[0].badge === '80% / 80%', `트리 노드(목표 맨 위): ${N.map((n) => n.id).join()}`);
-  N.shift();
+  ok(N.map((n) => n.id).join() === 'obs,parts,part:0,part:1,light,leds', `트리 노드(관측면 맨 위): ${N.map((n) => n.id).join()}`);
+  const obsN = N.shift();
   ok(N[1].badge === 'Milky 3.0' && N[1].sel && N[1].child && N[2].badge.startsWith('불투명') && N[3].badge === '직접 배치' && N[4].label === 'LED ×10' && N[4].badge === '균등'
-    && N[5].badge === '직선 116×16 mm', `배지: ${N.map((n) => n.badge).join(' | ')}`); }
+    && obsN.badge === '직선 116×16 mm · 목표 80/80%', `배지: ${N.map((n) => n.badge).join(' | ')}`); }
 { const N = treeNodes({ ...M, light: defaultLight() }, { node: null, line: null });
   ok(!N.some((n) => n.id === 'leds') && /인식 중$/.test(N.find((n) => n.id === 'obs').badge) && N.find((n) => n.id === 'light').badge === '지정 안 함', '광원 없음 → LED 노드 없음, 라인 인식 중');
   const N2 = treeNodes({ ...M, observe: defaultObserve() }, { node: null, line: null });
@@ -34,7 +34,7 @@ ok(partBadge(setPartMaterial(defaultPart(0, 'p', 1), 'clear')).startsWith('투�
 ok(calcLabel({ state: 'running' }) === '⏸ 계산 중' && calcLabel({ state: 'paused' }) === '▶ 계산 재개' && calcLabel({ state: 'done', reason: 'converged' }).includes('완료')
   && calcLabel({ state: 'done', reason: 'max' }).includes('한도') && calcLabel(null) === '▶ 계산' && calcLabel({ state: 'error' }).includes('다시'), '계산 버튼 문구');
 { const N = treeNodes({ ...M, light: { ...defaultLight(), kind: 'manual', manual: { ...defaultLight().manual, pitch: 11.6000001 } } }, { node: null, line: { kind: 'zigzag', closed: false, length: 99.6, width: 7.4 } });
-  ok(N.find((n) => n.id === 'leds').badge === '피치 11.6' && N.find((n) => n.id === 'obs').badge === 'zigzag 100×7 mm', `피치 반올림 · 모르는 라인 종류: ${N.find((n) => n.id === 'leds').badge} / ${N.find((n) => n.id === 'obs').badge}`); }
+  ok(N.find((n) => n.id === 'leds').badge === '피치 11.6' && N.find((n) => n.id === 'obs').badge === 'zigzag 100×7 mm · 목표 80/80%', `피치 반올림 · 모르는 라인 종류: ${N.find((n) => n.id === 'leds').badge} / ${N.find((n) => n.id === 'obs').badge}`); }
 { const el = { innerHTML: '', addEventListener() {}, contains: () => false, ownerDocument: null, querySelectorAll: () => [] };
   const P = { ...M, parts: [{ ...M.parts[0], name: `<img src=x onerror="a()">&'` }] };
   renderFeatureTree(el, P, { node: null, line: null }, { onNode() {} });
@@ -43,7 +43,7 @@ ok(calcLabel({ state: 'running' }) === '⏸ 계산 중' && calcLabel({ state: 'p
 { const h = treeHtml(M, { node: 'part:0', line: null });
   ok(/role="button" tabindex="0" aria-current="true" data-node="part:0"/.test(h) && (h.match(/aria-current/g) ?? []).length === 1 && (h.match(/role="button" tabindex="0"(?: aria-current="true")? data-node=/g) ?? []).length === treeNodes(M, { node: 'part:0', line: null }).length,
     '트리 노드: role=button · tabindex=0 · 선택 노드만 aria-current'); }
-{ const N = treeNodes(M, { node: null, line: null, hidden: [1], hideLeds: false }).filter((n) => n.id !== 'target');
+{ const N = treeNodes(M, { node: null, line: null, hidden: [1], hideLeds: false }).filter((n) => n.id !== 'obs');
   ok(N[0].eye === 'all' && N[1].eye === 'on' && N[2].eye === 'off' && N.find((n) => n.id === 'leds').eye === 'on', '눈 단추: 숨긴 부품 off · 머리 = 모두 보기 · 직접 배치 LED 도 있음');
   ok(treeNodes(M, { node: null, line: null, hidden: [] }).find((n) => n.id === 'parts').eye === undefined, '숨긴 것 없으면 머리 눈 단추 없음');
   const h = treeHtml(M, { node: null, line: null, hidden: [1] });
@@ -403,6 +403,14 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   const walk = (d) => readdirSync(d).flatMap((f) => { const p = `${d}/${f}`; return statSync(p).isDirectory() ? walk(p) : /\.(js|html)$/.test(f) ? [p] : []; });
   const bad = walk('src').filter((p) => /(?<!붙)\uC7A1\uC74C/.test(readFileSync(p, 'utf8')));
   if (bad.length) throw new Error(`src 에 옛 용어 남음 ${bad.slice(0, 3).join()}`);
+}
+{ // 부품 리스트 정리(2026-11-03): 관측면 맨 위 · 목표 노드 없음 · LED 줄 = 원설계 대비 Δx Δy Δz 만
+  const { ledDeltaXYZ, ledChange } = await import('../src/ui/m3/led-change.js');
+  const N0 = treeNodes(M, { node: null, line: { kind: 'line', length: 100, width: 7 }, hidden: [], hideLeds: false });
+  ok(N0[0].id === 'obs' && N0[0].top && N0[0].badge.includes('100×7 mm') && N0[0].badge.includes('목표') && !N0.some((n) => n.id === 'target') && N0.filter((n) => n.id === 'obs').length === 1, `관측면 맨 위 · 목표 포함: ${N0[0].badge}`);
+  const c = ledChange([{ s: 0, w: 0, pos: [0, 0, 0] }, { s: 10, w: 0, pos: [10, 0, 0] }], [{ s: 0, w: 0, pos: [0, 0, 0], n: 0 }, { s: 12, w: -1, pos: [12, 0, -1], n: 1 }, { s: 40, w: 0, pos: [40, 0, 0], n: 2 }]);
+  ok(ledDeltaXYZ(c.rows[0]) === '' && ledDeltaXYZ(c.rows[1]) === 'Δx +2 Δz −1' && ledDeltaXYZ(c.rows[2]) === '추가' && ledDeltaXYZ(null) === '', `Δ 표시: ${ledDeltaXYZ(c.rows[1])}`);
+  ok(ledDeltaXYZ({ state: 'same', d: [0, 0, 3] }) === 'Δz +3', '높이만 바뀌어도 표시');
 }
 done();
 

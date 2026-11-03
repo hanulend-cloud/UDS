@@ -6,7 +6,7 @@
 import { getMech3d, getLedMesh, setLedMesh, saveLedIDB, applyPartMods, redetectContacts } from '../../engine/mech3d/runtime.js';
 import { createMonitor } from './monitor.js';
 import { reportError } from '../error-log.js';
-import { ledChange, ledDeltaText, pitchOf } from './led-change.js';
+import { ledChange, ledDeltaText, ledDeltaXYZ, pitchOf } from './led-change.js';
 import { installCommitInputs } from './commit-input.js';
 import { createHistory } from './history.js';
 import { mountSplit } from './pane-split.js';
@@ -32,11 +32,11 @@ import { renderPropertyPanel } from './property-panel.js';
 import { meshInfo, clearDbHtml, clearAddFormHtml, reflAddFormHtml, wireMaterialDb, dbFormState } from '../mech3d-panel.js';
 import { isAdmin } from '../../model/admin.js';
 import { renderAdvanced } from '../l2-advanced.js';
-import { defaultRowGap, renderReflDb } from '../mech3d-light-panel.js';
+import { defaultRowGap, renderReflDb, setLpTab } from '../mech3d-light-panel.js';
 import { positionsFromLayout, addPosition, alignPositions } from '../../engine/mech3d/led-edit.js';
 import { createResultsPanel } from './results-panel.js';
 import { renderStatusBar, leakText } from './status-bar.js';
-import { createAdRunner } from './autodesign-run.js';
+import { createAdRunner, resumable } from './autodesign-run.js';
 import { renderAutoPanel, milkyTable, stageAvailability, clampCap, overallFrac, etaText, reusableCurrent, defaultHousingPart, applyDz, applyFinish, capDefault, nextFinish, finishText, shapeText, tileConfigHtml } from './autodesign-panel.js';
 import { ledHeightRange, heightCandidates, catalogOf, finishCandidatesFor, setReflMaterial, partFinishEdit } from '../../engine/mech3d/housing-led.js';
 import { migrateFinishCatalog, reflectPatch, copyAsUser, entryFromForm, addSamples, parsePercents, uniqueReflId } from '../../model/reflect-db.js';
@@ -103,7 +103,7 @@ export function command(id) {
     case 'deselect': st.update('session', (_, x) => { x.sel = null; x.ledSel = null; x.pick = null; x.focusCheck = null; }); break;
     case 'led-pick': h.onLed(); break;
     case 'obs-pick': h.onObs(); break;
-    case 'target': st.update('session', (_, x) => { x.node = 'target'; x.sel = null; x.ledSel = null; }); break;
+    case 'target': setLpTab('obs', 'basic'); st.update('session', (_, x) => { x.node = 'obs'; x.sel = null; x.ledSel = null; }); break;
     case 'calc': h.onToggleCalc(); break;
     case 'auto': adSetOpen(true); break;
     case 'export-mech': exportMechStep(); break;
@@ -1069,11 +1069,11 @@ async function adRun(opt = {}) {
     heightRange: (d) => adHeightRangeAt(designScene(d, ctx).M, line, rt, hInfo?.range ?? [0, 0]),   // ⑤ 후보 범위 = ② 로 옮긴 자리 기준
     async verify(d, { noise = null, from = null, screen = false, maxMs = 600000 } = {}) {   // screen = 화면 화질 격자로(칸이 작을수록 칸마다 광자가 적음 → 칸 비만큼 광자를 더). noise = 그 노이즈까지(잰 값에서 필요한 광자 수를 노이즈, 10 분 한도). 정밀 재판정(현재안·최종안): 250만 광자(최소 150만, 20초까지) — 광자가 적으면 균일도(최저÷최고)가 노이즈 때문에 낮게 나옴(6초 제한 때 0.69 vs 실제 0.78)
       const { M: Md, parts } = designScene(d, ctx);
-      const scr = screen && !lowQ, gridK = scr && !from?.screen ? Math.max(G.ds / Gs.ds, G.cell / Gs.cell) : 1, capN = 4e8 * (scr ? { mid: 2, high: 4 }[obsS.quality] ?? 1 : 1);
-      const eff0 = currentVerified?.eff ?? snap0.photometry?.eff, r = await R.trace(adJob(Md, parts, scr ? ctxS : ctx), noise ? { N: Math.ceil(Math.min(capN, 1.1 * gridK * (from?.photons ?? 5e7) * ((from?.stats?.relNoise ?? 0.01) / noise) ** 2)), maxMs, minN: 1.5e6, chunkN: 2e5, batches: 10, keepRaw: true } : { N: Math.ceil(Math.min(1.5e7, 5e6 * Math.max(1, 0.5 / (eff0 > 0 ? eff0 : 0.5)))), maxMs: d.shape?.kF ? 60000 : 45000, minN: 1.5e6, batches: 10, keepRaw: true });   // 효율이 낮으면 관측면에 닿는 빛이 적어 광자를 더. 실측: 20 초(노이즈 2%) 판정 0.73~0.76 vs 수렴값 0.78~0.79 — 노이즈가 칸 최소·최대를 벌려 낮게 나오므로 시간을 늘림(2026-11-03). 입광면 보정 메쉬는 추적이 느려 같은 시간이면 노이즈가 커져 현재안과 공정하게 비교가 안 됨 → 시간 더
+      const scr = screen && !lowQ, gridK = scr && !from?.screen ? Math.max(G.ds / Gs.ds, G.cell / Gs.cell) : 1, capN = 4e8 * (scr ? { mid: 2, high: 4 }[obsS.quality] ?? 1 : 1), sig = JSON.stringify(d), resume = noise ? resumable(from, sig, scr) : null;   // 같은 설계·격자를 더 정밀하게 잴 때는 앞 계산에 이어서(N = 전체 광자 수)
+      const eff0 = currentVerified?.eff ?? snap0.photometry?.eff, r = await R.trace(adJob(Md, parts, scr ? ctxS : ctx), noise ? { N: Math.ceil(Math.min(capN, 1.1 * gridK * (from?.photons ?? 5e7) * ((from?.stats?.relNoise ?? 0.01) / noise) ** 2)), maxMs, minN: 1.5e6, chunkN: 2e5, batches: 10, keepRaw: true, resume } : { N: Math.ceil(Math.min(1.5e7, 5e6 * Math.max(1, 0.5 / (eff0 > 0 ? eff0 : 0.5)))), maxMs: d.shape?.kF ? 60000 : 45000, minN: 1.5e6, batches: 10, keepRaw: true });   // 효율이 낮으면 관측면에 닿는 빛이 적어 광자를 더. 실측: 20 초(노이즈 2%) 판정 0.73~0.76 vs 수렴값 0.78~0.79 — 노이즈가 칸 최소·최대를 벌려 낮게 나오므로 시간을 늘림(2026-11-03). 입광면 보정 메쉬는 추적이 느려 같은 시간이면 노이즈가 커져 현재안과 공정하게 비교가 안 됨 → 시간 더
       const stt = scr ? tallyStats(Gs, r.batches, obsS) : tallyStats(G, r.batches, obs);
       A.optDash?.evals('final', [{ label: verifyLabel(d), Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty }]);
-      return { stats: stt, eff: adEff(r), photons: r.photons, screen: scr, raw: scr || lowQ ? r.kept : null };
+      return { stats: stt, eff: adEff(r), photons: r.photons, screen: scr, sig, raw: scr || lowQ ? r.kept : null };
     },
     trace: (stage, list) => A.optDash?.evals(stage, list),   // 엔진이 직접 알리는 결과(② 배치 Solver 최선안·대안)
   };
@@ -1638,7 +1638,7 @@ function cmdHandlers() {
     // ① LED 지정: 광원이 아직 없거나 발광 방향 미지정이면 먼저 자동 선택(같은 부품 2개 이상 · PCB 위 · PCB 반대쪽 발광) — 못 찾으면 기존 흐름
     onLed: () => { const L0 = A.store.mspec.light; if ((L0.kind === 'none' || (L0.kind === 'step' && !L0.step?.emitters?.length)) && autoMechLight(true)) return; A.store.update('session', (m, x) => { const stp = m.light.kind === 'step' && m.light.step; x.node = stp ? 'leds' : 'light'; x.pick = stp && !stp.virtual ? (x.pick === 'led' ? null : 'led') : null; }); },
     onObs: () => A.store.update('session', (_, x) => { x.node = 'obs'; x.pick = x.pick === 'obs' ? null : 'obs'; }),
-    onTarget: () => A.store.update('session', (_, x) => { x.node = 'target'; x.sel = null; x.ledSel = null; x.pick = null; }),
+    onTarget: () => { setLpTab('obs', 'basic'); A.store.update('session', (_, x) => { x.node = 'obs'; x.sel = null; x.ledSel = null; x.pick = null; }); },   // 목표 = 관측면 기본 탭
     onSection: () => A.store.update('view', (_, x) => {
       if (x.section) { x.section = null; return; }
       const b = bounds(getMech3d().combined.positions);
@@ -1709,7 +1709,7 @@ function ledLineS(LS, it) {
 // LED 목록 = 라인 위치 순(도면에 저장된 순서는 뒤섞여 있음) — rank = 화면에 보이는 번호(1부터), n = 내부 번호
 function ledRows(LS) {
   const chg = ledChangeNow();   // 원설계 대비 — 트리·목록에 표시
-  const rows = LS.list.map((it) => { const c = chg?.byN.get(it.n) ?? null; return { n: it.n, s: ledLineS(LS, it), excluded: it.excluded, chg: c, delta: ledDeltaText(c) }; }).sort((a, b) => (Number.isFinite(a.s) ? a.s : Infinity) - (Number.isFinite(b.s) ? b.s : Infinity) || a.n - b.n);
+  const rows = LS.list.map((it) => { const c = chg?.byN.get(it.n) ?? null; return { n: it.n, s: ledLineS(LS, it), excluded: it.excluded, chg: c, delta: ledDeltaText(c), dxyz: ledDeltaXYZ(c) }; }).sort((a, b) => (Number.isFinite(a.s) ? a.s : Infinity) - (Number.isFinite(b.s) ? b.s : Infinity) || a.n - b.n);
   rows.forEach((r, i) => { r.rank = i + 1; });
   return rows;
 }

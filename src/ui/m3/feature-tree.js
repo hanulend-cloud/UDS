@@ -1,5 +1,5 @@
-// 피처 트리 — spec 2026-10-15 m3-cad-ui §2: 부품(소재 배지) · 광원(LED 개수·피치) · 관측면(라인 종류·길이·폭) · 목표 · 접촉면.
-// 노드 id: 'parts' | 'part:i' | 'light' | 'leds' | 'obs' | 'target' | 'contacts'. 클릭 → h.onNode(id)
+// 피처 트리 — spec 2026-10-15 m3-cad-ui §2: 관측면(라인 종류·길이·폭 · 목표, 맨 위) · 부품(소재 배지) · 광원(LED 개수·피치) · 접촉면.
+// 노드 id: 'parts' | 'part:i' | 'light' | 'leds' | 'obs' | 'contacts'. 클릭 → h.onNode(id)
 import { PART_KINDS } from '../../engine/mech3d/materials.js';
 
 export const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -19,7 +19,9 @@ export function treeNodes(M, S, lay, leds = []) {
   const L = M.light, O = M.observe, out = [], hid = new Set(S.hidden ?? []), hl = new Set(S.hiddenLeds ?? []);
   const node = (id, label, badge, child = false, kind = '', eye, extra = {}) => out.push({ id, label, badge, child, kind, sel: S.node === id || (S.multi ?? []).includes(id), eye, depth: child ? 1 : 0, ...extra });
   const fold = (k, def = false) => (S.fold?.[k] ?? def);   // 접힘 상태(세션) — 광원으로 옮긴 부품 묶음은 기본 접힘
-  node('target', '◎ 목표', `${Math.round(O.targetLen * 100)}% / ${Math.round(O.targetWid * 100)}%`);   // 맨 위 — 무엇을 맞출지 먼저
+  // 관측면 = 맨 위(무엇을 어떻게 맞출지 먼저, 부품·광원과 성격이 달라 밑줄로 구분) · 목표는 관측면 속성에 포함(2026-11-03)
+  const ln = S.line, goal = `목표 ${Math.round(O.targetLen * 100)}/${Math.round(O.targetWid * 100)}%`;
+  node('obs', '◎ 관측면', ln ? `${LINE_KIND[ln.kind] ?? ln.kind} ${ln.length.toFixed(0)}×${ln.width.toFixed(0)} mm · ${goal}` : S.lineErr && O.faces.length ? '라인 인식 실패' : O.faces.length ? `면 ${O.faces.length}개 · 인식 중` : '미지정 — 클릭', false, '', undefined, { top: true });
   node('parts', '부품', String(M.parts.length), false, '', hid.size || S.hideLeds || hl.size ? 'all' : undefined, { fold: fold('parts') ? 'closed' : 'open' });
   // 그룹(2026-10-30): 사용자 그룹(M.groups) = 첫 부품 자리에 머리 + 펼치면 부품(들여쓰기 2단) · 그룹 밖 광원으로 옮긴 부품 = 자동 묶음 '_light'(기본 접힘)
   const gOf = new Map(), G = [...(M.groups ?? [])];
@@ -47,11 +49,8 @@ export function treeNodes(M, S, lay, leds = []) {
     const pit = (p) => (p > 0 ? `피치 ${+(+p).toFixed(1)}` : '균등');
     const chg = S.ledChange?.changed ? S.ledChange : null;
     node('leds', `LED ×${n}`, chg ? `원설계 ${chg.nOrig} → ${chg.nCur}개${chg.pitchCur.uniform ? '' : ' · 불규칙'}` : L.kind === 'manual' ? (L.manual.rows === 2 ? `${rw(L.manual)} ${pit(L.manual.pitch)}` : pit(L.manual.pitch)) : failed ? '배치 편집 실패' : vt ? (Array.isArray(vt.positions) ? '배치 편집' : `자동 ${rw(vt)} ${pit(vt.pitch)}`) : `${L.spec.beam}°`, true, 'led', S.hideLeds ? 'off' : 'on', leds.length ? { fold: fold('leds', ledFoldDefault(leds.length)) ? 'closed' : 'open', sel: S.node === 'leds' && S.ledSel == null, ...(chg ? { chg: true } : {}) } : (chg ? { chg: true } : {}));
-    if (leds.length && !fold('leds', ledFoldDefault(leds.length))) for (const r of leds) node(`led:${r.n}`, `LED ${r.rank}`, r.excluded ? '빛 끔' : Number.isFinite(r.s) ? `${r.s.toFixed(1)} mm${r.delta ? ` (${r.delta})` : ''}` : '', true, r.excluded ? 'off' : 'led', S.hideLeds || hl.has(r.n) ? 'off' : 'on', { depth: 2, sel: S.node === 'leds' && S.ledSel === r.n, strike: !!r.excluded });
+    if (leds.length && !fold('leds', ledFoldDefault(leds.length))) for (const r of leds) node(`led:${r.n}`, `LED ${r.rank}`, r.excluded ? '빛 끔' : r.dxyz ?? '', true, r.excluded ? 'off' : 'led', S.hideLeds || hl.has(r.n) ? 'off' : 'on', { depth: 2, sel: S.node === 'leds' && S.ledSel === r.n, strike: !!r.excluded });
   }
-  const ln = S.line;
-  // 관측면(하위 노드 없음 — ▾ 뺌): 라인 종류·길이×폭 mm · 면 수 / 인식 실패 / 미지정
-  node('obs', '관측면', ln ? `${LINE_KIND[ln.kind] ?? ln.kind} ${ln.length.toFixed(0)}×${ln.width.toFixed(0)} mm` : S.lineErr && O.faces.length ? '라인 인식 실패' : O.faces.length ? `면 ${O.faces.length}개 · 인식 중` : '미지정 — 클릭');
   return out;
 }
 // 그룹 연산(순수, 2026-10-30) — groups = [{ id, name, parts:[번호] }]. 새 그룹의 부품은 다른 그룹에서 빠지고, 빈 그룹은 지움
@@ -145,7 +144,7 @@ const renamable = (n) => n.id.startsWith('part:') || (n.id.startsWith('group:') 
 export function treeHead() {   // 그룹 단추는 우클릭 메뉴로 옮김(2026-10-30)
   return '<div class="m3-h" title="클릭 = 속성 편집 · Ctrl+클릭 = 여러 개 · Shift+클릭 = 범위 · 우클릭 = 그룹 만들기·해제·이름 바꾸기">부품 리스트 <span class="mut m3-tree-tip">우클릭 = 그룹</span></div>';
 }
-export const treeHtml = (M, S, lay, leds) => `${treeHead(M, S)}${treeNodes(M, S, lay, leds).map((n) => `<div class="m3-node ${n.chg ? 'chg ' : ''}${n.child ? 'child' : ''} d${n.depth ?? 0}${n.id.startsWith('group:') ? ' grp' : ''} ${n.sel ? 'sel' : ''} ${n.eye === 'off' ? 'hid' : ''}${n.strike ? ' untr' : ''}" role="button" tabindex="0"${n.sel ? ' aria-current="true"' : ''} data-node="${esc(n.id)}">${caret(n)}${eyeHtml(n)}<span class="m3-lbl"${renamable(n) ? ' data-lbl title="더블클릭: 이름 바꾸기"' : ''}>${esc(n.label)}</span> <span class="${n.child && !n.id.startsWith('group:') ? `m3-badge k-${esc(n.kind)}` : 'b'}">${esc(n.badge)}</span></div>`).join('')}`;
+export const treeHtml = (M, S, lay, leds) => `${treeHead(M, S)}${treeNodes(M, S, lay, leds).map((n) => `<div class="m3-node ${n.chg ? 'chg ' : ''}${n.child ? 'child' : ''} d${n.depth ?? 0}${n.id.startsWith('group:') ? ' grp' : ''} ${n.sel ? 'sel' : ''} ${n.eye === 'off' ? 'hid' : ''}${n.strike ? ' untr' : ''}${n.top ? ' m3-top' : ''}" role="button" tabindex="0"${n.sel ? ' aria-current="true"' : ''} data-node="${esc(n.id)}">${caret(n)}${eyeHtml(n)}<span class="m3-lbl"${renamable(n) ? ' data-lbl title="더블클릭: 이름 바꾸기"' : ''}>${esc(n.label)}</span> <span class="${n.child && !n.id.startsWith('group:') ? `m3-badge k-${esc(n.kind)}` : 'b'}">${esc(n.badge)}</span></div>`).join('')}`;
 // 작은 우클릭 메뉴(화면 고정 위치) — 바깥 클릭·Esc·창 벗어남 = 닫기
 export function showCtxMenu(doc, x, y, items, onPick, host = doc.body) {   // host = 테마 변수를 물려받을 곳
   doc.querySelector('.m3-ctx')?.remove();

@@ -223,12 +223,12 @@ export function renderLedProps(el, m, ui, h) {
 // 관측면 노드: 면 클릭(추가/제거) · 라인 인식 결과 · 관측 방향 · 원뿔 · 집계 격자 · 가장자리 제외
 // ui = { pick, lineInfo, lineErr, auto:{cellS,cellW,winS}|null, dir }, h = { onPick, onClearObs(), onRetryLine(), onObsDir(v|null), onObs(key, v|null) }
 export function renderObserveProps(el, m, ui, h) {
-  const O = m.observe, R = ui.result ?? null, tab = LP_TAB.obs;
+  const O = m.observe, C = m.checks ?? {}, R = ui.result ?? null, tab = LP_TAB.obs;
   const pass = (v, tg) => (Number.isFinite(v) ? `<b class="${v + 1e-9 >= tg ? 'ok' : 'bad'}">${(Math.floor(v * 100 + 1e-9) / 100).toFixed(2)}</b>` : '<span class="mut">–</span>');
   const verdict = (v, tg) => (Number.isFinite(v) ? (v + 1e-9 >= tg ? ' <span class="ok">✓</span>' : ` <span class="bad" title="목표까지 ${(tg - v).toFixed(2)}">✕</span>`) : '');
   const ln = ui.line ?? null, nF = O.faces.length;
   const state = !nF ? '<span class="warn">아직 지정 안 함</span>' : ui.lineErr ? `<span class="warn">면 ${nF}개 · 라인 인식 실패</span>` : ln ? `<b>면 ${nF}개</b> · ${esc(ui.lineInfo ?? '')}` : `면 ${nF}개 · <span class="mut">라인 인식 중</span>`;
-  // 기본 탭(2026-10-30 정리): ① 어디를 보나(면 지정·상태) ② 목표와 지금 결과(한 표)
+  // 기본 탭(2026-10-30 정리, 2026-11-03 목표 통합): ① 어디를 보나(면 지정·상태) ② 목표와 지금 결과(한 표) · 밝기 목표
   const basic = `<div class="m3-card"><div class="m3-sub">관측면 — 빛이 고르게 보여야 하는 면</div>
       <div class="m3-row">${state}</div>
       <div class="m3-row">${pickBtn(ui, 'obs', ui.pick === 'obs' ? '클릭 대기 중 — 끝내기' : nF ? '면 더하기 / 빼기' : '👁 3D 에서 면 클릭')} ${nF ? '<button data-lp-clear>모두 지우기</button>' : ''} ${ui.lineErr ? '<button data-lp-reline>라인 다시 인식</button>' : ''}</div>
@@ -238,27 +238,30 @@ export function renderObserveProps(el, m, ui, h) {
       <table class="m3-cmp m3-obs-t"><tr><th></th><th>목표</th><th>지금${O.faces.length ? '' : ' <span class="mut">(관측면 먼저)</span>'}</th></tr>
         <tr><th>길이 균일도</th><td><input type="number" min="0" max="1" step="0.05" value="${O.targetLen}" data-lp-tgt="targetLen" aria-label="길이 균일도 목표"></td><td>${pass(R?.Ulen, O.targetLen)}${verdict(R?.Ulen, O.targetLen)}</td></tr>
         <tr><th>폭 균일도</th><td><input type="number" min="0" max="1" step="0.05" value="${O.targetWid}" data-lp-tgt="targetWid" aria-label="폭 균일도 목표"></td><td>${pass(R?.Uwid, O.targetWid)}${verdict(R?.Uwid, O.targetWid)}</td></tr></table>
-      <div class="m3-row mut">균일도 = 가장 어두운 곳 ÷ 가장 밝은 곳 (1 = 완전히 고름)</div></div>`;
-  // 상세 탭: 묶음별 카드 — 라인 · 보는 방향 · 보는 범위 · 계산 격자 · 계산 정확도
-  const detail = `<div class="m3-card"><div class="m3-sub">관측 라인 <span class="mut">(관측면에서 자동 인식 — 길이·폭 방향의 기준)</span></div>
-      <div class="m3-row">${ui.lineInfo ? esc(ui.lineInfo) : '<span class="mut">관측면을 지정하면 인식</span>'}</div>
-      ${ui.lineErr ? `<div class="m3-row"><span class="warn">${esc(ui.lineErr)}</span> <button data-lp-reline>라인 다시 인식</button></div>` : ''}</div>
-    ${nF ? `<div class="m3-card"><div class="m3-sub">보는 방향 <span class="mut">${O.dir ? '(직접 지정)' : '(자동 = 면에 수직)'}</span></div>
+      <div class="m3-row mut">균일도 = 가장 어두운 곳 ÷ 가장 밝은 곳 (1 = 완전히 고름)</div>
+      <div class="m3-row"><label>밝기 목표</label><input type="number" min="0" step="10" value="${O.targetLum ?? ''}" placeholder="없음" data-lp-tgt="targetLum" data-lp-auto aria-label="평균 휘도 목표 cd/m²"> cd/m² <span class="mut">선택 · LED 밝기(lm) 입력 필요</span></div></div>`;
+  // 상세 탭: 보는 방향 · 보는 범위 · 계산 · 설계 점검 기준(라인 상태·다시 인식은 기본 탭)
+  const detail = `${nF ? `<div class="m3-card"><div class="m3-sub">보는 방향 <span class="mut">${O.dir ? '(직접 지정)' : '(자동 = 면에 수직)'}</span></div>
       <div class="m3-row">x<input type="number" step="0.1" value="${numIn(ui.dir?.[0], 3)}" data-lp-dir="0"> y<input type="number" step="0.1" value="${numIn(ui.dir?.[1], 3)}" data-lp-dir="1"> z<input type="number" step="0.1" value="${numIn(ui.dir?.[2], 3)}" data-lp-dir="2"> ${O.dir ? '<button data-lp-dirauto>자동으로</button>' : ''}</div></div>` : ''}
     <div class="m3-card"><div class="m3-sub">보는 범위</div>
       <div class="m3-row"><label>보는 각도 ±</label><input type="number" min="2" max="90" step="1" value="${O.cone}" data-lp-obs="cone">° <span class="mut">90 = 모든 방향(확산면 밝기) · 좁히면 정면에서 본 밝기(계산 노이즈 큼)</span></div>
       <div class="m3-row"><label>가장자리 제외</label><input type="number" min="0" step="0.1" value="${O.edgeExcl}" data-lp-obs="edgeExcl">mm <span class="mut">테두리 근처는 균일도 판정에서 뺌</span></div></div>
-    <div class="m3-card"><div class="m3-sub">계산 격자 <span class="mut">(빈칸 = 자동)</span></div>
+    <div class="m3-card"><div class="m3-sub">계산 <span class="mut">(칸 빈칸 = 자동)</span></div>
       <div class="m3-row"><label>길이 칸</label><input type="number" min="0.2" step="0.5" value="${O.cellS ?? ''}" placeholder="${autoPh(ui.auto?.cellS)}" data-lp-obs="cellS" data-lp-auto>mm <label>폭 칸</label><input type="number" min="0.1" step="0.1" value="${O.cellW ?? ''}" placeholder="${autoPh(ui.auto?.cellW)}" data-lp-obs="cellW" data-lp-auto>mm</div>
-      <div class="m3-row"><label>폭 판정 창</label><input type="number" min="1" step="1" value="${O.winS ?? ''}" placeholder="${autoPh(ui.auto?.winS)}" data-lp-obs="winS" data-lp-auto>mm <span class="mut">폭 균일도를 볼 때 길이 방향으로 묶는 길이</span></div></div>
-    <div class="m3-card"><div class="m3-sub">계산 정확도</div>
-      <div class="m3-row"><label>오차 목표</label><input type="number" min="0.2" max="20" step="0.5" value="${num((O.targetNoise ?? 0.01) * 100, 1)}" data-lp-tgt="targetNoise" data-lp-pct>% <span class="mut">이 오차 이하가 되면 계산을 멈춤(작을수록 오래 걸림)</span></div></div>`;
+      <div class="m3-row"><label>폭 판정 창</label><input type="number" min="1" step="1" value="${O.winS ?? ''}" placeholder="${autoPh(ui.auto?.winS)}" data-lp-obs="winS" data-lp-auto>mm <span class="mut">폭 균일도를 볼 때 길이 방향으로 묶는 길이</span></div>
+      <div class="m3-row"><label>오차 목표</label><input type="number" min="0.2" max="20" step="0.5" value="${num((O.targetNoise ?? 0.01) * 100, 1)}" data-lp-tgt="targetNoise" data-lp-pct>% <span class="mut">이 오차 이하가 되면 계산을 멈춤(작을수록 오래 걸림)</span></div></div>
+    <div class="m3-card"><div class="m3-sub">설계 점검 기준</div>
+      <div class="m3-row"><label>최소 살두께</label><input type="number" min="0.1" step="0.1" value="${C.minWall}" data-lp-chk="minWall"> mm</div>
+      <div class="m3-row"><label>최소 도달률</label><input type="number" min="0" max="100" step="5" value="${num(C.minReach * 100, 0)}" data-lp-chk="minReach" data-lp-pct>%</div>
+      <div class="m3-row"><label>새는 빛 한도</label><input type="number" min="0" max="100" step="5" value="${num(C.maxLeak * 100, 0)}" data-lp-chk="maxLeak" data-lp-pct>%</div></div>`;
   const dSum = [O.dir ? '방향 지정' : '', O.cone !== 90 ? `원뿔 ±${O.cone}°` : ''].filter(Boolean).join(' · ');
   el.innerHTML = `<div class="m3-h">속성 · 관측면</div>${tabsHtml('obs', dSum)}<div class="m3-edit" role="tabpanel">${tab === 'basic' ? basic : detail}</div>`;
   wireTabs(el, 'obs', () => renderObserveProps(el, m, ui, h));
   wirePick(el, ui, h);
   on(el, '[data-lp-obs]', 'change', (x) => { const v = readNum(x); if (v != null || 'lpAuto' in x.dataset) h.onObs(x.dataset.lpObs, v); });   // 자동 칸은 빈칸 = null
-  on(el, '[data-lp-tgt]', 'change', (x) => { const v = readNum(x); if (v != null) h.onTarget?.(x.dataset.lpTgt, 'lpPct' in x.dataset ? v / 100 : v); });
+  const val = (x) => { const v = readNum(x); return v == null ? null : 'lpPct' in x.dataset ? v / 100 : v; };
+  on(el, '[data-lp-tgt]', 'change', (x) => { const v = val(x); if (v != null || 'lpAuto' in x.dataset) h.onTarget?.(x.dataset.lpTgt, v); });   // 밝기 목표는 빈칸 = 없음
+  on(el, '[data-lp-chk]', 'change', (x) => { const v = val(x); if (v != null) h.onCheckParam?.(x.dataset.lpChk, v); });
   on(el, '[data-lp-clear]', 'click', () => h.onClearObs());
   on(el, '[data-lp-dir]', 'change', () => {
     const xs = [0, 1, 2].map((k) => el.querySelector(`[data-lp-dir="${k}"]`));
@@ -290,27 +293,6 @@ export function reflDbHtml(cat, ui = {}) {
 }
 const DB_ADD = new WeakMap();   // 패널 요소 → 측정값 추가 중인 id
 
-// 목표 노드: 균일도(길이·폭) · 평균 휘도 · 노이즈 목표 · 설계 점검 기준
-// h = { onTarget(key, v|null), onCheckParam(key, v), onCatalog(id, key, v), onReflDb(op, id?, arg?) } — % 칸(data-lp-pct)은 0~1 로 바꿔 넘김 · cat = 반사 소재표 행(catalogOf(DB))
-// onReflDb op: 'rename'(id, 이름) · 'samples'(id, { values, cond, note } → 오류 문구|없음) · 'remove'(id) · 'copy'(id) · 'export' · 'import'(_, 텍스트)
-// 목표 노드(쉽게): 길이·폭 균일도 % 두 칸 + (선택) 밝기 목표. 계산 오차·설계 점검 기준은 접는 구역. 반사 소재 DB 는 부품 상세 탭으로 옮김
-export function renderTargetProps(el, m, h) {
-  const O = m.observe, C = m.checks, pc = (v) => Math.round(v * 100);
-  el.innerHTML = `<div class="m3-h">속성 · 목표</div>
-    <div class="m3-card"><div class="m3-sub">균일도 목표 <span class="mut">가장 어두운 곳 ÷ 가장 밝은 곳</span></div>
-      <div class="m3-row"><label>길이 방향</label><input type="number" min="0" max="100" step="5" value="${pc(O.targetLen)}" data-lp-tgt="targetLen" data-lp-pct aria-label="길이 방향 균일도 목표 %"> %</div>
-      <div class="m3-row"><label>폭 방향</label><input type="number" min="0" max="100" step="5" value="${pc(O.targetWid)}" data-lp-tgt="targetWid" data-lp-pct aria-label="폭 방향 균일도 목표 %"> %</div></div>
-    <div class="m3-card"><div class="m3-row"><label>밝기 목표</label><input type="number" min="0" step="10" value="${O.targetLum ?? ''}" placeholder="없음" data-lp-tgt="targetLum" data-lp-auto aria-label="평균 휘도 목표 cd/m²"> cd/m² <span class="mut">선택 · LED 밝기(lm) 입력 필요</span></div></div>
-    ${secHtml('tgtadv', '계산 · 설계 점검 기준', '', `
-      <div class="m3-row"><label>계산 오차 목표</label><input type="number" min="0.2" max="20" step="0.5" value="${num((O.targetNoise ?? 0.01) * 100, 1)}" data-lp-tgt="targetNoise" data-lp-pct>% <span class="mut">이하가 되면 계산 멈춤</span></div>
-      <div class="m3-row"><label>최소 살두께</label><input type="number" min="0.1" step="0.1" value="${C.minWall}" data-lp-chk="minWall"> mm</div>
-      <div class="m3-row"><label>최소 도달률</label><input type="number" min="0" max="100" step="5" value="${num(C.minReach * 100, 0)}" data-lp-chk="minReach" data-lp-pct>%</div>
-      <div class="m3-row"><label>새는 빛 한도</label><input type="number" min="0" max="100" step="5" value="${num(C.maxLeak * 100, 0)}" data-lp-chk="maxLeak" data-lp-pct>%</div>`)}`;
-  wireSections(el);
-  const val = (x) => { const v = readNum(x); return v == null ? null : 'lpPct' in x.dataset ? v / 100 : v; };
-  on(el, '[data-lp-tgt]', 'change', (x) => { const v = val(x); if (v != null || 'lpAuto' in x.dataset) h.onTarget(x.dataset.lpTgt, v); });
-  on(el, '[data-lp-chk]', 'change', (x) => { const v = val(x); if (v != null) h.onCheckParam(x.dataset.lpChk, v); });
-}
 // 반사 소재 DB(편집·측정값 추가·복사·삭제·내보내기·불러오기) — 부품 상세 탭(불투명 부품)에 붙임. redraw = 다시 그리기(측정값 추가 양식 열고 닫기)
 export function renderReflDb(el, cat, h, redraw) {
   el.innerHTML = reflDbHtml(cat, { addFor: DB_ADD.get(el) ?? null });
