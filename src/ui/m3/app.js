@@ -849,7 +849,7 @@ async function realLightPaths(P, base, ledE, key, oa, nMech) {
     const ok = base[i].names && g.enter?.length === base[i].names.length;   // 이름표 = 그 부품에 처음 들어간 점
     return { ...base[i], pts: [...g.pts, tail], names: ok ? base[i].names : null, namePts: ok ? g.enter : null };
   }));
-  if (key !== pathKey || !pathsOn()) return;   // 그사이 경로가 바뀜·꺼짐
+  if (!A || key !== pathKey || !pathsOn()) return;   // 그사이 프로젝트를 닫음·경로가 바뀜·꺼짐
   A.view.setLightPaths(out);
 }
 // 관측면 빛 방향 화살표 — 고른 면들의 면적 가중 중심에서 관측 방향(d) 으로. 들어오는 빛(mode 'in') 이면 면을 향해 그림

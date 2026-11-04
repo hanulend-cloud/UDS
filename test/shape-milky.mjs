@@ -22,14 +22,26 @@ const run = (id) => !only || only.split(',').includes(id);
 const table = loadTable(), n = 1.59, rhoB = +(process.env.RHOB ?? 0.5), intensity = (c) => c;
 
 if (run('REG')) {
+  // 평판 PSF 격자 상한(생산 180)과 형상 PSF(255)가 달라 칸 번호가 같아도 위치가 다르다 — 같은 격자(255)로 맞춘 psf.js 를 따로 불러 같은 solver 인지 본다.
+  // 쿼리를 붙이면 별도 모듈(상한은 불러올 때 읽음) — 아래 VS7M 의 생산 경로는 그대로 180
+  globalThis.__psfCells = 255;
+  const { systemPsf: systemPsf255 } = await import('../src/engine/l2/psf.js?cells=255');
+  delete globalThis.__psfCells;
   for (const milky of [3, 7]) {
     const mat = l2Material(table, milky, n), t = 2, depth = 10, W = 200;
     const geom = { hf: heightfieldFromFn(W, W, 1, () => 0, () => -t), ox: W / 2, oy: W / 2, walls: { x0: 0, x1: W, y0: 0, y1: W }, key: `reg${milky}` };
-    const a = systemPsf({ table, mat, t, h: depth - t, rhoB, intensity, intensityKey: 'lam1', I0: 1, extentX: 200, extentY: 200, step: 1 });
+    const a = systemPsf255({ table, mat, t, h: depth - t, rhoB, intensity, intensityKey: 'lam1', I0: 1, extentX: 200, extentY: 200, step: 1 });
     const b = milkyPsf(geom, depth, { x: 100, y: 100 }, { table, mat, rhoB, intensity, intensityKey: 'lam1', I0: 1, extentX: 200, extentY: 200, step: 1 });
+    if (a.K.kNx !== b.K.kNx || a.K.stepX !== b.K.stepX) { ok(false, `REG Milky ${milky}: 격자가 달라 비교 불가 (${a.K.kNx} s=${a.K.stepX} / ${b.K.kNx} s=${b.K.stepX})`); continue; }
     let md = 0, mx = 0; for (const v of a.K.data) mx = Math.max(mx, v);
     for (let k = 0; k < a.K.data.length; k++) if (a.K.data[k] > 1e-3 * mx) md = Math.max(md, Math.abs(b.K.data[k] / a.K.data[k] - 1));
     ok(md < 1e-6 && Math.abs(b.trans / a.trans - 1) < 1e-9, `REG Milky ${milky} 평판: 로컬 슬래브 PSF = L2 PSF (최대 상대차 ${md.toExponential(1)}, 투과 ${b.trans.toFixed(4)})`);
+    // 생산 격자(평판 180 · 형상 255): 같은 위치(10 mm 배수 = 양쪽 공통 노드)끼리 1% 안 · 투과 0.1% 안
+    const p = systemPsf({ table, mat, t, h: depth - t, rhoB, intensity, intensityKey: 'lam1', I0: 1, extentX: 200, extentY: 200, step: 1 }), P = p.K;
+    const at = (K, x, y) => K.data[Math.round((y - K.dyMin) / K.stepY) * K.kNx + Math.round((x - K.dxMin) / K.stepX)];
+    let mp = 0, dp = 0; for (const v of P.data) mp = Math.max(mp, v);
+    for (let y = -90; y <= 90; y += 10) for (let x = -90; x <= 90; x += 10) { const v = at(P, x, y); if (v > 1e-3 * mp) dp = Math.max(dp, Math.abs(at(b.K, x, y) / v - 1)); }
+    ok(P.kNx !== b.K.kNx && dp < 0.01 && Math.abs(b.trans / p.trans - 1) < 1e-3, `REG Milky ${milky} 생산 격자(${P.kNx}·${b.K.kNx}칸): 같은 위치 최대 상대차 ${(dp * 100).toFixed(2)}% · 투과차 ${(Math.abs(b.trans / p.trans - 1) * 100).toFixed(3)}%`);
   }
 }
 

@@ -219,8 +219,12 @@ function clearShape() {
 
 // ---- 상단 메뉴(파일·편집·보기·계산·설정·도움말) ----
 function resetAll() { projFile?.clear(); spec = structuredClone(DEFAULT_SPEC); markSoloReset(); mount(); m3app.unmount(); m3app.resetWorkers(); applyMode(); schedule(); }
-function newProject() {
+const NO_SERVER = '프로그램 서버에 연결되지 않습니다 — serve.py 가 꺼져 있을 수 있습니다. 서버를 다시 켠 뒤 새로고침(Ctrl+F5) 하세요.';
+async function newProject() {
   if (!confirm('지금 프로젝트를 닫고 예제 프로젝트로 새로 시작할까요?\n(파일로 저장하지 않은 작업은 사라집니다 — 먼저 [파일 › 다른 이름으로 저장] 권장)')) return;
+  // 예제를 받을 수 있는지 먼저 확인 — 못 받으면 지금 프로젝트를 닫지 않음
+  try { const r = await fetch('data/projects/v3.json', { cache: 'no-store' }); if (!r.ok) throw new Error(String(r.status)); }
+  catch { alert(`예제 프로젝트를 열 수 없습니다. 지금 프로젝트는 그대로 둡니다.\n${NO_SERVER}`); return; }
   projFile?.clear(); m3app.unmount(); spec.mech3d = null; spec.mech3dPending = null; spec.mode = 'mech3d'; persist(); applyMode(); loadSampleProject(false);
 }
 const GUIDE = `사용 순서 (3D 기구 설계)
@@ -383,7 +387,7 @@ async function loadSampleProject(ask = true) {
       for (let i = 0; i < 200 && !m3app.isMounted(); i++) await new Promise((r) => setTimeout(r, 100));
       m3app.importLed(led);
     });
-  } catch (e) { say(`예제 프로젝트 불러오기 실패: ${e.message ?? e}`); }
+  } catch (e) { say(`예제 프로젝트 불러오기 실패: ${e instanceof TypeError ? NO_SERVER : e.message ?? e}`); }
 }
 // 기구 STEP 불러오기(평판·3D 모드 공통) — spec.mech3d 를 새로 만들고 3D 모드로
 function importMech3d(file, onDone = null) {
