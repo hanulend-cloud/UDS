@@ -1,9 +1,10 @@
+import { setCtl } from './run-ctl.js';
 // ⑤ 기구 최적화 창 — 화면 안에 떠 있는 창(2026-10-29). 기본 화면에는 설계와 ④ 광분포 시뮬레이션만 두고,
 // 기구 최적화에 관한 칸('설계 인자 현황' · 기구 최적화 실행·항목·결과)은 처음부터 이 창 안에 옮겨 둔다(같은 DOM — 연결·갱신 그대로).
 // 명령줄 [5 기구 최적화] 로 열고 닫음(닫으면 숨김 — 기본 화면으로 돌아가지 않음). 끌어서 옮기기(머리) · 크기 조절(상하좌우·모서리) · 접기(제목과 현재 결과만).
 // 열림·위치·크기·접힘 = 보는 사람별(uds.m3.opt)
 const KEY = 'uds.m3.opt', MIN_W = 320, MIN_H = 160;
-export const COLLAPSED_W = 590;   // 접은 창 폭 — 제목·현재 결과 1~2개·단추만
+export const COLLAPSED_W = 720;   // 접은 창 폭 — 제목·현재 결과 1~2개·단추만
 export const DEF_RECT = { x: null, y: 80, w: 1040, h: 680 };   // x null = 오른쪽에 붙임 · 넓게(왼쪽 설계 인자 | 오른쪽 실행·진행, 2026-10-30)
 const LAY = 2;   // 창 배치 판 — 예전(세로 쌓기, 폭 540) 저장값은 위치·크기를 새 기본으로
 
@@ -62,7 +63,7 @@ export function createMonitor({ host, items, onChange = () => {} }) {
   const place = () => { const r = clampRect(st.min ? { ...st, w: COLLAPSED_W } : st, innerWidth, innerHeight); st.x = r.x; st.y = r.y; if (!st.min) { st.w = r.w; st.h = r.h; } el.style.left = `${r.x}px`; el.style.top = `${r.y}px`; el.style.width = `${r.w}px`; el.style.height = st.min ? 'auto' : `${r.h}px`; };
   const kick = () => window.dispatchEvent(new Event('resize'));   // 담은 칸의 그래프·캔버스 크기 다시
   el.className = 'm3-mon'; el.hidden = true; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', '기구 최적화');
-  el.innerHTML = `<div class="m3-mon-hd" title="끌어서 옮기기"><b><i class="m3-fl">5</i>기구 최적화</b><span class="mut m3-mon-flow" title="④ 광분포 시뮬레이션이 목표 미달이면 여기서 Milky·LED 위치·형상 후보를 찾아 최종 화질로 판정하고, [적용] 하면 그 값이 화면에 그대로 나옴">④ 결과 미달 → 후보 탐색 → 최종 판정 → 적용</span><span class="m3-mon-sum" data-mon-sum></span><span class="m3-mon-sp"></span><button type="button" class="m3-min-run" data-mon-run></button><button type="button" data-mon-min></button><button type="button" data-mon-close title="창 닫기(진행 중인 최적화는 계속)">✕ 닫기</button></div><div class="m3-mon-body"></div>`;
+  el.innerHTML = `<div class="m3-mon-hd" title="끌어서 옮기기"><b><i class="m3-fl">5</i>기구 최적화</b><span class="mut m3-mon-flow" title="④ 광분포 시뮬레이션이 목표 미달이면 여기서 Milky·LED 위치·형상 후보를 찾아 최종 화질로 판정하고, [적용] 하면 그 값이 화면에 그대로 나옴">④ 결과 미달 → 후보 탐색 → 최종 판정 → 적용</span><span class="m3-mon-sum" data-mon-sum></span><span class="m3-mon-sp"></span><span class="m3-ctl m3-min-run" data-mon-ctl></span><button type="button" data-mon-min></button><button type="button" data-mon-close title="창 닫기(진행 중인 최적화는 계속)">✕ 닫기</button></div><div class="m3-mon-body"></div>`;
   const body = el.querySelector('.m3-mon-body');
   for (const it of items.filter(Boolean)) body.appendChild(it);   // 기본 화면에서 빼서 창 안으로(닫아도 여기 그대로)
   host.appendChild(el);
@@ -92,7 +93,6 @@ export function createMonitor({ host, items, onChange = () => {} }) {
   if (st.open) { st.open = false; queueMicrotask(open); }   // 지난번에 열어 둔 채였으면 다시 엶
   // 접었을 때 보일 현재 결과(글 1~2개) — html
   const setSummary = (html) => { const q = el.querySelector('[data-mon-sum]'); if (q && q._h !== html) { q._h = html; q.innerHTML = html; } };
-  // 접은 창의 실행 단추 — { label, title, disabled, fn }
-  const setRun = ({ label, title = '', disabled = false, fn }) => { const b = el.querySelector('[data-mon-run]'); if (b.textContent !== label) b.textContent = label; b.title = title; b.disabled = disabled; b.onclick = fn; };
-  return { open, close, toggle: () => (st.open ? close() : open()), isOpen: () => st.open, el, setSummary, setRun };
+  const setRunCtl = (c, fn) => setCtl(el.querySelector('[data-mon-ctl]'), c, fn);   // 접은 창의 실행·일시정지·중지
+  return { open, close, toggle: () => (st.open ? close() : open()), isOpen: () => st.open, el, setSummary, setCtl: setRunCtl };
 }

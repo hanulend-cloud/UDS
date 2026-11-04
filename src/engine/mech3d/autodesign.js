@@ -444,6 +444,7 @@ export async function runAutoDesign(cfg, io) {
   let d = { ...cfg.current }, feasible = true, reason = '', hint = null, ledAlts = null, ledMore = null, ledLimit = null;
   const stop = () => io.cancelled?.();
   if (stop()) return { cancelled: true };
+  const clock = io.now ?? Date.now;   // 일시정지한 시간은 빼고 잼
   io.progress?.('current', 0, '현재안 계산');   // 비교표 '현재' 열 — 최종안과 같은 추정기(io.verify). 수렴한 점진 결과가 있으면 재사용
   let currentVerified = cfg.currentVerified ?? await io.verify(d);
   if (stop()) return { cancelled: true };
@@ -663,9 +664,9 @@ export async function runAutoDesign(cfg, io) {
     const mgOf = (t) => mgFix(t.verified.stats);
     let more = false;
     if (ledMore && !tried.some((t) => mgOf(t) >= 0)) {
-      const cap = mgFix(currentVerified.stats) >= 0 ? Math.min(cfg.nMax, totalLeds(cfg.current) - 1) : cfg.nMax, t0 = Date.now();
+      const cap = mgFix(currentVerified.stats) >= 0 ? Math.min(cfg.nMax, totalLeds(cfg.current) - 1) : cfg.nMax, t0 = clock();
       let n = Math.max(...tried.map((t) => totalLeds(t.design))) + 1, top = Math.max(...tried.map(mgOf)), stall = 0;
-      while (n <= cap && stall < 2 && Date.now() - t0 < (cfg.ladderMs ?? LADDER_MS)) {
+      while (n <= cap && stall < 2 && clock() - t0 < (cfg.ladderMs ?? LADDER_MS)) {
         if (stop()) return { cancelled: true };
         const L = ledMore(n);
         if (L) {
@@ -681,9 +682,9 @@ export async function runAutoDesign(cfg, io) {
     }
     // 후보 추정은 노이즈로 개수를 많이 잡기 쉬움 — 적은 쪽도 정밀 재계산으로 확인(최종 목표 = LED 를 많이 쓰지 않음). 통과면 통과하는 동안, 못 닿으면 나빠지지 않는 동안 줄임
     if (ledMore && !tried.slice(1).some((t) => mgOf(t) >= 0)) {
-      const t0 = Date.now(), best0 = Math.max(...tried.map(mgOf)), passed = best0 >= 0;
+      const t0 = clock(), best0 = Math.max(...tried.map(mgOf)), passed = best0 >= 0;
       let n = Math.min(...tried.map((t) => totalLeds(t.design))) - 1;
-      while (n >= 1 && Date.now() - t0 < (cfg.ladderMs ?? LADDER_MS)) {
+      while (n >= 1 && clock() - t0 < (cfg.ladderMs ?? LADDER_MS)) {
         if (stop()) return { cancelled: true };
         const L = ledMore(n);
         if (!L) break;

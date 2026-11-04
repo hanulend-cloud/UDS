@@ -1,6 +1,5 @@
 // CAD UI 순수 도우미(DOM 없이): node test/m3-ui-pure.mjs
 import { treeNodes, partBadge, renderFeatureTree, treeHtml, toggleVisibility, esc as escT } from '../src/ui/m3/feature-tree.js';
-import { calcLabel } from '../src/ui/m3/command-bar.js';
 import { judgeText, lumCard, fmtU, buildLut, NO_DATA_RGB, DEFAULT_GUIDE } from '../src/ui/m3/results-panel.js';
 import { checkLabels, statusWord, statusIcon, checkAria, isActivateKey, esc as escS } from '../src/ui/m3/status-bar.js';
 import { ramp, NO_DATA } from '../src/ui/m3/colormap.js';
@@ -31,8 +30,6 @@ const card = (o) => autoCardHtml(o) + ['milky', 'leds', 'shape', 'housing', 'hei
   const N2 = treeNodes({ ...M, observe: defaultObserve() }, { node: null, line: null });
   ok(N2.find((n) => n.id === 'obs').badge === '미지정 — 클릭', '관측면 없음 → 미지정'); }
 ok(partBadge(setPartMaterial(defaultPart(0, 'p', 1), 'clear')).startsWith('투명 '), '투명 부품 배지 = 투명 + 투과율');
-ok(calcLabel({ state: 'running' }) === '⏸ 계산 중' && calcLabel({ state: 'paused' }) === '▶ 계산 재개' && calcLabel({ state: 'done', reason: 'converged' }).includes('완료')
-  && calcLabel({ state: 'done', reason: 'max' }).includes('한도') && calcLabel(null) === '▶ 계산' && calcLabel({ state: 'error' }).includes('다시'), '계산 버튼 문구');
 { const N = treeNodes({ ...M, light: { ...defaultLight(), kind: 'manual', manual: { ...defaultLight().manual, pitch: 11.6000001 } } }, { node: null, line: { kind: 'zigzag', closed: false, length: 99.6, width: 7.4 } });
   ok(N.find((n) => n.id === 'leds').badge === '피치 11.6' && N.find((n) => n.id === 'obs').badge === 'zigzag 100×7 mm · 목표 80/80%', `피치 반올림 · 모르는 라인 종류: ${N.find((n) => n.id === 'leds').badge} / ${N.find((n) => n.id === 'obs').badge}`); }
 { const el = { innerHTML: '', addEventListener() {}, contains: () => false, ownerDocument: null, querySelectorAll: () => [] };
@@ -67,7 +64,6 @@ ok(isActivateKey({ key: 'Enter' }) && isActivateKey({ key: ' ' }) && !isActivate
   ok(L instanceof Uint8Array && L.length === 768 && [0, 1, 2].every((k) => L[k] === Math.round(ramp(0)[k] * 255) && L[765 + k] === Math.round(ramp(1)[k] * 255) && L[384 + k] === Math.round(ramp(128 / 255)[k] * 255)), '256단계 색 표 = ramp');
   ok(n.every((v, k) => v === Math.round(NO_DATA[k] * 255)), '자료 없음 색 = colormap NO_DATA'); }
 ok(typeof DEFAULT_GUIDE === 'string' && DEFAULT_GUIDE.length > 0, '기본 안내 문구');
-ok(calcLabel({ state: 'starting' }) === '⏸ 장면 준비' && calcLabel({ state: 'pending' }) === '⏸ 계산 중', "calc 'starting' = 장면 준비");
 ok(JSON.stringify(judgeText(0.85, 0.8)) === '{"cls":"ok","text":"목표 0.80 · 합격"}' && judgeText(0.7, 0.8).cls === 'bad' && judgeText(0.7, 0.8).text === '목표 0.80 · 미달 −0.10' && judgeText(NaN, 0.8).cls === '', '판정 문구(합격·미달·값 없음)');
 { const st = { profile: Float64Array.from([1, 0.5, NaN]) };
   const rel = lumCard(st, { eff: 0.2, lum: null }, null), abs = lumCard(st, { eff: 0.2, lum: 1234.4 }, 1000), none = lumCard(st, { eff: 0.2, lum: 800 }, null);
@@ -436,6 +432,13 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   const open = treeNodes(base, { node: null, line: null }), shut = treeNodes(base, { node: null, line: null, fold: { light: true } });
   ok(open.find((n) => n.id === 'light').fold === 'open' && open.some((n) => n.id === 'leds') && shut.find((n) => n.id === 'light').fold === 'closed' && !shut.some((n) => n.id === 'leds'), '광원 접으면 LED 줄 숨김');
   ok(treeNodes({ ...base, light: { ...base.light, kind: 'none' } }, { node: null, line: null }).find((n) => n.id === 'light').fold === undefined, '광원 없음 = 접기 없음');
+}
+{ // 실행 · 일시정지 · 중지 단추(2026-11-04)
+  const { simCtl, optCtl } = await import('../src/ui/m3/run-ctl.js');
+  const on = (c) => ['run', 'pause', 'stop'].filter((k) => c[k]).join();
+  ok(on(simCtl({ state: 'running' })) === 'pause,stop' && on(simCtl({ state: 'paused' })) === 'run,stop' && on(simCtl({ state: 'paused', stopped: true })) === 'run' && on(simCtl({ state: 'done' })) === 'run' && on(simCtl(null)) === 'run' && on(simCtl({ state: 'running' }, true)) === '', '시뮬레이션 단추 상태');
+  ok(simCtl({ state: 'paused' }).runTitle === '이어서 계산' && simCtl({ state: 'done' }).runTitle === '처음부터 계산', '실행 = 일시정지면 이어서, 아니면 처음부터');
+  ok(on(optCtl({ running: true })) === 'pause,stop' && on(optCtl({ running: true, paused: true })) === 'run,stop' && on(optCtl({})) === 'run' && on(optCtl({ canRun: false })) === '' && optCtl({ hasResult: true }).runTitle.includes('버리고'), '최적화 단추 상태');
 }
 done();
 

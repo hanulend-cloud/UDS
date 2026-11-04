@@ -105,4 +105,13 @@ const fakePorts = (log, delay = 0) => Array.from({ length: 3 }, (_, w) => ({ sen
   ok(log.filter((x) => x.endsWith('chunk')).length === 2 && f.photons === 20000, '격자가 다르면 무시하고 처음부터');
   const raw = { nCell: 4 }, from = { raw, sig: 'A', screen: true };
   ok(resumable(from, 'A', true) === raw && resumable(from, 'B', true) === null && resumable(from, 'A', false) === null && resumable({ sig: 'A', screen: true }, 'A', true) === null && resumable(null, 'A', true) === null && resumable({ raw, sig: 'A' }, 'A', false) === raw, '같은 설계 · 같은 격자일 때만 이어서'); }
+{ // 일시정지: 새 청크를 보내지 않고, 시계는 멈춘 시간을 빼고, 풀면 이어지며, 멈춘 채 중지할 수 있음
+  let t = 0; const log = [], R = createAdRunner({ ports: fakePorts(log), now: () => t }), job = { sceneKey: 'pz', scene: { G: { ns: 2, nw: 2 } } };
+  R.pause(); t = 1000; ok(R.paused && R.now() === 0, `멈춘 시간은 시계에서 뺌 (${R.now()})`);
+  const pr = R.trace(job, { N: 20000, chunkN: 10000, batches: 2 }); await new Promise((r) => setTimeout(r, 10));
+  ok(log.filter((x) => x.endsWith('chunk')).length === 0 && log.some((x) => x.endsWith('scene')), '일시정지 중 청크 없음');
+  R.resume(); t = 1500; ok(!R.paused && R.now() === 500, `풀면 시계가 다시 감 (${R.now()})`);
+  const r = await pr; ok(r.photons === 20000 && log.filter((x) => x.endsWith('chunk')).length === 2, '풀면 이어서 끝남');
+  const R2 = createAdRunner({ ports: fakePorts([]) }); R2.pause(); const p2 = R2.trace(job, { N: 20000, chunkN: 10000, batches: 2 }); await new Promise((r2) => setTimeout(r2, 10)); R2.cancel();
+  let msg = ''; try { await p2; } catch (e) { msg = e.message; } ok(/중지/.test(msg), '멈춘 채 중지 가능'); }
 done();

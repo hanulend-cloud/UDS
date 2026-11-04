@@ -46,11 +46,14 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
 
   // 물리 변경 — 진행 중 결과는 세대(gen)로 무효화하고 디바운스 뒤 새로 시작
   // seedFn(선택) = 시작 때 부르는 함수 — 값이 있으면(기구 최적화가 이미 잰 결과) 청크를 돌리지 않고 그 결과를 끝난 계산으로 받음
+  let stopped = false;
   function restart(j, seedFn = null) {
     if (disposed) return;
     gen++; stopTick();
     if (debounce != null) timers.clearTimeout(debounce);
-    if (state === 'paused') wantPaused = true;   // 사용자 일시정지는 다시 시작 뒤에도 유지(여러 값을 고치는 동안)
+    if (state === 'paused' && !stopped) wantPaused = true;   // 사용자 일시정지는 다시 시작 뒤에도 유지(여러 값을 고치는 동안) · 중지 뒤에는 새로 계산
+    else if (stopped) wantPaused = false;
+    stopped = false;
     resetAcc(); job = null; pendingJob = j; pendingSeed = seedFn; state = 'pending'; reason = null; error = null;
     const g = gen;
     debounce = timers.setTimeout(() => { debounce = null; begin(g); }, o.debounceMs);
@@ -173,7 +176,10 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
     if (state !== 'running') return;
     state = 'paused'; stopTick(); emit();
   }
+  // 중지 = 계산을 끝냄: 지금까지의 결과는 남고 이어서 못 함(다음 실행은 restart)
+  function stop() { stopped = true; if (state === 'paused') emit(); else pause(); }
   function resume() {
+    stopped = false;
     if (state === 'pending' || state === 'starting') { wantPaused = false; return; }
     if (state !== 'paused') return;
     state = 'running'; startTick(); emit(); pumpAll(gen);
@@ -202,11 +208,11 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
   // 주의: bins[].acc 는 내부 누적 배열을 그대로 넘긴다(복사 비용 회피) — 소비자는 읽기만 하고 바꾸면 안 된다.
   function snapshot() {
     return {
-      state, reason, error, photons, chunks: doneChunks, ignored, sceneKey: job?.sceneKey ?? null,
+      state, stopped, reason, error, photons, chunks: doneChunks, ignored, sceneKey: job?.sceneKey ?? null,
       stats: snap?.stats ?? null, sum: snap?.sum ?? null, photometry: snap?.photometry ?? null,
       ledger: { ...ledger }, leak: { ...leak }, paths: { ...paths }, bins: bins.map((b) => b && { acc: b.acc, n: b.n, photons: b.photons }),
       G: job?.G ?? null, obs: job?.obs ?? null, targetNoise: goal(),
     };
   }
-  return { restart, pause, resume, cancel, dispose, setJudge, snapshot };
+  return { restart, pause, stop, resume, cancel, dispose, setJudge, snapshot };
 }

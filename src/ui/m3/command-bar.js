@@ -1,16 +1,6 @@
 import { judgeStats } from '../../engine/mech3d/tally.js';
-// 명령 막대 — ① LED 지정 ② 관측면 지정 ③ 목표 설정(사용 순서). 나머지는 상단 메뉴. calcLabel = 계산 카드의 제어 단추 문구
+// 명령 막대 — ① LED 지정 ② 관측면 지정 ③ 목표 설정(사용 순서). 나머지는 상단 메뉴
 // h = { onLed(), onObs(), onTarget() }
-export function calcLabel(calc) {
-  switch (calc?.state) {
-    case 'starting': return '⏸ 장면 준비';
-    case 'running': case 'pending': return '⏸ 계산 중';
-    case 'paused': return '▶ 계산 재개';
-    case 'done': return calc.reason === 'converged' ? '✓ 계산 완료 — 다시 계산' : '⚠ 계산 한도 — 다시 계산';   // 완료 = 목표 정확도 도달 · 한도 = 광선 상한까지 쏘았지만 정확도 미달
-    case 'error': return '⟳ 다시 계산';
-    default: return '▶ 계산';
-  }
-}
 // 사용 순서대로 ① LED 지정 → ② 관측면 지정 → ③ 목표 설정(2026-10-27). 끝난 단계는 ✓. 계산 제어는 오른쪽 위 '광분포 시뮬레이션' 카드로 옮김
 export function stepState(M) {
   const L = M.light, led = L.kind === 'step' ? (L.step?.emitters?.length ?? 0) > 0 : L.kind === 'manual';
@@ -26,7 +16,7 @@ export function flowState(calc, stats, M, ad = {}) {
   const res = has ? `${pc(stats.Ulen, O.targetLen)} / ${pc(stats.Uwid, O.targetWid)}` : '';
   const running = st === 'running' || st === 'pending' || st === 'starting', done = st === 'done';
   const sim = running ? { text: `계산 중 ${Number.isFinite(rn) && rn > 0 ? Math.round(Math.min(1, (tn / rn) ** 2) * 100) : 0}%${res ? ` · ${res}` : ''}`, cls: 'run', done: false }
-    : st === 'paused' ? { text: `일시정지${res ? ` · ${res}` : ''}`, cls: '', done: false }
+    : st === 'paused' ? { text: `${calc?.stopped ? '중지됨' : '일시정지'}${res ? ` · ${res}` : ''}`, cls: '', done: false }
     : done && has ? { text: `${res} ${pass ? '목표 통과' : J === 'near' ? '목표 근처' : '목표 미달'}`, cls: pass ? 'ok' : J === 'near' ? 'near' : 'bad', done: true }
     : { text: '–', cls: '', done: false };
   const opt = ad.running ? { text: '진행 중', cls: 'run', done: false }

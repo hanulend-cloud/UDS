@@ -29,6 +29,7 @@ import { mountSplitter, mountDockSplitter, mountFacSplitter } from './splitter.j
 import { createOptDash, createSimDash, simPct } from './opt-dash.js';
 import { geomQuery, geomLimit, geomClash } from './geom-client.js';
 import { renderPropertyPanel } from './property-panel.js';
+import { optCtl } from './run-ctl.js';
 import { judgeStats } from '../../engine/mech3d/tally.js';
 import { watchNumInputs } from './num-fit.js';
 import { meshInfo, clearDbHtml, clearAddFormHtml, reflAddFormHtml, wireMaterialDb, dbFormState } from '../mech3d-panel.js';
@@ -202,8 +203,8 @@ export async function mount(ctx) {
   }
   const a = A = { ctx, store, pool, view: null, meshShown: null, lineKey: '', Gc: null, obsShown: null, checks: {}, markKey: '', timing: { start: 0, first: null, noise5: null } };
   a.prog = createProgressive({ ports: pool.ports(), onUpdate: onCalc, opts: { targetNoise: ctx.mspec.observe.targetNoise ?? 0.01 } });
-  a.results = createResultsPanel($('#m3-res'), { onCalc: () => A?.toggleCalc?.(), calcBusy: () => !!A?.ad?.running, onLeak: () => A.store.update('session', (_, s) => { s.focusCheck = s.focusCheck === 'leak' ? null : 'leak'; }), onBig: (node) => A?.simDash?.attach(node), fileName: () => String(A?.store?.mspec?.name ?? 'uds').replace(/\.(stp|step)$/i, ''), onQuality: (v) => A.store.update('observe', (m) => { m.observe.quality = v; }) });
-  a.optDash = createOptDash($('#m3-optdash'), { config: (k) => (A?.tileState ? tileConfigHtml(k, A.tileState) : { on: false, html: '' }), onSel: (k, v) => adSel(k, v), onUnlock: (k) => adUnlock(k), board: $('#m3-factor'), now: () => (A ? factorNow() : {}) }); a.simDash = createSimDash($('#m3-simdash'), { onCtl: () => cmdHandlers().onToggleCalc() });
+  a.results = createResultsPanel($('#m3-res'), { onCalc: (k) => calcCtl(k), calcBusy: () => !!A?.ad?.running, onLeak: () => A.store.update('session', (_, s) => { s.focusCheck = s.focusCheck === 'leak' ? null : 'leak'; }), onBig: (node) => A?.simDash?.attach(node), fileName: () => String(A?.store?.mspec?.name ?? 'uds').replace(/\.(stp|step)$/i, ''), onQuality: (v) => A.store.update('observe', (m) => { m.observe.quality = v; }) });
+  a.optDash = createOptDash($('#m3-optdash'), { config: (k) => (A?.tileState ? tileConfigHtml(k, A.tileState) : { on: false, html: '' }), onSel: (k, v) => adSel(k, v), onUnlock: (k) => adUnlock(k), board: $('#m3-factor'), now: () => (A ? factorNow() : {}) }); a.simDash = createSimDash($('#m3-simdash'), { onCtl: (k) => calcCtl(k) });
   // 오른쪽 맨 위 광분포 시뮬레이션 ↕ 아래 광량 분포: 경계선 끌어 높이 조절(2026-10-30, 보는 사람별)
   mountSplit([$('#m3-simdash'), $('#m3-res')], { key: 'uds.m3.simSplit', dir: 'col', min: 80, init: [1, 3], onChange: () => window.dispatchEvent(new Event('resize')) });   // 아래 칸 = 기구 최적화 · 오른쪽 맨 위 = 광분포 시뮬레이션(항상 보임, 계산 제어 단추)
   a.cmd = mountCommandBar($('#m3-cmd'), cmdHandlers());
@@ -616,25 +617,45 @@ function renderAuto() {
     return;
   }
   A.optDash?.refresh();
-  renderAutoPanel(el, { avail, sel, running: st.running, result: st.result, resultOpen: !!st.resultOpen, names: M.parts.map((p) => p.name), canRevert: !!st.undo, applied: st.undo ? st.applied ?? null : null, noLine: !A.store.session.line, milkyPart: mp, housingMat: hm ? { name: hm.name, max: hm.max } : null, catalog: reflCat() }, {
+  renderAutoPanel(el, { avail, sel, running: st.running && { ...st.running, paused: !!st.paused }, result: st.result, resultOpen: !!st.resultOpen, names: M.parts.map((p) => p.name), canRevert: !!st.undo, applied: st.undo ? st.applied ?? null : null, noLine: !A.store.session.line, milkyPart: mp, housingMat: hm ? { name: hm.name, max: hm.max } : null, catalog: reflCat() }, {
     onSel: (k, v) => adSel(k, v),
-    onAction: (k, v) => ({ continue: adContinue, applyMilky: () => adApplyMilky(+v), run: adRunBoost, stop: adStop, close: () => monitor?.close(), apply: adApply, applyAlt: adApplyAlt, cancel: adCancel, revert: adRevert, step: adStep, view: () => { st.resultOpen = true; renderAuto(); }, hide: () => { st.resultOpen = false; renderAuto(); } })[k]?.(),
+    onAction: (k, v) => ({ continue: adContinue, applyMilky: () => adApplyMilky(+v), run: () => adCtl('run'), pause: () => adCtl('pause'), stop: adStop, close: () => monitor?.close(), apply: adApply, applyAlt: adApplyAlt, cancel: adCancel, revert: adRevert, step: adStep, view: () => { st.resultOpen = true; renderAuto(); }, hide: () => { st.resultOpen = false; renderAuto(); } })[k]?.(),
   });
 }
 // 접은 창에 보일 현재 결과 — 실행 중 = 진행률, 결과 있음 = 후보 값, 그 밖 = 지금 값(길이·폭 균일도)
 function monitorSummary() {
   if (!A || !monitor) return;
   const st0 = A.ad, av0 = adAvail(A.store.mspec), nSel = AD_ITEMS.filter(([, , ks]) => ks.some((k) => st0?.sel?.[k] && av0[k]?.ok)).length, noLine = !A.store.session.line;
-  monitor.setRun(st0?.running ? { label: '■ 중지', title: '기구 최적화 중지', fn: adStop }
-    : { label: st0?.result ? '▶ 다시 실행' : '▶ 실행', title: noLine ? '관측 라인이 없음' : !nSel ? '펼쳐서 최적화할 항목을 체크하세요' : st0?.result ? '지금 결과를 버리고 다시 실행' : '체크한 항목으로 실행', disabled: noLine || !nSel, fn: () => { if (adState().result) adCancel(); adRunBoost(); } });
+  monitor.setCtl(optCtl({ running: !!st0?.running, paused: !!st0?.paused, canRun: !noLine && nSel > 0, hasResult: !!st0?.result, why: noLine ? '관측 라인이 없음' : '펼쳐서 최적화할 항목을 체크하세요' }), adCtl);
   const st = A.ad, M = A.store.mspec, cell = (t, v, g) => `<b class="${Number.isFinite(v) && Number.isFinite(g) ? (v + 1e-9 >= g ? 'ok' : 'bad') : ''}">${t} ${Number.isFinite(v) ? v.toFixed(2) : '–'}</b>`;
-  if (st?.running) { monitor.setSummary(`<b>진행 ${Math.round((st.running.frac ?? 0) * 100)}%</b>`); return; }
+  if (st?.running) { monitor.setSummary(`<b>${st.paused ? '일시정지' : '진행'} ${Math.round((st.running.frac ?? 0) * 100)}%</b>`); return; }
   const b = st?.result?.best, sn = A.prog?.snapshot(), s = sn?.stats, calc = ['running', 'pending', 'starting'].includes(sn?.state) ? `<b>계산 ${Math.round(simPct(s?.relNoise, sn.targetNoise))}%</b> ` : '';
   if (!b && (!s || s.empty || s.relNoise > 0.05)) { monitor.setSummary(`<b>실행 전</b> ${calc || '<span>계산 중</span>'}`); return; }   // 초반 값은 노이즈
   const U = b ? [b.Ulen, b.Uwid] : [s.Ulen, s.Uwid];
   monitor.setSummary(`${b ? '<b>진행 100%</b> <span>후보</span> ' : `<b>실행 전</b> ${calc}`}${cell('길이', U[0], M.observe.targetLen)} ${cell('폭', U[1], M.observe.targetWid)}`);
 }
-function adStop() { const st = adState(); if (!st.running || !st.runner) return; st.runner.cancel(); setStatus('기구 최적화 중지됨'); A.optDash?.stop(); }
+function adStop() { const st = adState(); if (!st.running || !st.runner) return; st.paused = false; st.runner.cancel(); setStatus('기구 최적화 중지됨'); A.optDash?.stop(); }
+function adPause(on) {
+  const st = adState(); if (!st.running || !st.runner) return;
+  st.paused = on; on ? st.runner.pause() : st.runner.resume(); A.optDash?.setPaused(on);
+  setStatus(on ? '기구 최적화 일시정지 — 지금 계산 중인 조각까지만 받음' : '기구 최적화 이어서 실행'); renderAuto();
+}
+function adCtl(k) {
+  const st = adState();
+  if (k === 'pause') adPause(true);
+  else if (k === 'stop') adStop();
+  else if (st.running) { if (st.paused) adPause(false); }
+  else { if (st.result) adCancel(); adRunBoost(); }
+}
+// 광분포 시뮬레이션 단추: 실행 = 일시정지면 이어서, 그 밖에는 처음부터 · 기구 최적화 중에는 쓰지 않음
+function calcCtl(k) {
+  if (!A || A.ad?.running) return;
+  const s = A.prog.snapshot();
+  if (k === 'pause') A.prog.pause();
+  else if (k === 'stop') A.prog.stop();
+  else if (s.state === 'paused' && !s.stopped) A.prog.resume();
+  else if (!['running', 'pending', 'starting'].includes(s.state)) restartCalc();
+}
 // 실행 문맥 = 시작 때 스냅샷 { M0: mspec 복사, line, G, obs, rt: 기구 런타임, mp: ① 대상 부품 } — 평가·미리보기·적용이 모두 이것 기준
 // 형상 원본 = 원본 메쉬 + 크기·위치 조절(이미 적용된 shapeMod 는 빼고 — 적용 때 shapeMod 를 바꿔 끼우므로 평가와 같게)
 // 같은 (원본, xform) 이면 같은 객체 — 세분·높이맵 메모(메쉬 객체 기준)가 맞도록
@@ -984,14 +1005,14 @@ async function adRun(opt = {}) {
   const finCands = (k) => finishCandidatesFor({ catalog: reflCat(), materialId: M0.parts[k].reflMaterial, current: M0.parts[k].finish, allowSpecial: !!st.sel.housingSpecial });
   const finishCands = stages.housing ? finCands(hp) : null;
   const varTot = { height: (hInfo ? heightCandidates(hInfo.range, 7).length : 0) + 2, housing: (finishCands?.length ?? 0) + 2 }, varI = { height: 0, housing: 0 };   // 진행률 분모 = 1차 후보 + 정밀 2개
-  const minWall = { ...defaultChecks(), ...(M0.checks ?? {}) }.minWall, t0 = performance.now();
+  const minWall = { ...defaultChecks(), ...(M0.checks ?? {}) }.minWall, t0 = R.now();
   // ③ 변수 범위(Δt·h·R·e·c) — 엔진이 선별 → 격자 → 압축. 진행률 분모는 io.shapePlan 으로 받음(격자 크기 모르는 선별 중엔 최대 격자 27 로 어림)
   // ③ 입광면 보정 지도 — 길이 절점 간격 = LED 피치의 ⅛(2~6 mm, LED 물결을 잡게), 폭 7 절점. 광자 = 압축 마지막 단계 예산(광 효율 반비례)
   const shapeField = stages.shape ? (() => { const pitch = cur.count > 1 ? (cur.pitch > 0 ? cur.pitch : line.length / cur.count) : line.length, ds = Math.min(6, Math.max(2, pitch / 8)), sb = shapeBudget(currentVerified?.eff ?? snap0.photometry?.eff).schedule.at(-1); return { ns: Math.ceil(line.length / ds) + (line.closed ? 0 : 1), nw: 7, N: sb[1], maxMs: sb[2], W: line.width / 2, ledSOf: (d) => { try { const q = L.currentEmitters(designScene(d, ctx).M, line).map((e) => line.toSW(...line.to2D(e.pos))[0]).sort((a, b) => a - b); return q.filter((v, i) => !i || v - q[i - 1] > 1e-6); } catch { return []; } } }; })() : null;
   let shapeI = 0, shapeScr = 0, shapeTot = 1;
   const progress = (stage, frac, text) => {   // 전체 진행률(단계 무게) + 남은 시간
     if (A !== a || R.stopped) return;
-    const f = overallFrac(stages, stage, frac), eta = /몇 분/.test(text) ? '' : etaText(performance.now() - t0, f);
+    const f = overallFrac(stages, stage, frac), eta = /몇 분/.test(text) ? '' : etaText(R.now() - t0, f);
     const tx = opt.added?.length ? `보완 ${opt.step ?? ''} (${opt.added.join(' + ')}) · ${text}` : text;
     A.optDash?.progress(stage, frac, tx);
     st.running = { frac: f, text: eta ? `${tx} · ${eta}` : tx }; renderAuto();
@@ -1101,7 +1122,7 @@ async function adRun(opt = {}) {
   const clashN = res && !res.cancelled && !R.stopped ? await designClash(res.best, ctx, M0, rt, line) : 0;   // running 을 끄기 전에 — 양보하는 동안 다시 실행되지 않게
   if (A !== a) return;
   globalThis.__adLast = res;   // 진단용(콘솔에서 단계별 결과 확인)
-  st.running = null; st.runner = null;
+  st.running = null; st.runner = null; st.paused = false;
   if (res && !res.cancelled && !R.stopped) {
     const C = res.current;   // 현재안 = 최종안과 같은 추정기
     let nStep = null; if (M0.light.kind === 'step') { try { nStep = L.currentEmitters(M0, line).length; } catch { nStep = 0; } }
@@ -1651,12 +1672,12 @@ function cmdHandlers() {
       x.section = { axis: 'x', pos: (b[0] + b[3]) / 2, box: b };
     }),
     onFit: () => A.view?.fitAll(),   // 맞춤 = 보이는 부품 전체를 창에 꽉 차게(보는 방향은 그대로)
-    onToggleCalc: (A.toggleCalc = () => {   // '⏸ 계산 중'(대기·장면 준비 포함) → 일시정지, 일시정지 → 재개, 그 밖(완료·오류·대기) → 다시 계산
+    onToggleCalc: () => {   // '⏸ 계산 중'(대기·장면 준비 포함) → 일시정지, 일시정지 → 재개, 그 밖(완료·오류·대기) → 다시 계산
       // 기구 최적화 중: 계산이 끝났거나 대기였으면(미룬 계산 없음) = 다시 계산 요청, 아니면 일시정지 여부를 뒤집음
       if (A.ad?.running) { const st = A.ad; st.userPaused = st.deferred ? !st.userPaused : false; st.deferred = true; setStatus(st.userPaused ? '기구 최적화가 끝나도 계산은 멈춰 둠' : '기구 최적화가 끝나면 계산 재개'); return; }
       const s = A.prog.snapshot().state;
       if (s === 'running' || s === 'pending' || s === 'starting') A.prog.pause(); else if (s === 'paused') A.prog.resume(); else restartCalc();
-    }),
+    },
     onAuto: () => adSetOpen(!adState().open),
     // 흐름 4·5단계 단추 — 해당 칸을 보여 주고 잠깐 강조(모니터가 열려 있으면 그 안에서)
     onSim: () => A.results.toggleBig(),

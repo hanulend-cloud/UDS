@@ -9,8 +9,11 @@ const MIN_CHUNK = 1000;
 export const resumable = (from, sig, screen) => (from?.raw && from.sig === sig && !!from.screen === !!screen ? from.raw : null);
 // 응답 시간 제한(progressive.js 와 같음): 장면 60초 · 청크 30초. cancel() = 기다리던 send 도 바로 '중지' 로 끝냄
 // 한 Worker 루프가 실패하면 같은 호출의 다른 루프도 새 청크를 보내지 않고 첫 오류를 다시 던짐
-export function createAdRunner({ ports, now = () => globalThis.performance?.now?.() ?? Date.now(), sceneTimeoutMs = 60000, chunkTimeoutMs = 30000, timers = globalThis }) {
+export function createAdRunner({ ports, now: now0 = () => globalThis.performance?.now?.() ?? Date.now(), sceneTimeoutMs = 60000, chunkTimeoutMs = 30000, timers = globalThis }) {
   let stopped = false, seed = 7001, onStop = null;
+  // 일시정지 = 새 청크를 보내지 않음(보낸 청크는 받음). 시계는 멈춘 시간을 뺌 — 시간 한도가 있는 단계의 결과가 쉬었다고 달라지지 않게
+  let gate = null, release = null, pausedMs = 0, pausedAt = 0;
+  const now = () => now0() - pausedMs - (gate ? now0() - pausedAt : 0);
   const stopP = new Promise((_, rej) => { onStop = () => rej(new Error('기구 최적화 중지')); });
   stopP.catch(() => {});
   const check = (ctl) => { if (stopped) throw new Error('기구 최적화 중지'); if (ctl?.err) throw ctl.err; };
@@ -27,6 +30,7 @@ export function createAdRunner({ ports, now = () => globalThis.performance?.now?
     await Promise.all(ports.map(guard(ctl, (p) => withTimeout(p.send({ type: 'scene', sceneKey: job.sceneKey, ...job.scene }), 'scene', sceneTimeoutMs))));
   }
   const send = async (job, msg) => {
+    if (gate) await Promise.race([gate, stopP]);
     const r = await withTimeout(msg.p.send({ type: 'chunk', sceneKey: job.sceneKey, seed: msg.seed ?? seed++, ...msg.body }), 'chunk', chunkTimeoutMs);
     if (r.stale) throw new Error('장면이 바뀜 — 다시 실행하세요');
     return r;
@@ -133,5 +137,7 @@ export function createAdRunner({ ports, now = () => globalThis.performance?.now?
     })));
     return { maps, emitted: 1 };
   }
-  return { trace, traceEach, cancel() { if (!stopped) { stopped = true; onStop(); } }, get stopped() { return stopped; } };
+  return { trace, traceEach, now, cancel() { if (!stopped) { stopped = true; onStop(); } }, get stopped() { return stopped; }, get paused() { return !!gate; },
+    pause() { if (gate || stopped) return; pausedAt = now0(); gate = new Promise((res) => { release = res; }); },
+    resume() { if (!gate) return; pausedMs += now0() - pausedAt; gate = null; release(); } };
 }

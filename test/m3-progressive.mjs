@@ -278,4 +278,13 @@ const perPhoton = (s) => Array.from(s.sum, (v) => v / (s.photons / 25000));   //
   P.restart(job(10), () => ({ ...seed, nCell: 99 })); await T.advance(500); await settle();
   ok(P.snapshot().state === 'running' && chunks(a).length > 0, '격자가 다른 값은 무시 — 새로 계산');
   P.dispose(); }
+{ // 중지 = 결과는 남고 이어서 못 함 · 다음 실행은 처음부터 계산(일시정지처럼 멈춰 있지 않음)
+  const T = fakeTimers(), a = delayedPort(T), P = createProgressive({ ports: [a], timers: T, opts: OPT });
+  P.restart(job(21)); await T.advance(1200); await settle();
+  P.stop(); const s = P.snapshot(); ok(s.state === 'paused' && s.stopped === true, '중지 표시');
+  P.restart(job(22)); await T.advance(1200); await settle();
+  const s2 = P.snapshot(); ok(s2.state === 'running' && s2.stopped === false, `중지 뒤 실행 = 새 계산 (${s2.state})`);
+  P.pause(); P.restart(job(23)); await T.advance(1200); await settle();
+  ok(P.snapshot().state === 'paused', '일시정지는 다시 시작 뒤에도 유지(기존 동작)');
+  P.dispose(); }
 done();

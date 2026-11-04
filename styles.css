@@ -688,7 +688,7 @@ header:has(.mb-drop) { z-index: 80; }   /* 메뉴를 펼치면 떠 있는 창 �
 
 /* 오른쪽 맨 위 '현재 설계 계산' 카드(항상 보임) — 계산 제어 단추 포함 */
 .m3-simcard { flex: none; padding: 6px 10px 4px; border-left: 1px solid var(--m3-line); border-bottom: 1px solid var(--m3-line); }
-.m3-simcard .od-simh { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+.m3-simcard .od-simh { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; margin-bottom: 2px; white-space: nowrap; }
 .m3-simcard .od-simh button { font: inherit; font-size: 12px; padding: 2px 8px; border: 1px solid var(--m3-line); border-radius: 5px; background: #fff; cursor: pointer; }
 .m3-simcard .od-simh button:disabled { opacity: .5; cursor: default; }
 .m3-simcard .od-sim { height: 70px; margin: 2px 0; }
@@ -1000,7 +1000,11 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 .od-k { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 2px; } .od-k.od-d1 { background: var(--od-s1); } .od-k.od-d2 { background: var(--od-s2); }
 .od-simt .od-near, .od-simt .od-ok, .od-simt .od-bad { margin-left: 1px; font-weight: 700; }
 /* 접은 창에서만 보이는 실행 단추 */
-.m3-min-run { display: none; } .m3-mon.min .m3-min-run, .m3-big-in.min .m3-min-run { display: inline-block; font-weight: 700; }
+.m3-min-run { display: none !important; } .m3-mon.min .m3-min-run { display: inline-flex !important; }
+.m3-ctl { display: inline-flex; gap: 3px; flex: none; } .m3-ctl button { white-space: nowrap; } .m3-ctl button:disabled { opacity: .4; cursor: default; }
+.m3-ad-bar > button[disabled] { opacity: .4; cursor: default; }
+.m3-simcard .m3-ctl button { font: inherit; font-size: 11.5px; font-weight: 500; padding: 2px 6px; border: 1px solid var(--m3-line); border-radius: 5px; background: #fff; color: #20262f; cursor: pointer; }
+.m3-simcard .od-pct { display: flex; align-items: center; gap: 6px; } .od-simst { flex: 0 1 45%; min-width: 0; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 관측면 창: 상단 ②·③ 단계 번호 · 목표 = 꼭 입력 칸 */
 .m3-props .m3-card .m3-sub .m3-fl { margin-right: 2px; vertical-align: -2px; }
 .m3-req { margin-left: 4px; padding: 0 5px; border-radius: 4px; background: #fff0c2; color: #7a5a12; font-size: 10.5px; font-weight: 700; }
