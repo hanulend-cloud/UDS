@@ -303,8 +303,8 @@ export function createSimDash(el, { onCtl = null } = {}) {
     const dg = el.querySelector('[data-s="diag"]'); if (dg) { dg.hidden = !diag; set('diag', diag?.html ?? ''); }
     set('svg', svg);
     if (mini) {
-      const w = Math.max(240, mini.clientWidth - 2);
-      mini.innerHTML = `<div class="od-pct"><b>${pct.toFixed(0)}%</b><div class="od-bar od-bar-big"><i style="width:${pct.toFixed(0)}%"></i></div></div><div class="od-simcap">${row}</div><div class="od-simplot">${simPlotSvg(H, tgt, obs, w, 130)}</div>`;
+      const pl = mini.querySelector('.od-simplot'), w = Math.max(240, pl?.clientWidth || mini.clientWidth), ph = pl?.clientHeight || 130;   // 칸 크기로 그림 — 그림은 칸을 밀지 않음(.od-sim2 절대 위치)
+      mini.innerHTML = `<div class="od-pct"><b>${pct.toFixed(0)}%</b><div class="od-bar od-bar-big"><i style="width:${pct.toFixed(0)}%"></i></div></div><div class="od-simcap">${row}</div><div class="od-simplot">${simPlotSvg(H, tgt, obs, w, ph)}</div>`;
     }
     // 접힌 줄에는 주 광경로 한 줄 요약, 펼치면 광경로 목록
     set('sum', P.length ? `광경로 <span class="mut">${(P[0].share * 100).toFixed(0)}% ${esc(pathText(P[0], names))}</span>` : '광경로');
@@ -312,5 +312,7 @@ export function createSimDash(el, { onCtl = null } = {}) {
   }
   render();
   if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => draw()).observe(el);   // 칸 크기가 바뀌면 그래프를 그 크기로
-  return { sample, paths: () => P, attach: (node) => { mini = node; draw(); } };
+  // 창 크기가 바뀌면 끝난 계산도 그 크기로 다시 그림
+  const miniRO = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => draw()) : null;
+  return { sample, paths: () => P, attach: (node) => { miniRO?.disconnect(); mini = node; if (node) miniRO?.observe(node); draw(); } };
 }

@@ -894,7 +894,7 @@ body.booting::after { content: "불러오는 중…"; position: fixed; left: 50%
 .m3-simcard > * { flex: none; }
 .m3-simcard > .od-simbox { flex: 1 1 96px; min-height: 96px; display: flex; flex-direction: column; border: 1px solid var(--m3-line); border-radius: 6px; padding: 3px 4px; margin: 2px 0 3px; }
 .od-simcap { flex: none; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.od-simplot { flex: 1; min-height: 84px; overflow: hidden; }
+.od-simplot { position: relative; flex: 1; min-width: 0; min-height: 84px; overflow: hidden; }
 .m3-simcard .od-simplot .od-sim { width: auto; height: auto; margin: 0; display: block; }
 /* LED 목록 */
 .m3-ledlist { max-height: 168px; overflow: auto; border: 1px solid var(--m3-line); border-radius: 6px; margin: 4px 0; }
@@ -988,7 +988,9 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 .m3-big-prog .od-simplot { height: 130px; }
 .m3-big-prog .od-simcap { margin: 2px 0; }
 #mech3d-wrap { --od-s1: #2f6fd0; --od-s2: #d9822b; } #mech3d-wrap[data-theme="dark"] { --od-s1: #4f8fe6; --od-s2: #c97a2a; }
-.od-sim2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; } .od-sim2.one { grid-template-columns: 1fr; gap: 2px; }
+/* 그림은 칸 크기를 따라가기만 함 — 칸을 밀면 갱신마다 커지는 순환이 생김(창을 줄여도 안 줄어듦) */
+.od-sim2 { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } .od-sim2.one { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+.m3-big-prog { min-width: 0; }
 .od-simt { font-size: 10.5px; line-height: 15px; height: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .od-simt b { font-weight: 700; }
 .od-sim2 .od-sim { display: block; width: auto; height: auto; margin: 0; } .od-sim2 .od-ax { font-size: 8.5px; }
 .od-sim2 polyline { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
@@ -1038,3 +1040,12 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 #mech3d-wrap .m3-mon .om-done { color: #17693f; }   /* 창 바탕은 어두운 테마에서도 밝음 — 어두운 테마의 밝은 초록은 안 보임 */
 .m3-big-hd .m3-fl { background: #fff; color: var(--win); margin-right: 6px; } .m3-mon-hd .m3-fl { margin-right: 6px; }
 #mech3d-wrap .m3-fl.done { background: #1f9d55; color: #fff; box-shadow: 0 0 0 1.5px #fff; }
+/* 창을 줄이면 내용도 함께 — 제목 줄의 단추가 창 폭을 밀어 그림이 잘리지 않게 */
+.m3-big-in, .m3-mon { grid-template-columns: minmax(0, 1fr); }
+.m3-big-in:not(.min) .m3-big-hd, .m3-mon:not(.min) .m3-mon-hd { flex-wrap: wrap; row-gap: 4px; }
+.m3-big-grid { min-width: 0; }
+/* 창 높이를 줄이면 진행 그래프도 함께 줄어 2D·1D 자리를 남김 */
+.m3-big-prog { display: flex; flex-direction: column; flex: 0 1 30%; min-height: 84px; max-height: 196px; overflow: hidden; }
+.m3-big-prog .od-simplot { flex: 1 1 0; height: auto; min-height: 0; }
+.m3-big-grid > .m3-big-c, .m3-big-grid > .m3-big-row { min-height: 60px; }
+.m3-big-ct b { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .m3-big-ct button, .m3-big-ct label { flex: none; white-space: nowrap; }
