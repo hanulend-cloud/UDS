@@ -712,12 +712,10 @@ header:has(.mb-drop) { z-index: 80; }   /* 메뉴를 펼치면 떠 있는 창 �
 .fb-body .od-h, .fb-body .od-legend { flex: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0 0 2px; }
 .fb-body .od-legend { display: block; }
 .fb-plot { flex: 1; min-height: 30px; overflow: hidden; }
-.fb-chart { display: block; }
-.fb-chart .od-now { stroke: #8a96a8; stroke-width: 1; }
-.fb-row { flex: none; display: grid; grid-template-columns: 16px 9px auto auto minmax(0, 1fr);   /* 체크 · 색 점 · 이름 · 상태 · 값 */ gap: 5px; align-items: center; padding: 2px 0; border-top: 1px dashed var(--m3-line); font-size: 11.5px; }
+.fb-row { flex: none; display: grid; grid-template-columns: 16px 9px minmax(0, 1fr) auto;   /* 체크 · 색 점 · 이름 · 상태, 아랫줄 = 설명 */ gap: 5px; align-items: center; padding: 2px 0; border-top: 1px dashed var(--m3-line); font-size: 11.5px; }
 .fb-row.fb-off { opacity: .5; }
 .fb-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
-.fb-val { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fb-name { font-size: 14.5px; font-weight: 700; } .fb-val { grid-column: 3 / -1; font-size: 11.5px; line-height: 1.35; overflow-wrap: anywhere; }
 @media (max-width: 1024px) { .m3-faccard { height: auto; border-left: 0; } .m3-fac-split { display: none; } .fb-plot { flex: none; height: 130px; } }
 .m3-cmd .m3-now { margin-left: 6px; font-size: 12.5px; padding: 3px 8px; border-radius: 6px; background: var(--m3-accbg, #eef3ff); }
 .m3-cmd .m3-now b.ok { color: #1f9d55; } .m3-cmd .m3-now b.bad { color: #d64545; }
@@ -855,7 +853,7 @@ body.booting::after { content: "불러오는 중…"; position: fixed; left: 50%
 .om-k { background: rgba(128,128,128,.08); border-radius: 6px; padding: 5px 8px; font-size: 11px; min-width: 0; }
 .om-v { display: block; font-size: 22px; line-height: 1.2; }
 .om-v.ok { color: var(--m3-ok); } .om-v.bad { color: var(--m3-bad); }
-.od-plot { height: 170px; overflow: hidden; }
+.od-plot { position: relative; height: 170px; overflow: hidden; } .od-cand { opacity: .35; stroke: none; } .od-cand.od-d1 { fill: var(--od-s1); } .od-cand.od-d2 { fill: var(--od-s2); } .od-none-box { display: grid; place-items: center; font-size: 12px; color: var(--m3-mut); } .om-pct { margin-top: 0; }
 .od-run { stroke: #5b6b80; stroke-width: 2.4; vector-effect: non-scaling-stroke; }
 .om-log { margin-top: 6px; font-size: 11.5px; line-height: 1.6; border-top: 1px solid var(--m3-line); padding-top: 4px; }
 .om-lh { font-size: 11px; }
@@ -1001,7 +999,6 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 .od-k { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 2px; } .od-k.od-d1 { background: var(--od-s1); } .od-k.od-d2 { background: var(--od-s2); }
 .od-simt .od-near, .od-simt .od-ok, .od-simt .od-bad { margin-left: 1px; font-weight: 700; }
 /* 접은 창에서만 보이는 실행 단추 */
-.m3-min-run { display: none !important; } .m3-mon.min .m3-min-run { display: inline-flex !important; }
 .m3-ctl { display: inline-flex; gap: 3px; flex: none; } .m3-ctl button { white-space: nowrap; } .m3-ctl button:disabled { opacity: .4; cursor: default; }
 .m3-ad-bar > button[disabled] { opacity: .4; cursor: default; }
 .m3-simcard .m3-ctl button { font: inherit; font-size: 11.5px; font-weight: 500; padding: 2px 6px; border: 1px solid var(--m3-line); border-radius: 5px; background: #fff; color: #20262f; cursor: pointer; }

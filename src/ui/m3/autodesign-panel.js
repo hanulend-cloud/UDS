@@ -109,10 +109,6 @@ export function applyFinish(M, f) {
   return M;
 }
 const ITEMS = [['milky', '① Milky 레벨'], ['leds', '② LED 개수·피치'], ['shape', '③ LGP 형상'], ['housing', '④ 케이스 면 처리'], ['height', '⑤ LED 높이(LED–커버 거리)']];
-const progHtml = (running) => {
-  const pct = Math.round((running.frac ?? 0) * 100);
-  return `<div class="m3-ad-prog"><div class="bar" role="progressbar" aria-label="기구 최적화 진행" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div><span>${running.paused ? '일시정지 · ' : ''}${esc(running.text)}</span> <span class="m3-ctl"><button type="button" data-ad="run"${running.paused ? '' : ' disabled'} title="이어서 실행">▶ 실행</button><button type="button" data-ad="pause"${running.paused ? ' disabled' : ''} title="멈췄다가 이어서 실행할 수 있음">⏸ 일시정지</button><button type="button" data-ad="stop" title="최적화를 끝냄 — 찾던 안은 반영되지 않음">■ 중지</button></span></div>`;
-};
 // 최적화 타일(가운데 칸)의 켜기 스위치·항목 설정(순수) — 고르는 곳 = 진행을 보는 곳(아래 칸 대시보드와 한 자리)
 // state = { avail, sel, running, names, milkyPart, housingMat } → { on, html }(html = 스위치 + 설정, 쓸 수 없으면 이유)
 // 화면의 기구 최적화 = 3 항목: ① Milky · ② 기구 위치(= 엔진 ② LED 배치 + ⑤ LED 높이) · ③ 기구 형상. 케이스 반사율(④)은 부품 속성에서 직접
@@ -145,9 +141,9 @@ export function tileConfigHtml(k, { avail, sel, running, names = [], milkyPart =
 // noLine = 관측 라인 없음 · noLed = 실행할 수 없는 이유(LED 없음·읽는 중) — 실행 불가
 export function autoCardHtml({ avail, sel, running, canRevert = false, noLine = false, noLed = '', applied = null }) {
   const on = AD_ITEMS.filter(([, , ks]) => ks.some((k) => sel[k] && avail[k]?.ok)).map(([, l]) => l);
-  const run = `<button type="button" class="m3-ad-run" data-ad="run"${!on.length || noLine || noLed ? ' disabled' : ''}${noLine ? ' title="관측 라인이 없음"' : noLed ? ` title="${esc(noLed)}"` : ''}>▶ 실행</button><button type="button" disabled>⏸ 일시정지</button><button type="button" disabled>■ 중지</button>`;
-  if (running) return `<div class="m3-ad-bar">${progHtml(running)}</div>`;
-  return `<div class="m3-ad-bar">${run}<span class="m3-ad-on">${on.length ? `켠 항목 <b>${on.join(' ')}</b>` : '<span class="mut">왼쪽 설계 인자에서 최적화할 항목을 체크하세요</span>'}</span>${canRevert ? '<span class="m3-ad-sp"></span><button type="button" data-ad="revert" title="마지막 적용 전 값으로">↶ 되돌리기</button>' : ''}</div>${appliedHtml(applied)}`;
+  if (running) return '';   // 실행 단추·진행은 창 오른쪽 위
+  const why = noLine ? '관측 라인이 없음' : noLed;
+  return `<div class="m3-ad-bar"><span class="m3-ad-on">${why ? `<span class="warn">${esc(why)}</span> ` : ''}${on.length ? `켠 항목 <b>${on.join(' ')}</b>` : '<span class="mut">왼쪽 설계 인자에서 최적화할 항목을 체크하세요</span>'}</span>${canRevert ? '<span class="m3-ad-sp"></span><button type="button" data-ad="revert" title="마지막 적용 전 값으로">↶ 되돌리기</button>' : ''}</div>${appliedHtml(applied)}`;
 }
 // 형상 문구 — 0 인 항 생략. e = 끝단 두께, c = 폭 가장자리 두께(+ 가장자리 두껍게 · − 얇게), h < 0 = 돌출
 const sg = (v) => `${v >= 0 ? '+' : '−'}${f2(Math.abs(v))}`, nz = (v) => Number.isFinite(v) && Math.abs(v) >= 5e-5;
@@ -274,14 +270,7 @@ export function renderAutoPanel(el, state, h) {
   const r = state.result, full = r ? compareHtml({ ...r, canRevert: state.canRevert, ...(state.catalog ? { catalog: state.catalog } : {}) }) : '';
   const html = r ? `${resultLineHtml(r)}${state.resultOpen ? `<div class="m3-rmodal" role="dialog" aria-modal="true" aria-label="기구 최적화 결과"><div class="m3-rmodal-in"><div class="m3-rmodal-hd"><b>기구 최적화 결과</b><span class="m3-ad-sp"></span><button type="button" data-ad="hide" title="결과는 남음">✕ 닫기</button></div>
       <div class="m3-rverdict ${r.unchanged ? '' : r.targets?.judge?.all === 'near' ? 'near' : r.feasible ? 'ok' : 'bad'}">${r.unchanged ? `현재 설계보다 나은 안을 찾지 못함 — 현재안 유지${r.alt ? ' (찾은 후보가 뚜렷이 낫지 않음 — 원하면 [후보로 바꾸기])' : ''}` : r.targets?.judge?.all === 'near' ? '≈ 목표 근처 — 목표와의 차이가 노이즈보다 작음' : r.feasible ? '✓ 목표 통과' : '✕ 목표 미달 — 가장 가까운 안'}</div>${full}</div></div>` : ''}` : autoCardHtml(state);
-  const key = r ? html : autoCardHtml({ ...state, running: state.running ? { frac: 0, text: '', paused: state.running.paused } : null });
-  const bar = state.running && !r && el._adKey === key ? el.querySelector('.m3-ad-prog .bar') : null;
-  if (bar) {
-    const pct = Math.round((state.running.frac ?? 0) * 100);
-    bar.setAttribute('aria-valuenow', String(pct)); bar.firstElementChild.style.width = `${pct}%`;
-    el.querySelector('.m3-ad-prog > span').textContent = `${state.running.paused ? '일시정지 · ' : ''}${state.running.text ?? ''}`;
-    return;
-  }
+  const key = r ? html : autoCardHtml(state);
   if (r && el._adKey === key) return;   // 결과가 그대로면 다시 만들지 않음 — 누르는 사이 단추가 바뀌면 클릭이 사라지고, 펼친 Milky 표도 닫힘
   el._adKey = key; el.innerHTML = html;
   el.querySelectorAll('[data-ad]').forEach((x) => {

@@ -619,7 +619,7 @@ function renderAuto() {
   A.optDash?.refresh();
   renderAutoPanel(el, { avail, sel, running: st.running && { ...st.running, paused: !!st.paused }, result: st.result, resultOpen: !!st.resultOpen, names: M.parts.map((p) => p.name), canRevert: !!st.undo, applied: st.undo ? st.applied ?? null : null, noLine: !A.store.session.line, noLed: A.store.session.line ? adBlock() : '', milkyPart: mp, housingMat: hm ? { name: hm.name, max: hm.max } : null, catalog: reflCat() }, {
     onSel: (k, v) => adSel(k, v),
-    onAction: (k, v) => ({ continue: adContinue, applyMilky: () => adApplyMilky(+v), run: () => adCtl('run'), pause: () => adCtl('pause'), stop: adStop, close: () => monitor?.close(), apply: adApply, applyAlt: adApplyAlt, cancel: adCancel, revert: adRevert, step: adStep, view: () => { st.resultOpen = true; renderAuto(); }, hide: () => { st.resultOpen = false; renderAuto(); } })[k]?.(),
+    onAction: (k, v) => ({ continue: adContinue, applyMilky: () => adApplyMilky(+v), close: () => monitor?.close(), apply: adApply, applyAlt: adApplyAlt, cancel: adCancel, revert: adRevert, step: adStep, view: () => { st.resultOpen = true; renderAuto(); }, hide: () => { st.resultOpen = false; renderAuto(); } })[k]?.(),
   });
 }
 // 접은 창에 보일 현재 결과 — 실행 중 = 진행률, 결과 있음 = 후보 값, 그 밖 = 지금 값(길이·폭 균일도)
@@ -1028,7 +1028,7 @@ async function adRun(opt = {}) {
     if (A !== a || R.stopped) return;
     const f = overallFrac(stages, stage, frac), eta = /몇 분/.test(text) ? '' : etaText(R.now() - t0, f);
     const tx = opt.added?.length ? `보완 ${opt.step ?? ''} (${opt.added.join(' + ')}) · ${text}` : text;
-    A.optDash?.progress(stage, frac, tx);
+    A.optDash?.progress(stage, frac, tx, f);
     st.running = { frac: f, text: eta ? `${tx} · ${eta}` : tx }; renderAuto();
   };
   const io = {

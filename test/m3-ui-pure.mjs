@@ -91,7 +91,7 @@ ok(judgeText(0.8004, 0.8009).cls === 'ok' && judgeText(0.7999, 0.8).cls === 'bad
   ok(s1.ok && s1.note === 'LED STEP — 기준 LED 를 복사해 개수·간격 조정' && !s2.ok && /기준/.test(s2.why) && s3.ok, 'LED STEP ②: 기준 발광점(확인 필요·제외 아님) 있으면 가능, 없으면 이유');
   ok(card({ avail: { ...a, leds: s1 }, sel: { leds: true }, running: null }).includes('기준 LED 를 복사해 개수·간격 조정'), '카드: LED STEP ② 안내 문구');
   const h = card({ avail: a, sel: { milky: true, leds: false, shape: false, shapePart: 0 }, running: null });
-  ok(h.includes('data-ad="milky" checked') && h.includes('data-ad="run"') && !h.includes('disabled data-ad="milky"'), '카드: 체크 상태·실행 버튼');
+  ok(h.includes('data-ad="milky" checked') && !h.includes('data-ad="run"') && !h.includes('disabled data-ad="milky"'), '카드: 체크 상태(실행 단추는 창 오른쪽 위)');
   ok(autoCardHtml({ avail: a, sel: { milky: true }, running: null, canRevert: true }).includes('data-ad="revert"') && !h.includes('data-ad="revert"'), '카드: 적용 뒤에만 되돌리기');
   const c = compareHtml({ cur: { count: 5, pitch: 0, milky: 3, Ulen: 0.62, Uwid: 0.7, eff: 0.6 }, best: { count: 4, pitch: 0, milky: 3.5, Ulen: 0.81, Uwid: 0.72, eff: 0.55 }, feasible: true, reason: '', shape: null });
   ok(c.includes('LED') && c.includes('4') && c.includes('0.81') && c.includes('data-ad="apply"') && c.includes('data-ad="cancel"'), '비교표: 현재 | 최적 · 적용·취소');
@@ -121,9 +121,9 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   ok((s.match(/<polyline/g) ?? []).length === 2 && s.includes('<svg') && profileSvg(null, [1]) === '' && profileSvg([], [1]) === '', '길이 프로파일 SVG: 선 2개 · 없으면 생략');
   const base = { parts: [{ material: { kind: 'milky' } }], light: { kind: 'manual' }, observe: { faces: [] } }, a = stageAvailability(base, { non25: [0] });
   const run = card({ avail: a, sel: { milky: true, shape: true, shapePart: 0 }, running: { frac: 0.4, text: 'x' }, names: ['LGP'], milkyPart: 0 });
-  ok(/data-ad="milky" checked disabled/.test(run) && /data-ad="shapePart"[^>]*disabled/.test(run) && /role="progressbar"[^>]*aria-valuenow="40"/.test(run) && run.includes('대상: LGP'), '실행 중: 입력 비활성 · 진행 막대 aria · ① 대상 부품');
+  ok(/data-ad="milky" checked disabled/.test(run) && /data-ad="shapePart"[^>]*disabled/.test(run) && run.includes('대상: LGP'), '실행 중: 입력 비활성 · ① 대상 부품');
   const nl = card({ avail: a, sel: { milky: true }, running: null, noLine: true });
-  ok(/data-ad="run" disabled title="관측 라인이 없음"/.test(nl), '라인 없음 → 실행 비활성');
+  ok(nl.includes('관측 라인이 없음'), '라인 없음 → 이유 표시');
   const c = compareHtml({ cur: { count: 5, pitch: 0, milky: 3, Ulen: 0.6, Uwid: 0.7, eff: 0.5, shape: { dt: 0, h: 0.2, R: 3 }, profile: [1, 2] }, best: { count: 5, pitch: 0, milky: 3, Ulen: 0.8, Uwid: 0.7, eff: 0.5, profile: [2, 2] }, feasible: true, reason: '', shape: null });
   ok(c.includes('적용된 형상') && (c.match(/<polyline/g) ?? []).length === 2, '비교표: 적용된 형상 · 프로파일 SVG');
   const t1 = shapeText({ dt: 0.5, h: 0.4, R: 6, e: -0.3, c: 0.2 }), t2 = shapeText({ dt: 0, h: -0.25, R: 4.5, e: 0, c: -0.1 });
@@ -174,7 +174,7 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   const c = stepA([]), d = stepA([{ part: 1 }]);
   ok(!c.housing.ok && /불투명/.test(c.housing.why) && !c.height.ok && /발광면/.test(c.height.why) && d.height.ok, '④ 불투명 없음 → 불가 · ⑤ LED STEP 발광점 없음 → 불가, 있으면 가능');
   const h = card({ avail: a, sel: { height: true, housing: true, housingPart: 2 }, running: null, names: ['LGP', '케이스', '덮개'] });
-  ok(h.includes('data-ad="height" checked') && h.includes('data-ad="housing" checked') && /<option value="2" selected>덮개/.test(h) && !/data-ad="run" disabled/.test(h) && tileConfigHtml('position', { avail: a, sel: { height: true } }).html.includes('data-ad="position" checked'), '카드: ⑤ 켜짐 = ② 기구 위치 사용 · 실행 가능');
+  ok(h.includes('data-ad="height" checked') && h.includes('data-ad="housing" checked') && /<option value="2" selected>덮개/.test(h) && tileConfigHtml('position', { avail: a, sel: { height: true } }).html.includes('data-ad="position" checked'), '카드: ⑤ 켜짐 = ② 기구 위치 사용 · 실행 가능');
   const M = { parts, observe: { faces: [{ part: 0, face: 1 }] } };
   const box0 = [0, 0, 0, 10, 10, 2], small = [-1, -1, -1, 11, 11, 3], big = [-5, -5, -5, 15, 15, 5], far = [100, 0, 0, 200, 100, 50];
   ok(defaultHousingPart(M, [box0, small, big]) === 2 && defaultHousingPart(M, [box0, small, far]) === 1 && defaultHousingPart(M, [box0, far, [0, 0, 0, 1, 1, 1]]) === 1
@@ -456,7 +456,7 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   const { autoCardHtml, stageAvailability } = await import('../src/ui/m3/autodesign-panel.js');
   const base = { avail: { milky: { ok: true } }, sel: { milky: true }, running: null };
   const go = autoCardHtml(base), wait = autoCardHtml({ ...base, noLed: 'LED 도면을 읽는 중' });
-  ok(!/data-ad="run" disabled/.test(go) && /data-ad="run" disabled title="LED 도면을 읽는 중"/.test(wait), '준비 전에는 실행 불가 · 이유 표시');
+  ok(!go.includes('읽는 중') && wait.includes('LED 도면을 읽는 중'), '준비 전에는 이유 표시');
 }
 { // 2D 최저 위치 점: 그림 크기에 맞춤, 2~5 px
   const { minDotR } = await import('../src/ui/m3/results-panel.js');
@@ -478,6 +478,16 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   ok(K(true, false) === 'mapCsv,pinCsv,png,copy' && mapMenuItems(true, true)[1].label.startsWith('선택 선') && mapMenuItems(false, true)[1].label.startsWith('이 위치') && K(false, false) === 'mapCsv,png,copy', '2D 전체 데이터 · 선택 선 있으면 CSV · 없으면 누른 자리 · 여백이면 전체·이미지');
   const { plotMenuItems } = await import('../src/ui/m3/results-panel.js');
   ok(plotMenuItems('길이 방향 1D').map((x) => x.k).join() === 'csv,png,copy' && plotMenuItems('길이 방향 1D')[0].label === '길이 방향 1D 데이터 CSV 저장', '1D 메뉴');
+}
+{ // 기구 최적화 그래프 2개 · 진행 막대
+  const { factorChartSvg, monitorHtml, STAGES } = await import('../src/ui/m3/opt-dash.js');
+  const seq = [{ k: 'milky', label: 'Milky 1', Ulen: 0.7, Uwid: 0.9 }, { k: 'milky', label: 'Milky 2', Ulen: 0.82, Uwid: 0.84 }, { k: 'milky', label: 'Milky 3', Ulen: 0.75, Uwid: 0.86 }];
+  const S = { tgLen: 0.8, tgWid: 0.8, seq, before: { Ulen: 0.6, Uwid: 0.7 }, overall: 0.44, tiles: Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', evals: [] }])) };
+  const g = factorChartSvg(S, S.before, 600, 170);
+  ok((g.match(/<svg/g) ?? []).length === 2 && g.includes('길이 균일도') && g.includes('폭 균일도') && g.includes('최고 0.82') && g.includes('최고 0.84') && g.includes('시작 0.60') && g.includes('④ Milky') && (g.match(/od-cand/g) ?? []).length === 6 && g.includes('<title>후보 2'), '그래프 2개: 최고 = 같은 후보 · 후보 점 · 항목 이름');
+  ok(factorChartSvg({ ...S, seq: [] }, {}, 600, 170).includes('후보를 시험하면'), '후보 전 안내');
+  const m = monitorHtml(S, 65); ok(m.includes('<b>44%</b>') && m.includes('width:44%') && m.includes('진행 01:05') && /role="progressbar"[^>]*aria-valuenow="44"/.test(m) && m.indexOf('44%') < m.indexOf('om-steps'), '맨 위 진행 막대 % · aria');
+  ok(monitorHtml({ ...S, ended: true, endSec: 5 }, 5).includes('<b>100%</b>'), '끝나면 100%');
 }
 done();
 

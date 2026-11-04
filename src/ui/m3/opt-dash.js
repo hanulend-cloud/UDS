@@ -34,14 +34,14 @@ export function factorBoardHtml(S, nw = {}, cfg = null) {
   const tl = S?.tgLen ?? nw.tgLen, tw = S?.tgWid ?? nw.tgWid;
   const row = (k, name, nowTxt) => {
     // 고정 = 적용까지 마친 항목 — 다음 실행에서 건드리지 않음. [다시 최적화] = 고정 풀고 다시 체크
-    if (nw.locked?.[k]) return `<div class="fb-row fb-lock" title="최적화 결과를 적용함 — 다음 실행에서 이 값 그대로 씀"><span class="fb-lk">🔒</span><i class="fb-dot" style="background:${FB_COL[k]}"></i><b>${name}</b><span class="od-chip od-lockc">✓ 고정</span><span class="fb-val">${esc(nowTxt)} <button type="button" class="fb-redo" data-adunlock="${k}">다시 최적화</button></span></div>`;
+    if (nw.locked?.[k]) return `<div class="fb-row fb-lock" title="최적화 결과를 적용함 — 다음 실행에서 이 값 그대로 씀"><span class="fb-lk">🔒</span><i class="fb-dot" style="background:${FB_COL[k]}"></i><b class="fb-name">${name}</b><span class="od-chip od-lockc">✓ 고정</span><span class="fb-val">${esc(nowTxt)} <button type="button" class="fb-redo" data-adunlock="${k}">다시 최적화</button></span></div>`;
     const c = cfg?.(k), t = S?.tiles?.[k], on = c ? !!c.on : t ? t.status !== 'off' : !!nw.on?.[k];
     const ev = (t?.evals ?? []).filter((e) => e.ok !== false && Number.isFinite(e.Ulen)); let b = null;
     for (const e of ev) if (!b || scoreOf(e, tl, tw) > scoreOf(b, tl, tw)) b = e;
     const chip = t && t.status !== 'off' ? { wait: '대기', run: `진행 ${Math.round(t.frac * 100)}%`, done: '완료' }[t.status] : on ? '켜짐' : '꺼짐';
     const txt = `지금 ${nowTxt}${b ? ` → ${b.label} (${f2(b.Ulen)}/${f2(b.Uwid)})` : ''}`;
     const box = c?.box ? `<label class="fb-sw" title="${esc(c.why || '최적화에 사용')}">${c.box}</label>` : '<span></span>';   // 빈 칸도 자리 유지(격자 5칸)
-    return `<div class="fb-row${on ? '' : ' fb-off'}" title="${esc(txt)}">${box}<i class="fb-dot" style="background:${FB_COL[k]}"></i><b>${name}</b><span class="od-chip">${chip}</span><span class="fb-val"><span class="mut">지금</span> ${esc(nowTxt)}${b ? ` → <b>${esc(b.label)}</b> <span class="mut">(${f2(b.Ulen)}/${f2(b.Uwid)})</span>` : ''}</span></div>${c?.opt ? `<div class="fb-opt">${c.opt}</div>` : ''}`;   // 설정(① 대상 · ③ 형상 바꿀 부품 — 체크 전에도 골라 둠)
+    return `<div class="fb-row${on ? '' : ' fb-off'}" title="${esc(txt)}">${box}<i class="fb-dot" style="background:${FB_COL[k]}"></i><b class="fb-name">${name}</b><span class="od-chip">${chip}</span><span class="fb-val"><span class="mut">지금</span> ${esc(nowTxt)}${b ? ` → <b>${esc(b.label)}</b> <span class="mut">(${f2(b.Ulen)}/${f2(b.Uwid)})</span>` : ''}</span></div>${c?.opt ? `<div class="fb-opt">${c.opt}</div>` : ''}`;   // 설정(① 대상 · ③ 형상 바꿀 부품 — 체크 전에도 골라 둠)
   };
   // 그래프는 오른쪽 모니터로(2026-10-30) — 여기는 입력(체크·옵션)과 상태만
   const nowOf = { position: nw.leds ?? '–', housing: nw.housing ?? '–', shape: nw.shape ?? '원래 형상', milky: Number.isFinite(nw.milky) ? `Milky ${f2(nw.milky)}` : '확산 부품 없음' };
@@ -49,34 +49,30 @@ export function factorBoardHtml(S, nw = {}, cfg = null) {
     ${STAGES.map(([k, name]) => row(k, name, nowOf[k])).join('')}
     <div class="mut fb-hint">한 항목씩: 체크 → ▶ 실행 → [적용] = 🔒 고정 → 다음 항목 체크 → ▶ 실행</div>`;
 }
-// 인자 3개를 한 그래프로(순수) — W×H = 실제 px(글자가 늘어나지 않게). 가로 = 시험 순서(S.seq), 세로 = 균일도 U(목표·지금 포함 범위)
+// 최적화 그래프 2개(순수, 2026-11-04) — 길이·폭 균일도를 따로. 연한 점 = 시험한 후보 · 굵은 선 = 지금까지 고른 최고안 · 빨간 점선 = 목표 · 색 띠 = 그때 시험한 항목. W×H = 칸의 실제 px
 export function factorChartSvg(S, nw = {}, W = 240, H = 100) {
-  const tl = S?.tgLen ?? nw.tgLen, tw = S?.tgWid ?? nw.tgWid, seq = S?.seq ?? [];
-  const okE = (e) => e.ok !== false && Number.isFinite(e.Ulen);
-  const vals = [...seq.filter(okE).flatMap((e) => [e.Ulen, e.Uwid]), tl, tw, nw.Ulen, nw.Uwid].filter(Number.isFinite);
-  const lo = vals.length ? Math.max(0, Math.floor((Math.min(...vals) - 0.02) * 20) / 20) : 0, hi = vals.length ? Math.min(1, Math.ceil((Math.max(...vals) + 0.01) * 20) / 20) : 1;
-  const x0 = 26, x1 = W - 6, y0 = 5, y1 = H - 13, Y = (v) => y0 + (1 - (v - lo) / (hi - lo || 1)) * (y1 - y0);
-  const n = seq.length, step = n > 1 ? (x1 - x0) / (n - 1) : 0, X = (i) => x0 + (n > 1 ? i * step : (x1 - x0) / 2);
-  const hl = (v, cls) => (Number.isFinite(v) ? `<line class="${cls}" x1="${x0}" x2="${x1}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/>` : '');
-  let body = '';
-  if (seq.some(okE)) {
-    let s0 = 0;   // 인자 구간 띠
-    for (let i = 1; i <= n; i++) if (i === n || seq[i].k !== seq[s0].k) { const xa = Math.max(x0, X(s0) - step / 2), xb = Math.min(x1, X(i - 1) + step / 2); body += `<rect x="${xa.toFixed(1)}" y="${y0}" width="${Math.max(1, xb - xa).toFixed(1)}" height="${y1 - y0}" fill="${FB_COL[seq[s0].k] ?? '#888'}" opacity=".08"/>`; s0 = i; }
-    body += hl(tl, 'od-tg') + hl(tw, 'od-tg od-tg2') + hl(nw.Ulen, 'od-now');
-    let best = -1;
-    seq.forEach((e, i) => { if (okE(e) && (best < 0 || scoreOf(e, tl, tw) > scoreOf(seq[best], tl, tw))) best = i; });
-    for (const k of Object.keys(FB_COL)) {
-      const idx = seq.map((e, i) => i).filter((i) => seq[i].k === k && okE(seq[i]));
-      if (!idx.length) continue;
-      const pl = (key, dash) => { const d = idx.filter((i) => Number.isFinite(seq[i][key])).map((i) => `${X(i).toFixed(1)},${Y(seq[i][key]).toFixed(1)}`); return d.length > 1 ? `<polyline points="${d.join(' ')}" fill="none" stroke="${FB_COL[k]}" stroke-width="1.6"${dash ? ' stroke-dasharray="3 2"' : ''}/>` : ''; };
-      body += pl('Ulen', false) + pl('Uwid', true) + idx.map((i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(seq[i].Ulen).toFixed(1)}" r="2" fill="${FB_COL[k]}"/>`).join('');
-    }
-    let bb = null; const run = []; seq.forEach((e, i) => { if (okE(e) && (!bb || scoreOf(e, tl, tw) > scoreOf(bb, tl, tw))) bb = e; if (bb) run.push(`${X(i).toFixed(1)},${Y(bb.Ulen).toFixed(1)}`); });
-    if (run.length > 1) body += `<polyline class="od-run" points="${run.join(' ')}" fill="none"/>`;   // 지금까지 최고(길이 균일도) — 계단처럼 오르는 선
-    if (best >= 0) body += `<circle class="od-best" cx="${X(best).toFixed(1)}" cy="${Y(seq[best].Ulen).toFixed(1)}" r="5"><title>최고 ${esc(seq[best].label)} (${f2(seq[best].Ulen)}/${f2(seq[best].Uwid)})</title></circle>`;
-    body += `<text class="od-ax" x="${x0}" y="${H - 2}">후보 1</text><text class="od-ax" x="${x1}" y="${H - 2}" text-anchor="end">${n}</text>`;
-  } else body += hl(tl, 'od-tg') + hl(tw, 'od-tg od-tg2') + hl(nw.Ulen, 'od-now') + `<text class="od-none" x="${(x0 + x1) / 2}" y="${(y0 + y1) / 2 + 4}" text-anchor="middle">기구 최적화를 실행하면 후보 균일도가 그려짐</text>`;
-  return `<svg class="fb-chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><rect x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}" fill="none" stroke="#c7cfdb" stroke-width=".5"/>${body}<text class="od-ax" x="2" y="${y0 + 6}">${hi.toFixed(2)}</text><text class="od-ax" x="2" y="${y1}">${lo.toFixed(2)}</text></svg>`;
+  const tl = S?.tgLen ?? nw.tgLen, tw = S?.tgWid ?? nw.tgWid, seq = S?.seq ?? [], okE = (e) => e.ok !== false && Number.isFinite(e.Ulen);
+  if (!seq.some(okE)) return `<div class="od-sim2 one"><div class="od-none-box">후보를 시험하면 여기에 그려집니다</div></div>`;
+  const one = W < 300, cw = one ? W : Math.floor((W - 8) / 2), ch = Math.max(44, (one ? Math.floor(H / 2) : H) - 17), x0 = 30, x1 = cw - 5, y0 = 13, y1 = ch - 12, n = seq.length;
+  const X = (i) => x0 + (n > 1 ? (i / (n - 1)) * (x1 - x0) : (x1 - x0) / 2), wd = (x1 - x0) / Math.max(1, n - 1);
+  let bb = null; const run = seq.map((e) => { if (okE(e) && (!bb || scoreOf(e, tl, tw) > scoreOf(bb, tl, tw))) bb = e; return bb; });
+  let bands = '';
+  for (let s0 = 0, i = 1; i <= n; i++) if (i === n || seq[i].k !== seq[s0].k) {
+    const xa = Math.max(x0, X(s0) - wd / 2), xb = Math.min(x1, X(i - 1) + wd / 2), name = STAGES.find(([k]) => k === seq[s0].k)?.[1] ?? '';
+    bands += `<rect x="${xa.toFixed(1)}" y="${y0}" width="${Math.max(1, xb - xa).toFixed(1)}" height="${y1 - y0}" fill="${FB_COL[seq[s0].k] ?? '#888'}" opacity=".13"/>${xb - xa > 30 ? `<text class="od-ax" x="${((xa + xb) / 2).toFixed(1)}" y="${y0 - 3}" text-anchor="middle">${esc(name)}</text>` : ''}`;
+    s0 = i;
+  }
+  const hits = Array.from({ length: Math.min(30, n) }, (_, q, m = Math.min(30, n)) => { const i = Math.round((q * (n - 1)) / Math.max(1, m - 1)), e = seq[i], bw = (x1 - x0) / m; return `<rect class="od-hit" x="${(x0 + q * bw).toFixed(1)}" y="${y0}" width="${bw.toFixed(1)}" height="${y1 - y0}"><title>후보 ${i + 1} · ${esc(e.label ?? '')} · 길이 ${okE(e) ? f2(e.Ulen) : '–'} · 폭 ${okE(e) ? f2(e.Uwid) : '–'}${run[i] ? ` · 지금까지 최고 ${esc(run[i].label ?? '')}` : ''}</title></rect>`; }).join('');
+  const panel = (key, t, v0, title, s, d) => {
+    const vals = [...seq.filter(okE).map((e) => e[key]), t, v0].filter(Number.isFinite), lo = Math.max(0, Math.floor((Math.min(...vals) - 0.02) * 20) / 20), hi = Math.min(1, Math.ceil((Math.max(...vals) + 0.01) * 20) / 20), Y = (v) => y0 + (1 - (Math.min(hi, Math.max(lo, v)) - lo) / (hi - lo || 1)) * (y1 - y0);
+    const dots = seq.map((e, i) => (okE(e) && Number.isFinite(e[key]) ? `<circle class="od-cand ${d}" cx="${X(i).toFixed(1)}" cy="${Y(e[key]).toFixed(1)}" r="1.8"/>` : '')).join('');
+    const line = run.map((e, i) => (e && Number.isFinite(e[key]) ? `${X(i).toFixed(1)},${Y(e[key]).toFixed(1)}` : null)).filter(Boolean).join(' '), last = bb?.[key];
+    const mark = Number.isFinite(last) ? `<circle class="od-dot ${d}" cx="${x1}" cy="${Y(last).toFixed(1)}" r="3.5"/>` : '';
+    const tg = Number.isFinite(t) ? `<line class="od-tg" x1="${x0}" x2="${x1}" y1="${Y(t).toFixed(1)}" y2="${Y(t).toFixed(1)}"/><text class="od-ax" x="${x0 - 3}" y="${(Y(t) + 3).toFixed(1)}" text-anchor="end">${f2(t)}</text>` : '';
+    const ok = Number.isFinite(last) && Number.isFinite(t) ? (last + 1e-9 >= t ? '<span class="od-ok">✓</span>' : '<span class="od-bad">✕</span>') : '';
+    return `<div><div class="od-simt"><b>${title}</b> 최고 ${f2(last)}${ok} · 목표 ${f2(t)}${Number.isFinite(v0) && cw >= 260 ? ` · 시작 ${f2(v0)}` : ''}</div><svg class="od-sim" width="${cw}" height="${ch}" viewBox="0 0 ${cw} ${ch}">${bands}${tg}<text class="od-ax" x="${x0 - 3}" y="${y0 + 7}" text-anchor="end">${hi.toFixed(2)}</text><text class="od-ax" x="${x0 - 3}" y="${y1}" text-anchor="end">${lo.toFixed(2)}</text><line class="od-ax-l" x1="${x0}" x2="${x1}" y1="${y1}" y2="${y1}"/><text class="od-ax" x="${x0}" y="${ch - 2}">후보 1</text><text class="od-ax" x="${x1}" y="${ch - 2}" text-anchor="end">${n}개</text>${dots}${line ? `<polyline class="${s}" points="${line}"/>` : ''}${mark}${hits}</svg></div>`;
+  };
+  return `<div class="od-sim2${one ? ' one' : ''}">${panel('Ulen', tl, nw.Ulen, '길이 균일도', 'od-s1', 'od-d1')}${panel('Uwid', tw, nw.Uwid, '폭 균일도', 'od-s2', 'od-d2')}</div>`;
 }
 // 최적화 타일 전후 사양표(순수) — b0 = 실행 전 사양(factorNow), best = 그 항목 최고 후보 { label, Ulen, Uwid }. 바뀐 칸 강조 · 목표 통과 ✓/✕
 const SPEC_NOW = { milky: (b) => (Number.isFinite(b.milky) ? `Milky ${f2(b.milky)}` : '–'), position: (b) => b.leds ?? '–', shape: (b) => b.shape ?? '원래 형상', housing: (b) => b.housing ?? '–' };
@@ -121,11 +117,12 @@ export function monitorHtml(S, sec = 0) {
   const say = busy ? `<p><b>지금 하는 일</b> ${esc(doing)}</p>${uLine ? `<p><b>지금까지 가장 좋은 안</b> ${uLine}</p>` : ''}`
     : S.stopped ? '<p><b>중지했습니다.</b> 찾던 안은 설계에 반영되지 않았습니다.</p>'
     : `<p><b>${J.all === 'near' ? '목표 근처의 안을 찾았습니다. 차이가 노이즈보다 작아 통과·미달은 계산마다 달라질 수 있습니다.' : S.ended ? '목표를 통과한 안을 찾았습니다.' : '목표에 닿는 안을 찾지 못해 가장 가까운 안을 골랐습니다.'}</b></p>${uLine ? `<p><b>최종 판정</b> ${uLine}</p>` : ''}${!S.ended && S.note ? `<p class="mut">${esc(J.all === 'near' ? S.note.replace(/미달/g, '근처') : S.note)}</p>` : ''}<p class="mut">왼쪽 아래 결과에서 적용하면 이 값이 그대로 화면에 나옵니다.</p>`;
-  return `<div class="od-h">${busy ? `${S.pauseAt ? '일시정지' : '진행'} ${mmss(sec)}` : S.stopped ? '중지됨' : `끝남 ${mmss((S.endSec ?? sec))}`} <span class="mut">· 시험한 후보 ${nEval}개</span></div>
+  const pct = S.ended != null ? 100 : Math.round(Math.max(0, Math.min(1, S.overall ?? 0)) * 100);
+  return `<div class="od-pct om-pct"><b>${pct}%</b><div class="od-bar od-bar-big" role="progressbar" aria-label="기구 최적화 진행" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div><span class="mut od-simst">${busy ? `${S.pauseAt ? '일시정지' : '진행'} ${mmss(sec)}` : S.stopped ? '중지됨' : `끝남 ${mmss((S.endSec ?? sec))}`} · 후보 ${nEval}개</span></div>
     <div class="om-steps">${steps.join('<i class="om-ar">→</i>')}</div>
     <div class="om-say">${say}</div>
     <div class="om-kpi">${kpi(fin ? '길이 균일도 최종' : '길이 균일도', tl, cur?.Ulen ?? b0.Ulen, b0.Ulen)}${kpi(fin ? '폭 균일도 최종' : '폭 균일도', tw, cur?.Uwid ?? b0.Uwid, b0.Uwid)}${effK}</div>
-    <div class="od-legend">그래프 보는 법: 점 하나 = 시험한 후보 하나 · 굵은 선 = 지금까지 최고 · 위로 갈수록 고름 <i class="od-kt"></i>목표 <i style="border-color:#8a96a8"></i>시작</div>
+    <div class="od-legend">위로 갈수록 고름 · 연한 점 = 시험한 후보 · 굵은 선 = 지금까지 고른 최고안 · 빨간 점선 = 목표 · 색 띠 = 그때 시험한 항목</div>
     <div class="od-plot"></div>
     ${optMatrixHtml(S)}`;
 }
@@ -160,7 +157,8 @@ export function createOptDash(el, h = {}) {
   }
   // 보완 실행 — 새로 켠 항목을 '대기' 로(기존 결과는 남김)
   function addStages(stages, note = '') { if (!S) return; for (const [k] of STAGES) if (stages[k] && S.tiles[k].status === 'off') S.tiles[k].status = 'wait'; S.note = note; draw(); }
-  function progress(stage, frac, text) {
+  function progress(stage, frac, text, overall) {
+    if (S && Number.isFinite(overall)) S.overall = overall;
     if (!S) return;
     const k = tileOf(stage);
     if (!k) { S.note = text ?? ''; draw(); return; }   // 현재안·검증 = 머리 줄 문구
