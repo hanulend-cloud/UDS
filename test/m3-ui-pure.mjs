@@ -452,6 +452,12 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   setStepMark(mk, 4, false); ok(mk.textContent === '4' && !cls.has('done'), '다시 계산하면 번호');
   setStepMark(null, 4, true);
 }
+{ // LED 가 없거나 읽는 중이면 실행 단추를 막음
+  const { autoCardHtml, stageAvailability } = await import('../src/ui/m3/autodesign-panel.js');
+  const base = { avail: { milky: { ok: true } }, sel: { milky: true }, running: null };
+  const go = autoCardHtml(base), wait = autoCardHtml({ ...base, noLed: 'LED 도면을 읽는 중' });
+  ok(!/data-ad="run" disabled/.test(go) && /data-ad="run" disabled title="LED 도면을 읽는 중"/.test(wait), '준비 전에는 실행 불가 · 이유 표시');
+}
 done();
 
 { const { clearDbHtml } = await import('../src/ui/mech3d-panel.js');

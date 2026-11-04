@@ -617,18 +617,28 @@ function renderAuto() {
     return;
   }
   A.optDash?.refresh();
-  renderAutoPanel(el, { avail, sel, running: st.running && { ...st.running, paused: !!st.paused }, result: st.result, resultOpen: !!st.resultOpen, names: M.parts.map((p) => p.name), canRevert: !!st.undo, applied: st.undo ? st.applied ?? null : null, noLine: !A.store.session.line, milkyPart: mp, housingMat: hm ? { name: hm.name, max: hm.max } : null, catalog: reflCat() }, {
+  renderAutoPanel(el, { avail, sel, running: st.running && { ...st.running, paused: !!st.paused }, result: st.result, resultOpen: !!st.resultOpen, names: M.parts.map((p) => p.name), canRevert: !!st.undo, applied: st.undo ? st.applied ?? null : null, noLine: !A.store.session.line, noLed: A.store.session.line ? adBlock() : '', milkyPart: mp, housingMat: hm ? { name: hm.name, max: hm.max } : null, catalog: reflCat() }, {
     onSel: (k, v) => adSel(k, v),
     onAction: (k, v) => ({ continue: adContinue, applyMilky: () => adApplyMilky(+v), run: () => adCtl('run'), pause: () => adCtl('pause'), stop: adStop, close: () => monitor?.close(), apply: adApply, applyAlt: adApplyAlt, cancel: adCancel, revert: adRevert, step: adStep, view: () => { st.resultOpen = true; renderAuto(); }, hide: () => { st.resultOpen = false; renderAuto(); } })[k]?.(),
   });
 }
 // 접은 창에 보일 현재 결과 — 실행 중 = 진행률, 결과 있음 = 후보 값, 그 밖 = 지금 값(길이·폭 균일도)
+// 기구 최적화를 시작할 수 없는 이유 — 없으면 ''. 페이지를 연 직후 LED 도면을 읽기 전에 실행하면 'LED 가 없음' 으로 실패했음
+let adLedCache = null;
+function adBlock(M = A.store.mspec, line = A.store.session.line) {
+  if (!line) return '관측 라인이 없음';
+  if (M.light.kind === 'none') return 'LED 를 먼저 지정하세요 — ① LED 지정';
+  if (M.light.kind === 'step' && M.light.step && !getLedMesh()) return 'LED 도면을 읽는 중';
+  const key = JSON.stringify(M.light), mesh = getLedMesh();   // 계산 갱신마다 불림 — 광원이 그대로면 다시 안 잼
+  if (adLedCache?.key !== key || adLedCache.line !== line || adLedCache.mesh !== mesh) { let n = 0; try { n = L.currentEmitters(M, line).length; } catch { n = 0; } adLedCache = { key, line, mesh, n }; }
+  return adLedCache.n ? '' : 'LED 를 먼저 지정하세요 — ① LED 지정';
+}
 function monitorSummary() {
   if (!A || !monitor) return;
   A.cmd?.update(A.store.session, A.store.mspec);   // 상단 ⑤ 표시 — 계산이 끝난 뒤 최적화가 끝나거나 중지돼도 바뀌게
   monitor.setDone(!A.ad?.running && (!!A.ad?.result || !!A.cmd?.flow?.()?.opt?.done));   // 창 제목 ✓ = 최적화를 끝냈거나 할 필요 없음
-  const st0 = A.ad, av0 = adAvail(A.store.mspec), nSel = AD_ITEMS.filter(([, , ks]) => ks.some((k) => st0?.sel?.[k] && av0[k]?.ok)).length, noLine = !A.store.session.line;
-  monitor.setCtl(optCtl({ running: !!st0?.running, paused: !!st0?.paused, canRun: !noLine && nSel > 0, hasResult: !!st0?.result, why: noLine ? '관측 라인이 없음' : '펼쳐서 최적화할 항목을 체크하세요' }), adCtl);
+  const st0 = A.ad, av0 = adAvail(A.store.mspec), nSel = AD_ITEMS.filter(([, , ks]) => ks.some((k) => st0?.sel?.[k] && av0[k]?.ok)).length, block = adBlock();
+  monitor.setCtl(optCtl({ running: !!st0?.running, paused: !!st0?.paused, canRun: !block && nSel > 0, hasResult: !!st0?.result, why: block || '펼쳐서 최적화할 항목을 체크하세요' }), adCtl);
   const st = A.ad, M = A.store.mspec, cell = (t, v, g) => `<b class="${Number.isFinite(v) && Number.isFinite(g) ? (v + 1e-9 >= g ? 'ok' : 'bad') : ''}">${t} ${Number.isFinite(v) ? v.toFixed(2) : '–'}</b>`;
   if (st?.running) { monitor.setSummary(`<b>${st.paused ? '일시정지' : '진행'} ${Math.round((st.running.frac ?? 0) * 100)}%</b>`); return; }
   const b = st?.result?.best, sn = A.prog?.snapshot(), s = sn?.stats, calc = ['running', 'pending', 'starting'].includes(sn?.state) ? `<b>계산 ${Math.round(simPct(s?.relNoise, sn.targetNoise))}%</b> ` : '';
@@ -976,6 +986,8 @@ const progress0 = (t) => { const st = A?.ad; if (st?.running) { st.running = { .
 async function adRun(opt = {}) {
   const a = A, st = adState(), S = A.store.session;
   if (!S.line || st.running) return null;
+  const why = adBlock();
+  if (why) { setStatus(why); return null; }
   if (/^기구 최적화 실패/.test(S.status ?? '')) setStatus('');   // 지난 실패 문구는 지움
   const M0 = adClone(A.store.mspec), line = S.line, rt = getMech3d();   // 실행 격리 — 편집은 실행을 중지시킴(onChange)
   const avail = adAvail(M0), stages = opt.stages ?? { milky: st.sel.milky && avail.milky.ok, leds: st.sel.leds && avail.leds.ok, shape: st.sel.shape && avail.shape.ok && avail.shape.parts.includes(st.sel.shapePart),

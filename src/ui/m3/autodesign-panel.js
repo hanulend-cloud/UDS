@@ -142,10 +142,10 @@ export function tileConfigHtml(k, { avail, sel, running, names = [], milkyPart =
   return { on, box: `<input type="checkbox" data-ad="${k}"${on ? ' checked' : ''}${dis} aria-label="${k} 사용">`, opt, why, html: `${sw}<div class="od-why mut">${esc(why)}</div>${opt}` };
 }
 // 기구 최적화 한 줄(대시보드 맨 위) — 켠 항목 · [▶ 실행] · [되돌리기] · [접기]. 실행 중 = 진행 막대 · [중지]. 항목 고르기는 아래 타일에서
-// noLine = 관측 라인 없음(실행 불가)
-export function autoCardHtml({ avail, sel, running, canRevert = false, noLine = false, applied = null }) {
+// noLine = 관측 라인 없음 · noLed = 실행할 수 없는 이유(LED 없음·읽는 중) — 실행 불가
+export function autoCardHtml({ avail, sel, running, canRevert = false, noLine = false, noLed = '', applied = null }) {
   const on = AD_ITEMS.filter(([, , ks]) => ks.some((k) => sel[k] && avail[k]?.ok)).map(([, l]) => l);
-  const run = `<button type="button" class="m3-ad-run" data-ad="run"${!on.length || noLine ? ' disabled' : ''}${noLine ? ' title="관측 라인이 없음"' : ''}>▶ 실행</button><button type="button" disabled>⏸ 일시정지</button><button type="button" disabled>■ 중지</button>`;
+  const run = `<button type="button" class="m3-ad-run" data-ad="run"${!on.length || noLine || noLed ? ' disabled' : ''}${noLine ? ' title="관측 라인이 없음"' : noLed ? ` title="${esc(noLed)}"` : ''}>▶ 실행</button><button type="button" disabled>⏸ 일시정지</button><button type="button" disabled>■ 중지</button>`;
   if (running) return `<div class="m3-ad-bar">${progHtml(running)}</div>`;
   return `<div class="m3-ad-bar">${run}<span class="m3-ad-on">${on.length ? `켠 항목 <b>${on.join(' ')}</b>` : '<span class="mut">왼쪽 설계 인자에서 최적화할 항목을 체크하세요</span>'}</span>${canRevert ? '<span class="m3-ad-sp"></span><button type="button" data-ad="revert" title="마지막 적용 전 값으로">↶ 되돌리기</button>' : ''}</div>${appliedHtml(applied)}`;
 }
