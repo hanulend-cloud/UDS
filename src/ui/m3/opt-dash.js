@@ -3,7 +3,7 @@ import { judgeStats, uVerdict } from '../../engine/mech3d/tally.js';
 // 최적화: app.js 의 기구 최적화 io 가 progress(stage, frac, text) · evals(stage, [{label, Ulen, Uwid, ok, why}]) 를 부른다.
 // 타일마다 상태(대기·진행 %·완료·건너뜀) · 시험 중 값 → 지금까지 최고 · 후보별 길이/폭 균일도 점 그래프(목표선) · 진행 막대.
 // 시뮬레이션: 점진 계산 스냅숏마다 sample(snap, targetNoise) — 광선 수에 따른 노이즈 %·길이/폭 균일도 추정과 진행률 %(노이즈가 목표에 닿으면 100%).
-import { simCtl, setCtl } from './run-ctl.js';
+import { simCtl, setCtl, setStepMark } from './run-ctl.js';
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 // 계산 순서대로(엔진: 위치 → 케이스 면 → 형상 → Milky, 2026-10-30) — 번호도 이 순서
 export const STAGES = [['position', '① 위치'], ['housing', '② 케이스 면'], ['shape', '③ 형상'], ['milky', '④ Milky']];
@@ -289,13 +289,14 @@ export function createSimDash(el, { onCtl = null } = {}) {
     const sTxt = { running: '계산 중', paused: stopped ? '중지됨' : '일시정지', done: reason === 'adopted' ? '완료 — 기구 최적화 최종 판정 값' : reason === 'converged' ? '완료 — 목표 정확도 도달' : '계산 한도 도달 — 정확도 미달', pending: '대기', starting: '장면 준비' }[state] ?? state ?? '';
     // 틀은 한 번만 만들고 칸마다 바뀐 것만 고침 — 계산 중 갱신이 잦아도 단추 클릭·접는 칸이 끊기지 않게
     if (!el.querySelector('.od-simh')) {
-      el.innerHTML = `<div class="od-h od-simh"><i class="m3-fl">4</i>광분포 시뮬레이션<span class="m3-ad-sp"></span>${onCtl ? '<span class="m3-ctl" data-sim-ctl></span>' : ''}</div>
+      el.innerHTML = `<div class="od-h od-simh"><i class="m3-fl" data-s="step">4</i>광분포 시뮬레이션<span class="m3-ad-sp"></span>${onCtl ? '<span class="m3-ctl" data-sim-ctl></span>' : ''}</div>
         <div class="od-pct"><b data-s="pct"></b><div class="od-bar od-bar-big" title="계산 오차가 목표에 닿으면 100%"><i data-s="bar"></i></div><span class="mut od-simst" data-s="st"></span></div>
         <div class="od-simbox"><div class="od-simcap" data-s="row"></div><div class="od-simplot" data-s="svg"></div></div><div class="od-diag" data-s="diag" hidden></div>
         <details class="od-more"><summary><span data-s="sum">광경로</span></summary><div data-s="paths"></div></details>`;
     }
     const set = (k, html) => { const n = el.querySelector(`[data-s="${k}"]`); if (n && n.innerHTML !== html) n.innerHTML = html; };
     set('st', busy ? '기구 최적화 중 — 일시정지(끝나면 이어서)' : esc(sTxt));
+    setStepMark(el.querySelector('[data-s="step"]'), 4, state === 'done');
     setCtl(el.querySelector('[data-sim-ctl]'), simCtl({ state, stopped }, busy), (k) => onCtl?.(k));
     set('pct', `${pct.toFixed(0)}%`); el.querySelector('[data-s="bar"]').style.width = `${pct.toFixed(0)}%`;
     set('row', row);

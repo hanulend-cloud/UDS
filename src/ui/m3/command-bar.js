@@ -28,7 +28,7 @@ export function flowState(calc, stats, M, ad = {}) {
   return { sim, opt };
 }
 export function mountCommandBar(el, h) {
-  let lastStats = null;
+  let lastStats = null, lastFlow = null;
   el.innerHTML = `<button type="button" class="m3-step" data-c="led" aria-pressed="false"><i>1</i> LED 지정</button><span class="m3-arrow">›</span>
     <button type="button" class="m3-step" data-c="obs" aria-pressed="false"><i>2</i> 관측면 지정</button><span class="m3-arrow">›</span>
     <button type="button" class="m3-step" data-c="tgt" aria-pressed="false"><i>3</i> 목표 설정 <span class="mut" data-tgt></span></button><span class="m3-arrow">›</span>
@@ -46,6 +46,7 @@ export function mountCommandBar(el, h) {
     if (n.getAttribute('aria-pressed') !== v) n.setAttribute('aria-pressed', v);
   };
   return {
+    flow: () => lastFlow,
     // S = 세션, M = 설계(단계 완료 표시), stats = 지금 계산 결과(없으면 마지막 값 유지)
     update(S, M, stats) {
       if (stats !== undefined) lastStats = stats;
@@ -58,6 +59,7 @@ export function mountCommandBar(el, h) {
       const t = el.querySelector('[data-tgt]'); if (t.textContent !== st.tgt) t.textContent = st.tgt;
       // 4 광분포 시뮬레이션 · 5 기구 최적화 — 상태 문구(색 = 통과/미달/필요)와 끝난 단계 ✓
       const f = flowState(S.calc, lastStats, M, h.adFlow?.() ?? {});
+      lastFlow = f;
       for (const [k, n] of [['sim', '4'], ['opt', '5']]) {
         const x = b(k), s = el.querySelector(`[data-flow="${k}"]`), c = `m3-fs ${f[k].cls}`, i = x.querySelector('i');
         if (s.textContent !== f[k].text) s.textContent = f[k].text;

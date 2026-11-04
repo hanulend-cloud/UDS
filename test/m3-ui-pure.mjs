@@ -440,6 +440,18 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   ok(simCtl({ state: 'paused' }).runTitle === '이어서 계산' && simCtl({ state: 'done' }).runTitle === '처음부터 계산', '실행 = 일시정지면 이어서, 아니면 처음부터');
   ok(on(optCtl({ running: true })) === 'pause,stop' && on(optCtl({ running: true, paused: true })) === 'run,stop' && on(optCtl({})) === 'run' && on(optCtl({ canRun: false })) === '' && optCtl({ hasResult: true }).runTitle.includes('버리고'), '최적화 단추 상태');
 }
+{ // 적용 전 결과가 있으면 다시 실행 전에 물음
+  const { rerunAsk, optCtl } = await import('../src/ui/m3/run-ctl.js');
+  const q = rerunAsk({ Ulen: 0.8302, Uwid: 0.7421 });
+  ok(q.includes('0.83') && q.includes('0.74') && q.includes('버리고') && rerunAsk(null).includes('버리고') && optCtl({ hasResult: true }).runTitle.includes('확인'), `확인 문구: ${q.replace('\n', ' ')}`);
+}
+{ // 창 제목 단계 표시: 번호 ↔ 초록 ✓
+  const { setStepMark } = await import('../src/ui/m3/run-ctl.js');
+  const cls = new Set(), mk = { textContent: '4', classList: { toggle: (c, v) => (v ? cls.add(c) : cls.delete(c)) } };
+  setStepMark(mk, 4, true); ok(mk.textContent === '✓' && cls.has('done'), '끝나면 ✓');
+  setStepMark(mk, 4, false); ok(mk.textContent === '4' && !cls.has('done'), '다시 계산하면 번호');
+  setStepMark(null, 4, true);
+}
 done();
 
 { const { clearDbHtml } = await import('../src/ui/mech3d-panel.js');

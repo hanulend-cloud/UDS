@@ -1,7 +1,7 @@
 import { mountSplit } from './pane-split.js';
 import { clampRect, fitRect, dragBy, raiseWin, mountResizers, COLLAPSED_W } from './monitor.js';
 import { simPct } from './opt-dash.js';
-import { simCtl, setCtl } from './run-ctl.js';
+import { simCtl, setCtl, setStepMark } from './run-ctl.js';
 // 결과 패널 — spec 2026-10-15 m3-cad-ui §2(시안 m3-ui-mockup 오른쪽):
 // ① 2D 광량 분포(관측면 펼침 s×w) + 평균 광량(목표 대비)·광 효율 ② 길이 1D 프로파일(목표선) + 길이 균일도 ③ 폭 1D 프로파일(최저 창) + 폭 균일도.
 // update({ snap(progressive snapshot), observe(spec.mech3d.observe), message(안내 | ''), leds?: [{s, w}](LED 위치 — 프로파일 아래 표시) })
@@ -503,7 +503,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     const rect = fitRect(bigRectLoad(), innerWidth, innerHeight);
     ov.className = 'm3-big-in'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', '광시뮬레이션');
     const cell = (k) => `<div class="m3-big-c" data-k="${k}"><div class="m3-big-ct"><b>${TITLE[k]}</b><span class="m3-big-sp"></span>${k === 'map' ? `<label class="m3-big-eq"><input type="checkbox" data-big-eq${eq0 ? ' checked' : ''}> 실제 비율</label>` : ''}<button type="button" data-big-txt="${k}" title="${k === 'map' ? '2D 분포 표(칸마다, 최대 대비 %)' : `${TITLE[k]} — ${k === 'prof' ? '폭 평균' : '최저 창·길이 평균'} 곡선(원자료 %, 고른 점이 있으면 그 곡선도)`}">${k === 'map' ? '2D CSV' : '평균값 CSV'}</button><button type="button" data-big-one="${k}">⤢ 이 그림만</button></div><canvas class="m3-big-cv" data-big-cv="${k}"></canvas></div>`;
-    ov.innerHTML = `<div class="m3-big-hd" title="끌어서 옮기기"><b title="진행 현황 · 2D · 1D — 2D 클릭 = 그 점 기준 1D 곡선(주황)">광시뮬레이션</b><span class="m3-mon-sum" data-big-sum></span><span class="m3-big-sp"></span><span class="m3-ctl" data-big-ctl></span><label class="m3-big-q">화질 <select data-big-q aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label><button type="button" data-pin-txt>선택 선 CSV</button><button type="button" data-big-min></button><button type="button" data-big-close title="Esc">✕ 닫기</button></div>
+    ov.innerHTML = `<div class="m3-big-hd" title="끌어서 옮기기"><b title="진행 현황 · 2D · 1D — 2D 클릭 = 그 점 기준 1D 곡선(주황)"><i class="m3-fl" data-big-step>4</i>광시뮬레이션</b><span class="m3-mon-sum" data-big-sum></span><span class="m3-big-sp"></span><span class="m3-ctl" data-big-ctl></span><label class="m3-big-q">화질 <select data-big-q aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label><button type="button" data-pin-txt>선택 선 CSV</button><button type="button" data-big-min></button><button type="button" data-big-close title="Esc">✕ 닫기</button></div>
       <div class="m3-big-grid"><div class="m3-big-prog" data-big-prog></div>${cell('map')}<div class="m3-big-row">${cell('prof')}${cell('wprof')}</div></div>`;
     (el.closest('#mech3d-wrap') ?? document.body).appendChild(ov);   // 설계 화면에 붙임(화면을 바꾸면 함께 숨음)
     const cvs = Object.fromEntries(KINDS.map((k) => [k, ov.querySelector(`[data-big-cv="${k}"]`)]));
@@ -551,6 +551,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     if (document.activeElement !== s) s.value = last?.observe?.quality ?? 'low';
     const su = big.el.querySelector('[data-big-sum]'), st0 = last?.snap?.stats, O = last?.observe, u = (t, v, g) => `<b class="${Number.isFinite(v) && Number.isFinite(g) ? (v + 1e-9 >= g ? 'ok' : 'bad') : ''}">${t} ${Number.isFinite(v) ? v.toFixed(2) : '–'}</b>`;
     const pr = last?.snap?.state === 'done' ? 100 : simPct(st0?.relNoise, last?.snap?.targetNoise ?? 0.01);
+    setStepMark(big.el.querySelector('[data-big-step]'), 4, last?.snap?.state === 'done');
     setCtl(big.el.querySelector('[data-big-ctl]'), simCtl(last?.snap, calcBusy()), (k) => onCalc?.(k));
     if (su) su.innerHTML = `<b>진행 ${pr.toFixed(0)}%</b> ${!st0 || st0.empty || st0.relNoise > 0.05 ? '' : `${u('길이', st0.Ulen, O?.targetLen)} ${u('폭', st0.Uwid, O?.targetWid)}`}`;   // 접었을 때 보이는 현재 결과(계산 초반 값은 노이즈가라 숨김)
     b.disabled = !pin; b.title = pin ? '고른 점을 지나는 길이·폭 방향 원자료(평활 없음, 2D 최대 대비 %)' : '2D 에서 점을 클릭하면 저장할 수 있음';

@@ -11,7 +11,19 @@ export function simCtl(snap, busy = false) {
 // canRun = 켠 항목이 있고 관측 라인이 있음, hasResult = 적용 전 결과가 있음(실행하면 버림)
 export function optCtl({ running = false, paused = false, canRun = true, hasResult = false, why = '' } = {}) {
   if (running) return { run: paused, pause: !paused, stop: true, runTitle: paused ? '이어서 실행' : '', pauseTitle: paused ? '' : '멈췄다가 이어서 실행할 수 있음', stopTitle: '최적화를 끝냄 — 찾던 안은 반영되지 않음' };
-  return { run: canRun, pause: false, stop: false, runTitle: canRun ? (hasResult ? '지금 결과를 버리고 처음부터 실행' : '체크한 항목으로 실행') : why, pauseTitle: '', stopTitle: '' };
+  return { run: canRun, pause: false, stop: false, runTitle: canRun ? (hasResult ? '지금 결과를 버리고 처음부터 실행 — 먼저 확인함' : '체크한 항목으로 실행') : why, pauseTitle: '', stopTitle: '' };
+}
+// 창 제목의 단계 표시 — 상단 메뉴와 같은 번호, 끝나면 초록 ✓
+export function setStepMark(i, n, done) {
+  if (!i) return;
+  const t = done ? '✓' : String(n);
+  if (i.textContent !== t) i.textContent = t;
+  i.classList.toggle('done', !!done);
+}
+// 적용 전 결과를 버리고 다시 실행할 때 묻는 말 — 긴 계산 결과를 실수로 잃지 않게
+export function rerunAsk(best) {
+  const n = (v) => (Number.isFinite(v) ? v.toFixed(2) : '–');
+  return `적용하지 않은 최적화 결과가 있습니다${best ? ` (길이 균일도 ${n(best.Ulen)} · 폭 균일도 ${n(best.Uwid)})` : ''}.\n버리고 처음부터 다시 실행할까요?`;
 }
 // 단추 틀(한 번만 만듦) + 상태 갱신 — fn(k) k = run | pause | stop
 export function setCtl(box, c, fn) {

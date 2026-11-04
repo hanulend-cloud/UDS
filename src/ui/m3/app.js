@@ -29,7 +29,7 @@ import { mountSplitter, mountDockSplitter, mountFacSplitter } from './splitter.j
 import { createOptDash, createSimDash, simPct } from './opt-dash.js';
 import { geomQuery, geomLimit, geomClash } from './geom-client.js';
 import { renderPropertyPanel } from './property-panel.js';
-import { optCtl } from './run-ctl.js';
+import { optCtl, rerunAsk } from './run-ctl.js';
 import { judgeStats } from '../../engine/mech3d/tally.js';
 import { watchNumInputs } from './num-fit.js';
 import { meshInfo, clearDbHtml, clearAddFormHtml, reflAddFormHtml, wireMaterialDb, dbFormState } from '../mech3d-panel.js';
@@ -625,6 +625,8 @@ function renderAuto() {
 // 접은 창에 보일 현재 결과 — 실행 중 = 진행률, 결과 있음 = 후보 값, 그 밖 = 지금 값(길이·폭 균일도)
 function monitorSummary() {
   if (!A || !monitor) return;
+  A.cmd?.update(A.store.session, A.store.mspec);   // 상단 ⑤ 표시 — 계산이 끝난 뒤 최적화가 끝나거나 중지돼도 바뀌게
+  monitor.setDone(!A.ad?.running && (!!A.ad?.result || !!A.cmd?.flow?.()?.opt?.done));   // 창 제목 ✓ = 최적화를 끝냈거나 할 필요 없음
   const st0 = A.ad, av0 = adAvail(A.store.mspec), nSel = AD_ITEMS.filter(([, , ks]) => ks.some((k) => st0?.sel?.[k] && av0[k]?.ok)).length, noLine = !A.store.session.line;
   monitor.setCtl(optCtl({ running: !!st0?.running, paused: !!st0?.paused, canRun: !noLine && nSel > 0, hasResult: !!st0?.result, why: noLine ? '관측 라인이 없음' : '펼쳐서 최적화할 항목을 체크하세요' }), adCtl);
   const st = A.ad, M = A.store.mspec, cell = (t, v, g) => `<b class="${Number.isFinite(v) && Number.isFinite(g) ? (v + 1e-9 >= g ? 'ok' : 'bad') : ''}">${t} ${Number.isFinite(v) ? v.toFixed(2) : '–'}</b>`;
@@ -645,7 +647,7 @@ function adCtl(k) {
   if (k === 'pause') adPause(true);
   else if (k === 'stop') adStop();
   else if (st.running) { if (st.paused) adPause(false); }
-  else { if (st.result) adCancel(); adRunBoost(); }
+  else { if (st.result) { if (!globalThis.confirm?.(rerunAsk(st.result.best))) return; adCancel(); } adRunBoost(); }
 }
 // 광분포 시뮬레이션 단추: 실행 = 일시정지면 이어서, 그 밖에는 처음부터 · 기구 최적화 중에는 쓰지 않음
 function calcCtl(k) {
@@ -1825,7 +1827,7 @@ function renderAll(tag = 'all') {
   const pi = S.node?.startsWith('part:') ? +S.node.slice(5) : -1, clr = pi >= 0 ? clearanceOf(pi) : null;
   if (clr !== A.clrShown) { A.clrShown = clr; renderMarkers(); }
   watchNumInputs($('#m3-props'));
-  if (tag !== 'view') renderPropertyPanel($('#m3-props'), M, S, { admin: isAdmin(), dbList: A.ctx.materialDb()?.list() ?? [], catalog: reflCat(), clearList: clearUser(), clearUsed: M.parts.reduce((o, p) => { const id = p.material?.matId; if (id) o[id] = (o[id] ?? 0) + 1; return o; }, {}), milkyUsed: M.parts.reduce((o, p) => { const id = p.material?.kind === 'milky' && p.material.dbId; if (id) o[id] = (o[id] ?? 0) + 1; return o; }, {}), auto: autoGrid(), dir: M.observe.dir ?? S.line?.frame.d, lineInfo: lineInfo(), clearance: clr, xfInfo: pi >= 0 ? xformInfoOf(pi) : null, meshInfo: pi >= 0 ? partMeshInfo(pi) : null, xfMsg: S.xfMsg?.part === pi ? S.xfMsg.text : '', lay: lay ?? null, led: S.node === 'leds' && S.ledSel != null ? ledUi(LS, S.ledSel) : null, ...(S.node === 'leds' ? { ledList: ledRows(LS), ledGap: minFinite(ledGaps(LS.em)), ledChange: ledChangeNow() } : {}) }, propHandlers());
+  if (tag !== 'view') renderPropertyPanel($('#m3-props'), M, S, { admin: isAdmin(), dbList: A.ctx.materialDb()?.list() ?? [], catalog: reflCat(), clearList: clearUser(), clearUsed: M.parts.reduce((o, p) => { const id = p.material?.matId; if (id) o[id] = (o[id] ?? 0) + 1; return o; }, {}), milkyUsed: M.parts.reduce((o, p) => { const id = p.material?.kind === 'milky' && p.material.dbId; if (id) o[id] = (o[id] ?? 0) + 1; return o; }, {}), auto: autoGrid(), dir: M.observe.dir ?? S.line?.frame.d, lineInfo: lineInfo(), clearance: clr, xfInfo: pi >= 0 ? xformInfoOf(pi) : null, meshInfo: pi >= 0 ? partMeshInfo(pi) : null, xfMsg: S.xfMsg?.part === pi ? S.xfMsg.text : '', lay: lay ?? null, led: (S.node === 'leds' || S.node === 'light') && S.ledSel != null ? ledUi(LS, S.ledSel) : null, ...((S.node === 'leds' || S.node === 'light') ? { ledList: ledRows(LS), ledGap: minFinite(ledGaps(LS.em)), ledChange: ledChangeNow() } : {}) }, propHandlers());
   if (tag === 'session' || tag === 'all') renderMarkers();
   A.cmd.update(S, M);
   renderStatus();

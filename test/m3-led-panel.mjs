@@ -92,4 +92,9 @@ const ui = (o = {}) => ({ line, ledList: list, ledGap: 6.25, ...o });
   const d = ledPanelHtml(ms, ui());
   ok(d.includes('인식 고치기') && d.includes('램버시안') && !/data-lp-spec="sizeX"/.test(d) && /data-lp-solder/.test(d) && d.includes('m3-ledlist') && /data-lp-spec="fluxLm"/.test(d), '상세 탭 = 배치 · 밝기 · 인식 고치기 · 배광 모델 · PCB 색');
   setLpTab('leds', 'basic'); }
+{ // ① LED 지정 = 한 곳: 자동 → 수동 → 다른 방식 · 광원 없으면 이 칸만
+  setLpTab('leds', 'basic'); const h = ledPanelHtml(man, ui()), a = h.indexOf('data-lp-mauto'), b = h.indexOf('LED 수동 선택'), c = h.indexOf('data-lp-kind');
+  ok(h.includes('class="m3-fl">1</i> LED 지정') && a > 0 && a < b && b < c && h.indexOf('빛 퍼짐') > c, '기본 탭 맨 위 ① · 자동 아래 수동 · 다른 방식');
+  const n = ledPanelHtml({ light: { ...man.light, kind: 'none' } }, ui()); ok(n.includes('LED 수동 선택') && !n.includes('role="tab"') && !n.includes('빛 퍼짐'), '광원 없음 = ① 칸만');
+  setLpTab('leds', 'detail'); const d = ledPanelHtml(man, ui()); ok(!d.includes('data-lp-kind') && !d.includes('LED 수동 선택') && (d.match(/data-lp-man="count"/g) ?? []).length === 1, '상세 탭에 겹치는 지정 칸 없음'); setLpTab('leds', 'basic'); }
 done();

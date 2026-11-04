@@ -1025,3 +1025,17 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 .om-mx-l { text-align: left !important; white-space: normal !important; }
 .om-mx-f td, .om-mx-f th { border-top: 2px solid var(--m3-acc); }
 .m3-mon-hd > b { white-space: nowrap; }
+
+/* 떠 있는 두 창은 메인 화면과 다른 색 — 광시뮬레이션 = 청록, 기구 최적화 = 보라 */
+.m3-big-in { --win: #0f766e; --win-bg: #eef8f6; }
+.m3-mon { --win: #5b3fb5; --win-bg: #f4f1fc; }
+.m3-big-in, .m3-mon { background: var(--win-bg); border: 2px solid var(--win); }
+.m3-big-hd, .m3-mon-hd { background: var(--win); color: #fff; border-bottom-color: var(--win); }
+.m3-big-hd .mut, .m3-mon-hd .mut, .m3-big-hd .m3-big-q, .m3-mon-sum, .m3-mon-sum b, .m3-mon-sum span { color: #fff; }
+.m3-mon-sum b.ok { color: #b9f6d0; } .m3-mon-sum b.bad { color: #ffd5cc; } .m3-mon-sum b.near { color: #ffe9a8; }
+.m3-mon-hd .m3-fl { background: #fff; color: var(--win); }
+.m3-big-hd button, .m3-mon-hd button, .m3-big-hd select { background: #fff !important; color: #20262f !important; border-color: rgba(255, 255, 255, .7) !important; }
+.m3-big-hd button:disabled, .m3-mon-hd button:disabled { background: rgba(255, 255, 255, .25) !important; color: #fff !important; opacity: .75; }
+#mech3d-wrap .m3-mon .om-done { color: #17693f; }   /* 창 바탕은 어두운 테마에서도 밝음 — 어두운 테마의 밝은 초록은 안 보임 */
+.m3-big-hd .m3-fl { background: #fff; color: var(--win); margin-right: 6px; } .m3-mon-hd .m3-fl { margin-right: 6px; }
+#mech3d-wrap .m3-fl.done { background: #1f9d55; color: #fff; box-shadow: 0 0 0 1.5px #fff; }
