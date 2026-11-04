@@ -112,10 +112,10 @@ ok(nextFinish({ kind: 'whiteDiffuse', R: 0.85 })?.R === 0.95 && nextFinish({ kin
   && nextFinish({ kind: 'metal', R: 0.88 })?.R === 0.95 && nextFinish({ kind: 'whiteDiffuse', R: 0.97 }) === null && nextFinish(null)?.R === 0.85 && nextFinish({ kind: 'gloss' })?.R === 0.85, '④ 보완 안내: 같은 종류 +0.10 이상 최저(백색 85→95, 90→97) · 최고면 없음');
 ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCap(0) === null && clampCap(-2) === null && clampCap(NaN) === null, 'Milky 상한: 0.5~9.9 로 자름 · 0/음수/NaN = 기본');
 { const all = { milky: true, leds: true, shape: true }, m = { milky: true };
-  ok(overallFrac(m, 'current', 0) === 0 && Math.abs(overallFrac(m, 'milky', 0) - 5 / 50) < 1e-12 && Math.abs(overallFrac(m, 'milky', 0.5) - 22.5 / 50) < 1e-12 && overallFrac(m, 'verify', 1) === 1, '전체 진행률: 켠 단계만 정규화(① 만 = 5+35+10)');
-  ok(Math.abs(overallFrac(all, 'shape', 0) - 40 / 135) < 1e-12 && overallFrac(all, 'shape', 2) <= 1 && overallFrac(m, 'shape', 0.5) === 0, '전체 진행률: 단계 순서(② → ③ → ①)·무게 · 꺼진 단계 = 0');
+  ok(overallFrac(m, 'current', 0) === 0 && Math.abs(overallFrac(m, 'milky', 0) - 15 / 60) < 1e-12 && Math.abs(overallFrac(m, 'milky', 0.5) - 32.5 / 60) < 1e-12 && overallFrac(m, 'verify', 1) === 1, '전체 진행률: 켠 단계만 정규화(① 만 = 15+35+10)');
+  ok(Math.abs(overallFrac(all, 'shape', 0) - 50 / 145) < 1e-12 && overallFrac(all, 'shape', 2) <= 1 && overallFrac(m, 'shape', 0.5) === 0, '전체 진행률: 단계 순서(② → ③ → ①)·무게 · 꺼진 단계 = 0');
   const hh = { leds: true, height: true, housing: true, milky: true };
-  ok(Math.abs(overallFrac(hh, 'height', 0) - 40 / 125) < 1e-12 && Math.abs(overallFrac(hh, 'housing', 0.5) - 70 / 125) < 1e-12 && Math.abs(overallFrac(hh, 'milky', 0) - 80 / 125) < 1e-12, '전체 진행률: ⑤ 높이·④ 케이스 면(각 20)은 ② 와 ① 사이');
+  ok(Math.abs(overallFrac(hh, 'height', 0) - 50 / 135) < 1e-12 && Math.abs(overallFrac(hh, 'housing', 0.5) - 80 / 135) < 1e-12 && Math.abs(overallFrac(hh, 'milky', 0) - 90 / 135) < 1e-12, '전체 진행률: ⑤ 높이·④ 케이스 면(각 20)은 ② 와 ① 사이');
   ok(etaText(5000, 0.05) === '' && etaText(10000, 0.5) === '남은 약 10초' && etaText(1000, 1) === '', `남은 시간: 10% 이후만 (${etaText(10000, 0.5)})`); }
 { const s = profileSvg([1, 2, NaN, 4], [3, 3, 3, 3]);
   ok((s.match(/<polyline/g) ?? []).length === 2 && s.includes('<svg') && profileSvg(null, [1]) === '' && profileSvg([], [1]) === '', '길이 프로파일 SVG: 선 2개 · 없으면 생략');
@@ -488,6 +488,18 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   ok(factorChartSvg({ ...S, seq: [] }, {}, 600, 170).includes('후보를 시험하면'), '후보 전 안내');
   const m = monitorHtml(S, 65); ok(m.includes('<b>44%</b>') && m.includes('width:44%') && m.includes('진행 01:05') && /role="progressbar"[^>]*aria-valuenow="44"/.test(m) && m.indexOf('44%') < m.indexOf('om-steps'), '맨 위 진행 막대 % · aria');
   ok(monitorHtml({ ...S, ended: true, endSec: 5 }, 5).includes('<b>100%</b>'), '끝나면 100%');
+}
+{ // 설계 인자 상자 · 현재안 %
+  const { factorBoardHtml, monitorHtml, STAGES } = await import('../src/ui/m3/opt-dash.js');
+  const tiles = Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', evals: [] }])); tiles.milky = { status: 'run', frac: 0.4, evals: [] }; tiles.shape = { status: 'done', frac: 1, evals: [] };
+  const h = factorBoardHtml({ tgLen: 0.8, tgWid: 0.8, tiles }, { locked: { position: {} }, on: {} }, (k) => ({ on: k === 'housing', box: `<input type="checkbox" data-ad="${k}">`, opt: '', why: '' }));
+  ok((h.match(/class="fb-card/g) ?? []).length === 4 && (h.match(/class="fb-head"/g) ?? []).length === 4 && h.includes('st-lock') && h.includes('st-on') && h.includes('st-run') && h.includes('st-done') && h.indexOf('fb-head') < h.indexOf('fb-in') && (h.match(/class="fb-sw"/g) ?? []).length === 3, '네 항목 같은 상자 · 상태 표시');
+  const m = monitorHtml({ tgLen: 0.8, tgWid: 0.8, seq: [], before: {}, tiles, curFrac: 0.37 }, 3); ok(m.includes('<b>현재안</b><span>37%</span>'), '현재안 계산 %');
+  const v = monitorHtml({ tgLen: 0.8, tgWid: 0.8, seq: [{ k: 'milky', Ulen: 0.7, Uwid: 0.7 }], before: {}, tiles, verFrac: 0.5 }, 3); ok(v.includes('<b>검증</b><span>50%</span>'), '검증 %');
+}
+{ // 추적 중 진행 알림
+  const R = (await import('../src/ui/m3/autodesign-run.js')).createAdRunner({ ports: [{ send: async (m) => (m.type === 'scene' ? { ready: true } : { acc: new Float64Array(4).fill(1), cnt: new Uint32Array(4), ledger: { emitted: 1, escaped: 0, absSurf: 0, absVol: 0, lost: 0, rrLoss: 0, rrGain: 0 }, ms: 1 }) }] }); const seen = []; await R.trace({ sceneKey: 'pg', scene: { G: { ns: 2, nw: 2 } } }, { N: 40000, chunkN: 10000, batches: 2, onProgress: (f) => seen.push(f) });
+  ok(seen.length === 4 && seen.every((f, i) => f >= 0 && f <= 1 && (i === 0 || f >= seen[i - 1] - 1e-9)) && seen[seen.length - 1] === 1, `진행 알림 0~1 (${seen.join()})`);
 }
 done();
 

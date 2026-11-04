@@ -1031,8 +1031,18 @@ async function adRun(opt = {}) {
     A.optDash?.progress(stage, frac, tx, f);
     st.running = { frac: f, text: eta ? `${tx} · ${eta}` : tx }; renderAuto();
   };
+  // 현재안 계산·최종 판정은 한 번의 긴 계산 — 계산하는 동안에도 %가 오르게(광선 수·시간 한도 기준, 0.3 초마다)
+  let lastP = null, lastTick = 0;
+  const report = (stage, frac, text) => { lastP = { stage, frac, text }; progress(stage, frac, text); };
+  const traceTick = (f) => {
+    if (!lastP || (lastP.stage !== 'current' && lastP.stage !== 'verify') || R.now() - lastTick < 300) return;
+    lastTick = R.now();
+    const v = lastP.frac + (1 - lastP.frac) * f * 0.95;
+    if (overallFrac(stages, lastP.stage, v) >= (st.running?.frac ?? 0)) progress(lastP.stage, v, lastP.text);
+  };
   const io = {
-    progress,
+    progress: report,
+    now: () => R.now(),   // 일시정지한 시간은 시간 한도에서 뺌
     cancelled: () => R.stopped,
     shapePlan: ({ screen, total }) => { shapeScr = screen; shapeTot = Math.max(1, total ?? shapeTotal(screen, 27)); },
     async milkyRows(d, ms, { precise = false } = {}) {   // 재가중 기준 = 창 가운데. 시간 제한(Milky 4~5 는 광자당 ~10배) — 경계가 든 창은 정밀 재추적
@@ -1110,7 +1120,7 @@ async function adRun(opt = {}) {
     async verify(d, { noise = null, from = null, screen = false, maxMs = 600000 } = {}) {   // screen = 화면 화질 격자로(칸이 작을수록 칸마다 광자가 적음 → 칸 비만큼 광자를 더). noise = 그 노이즈까지(잰 값에서 필요한 광자 수를 노이즈, 10 분 한도). 정밀 재판정(현재안·최종안): 250만 광자(최소 150만, 20초까지) — 광자가 적으면 균일도(최저÷최고)가 노이즈 때문에 낮게 나옴(6초 제한 때 0.69 vs 실제 0.78)
       const { M: Md, parts } = designScene(d, ctx);
       const scr = screen && !lowQ, gridK = scr && !from?.screen ? Math.max(G.ds / Gs.ds, G.cell / Gs.cell) : 1, capN = 4e8 * (scr ? { mid: 2, high: 4 }[obsS.quality] ?? 1 : 1), sig = JSON.stringify(d), resume = noise ? resumable(from, sig, scr) : null;   // 같은 설계·격자를 더 정밀하게 잴 때는 앞 계산에 이어서(N = 전체 광자 수)
-      const eff0 = currentVerified?.eff ?? snap0.photometry?.eff, r = await R.trace(adJob(Md, parts, scr ? ctxS : ctx), noise ? { N: Math.ceil(Math.min(capN, 1.1 * gridK * (from?.photons ?? 5e7) * ((from?.stats?.relNoise ?? 0.01) / noise) ** 2)), maxMs, minN: 1.5e6, chunkN: 2e5, batches: 10, keepRaw: true, resume } : { N: Math.ceil(Math.min(1.5e7, 5e6 * Math.max(1, 0.5 / (eff0 > 0 ? eff0 : 0.5)))), maxMs: d.shape?.kF ? 60000 : 45000, minN: 1.5e6, batches: 10, keepRaw: true });   // 효율이 낮으면 관측면에 닿는 빛이 적어 광자를 더. 실측: 20 초(노이즈 2%) 판정 0.73~0.76 vs 수렴값 0.78~0.79 — 노이즈가 칸 최소·최대를 벌려 낮게 나오므로 시간을 늘림(2026-11-03). 입광면 보정 메쉬는 추적이 느려 같은 시간이면 노이즈가 커져 현재안과 공정하게 비교가 안 됨 → 시간 더
+      const eff0 = currentVerified?.eff ?? snap0.photometry?.eff, r = await R.trace(adJob(Md, parts, scr ? ctxS : ctx), noise ? { N: Math.ceil(Math.min(capN, 1.1 * gridK * (from?.photons ?? 5e7) * ((from?.stats?.relNoise ?? 0.01) / noise) ** 2)), maxMs, minN: 1.5e6, chunkN: 2e5, batches: 10, keepRaw: true, resume, onProgress: traceTick } : { N: Math.ceil(Math.min(1.5e7, 5e6 * Math.max(1, 0.5 / (eff0 > 0 ? eff0 : 0.5)))), maxMs: d.shape?.kF ? 60000 : 45000, minN: 1.5e6, batches: 10, keepRaw: true, onProgress: traceTick });   // 효율이 낮으면 관측면에 닿는 빛이 적어 광자를 더. 실측: 20 초(노이즈 2%) 판정 0.73~0.76 vs 수렴값 0.78~0.79 — 노이즈가 칸 최소·최대를 벌려 낮게 나오므로 시간을 늘림(2026-11-03). 입광면 보정 메쉬는 추적이 느려 같은 시간이면 노이즈가 커져 현재안과 공정하게 비교가 안 됨 → 시간 더
       const stt = scr ? tallyStats(Gs, r.batches, obsS) : tallyStats(G, r.batches, obs);
       A.optDash?.evals('final', [{ label: verifyLabel(d), Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty }]);
       return { stats: stt, eff: adEff(r), photons: r.photons, screen: scr, sig, raw: scr || lowQ ? r.kept : null };

@@ -34,14 +34,15 @@ export function factorBoardHtml(S, nw = {}, cfg = null) {
   const tl = S?.tgLen ?? nw.tgLen, tw = S?.tgWid ?? nw.tgWid;
   const row = (k, name, nowTxt) => {
     // 고정 = 적용까지 마친 항목 — 다음 실행에서 건드리지 않음. [다시 최적화] = 고정 풀고 다시 체크
-    if (nw.locked?.[k]) return `<div class="fb-row fb-lock" title="최적화 결과를 적용함 — 다음 실행에서 이 값 그대로 씀"><span class="fb-lk">🔒</span><i class="fb-dot" style="background:${FB_COL[k]}"></i><b class="fb-name">${name}</b><span class="od-chip od-lockc">✓ 고정</span><span class="fb-val">${esc(nowTxt)} <button type="button" class="fb-redo" data-adunlock="${k}">다시 최적화</button></span></div>`;
+    const dot = `<i class="fb-dot" style="background:${FB_COL[k]}"></i>`, head = (lead, chipC, chipT) => `<div class="fb-head">${lead}${dot}<b class="fb-name">${name}</b><span class="od-chip ${chipC}">${chipT}</span></div>`;
+    if (nw.locked?.[k]) return `<div class="fb-card fb-lock" style="--fb:${FB_COL[k]}" title="최적화 결과를 적용함 — 다음 실행에서 이 값 그대로 씀">${head('<span class="fb-lk">🔒</span>', 'st-lock', '✓ 고정')}<div class="fb-in"><div class="fb-val">${esc(nowTxt)} <button type="button" class="fb-redo" data-adunlock="${k}">다시 최적화</button></div></div></div>`;
     const c = cfg?.(k), t = S?.tiles?.[k], on = c ? !!c.on : t ? t.status !== 'off' : !!nw.on?.[k];
     const ev = (t?.evals ?? []).filter((e) => e.ok !== false && Number.isFinite(e.Ulen)); let b = null;
     for (const e of ev) if (!b || scoreOf(e, tl, tw) > scoreOf(b, tl, tw)) b = e;
-    const chip = t && t.status !== 'off' ? { wait: '대기', run: `진행 ${Math.round(t.frac * 100)}%`, done: '완료' }[t.status] : on ? '켜짐' : '꺼짐';
+    const [chipC, chipT] = t && t.status !== 'off' ? { wait: ['st-wait', '대기'], run: ['st-run', `진행 ${Math.round(t.frac * 100)}%`], done: ['st-done', '✓ 완료'] }[t.status] : on ? ['st-on', '켜짐'] : ['st-off', '꺼짐'];
     const txt = `지금 ${nowTxt}${b ? ` → ${b.label} (${f2(b.Ulen)}/${f2(b.Uwid)})` : ''}`;
-    const box = c?.box ? `<label class="fb-sw" title="${esc(c.why || '최적화에 사용')}">${c.box}</label>` : '<span></span>';   // 빈 칸도 자리 유지(격자 5칸)
-    return `<div class="fb-row${on ? '' : ' fb-off'}" title="${esc(txt)}">${box}<i class="fb-dot" style="background:${FB_COL[k]}"></i><b class="fb-name">${name}</b><span class="od-chip">${chip}</span><span class="fb-val"><span class="mut">지금</span> ${esc(nowTxt)}${b ? ` → <b>${esc(b.label)}</b> <span class="mut">(${f2(b.Ulen)}/${f2(b.Uwid)})</span>` : ''}</span></div>${c?.opt ? `<div class="fb-opt">${c.opt}</div>` : ''}`;   // 설정(① 대상 · ③ 형상 바꿀 부품 — 체크 전에도 골라 둠)
+    const box = c?.box ? `<label class="fb-sw" title="${esc(c.why || '최적화에 사용')}">${c.box}</label>` : '<span class="fb-sw"></span>';
+    return `<div class="fb-card${on ? '' : ' fb-off'}" style="--fb:${FB_COL[k]}" title="${esc(txt)}">${head(box, chipC, chipT)}<div class="fb-in"><div class="fb-val"><span class="mut">지금</span> ${esc(nowTxt)}${b ? ` → <b>${esc(b.label)}</b> <span class="mut">(${f2(b.Ulen)}/${f2(b.Uwid)})</span>` : ''}</div>${c?.opt ? `<div class="fb-opt">${c.opt}</div>` : ''}</div></div>`;
   };
   // 그래프는 오른쪽 모니터로(2026-10-30) — 여기는 입력(체크·옵션)과 상태만
   const nowOf = { position: nw.leds ?? '–', housing: nw.housing ?? '–', shape: nw.shape ?? '원래 형상', milky: Number.isFinite(nw.milky) ? `Milky ${f2(nw.milky)}` : '확산 부품 없음' };
@@ -92,7 +93,7 @@ export function monitorHtml(S, sec = 0) {
   let best = null; for (const e of S.seq ?? []) if (ok(e) && (!best || scoreOf(e, tl, tw) > scoreOf(best, tl, tw))) best = e;
   const busy = S.ended == null && !S.stopped;
   const step = (cls, name, sub) => `<div class="om-st om-${cls}"><b>${name}</b><span>${sub}</span></div>`;
-  const steps = [step(S.seq?.length || !busy ? 'done' : 'run', '현재안', S.seq?.length || !busy ? '✓' : '계산')];
+  const steps = [step(S.seq?.length || !busy ? 'done' : 'run', '현재안', S.seq?.length || !busy ? '✓' : `${Math.round((S.curFrac ?? 0) * 100)}%`)];
   for (const [k, name] of STAGES) {
     const t = S.tiles[k];
     if (S.locked?.[k] && t.status === 'off') steps.push(step('lock', name, '고정 ✓'));
@@ -100,7 +101,7 @@ export function monitorHtml(S, sec = 0) {
     else if (t.status === 'done') steps.push(step('done', name, '✓'));
     else if (t.status === 'wait') steps.push(step('wait', name, '대기'));
   }
-  steps.push(step(S.ended != null ? 'done' : 'wait', '검증', S.ended != null ? '✓' : ''));
+  steps.push(S.ended != null ? step('done', '검증', '✓') : busy && S.verFrac != null ? step('run', '검증', `${Math.round(S.verFrac * 100)}%`) : step('wait', '검증', ''));
   const b0 = S.before ?? {};
   const kpi = (label, tg, v, v0) => {
     const pass = Number.isFinite(v) && Number.isFinite(tg) ? (v + 1e-9 >= tg ? 'ok' : 'bad') : '';
@@ -160,6 +161,7 @@ export function createOptDash(el, h = {}) {
   function progress(stage, frac, text, overall) {
     if (S && Number.isFinite(overall)) S.overall = overall;
     if (!S) return;
+    if (stage === 'current') S.curFrac = frac; else if (stage === 'verify') S.verFrac = frac;
     const k = tileOf(stage);
     if (!k) { S.note = text ?? ''; draw(); return; }   // 현재안·검증 = 머리 줄 문구
     const t = S.tiles[k]; S.note = '';
