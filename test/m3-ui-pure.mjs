@@ -475,7 +475,9 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
 { // 2D 우클릭 메뉴
   const { mapMenuItems } = await import('../src/ui/m3/results-panel.js');
   const K = (a, b) => mapMenuItems(a, b).map((x) => x.k).join();
-  ok(K(true, false) === 'pinCsv,png,copy' && mapMenuItems(true, true)[0].label.startsWith('선택 선') && mapMenuItems(false, true)[0].label.startsWith('이 위치') && K(false, false) === 'png,copy', '선택 선 있으면 CSV · 없으면 누른 자리 · 여백이면 이미지만');
+  ok(K(true, false) === 'mapCsv,pinCsv,png,copy' && mapMenuItems(true, true)[1].label.startsWith('선택 선') && mapMenuItems(false, true)[1].label.startsWith('이 위치') && K(false, false) === 'mapCsv,png,copy', '2D 전체 데이터 · 선택 선 있으면 CSV · 없으면 누른 자리 · 여백이면 전체·이미지');
+  const { plotMenuItems } = await import('../src/ui/m3/results-panel.js');
+  ok(plotMenuItems('길이 방향 1D').map((x) => x.k).join() === 'csv,png,copy' && plotMenuItems('길이 방향 1D')[0].label === '길이 방향 1D 데이터 CSV 저장', '1D 메뉴');
 }
 done();
 
