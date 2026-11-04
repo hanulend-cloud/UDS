@@ -462,6 +462,16 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   const { minDotR } = await import('../src/ui/m3/results-panel.js');
   ok(minDotR(40, 30) === 2 && minDotR(100, 100) === 3 && minDotR(800, 400) === 5 && minDotR(800, 400, 2) === 10, `점 크기: ${minDotR(40, 30)} ${minDotR(100, 100)} ${minDotR(800, 400)}`);
 }
+{ // 광원·LED 우클릭 메뉴
+  const { treeCtxItems } = await import('../src/ui/m3/feature-tree.js');
+  const keys = (M, S, id, o) => treeCtxItems(M, S, id, o).map((x) => x.k).join();
+  const step = { light: { kind: 'step', step: { emitters: [{}], leds: [0], excluded: [] } } }, none = { light: { kind: 'none' } }, mech = { light: { kind: 'step', step: { emitters: [{}], leds: [0], fromMech: [1] } } }, virt = { light: { kind: 'step', step: { emitters: [{}], leds: [0], virtual: { positions: [] } } } }, man = { light: { kind: 'manual' } };
+  ok(keys(none, {}, 'light') === 'ledAuto,ledClick', '광원 없음 = 자동·수동');
+  ok(keys(step, {}, 'light') === 'ledAuto,ledClick,ledFace,ledOut,eye,fold' && keys(mech, {}, 'light').includes('ledClear') && !keys(virt, {}, 'light').includes('ledFace') && !keys(man, {}, 'light').includes('eye'), '광원 메뉴는 상태에 맞게');
+  ok(keys(step, { hiddenLeds: [1] }, 'leds') === 'eye,ledShowAll,fold' && keys(step, {}, 'leds') === 'eye,fold', 'LED ×n 메뉴');
+  const lab = (M, o) => treeCtxItems(M, {}, 'led:0', o).find((x) => x.k === 'ledOff')?.label;
+  ok(lab(step) === '이 LED 빛 끄기' && lab(step, { excluded: true }) === '이 LED 빛 다시 켜기' && lab(virt) === '이 LED 삭제' && lab(man) === undefined, 'LED 한 개 메뉴');
+}
 done();
 
 { const { clearDbHtml } = await import('../src/ui/mech3d-panel.js');

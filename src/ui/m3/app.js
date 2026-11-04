@@ -1812,10 +1812,17 @@ function renderAll(tag = 'all') {
     onFold: (id) => st.update('session', (_, x) => { const k = id === 'parts' || id === 'leds' || id === 'light' ? id : id.slice(6), def = k === '_light' || (k === 'leds' && ledFoldDefault(A.ledTotal)); x.fold = { ...x.fold, [k]: !(x.fold?.[k] ?? def) }; }),   // 접기·펼치기(세션)
     // 우클릭: 고른 것에 없으면 그것만 고름(고른 것 위에서 우클릭하면 여러 개 그대로)
     onCtxSelect: (id) => st.update('session', (_, x) => {
+      if (id.startsWith('led:')) { x.multi = []; x.node = 'leds'; x.sel = null; x.ledSel = +id.slice(4); return; }
       if (id === x.node || (x.multi ?? []).includes(id)) return;
       x.multi = []; x.node = id; x.sel = id.startsWith('part:') ? { part: +id.slice(5), face: null } : null;
     }),
-    onTreeAct: (k) => {   // 우클릭 메뉴: 새 그룹(선택한 부품들) · 그룹에서 빼기 · 그룹 해제
+    onTreeAct: (k) => {   // 우클릭 메뉴: 새 그룹(선택한 부품들) · 그룹에서 빼기 · 그룹 해제 · 광원 지정
+      if (k === 'ledAuto') { propHandlers().onMechAuto(); return; }
+      if (k === 'ledClick') { propHandlers().onLightKind('click'); return; }
+      if (k === 'ledFace' || k === 'ledOut') { st.update('session', (_, x) => { x.node = 'light'; x.pick = k === 'ledFace' ? 'led' : 'ledx'; }); return; }
+      if (k === 'ledClear') { mechLightClear(); return; }
+      if (k === 'ledShowAll') { st.update('view', (_, x) => { x.hiddenLeds = []; x.hideLeds = false; }); return; }
+      if (k === 'ledOff') { if (A.store.session.ledSel != null) propHandlers().onLedExclude(A.store.session.ledSel); return; }
       if (k === 'out') {
         const ps = [...new Set([...(S.multi ?? []), ...(S.node?.startsWith('part:') ? [S.node] : [])])].filter((x) => x.startsWith('part:')).map((x) => +x.slice(5));
         st.update('meta', (m) => { m.groups = removeFromGroups(m.groups, ps); }); st.update('session', (_, x) => { x.multi = []; });
