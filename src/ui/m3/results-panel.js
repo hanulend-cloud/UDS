@@ -425,7 +425,7 @@ function bigRectLoad() {
   return { x: Math.round((innerWidth - w) / 2), y: 56, w, h: Math.max(360, innerHeight - 72) };
 }
 function bigRectSave(r) { try { localStorage.setItem(BIG_KEY, JSON.stringify({ x: r.x, y: r.y, w: r.w, h: r.h })); } catch {} }
-export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds', onLeak = null, onBig = null } = {}) {
+export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds', onLeak = null, onBig = null, onCalc = null, calcBusy = () => false } = {}) {
   const gaugeHtml = (k) => `<div class="m3-gauge" data-r="${k}"><div class="f"></div><div class="tg"></div></div>`;
   el.innerHTML = `
     <div class="m3-res-h">시뮬레이션 결과</div>
@@ -502,7 +502,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     const rect = fitRect(bigRectLoad(), innerWidth, innerHeight);
     ov.className = 'm3-big-in'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', '광시뮬레이션');
     const cell = (k) => `<div class="m3-big-c" data-k="${k}"><div class="m3-big-ct"><b>${TITLE[k]}</b><span class="m3-big-sp"></span>${k === 'map' ? `<label class="m3-big-eq"><input type="checkbox" data-big-eq${eq0 ? ' checked' : ''}> 실제 비율</label>` : ''}<button type="button" data-big-txt="${k}" title="${k === 'map' ? '2D 분포 표(칸마다, 최대 대비 %)' : `${TITLE[k]} — ${k === 'prof' ? '폭 평균' : '최저 창·길이 평균'} 곡선(원자료 %, 고른 점이 있으면 그 곡선도)`}">${k === 'map' ? '2D CSV' : '평균값 CSV'}</button><button type="button" data-big-one="${k}">⤢ 이 그림만</button></div><canvas class="m3-big-cv" data-big-cv="${k}"></canvas></div>`;
-    ov.innerHTML = `<div class="m3-big-hd" title="끌어서 옮기기"><b title="진행 현황 · 2D · 1D — 2D 클릭 = 그 점 기준 1D 곡선(주황)">광시뮬레이션</b><span class="m3-mon-sum" data-big-sum></span><span class="m3-big-sp"></span><label class="m3-big-q">화질 <select data-big-q aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label><button type="button" data-pin-txt>선택 선 CSV</button><button type="button" data-big-min></button><button type="button" data-big-close title="Esc">✕ 닫기</button></div>
+    ov.innerHTML = `<div class="m3-big-hd" title="끌어서 옮기기"><b title="진행 현황 · 2D · 1D — 2D 클릭 = 그 점 기준 1D 곡선(주황)">광시뮬레이션</b><span class="m3-mon-sum" data-big-sum></span><span class="m3-big-sp"></span><button type="button" class="m3-min-run" data-big-run></button><label class="m3-big-q">화질 <select data-big-q aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label><button type="button" data-pin-txt>선택 선 CSV</button><button type="button" data-big-min></button><button type="button" data-big-close title="Esc">✕ 닫기</button></div>
       <div class="m3-big-grid"><div class="m3-big-prog" data-big-prog></div>${cell('map')}<div class="m3-big-row">${cell('prof')}${cell('wprof')}</div></div>`;
     (el.closest('#mech3d-wrap') ?? document.body).appendChild(ov);   // 설계 화면에 붙임(화면을 바꾸면 함께 숨음)
     const cvs = Object.fromEntries(KINDS.map((k) => [k, ov.querySelector(`[data-big-cv="${k}"]`)]));
@@ -527,6 +527,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     dragBy(ov.querySelector('.m3-big-hd'), snap, (dx, dy, s0) => { rect.x = s0.x + dx; rect.y = s0.y + dy; place(); }, (e) => !e.target.closest('button, select, label, input'), keep);
     mountResizers(ov, { rect: () => rect, apply: (r) => { Object.assign(rect, r); place(); }, ok: () => !big.min, end: keep, minW: 480, minH: 360 });
     ov.querySelector('[data-big-min]').onclick = () => setMin(!big.min);
+    ov.querySelector('[data-big-run]').onclick = () => onCalc?.();
     ov.addEventListener('click', (e) => {
       const one = e.target.closest('[data-big-one]'); if (one) { setFocus(big.focus === one.dataset.bigOne ? null : one.dataset.bigOne); return; }
       const t = e.target.closest('[data-big-txt]'); if (t) (t.dataset.bigTxt === 'map' ? txt2D() : txt1D(t.dataset.bigTxt));   // 그림마다 그 그림의 표
@@ -550,6 +551,8 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     if (document.activeElement !== s) s.value = last?.observe?.quality ?? 'low';
     const su = big.el.querySelector('[data-big-sum]'), st0 = last?.snap?.stats, O = last?.observe, u = (t, v, g) => `<b class="${Number.isFinite(v) && Number.isFinite(g) ? (v + 1e-9 >= g ? 'ok' : 'bad') : ''}">${t} ${Number.isFinite(v) ? v.toFixed(2) : '–'}</b>`;
     const pr = last?.snap?.state === 'done' ? 100 : simPct(st0?.relNoise, last?.snap?.targetNoise ?? 0.01);
+    const rb = big.el.querySelector('[data-big-run]'), bz = calcBusy(), rs = last?.snap?.state, rl = ['running', 'pending', 'starting'].includes(rs) ? '⏸ 일시정지' : rs === 'paused' ? '▶ 재개' : '▶ 다시 계산';
+    if (rb) { if (rb.textContent !== rl) rb.textContent = rl; rb.disabled = bz; rb.title = bz ? '기구 최적화가 끝나면 쓸 수 있음' : ''; }
     if (su) su.innerHTML = `<b>진행 ${pr.toFixed(0)}%</b> ${!st0 || st0.empty || st0.relNoise > 0.05 ? '' : `${u('길이', st0.Ulen, O?.targetLen)} ${u('폭', st0.Uwid, O?.targetWid)}`}`;   // 접었을 때 보이는 현재 결과(계산 초반 값은 노이즈가라 숨김)
     b.disabled = !pin; b.title = pin ? '고른 점을 지나는 길이·폭 방향 원자료(평활 없음, 2D 최대 대비 %)' : '2D 에서 점을 클릭하면 저장할 수 있음';
   };

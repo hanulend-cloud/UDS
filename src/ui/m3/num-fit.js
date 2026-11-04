@@ -12,9 +12,9 @@ export function numInputCh({ value = '', placeholder = '', min = '', max = '', s
 }
 const attrs = (e) => ({ value: e.value, placeholder: e.placeholder, min: e.getAttribute('min') ?? '', max: e.getAttribute('max') ?? '', step: e.getAttribute('step') ?? '' });
 
-// 소재표(.m3-cat)는 칸이 많아 따로 정함
+// 소재표(.m3-cat)는 칸이 많아, 목표(.m3-obs-t)는 꼭 입력 칸이라 따로 정함
 export function fitNumInputs(root) {
-  const inputs = [...root.querySelectorAll('input[type=number]')].filter((e) => !e.closest('.m3-cat')), rows = new Map();
+  const inputs = [...root.querySelectorAll('input[type=number]')].filter((e) => !e.closest('.m3-cat, .m3-obs-t')), rows = new Map();
   for (const e of inputs) {
     const row = e.closest('.m3-xf') ?? e.closest('tr') ?? e.closest('.m3-row') ?? e;
     rows.set(row, Math.max(rows.get(row) ?? 0, numInputCh(attrs(e))));

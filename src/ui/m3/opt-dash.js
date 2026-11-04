@@ -1,4 +1,4 @@
-import { judgeStats } from '../../engine/mech3d/tally.js';
+import { judgeStats, uVerdict } from '../../engine/mech3d/tally.js';
 // 아래 칸 대시보드 — ① 기구 최적화 진행(6 항목 타일) ② 시뮬레이션 진행현황(수렴 그래프).
 // 최적화: app.js 의 기구 최적화 io 가 progress(stage, frac, text) · evals(stage, [{label, Ulen, Uwid, ok, why}]) 를 부른다.
 // 타일마다 상태(대기·진행 %·완료·건너뜀) · 시험 중 값 → 지금까지 최고 · 후보별 길이/폭 균일도 점 그래프(목표선) · 진행 막대.
@@ -231,23 +231,36 @@ export function reachDiag(ledger, leak, names = []) {
 }
 // 진행 현황 그래프(순수, 2026-11-03) — 가로 = 광선 수(0 ~ 예상 총광선), 세로 = 균일도 %(점선 = 목표). H = [{ ph, noise, Ulen, Uwid }]
 export const simTotal = (last, tgt) => (last ? Math.max(last.ph, Number.isFinite(last.noise) ? last.ph * (last.noise / tgt) ** 2 : 0) : 0);
+// 진행 그래프 2개(2026-11-04): ① 계산 오차가 목표까지 내려가는 모습(남은 양 = 점선 예상) ② 길이·폭 균일도와 목표선(세로 막대 = 값의 불확실 범위 ±2 표준오차)
+const lineOf = (pts) => pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
 export function simPlotSvg(H, tgt, obs, w, h) {
   if (!(H?.length > 1)) return '';
-  const last = H[H.length - 1], total = simTotal(last, tgt), x0 = 34, x1 = w - 8, y0 = 6, y1 = h - 15, tl = obs?.targetLen, tw = obs?.targetWid;
-  const lo = Math.max(0, Math.floor(Math.min(tl ?? 1, tw ?? 1, last.Ulen ?? 1, last.Uwid ?? 1) * 10 - 2) / 10), Y = (v) => y0 + (1 - Math.max(0, (Math.min(1, v) - lo) / (1 - lo))) * (y1 - y0), X = (ph) => x0 + (ph / total) * (x1 - x0);
-  const line = (k, cls) => { const pl = H.filter((p) => Number.isFinite(p[k])).map((p) => `${X(p.ph).toFixed(1)},${Y(p[k]).toFixed(1)}`).join(' '); return pl ? `<polyline class="${cls}" points="${pl}"/>` : ''; };
-  const tg = [...new Set([tl, tw].filter(Number.isFinite))].map((t) => `<line class="od-tg" x1="${x0}" x2="${x1}" y1="${Y(t).toFixed(1)}" y2="${Y(t).toFixed(1)}"/><text class="od-ax" x="${x0 - 3}" y="${(Y(t) + 3).toFixed(1)}" text-anchor="end">${Math.round(t * 100)}%</text>`).join('');
-  const xNow = X(last.ph).toFixed(1);
-  return `<svg class="od-sim" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${tg}${line('Ulen', 'od-ln')}${line('Uwid', 'od-ln2')}
-    <line class="od-now" x1="${xNow}" x2="${xNow}" y1="${y0}" y2="${y1}"/>
-    <text class="od-ax" x="${x0 - 3}" y="${y0 + 7}" text-anchor="end">100%</text><text class="od-ax" x="${x0 - 3}" y="${y1}" text-anchor="end">${Math.round(lo * 100)}%</text>
-    <text class="od-ax" x="${x0}" y="${h - 3}">0</text><text class="od-ax" x="${x1}" y="${h - 3}" text-anchor="end">총 ${human(total)} 광선</text></svg>`;
+  const last = H[H.length - 1], total = Math.max(simTotal(last, tgt), last.ph), one = w < 280, cw = one ? w : Math.floor((w - 8) / 2), ch = Math.max(44, (one ? Math.floor(h / 2) : h) - 17);
+  const x0 = 28, x1 = cw - 5, y0 = 4, y1 = ch - 12, X = (ph) => x0 + (ph / total) * (x1 - x0), f1 = (v) => (Number.isFinite(v) ? (v * 100).toFixed(1) : '–'), f2 = (v) => (v * 100).toFixed(2);
+  const xAxis = `<line class="od-ax-l" x1="${x0}" x2="${x1}" y1="${y1}" y2="${y1}"/><text class="od-ax" x="${x0}" y="${ch - 2}">0</text><text class="od-ax" x="${x1}" y="${ch - 2}" text-anchor="end">총 ${human(total)} 광선</text>`;
+  const hits = (fn) => { const n = Math.min(24, H.length), wd = (x1 - x0) / n; let out = ''; for (let i = 0; i < n; i++) { const p = H[Math.round((i * (H.length - 1)) / Math.max(1, n - 1))]; out += `<rect class="od-hit" x="${(x0 + i * wd).toFixed(1)}" y="${y0}" width="${wd.toFixed(1)}" height="${y1 - y0}"><title>${fn(p)}</title></rect>`; } return out; };
+  // ① 계산 오차
+  const nMax = tgt * 4, YA = (v) => y0 + (1 - Math.min(v, nMax) / nMax) * (y1 - y0), mes = H.filter((p) => Number.isFinite(p.noise)).map((p) => [X(p.ph), YA(p.noise)]);
+  const pred = Number.isFinite(last.noise) && last.noise > tgt ? Array.from({ length: 13 }, (_, i) => { const ph = last.ph + ((total - last.ph) * i) / 12; return [X(ph), YA(last.noise * Math.sqrt(last.ph / ph))]; }) : [];
+  const svgA = `<svg class="od-sim" width="${cw}" height="${ch}" viewBox="0 0 ${cw} ${ch}">
+    <line class="od-tg" x1="${x0}" x2="${x1}" y1="${YA(tgt).toFixed(1)}" y2="${YA(tgt).toFixed(1)}"/><text class="od-ax" x="${x0 - 3}" y="${(YA(tgt) + 3).toFixed(1)}" text-anchor="end">${f1(tgt)}%</text><text class="od-ax" x="${x0 - 3}" y="${y0 + 7}" text-anchor="end">${f1(nMax)}%</text>${xAxis}
+    ${pred.length ? `<polyline class="od-pred" points="${lineOf(pred)}"/>` : ''}<polyline class="od-s1" points="${lineOf(mes)}"/>${mes.length ? `<circle class="od-dot od-d1" cx="${mes[mes.length - 1][0].toFixed(1)}" cy="${mes[mes.length - 1][1].toFixed(1)}" r="3"/>` : ''}${hits((p) => `광선 ${human(p.ph)} · 오차 ±${f2(p.noise)}%`)}</svg>`;
+  // ② 균일도
+  const tl = obs?.targetLen, tw = obs?.targetWid, vals = [tl, tw, last.Ulen, last.Uwid].filter(Number.isFinite), lo = Math.max(0, Math.floor((Math.min(...vals) - 0.05) * 20) / 20), hi = Math.min(1, Math.ceil((Math.max(...vals) + 0.05) * 20) / 20);
+  const YB = (v) => y0 + (1 - (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo)) * (y1 - y0);
+  const uLine = (k, cls) => { const pts = H.filter((p) => Number.isFinite(p[k])).map((p) => [X(p.ph), YB(p[k])]); return pts.length ? `<polyline class="${cls}" points="${lineOf(pts)}"/>` : ''; };
+  const mark = (v, se, cls) => { if (!Number.isFinite(v)) return ''; const x = X(last.ph).toFixed(1), d = 2 * (Number.isFinite(se) ? se : 0); return `${d > 0 ? `<line class="od-bar-e ${cls}" x1="${x}" x2="${x}" y1="${YB(v + d).toFixed(1)}" y2="${YB(v - d).toFixed(1)}"/>` : ''}<circle class="od-dot ${cls}" cx="${x}" cy="${YB(v).toFixed(1)}" r="3"/>`; };
+  const tgLines = [...new Set([tl, tw].filter(Number.isFinite))].map((t) => `<line class="od-tg" x1="${x0}" x2="${x1}" y1="${YB(t).toFixed(1)}" y2="${YB(t).toFixed(1)}"/><text class="od-ax" x="${x0 - 3}" y="${(YB(t) + 3).toFixed(1)}" text-anchor="end">${Math.round(t * 100)}%</text>`).join('');
+  const svgB = `<svg class="od-sim" width="${cw}" height="${ch}" viewBox="0 0 ${cw} ${ch}">${tgLines}<text class="od-ax" x="${x0 - 3}" y="${y0 + 7}" text-anchor="end">${Math.round(hi * 100)}%</text><text class="od-ax" x="${x0 - 3}" y="${y1}" text-anchor="end">${Math.round(lo * 100)}%</text>${xAxis}
+    ${uLine('Ulen', 'od-s1')}${uLine('Uwid', 'od-s2')}${mark(last.Ulen, last.seLen, 'od-d1')}${mark(last.Uwid, last.seWid, 'od-d2')}${hits((p) => `광선 ${human(p.ph)} · 길이 ${f1(p.Ulen)}% · 폭 ${f1(p.Uwid)}%`)}</svg>`;
+  const mk = (v, t, se, rn) => ({ ok: '<span class="od-ok">✓</span>', near: '<span class="od-near">≈</span>', bad: '<span class="od-bad">✕</span>' })[uVerdict(v, t, se, rn)] ?? '';
+  return `<div class="od-sim2${one ? ' one' : ''}"><div><div class="od-simt" title="계산 오차 — 점선(목표)까지 내려가면 계산 끝, 옅은 점선 = 예상"><b>${cw >= 190 ? '계산 오차' : '오차'}</b> ±${f2(last.noise)}% → ±${f2(tgt)}%</div>${svgA}</div>
+    <div><div class="od-simt" title="균일도 — 목표 점선 위면 통과, 세로 막대 = 불확실 범위">${cw >= 190 ? '<b>균일도</b> ' : ''}<i class="od-k od-d1"></i>길이 ${f1(last.Ulen)}%${mk(last.Ulen, tl, last.seLen, last.noise)} <i class="od-k od-d2"></i>폭 ${f1(last.Uwid)}%${mk(last.Uwid, tw, last.seWid, last.noise)}</div>${svgB}</div></div>`;
 }
-// 그래프 위 설명 한 줄(순수) — 광선 수 / 총광선 · 지금 균일도 / 목표 · 오차
+// 그래프 위 설명 한 줄(순수) — 광선 수 / 총광선 · 남은 시간
 export function simCaption(H, tgt, obs, state) {
   const last = H[H.length - 1]; if (!last) return '광선 수 0';
-  const pc = (v) => (Number.isFinite(v) ? `${(v * 100).toFixed(1)}%` : '–'), u = `<span class="od-c1">길이 ${pc(last.Ulen)}</span> · <span class="od-c2">폭 ${pc(last.Uwid)}</span> · 목표 ${pc(obs?.targetLen)}${obs?.targetWid !== obs?.targetLen ? ` / ${pc(obs?.targetWid)}` : ''}`;
-  return `광선 ${human(last.ph)} / 총 ${human(state === 'done' ? last.ph : simTotal(last, tgt))} · ${u} · 오차 ${Number.isFinite(last.noise) ? `±${(last.noise * 100).toFixed(1)}%` : '–'} → 목표 ±${(tgt * 100).toFixed(1)}%${state === 'running' ? etaText(H, tgt).replace(/ · 필요 광선 ≈ [^·]*/, '') : ''}`;
+  return `광선 ${human(last.ph)} / 총 ${human(state === 'done' ? last.ph : simTotal(last, tgt))}${state === 'running' ? etaText(H, tgt).replace(/ · 필요 광선 ≈ [^·]*/, '') : ''}`;
 }
 // 오른쪽 맨 위 카드(항상 보임) — onCtl = 계산 제어 단추(일시정지·재개·다시 계산). 광경로 목록은 접는 칸
 export function createSimDash(el, { onCtl = null } = {}) {
@@ -262,7 +275,7 @@ export function createSimDash(el, { onCtl = null } = {}) {
     diag = ph >= 50000 ? reachDiag(snap?.ledger, snap?.leak, nm) : null;
     if (!st || st.empty || !ph) { if (!ph) H = []; draw(); return; }
     if (H.length && ph < H[H.length - 1].ph) H = [];   // 장면이 바뀌어 다시 시작
-    if (!H.length || ph > H[H.length - 1].ph) H.push({ ph, t: performance.now(), noise: st.relNoise, Ulen: st.Ulen, Uwid: st.Uwid });
+    if (!H.length || ph > H[H.length - 1].ph) H.push({ ph, t: performance.now(), noise: st.relNoise, Ulen: st.Ulen, Uwid: st.Uwid, seLen: st.seLen, seWid: st.seWid });
     if (H.length > 400) H = H.filter((_, i) => i % 2 === 0 || i === H.length - 1);
     draw();
   }
@@ -290,7 +303,7 @@ export function createSimDash(el, { onCtl = null } = {}) {
     set('svg', svg);
     if (mini) {
       const w = Math.max(240, mini.clientWidth - 2);
-      mini.innerHTML = `<div class="od-pct"><b>${pct.toFixed(0)}%</b><div class="od-bar od-bar-big"><i style="width:${pct.toFixed(0)}%"></i></div></div><div class="od-simcap">${row}</div><div class="od-simplot">${simPlotSvg(H, tgt, obs, w, 96)}</div>`;
+      mini.innerHTML = `<div class="od-pct"><b>${pct.toFixed(0)}%</b><div class="od-bar od-bar-big"><i style="width:${pct.toFixed(0)}%"></i></div></div><div class="od-simcap">${row}</div><div class="od-simplot">${simPlotSvg(H, tgt, obs, w, 130)}</div>`;
     }
     // 접힌 줄에는 주 광경로 한 줄 요약, 펼치면 광경로 목록
     set('sum', P.length ? `광경로 <span class="mut">${(P[0].share * 100).toFixed(0)}% ${esc(pathText(P[0], names))}</span>` : '광경로');

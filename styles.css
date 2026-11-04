@@ -895,7 +895,7 @@ body.booting::after { content: "불러오는 중…"; position: fixed; left: 50%
 .m3-simcard > * { flex: none; }
 .m3-simcard > .od-simbox { flex: 1 1 96px; min-height: 96px; display: flex; flex-direction: column; border: 1px solid var(--m3-line); border-radius: 6px; padding: 3px 4px; margin: 2px 0 3px; }
 .od-simcap { flex: none; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.od-simplot { flex: 1; min-height: 66px; overflow: hidden; }
+.od-simplot { flex: 1; min-height: 84px; overflow: hidden; }
 .m3-simcard .od-simplot .od-sim { width: auto; height: auto; margin: 0; display: block; }
 /* LED 목록 */
 .m3-ledlist { max-height: 168px; overflow: auto; border: 1px solid var(--m3-line); border-radius: 6px; margin: 4px 0; }
@@ -986,9 +986,28 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 .m3-mon-hd > b, .m3-big-hd > b, .m3-rmodal-hd > b, .err-dlg-hd > b, .zoom-modal-hd > span:first-child { font-size: 17px; font-weight: 800; letter-spacing: -.01em; }
 .m3-res-h { flex: none; font-size: 14px; font-weight: 800; padding: 2px 2px 2px 8px; border-left: 4px solid var(--m3-acc); }
 .m3-big-prog { flex: none; padding: 4px 2px 6px; border-bottom: 1px solid var(--m3-line, #d3d8e0); margin-bottom: 6px; font-size: 12px; }
-.m3-big-prog .od-simplot { height: 96px; }
+.m3-big-prog .od-simplot { height: 130px; }
 .m3-big-prog .od-simcap { margin: 2px 0; }
-.od-ln2 { fill: none; stroke: #d9822b; stroke-width: 1.6; }
+#mech3d-wrap { --od-s1: #2f6fd0; --od-s2: #d9822b; } #mech3d-wrap[data-theme="dark"] { --od-s1: #4f8fe6; --od-s2: #c97a2a; }
+.od-sim2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; } .od-sim2.one { grid-template-columns: 1fr; gap: 2px; }
+.od-simt { font-size: 10.5px; line-height: 15px; height: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .od-simt b { font-weight: 700; }
+.od-sim2 .od-sim { display: block; width: auto; height: auto; margin: 0; } .od-sim2 .od-ax { font-size: 8.5px; }
+.od-sim2 polyline { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.od-sim2 polyline.od-s1 { stroke: var(--od-s1); } .od-sim2 polyline.od-s2 { stroke: var(--od-s2); } .od-sim2 polyline.od-pred { stroke: var(--od-s1); stroke-width: 1.2; stroke-dasharray: 3 3; opacity: .6; }
+.od-ax-l { stroke: var(--m3-line); stroke-width: 1; } .od-hit { fill: transparent; } .od-hit:hover { fill: rgba(127, 140, 160, .15); }
+.od-dot { stroke: var(--m3-panel, #fff); stroke-width: 1.2; } .od-dot.od-d1 { fill: var(--od-s1); } .od-dot.od-d2 { fill: var(--od-s2); }
+.od-bar-e { stroke-width: 3; opacity: .35; } .od-bar-e.od-d1 { stroke: var(--od-s1); } .od-bar-e.od-d2 { stroke: var(--od-s2); }
+.od-k { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 2px; } .od-k.od-d1 { background: var(--od-s1); } .od-k.od-d2 { background: var(--od-s2); }
+.od-simt .od-near, .od-simt .od-ok, .od-simt .od-bad { margin-left: 1px; font-weight: 700; }
+/* 접은 창에서만 보이는 실행 단추 */
+.m3-min-run { display: none; } .m3-mon.min .m3-min-run, .m3-big-in.min .m3-min-run { display: inline-block; font-weight: 700; }
+/* 관측면 창: 상단 ②·③ 단계 번호 · 목표 = 꼭 입력 칸 */
+.m3-props .m3-card .m3-sub .m3-fl { margin-right: 2px; vertical-align: -2px; }
+.m3-req { margin-left: 4px; padding: 0 5px; border-radius: 4px; background: #fff0c2; color: #7a5a12; font-size: 10.5px; font-weight: 700; }
+.m3-goal { border: 1.5px solid #e0a445; }
+.m3-obs-t th { white-space: nowrap; }
+#mech3d-wrap .m3-props .m3-obs-t input[data-lp-tgt] { width: 78px; height: 30px; padding: 2px 8px; font-size: 15px; font-weight: 700; background: #fff4c7; color: #20262f; border: 1.5px solid #c99a2e; border-radius: 5px; }
+#mech3d-wrap .m3-props .m3-obs-t input[data-lp-tgt]:focus { outline: 2px solid var(--m3-acc); outline-offset: 1px; background: #fffbe6; }
 .od-now { stroke: #8a96a8; stroke-width: 1; stroke-dasharray: 2 2; }
 .od-c1 { color: #2f6fd0; font-weight: 600; } .od-c2 { color: #c26f1f; font-weight: 600; }
 .om-say { font-size: 12.5px; line-height: 1.55; margin: 6px 0; padding: 6px 9px; background: #f3f6fa; color: #20262f; border-radius: 6px; }

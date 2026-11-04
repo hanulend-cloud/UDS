@@ -232,15 +232,15 @@ export function renderObserveProps(el, m, ui, h) {
   const ln = ui.line ?? null, nF = O.faces.length;
   const state = !nF ? '<span class="warn">아직 지정 안 함</span>' : ui.lineErr ? `<span class="warn">면 ${nF}개 · 라인 인식 실패</span>` : ln ? `<b>면 ${nF}개</b> · ${esc(ui.lineInfo ?? '')}` : `면 ${nF}개 · <span class="mut">라인 인식 중</span>`;
   // 기본 탭(2026-10-30 정리, 2026-11-03 목표 통합): ① 어디를 보나(면 지정·상태) ② 목표와 지금 결과(한 표) · 밝기 목표
-  const basic = `<div class="m3-card"><div class="m3-sub">관측면 — 빛이 고르게 보여야 하는 면</div>
+  const basic = `<div class="m3-card"><div class="m3-sub"><i class="m3-fl">2</i> 관측면 지정 <span class="mut">빛이 고르게 보여야 하는 면</span></div>
       <div class="m3-row">${state}</div>
       <div class="m3-row">${pickBtn(ui, 'obs', ui.pick === 'obs' ? '클릭 대기 중 — 끝내기' : nF ? '면 더하기 / 빼기' : '👁 3D 에서 면 클릭')} ${nF ? '<button data-lp-clear>모두 지우기</button>' : ''} ${ui.lineErr ? '<button data-lp-reline>라인 다시 인식</button>' : ''}</div>
       <div class="m3-row mut">${nF ? '3D 의 하늘색 테두리 = 관측면 · 화살표 = 보는 방향 · 같은 면을 다시 클릭 = 빼기' : '예: 확산판·도광판의 윗면(사람이 보는 면)을 3D 에서 클릭'}</div>
       ${ui.lineErr ? `<div class="m3-row warn">${esc(ui.lineErr)}</div>` : ''}</div>
-    <div class="m3-card"><div class="m3-sub">목표와 지금 결과</div>
+    <div class="m3-card m3-goal"><div class="m3-sub"><i class="m3-fl">3</i> 목표 설정 <span class="m3-req">꼭 입력</span></div>
       <table class="m3-cmp m3-obs-t"><tr><th></th><th>목표</th><th>지금${O.faces.length ? '' : ' <span class="mut">(관측면 먼저)</span>'}</th></tr>
-        <tr><th>길이 균일도</th><td><input type="number" min="0" max="1" step="0.05" value="${O.targetLen}" data-lp-tgt="targetLen" aria-label="길이 균일도 목표"></td><td>${pass(R?.Ulen, O.targetLen, R?.seLen)}${verdict(R?.Ulen, O.targetLen, R?.seLen)}</td></tr>
-        <tr><th>폭 균일도</th><td><input type="number" min="0" max="1" step="0.05" value="${O.targetWid}" data-lp-tgt="targetWid" aria-label="폭 균일도 목표"></td><td>${pass(R?.Uwid, O.targetWid, R?.seWid)}${verdict(R?.Uwid, O.targetWid, R?.seWid)}</td></tr></table>
+        <tr><th>길이 균일도</th><td><input type="number" min="0" max="1" step="0.05" value="${(+O.targetLen).toFixed(2)}" data-lp-tgt="targetLen" aria-label="길이 균일도 목표"></td><td>${pass(R?.Ulen, O.targetLen, R?.seLen)}${verdict(R?.Ulen, O.targetLen, R?.seLen)}</td></tr>
+        <tr><th>폭 균일도</th><td><input type="number" min="0" max="1" step="0.05" value="${(+O.targetWid).toFixed(2)}" data-lp-tgt="targetWid" aria-label="폭 균일도 목표"></td><td>${pass(R?.Uwid, O.targetWid, R?.seWid)}${verdict(R?.Uwid, O.targetWid, R?.seWid)}</td></tr></table>
       <div class="m3-row mut">균일도 = 가장 어두운 곳 ÷ 가장 밝은 곳 (1 = 완전히 고름)</div>
       <div class="m3-row"><label>밝기 목표</label><input type="number" min="0" step="10" value="${O.targetLum ?? ''}" placeholder="없음" data-lp-tgt="targetLum" data-lp-auto aria-label="평균 휘도 목표 cd/m²"> cd/m² <span class="mut">선택 · LED 밝기(lm) 입력 필요</span></div></div>`;
   // 상세 탭: 보는 방향 · 보는 범위 · 계산 · 설계 점검 기준(라인 상태·다시 인식은 기본 탭)

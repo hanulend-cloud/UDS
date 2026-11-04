@@ -431,6 +431,12 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   const near = monitorHtml({ ...S, final: { Ulen: 0.799, seLen: 0.004, Uwid: 0.84, seWid: 0.004 } }, 10), say = near.match(/om-say">([\s\S]*?)<\/div>/)[1];
   ok(say.includes('목표 근처의 안') && !say.includes('미달</') && !say.includes('/ 0.80 미달') && say.includes('0.80 근처') && !say.includes('찾지 못해'), `근처 설명: ${say.replace(/<[^>]+>/g, '').slice(0, 90)}`);
   const bad = monitorHtml({ ...S, final: { Ulen: 0.7, seLen: 0.004, Uwid: 0.84, seWid: 0.004 } }, 10); ok(bad.includes('찾지 못해') && bad.includes('/ 0.80 미달'), '미달이면 문구 그대로'); }
+{ // 광원 접기 · 관측면 창 ②·③ 번호 · 목표 꼭 입력
+  const base = { parts: [], observe: { faces: [], targetLen: 0.8, targetWid: 0.8 }, light: { kind: 'manual', spec: { beam: 120 }, manual: { count: 3, pitch: 0, rows: 1 } }, checks: {} };
+  const open = treeNodes(base, { node: null, line: null }), shut = treeNodes(base, { node: null, line: null, fold: { light: true } });
+  ok(open.find((n) => n.id === 'light').fold === 'open' && open.some((n) => n.id === 'leds') && shut.find((n) => n.id === 'light').fold === 'closed' && !shut.some((n) => n.id === 'leds'), '광원 접으면 LED 줄 숨김');
+  ok(treeNodes({ ...base, light: { ...base.light, kind: 'none' } }, { node: null, line: null }).find((n) => n.id === 'light').fold === undefined, '광원 없음 = 접기 없음');
+}
 done();
 
 { const { clearDbHtml } = await import('../src/ui/mech3d-panel.js');
@@ -498,8 +504,8 @@ done();
 { const { simPlotSvg, simCaption, optMatrixHtml, topPaths } = await import('../src/ui/m3/opt-dash.js');
   const obs = { targetLen: 0.8, targetWid: 0.8 }, H = [{ ph: 1e6, noise: 0.04, Ulen: 0.5, Uwid: 0.6 }, { ph: 4e6, noise: 0.02, Ulen: 0.7, Uwid: 0.75 }];
   const svg = simPlotSvg(H, 0.01, obs, 300, 90), cap = simCaption(H, 0.01, obs, 'done');
-  if (!svg.includes('총 1,600만 광선') || !svg.includes('80%') || !svg.includes('od-ln2')) throw new Error(`진행 그래프: 총광선·목표·폭 곡선 ${svg}`);
-  if (!simCaption(H, 0.01, obs, 'paused').includes('광선 400만 / 총 1,600만') || !cap.includes('길이 70.0%') || !cap.includes('목표 80.0%')) throw new Error(`진행 설명: ${cap}`);
+  if (!svg.includes('총 1,600만 광선') || !svg.includes('80%') || !svg.includes('od-s2') || !svg.includes('계산 오차') || !svg.includes('od-pred') || (svg.match(/<svg/g) ?? []).length !== 2 || !svg.includes('<title>')) throw new Error(`진행 그래프: 오차·균일도 2개 ${svg}`);
+  if (!simCaption(H, 0.01, obs, 'paused').includes('광선 400만 / 총 1,600만') || !svg.includes('길이 70.0%') || !svg.includes('폭 75.0%')) throw new Error(`진행 설명: ${cap}`);
   const stages = { milky: { status: 'done', frac: 1, text: '', evals: [{ label: 'Milky 1.5', Ulen: 0.76, Uwid: 0.84 }, { label: 'Milky 1.0', Ulen: 0.7, Uwid: 0.8 }] } };
   const tiles = new Proxy(stages, { get: (o, k) => o[k] ?? { status: 'off', frac: 0, text: '', evals: [] } });
   const mx = optMatrixHtml({ tiles, tgLen: 0.8, tgWid: 0.8, final: { Ulen: 0.81, Uwid: 0.85 } });

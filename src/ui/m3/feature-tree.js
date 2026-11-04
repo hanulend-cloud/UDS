@@ -40,8 +40,8 @@ export function treeNodes(M, S, lay, leds = []) {
     if (!closed) for (const k of mem) partNode(M.parts[k], k, 2);
   });
   // 광원 머리 눈 단추 = 광원 그룹(LED 몸체·PCB·지향각) 한 번에 켜기/끄기
-  node('light', '▾ 광원', L.kind === 'step' && L.step?.fromMech ? '3D 도면' : { none: '지정 안 함', step: 'LED STEP', manual: '직접 배치' }[L.kind], false, '', L.kind === 'step' ? (S.hideLeds ? 'off' : 'on') : undefined);
-  if (L.kind !== 'none') {
+  node('light', '광원', L.kind === 'step' && L.step?.fromMech ? '3D 도면' : { none: '지정 안 함', step: 'LED STEP', manual: '직접 배치' }[L.kind], false, '', L.kind === 'step' ? (S.hideLeds ? 'off' : 'on') : undefined, L.kind !== 'none' ? { fold: fold('light') ? 'closed' : 'open' } : {});
+  if (L.kind !== 'none' && !fold('light')) {
     const ex = L.step?.excluded ?? [], vt = L.kind === 'step' ? L.step?.virtual : null;
     const failed = !!vt && lay !== undefined && !lay?.virtual && (!!lay?.err || !!S.line);   // 라인 대기 중은 실패 아님
     const nr = (o) => (Array.isArray(o.positions) ? o.positions.length : o.count * (o.rows === 2 ? 2 : 1)), rw = (o) => (o.rows === 2 ? `2열 × ${o.count}개` : `${o.count}개`);   // 총 LED = 열 수 × 열당 개수(spec P4 §2.2b)

@@ -39,7 +39,7 @@ import { positionsFromLayout, addPosition, alignPositions } from '../../engine/m
 import { createResultsPanel } from './results-panel.js';
 import { renderStatusBar, leakText } from './status-bar.js';
 import { createAdRunner, resumable } from './autodesign-run.js';
-import { renderAutoPanel, milkyTable, stageAvailability, clampCap, overallFrac, etaText, reusableCurrent, defaultHousingPart, applyDz, applyFinish, capDefault, nextFinish, finishText, shapeText, tileConfigHtml } from './autodesign-panel.js';
+import { renderAutoPanel, milkyTable, stageAvailability, clampCap, overallFrac, etaText, reusableCurrent, defaultHousingPart, applyDz, applyFinish, capDefault, nextFinish, finishText, shapeText, tileConfigHtml, AD_ITEMS } from './autodesign-panel.js';
 import { ledHeightRange, heightCandidates, catalogOf, finishCandidatesFor, setReflMaterial, partFinishEdit } from '../../engine/mech3d/housing-led.js';
 import { migrateFinishCatalog, reflectPatch, copyAsUser, entryFromForm, addSamples, parsePercents, uniqueReflId } from '../../model/reflect-db.js';
 import { intersectRay } from '../../engine/mech3d/bvh.js';
@@ -202,7 +202,7 @@ export async function mount(ctx) {
   }
   const a = A = { ctx, store, pool, view: null, meshShown: null, lineKey: '', Gc: null, obsShown: null, checks: {}, markKey: '', timing: { start: 0, first: null, noise5: null } };
   a.prog = createProgressive({ ports: pool.ports(), onUpdate: onCalc, opts: { targetNoise: ctx.mspec.observe.targetNoise ?? 0.01 } });
-  a.results = createResultsPanel($('#m3-res'), { onLeak: () => A.store.update('session', (_, s) => { s.focusCheck = s.focusCheck === 'leak' ? null : 'leak'; }), onBig: (node) => A?.simDash?.attach(node), fileName: () => String(A?.store?.mspec?.name ?? 'uds').replace(/\.(stp|step)$/i, ''), onQuality: (v) => A.store.update('observe', (m) => { m.observe.quality = v; }) });
+  a.results = createResultsPanel($('#m3-res'), { onCalc: () => A?.toggleCalc?.(), calcBusy: () => !!A?.ad?.running, onLeak: () => A.store.update('session', (_, s) => { s.focusCheck = s.focusCheck === 'leak' ? null : 'leak'; }), onBig: (node) => A?.simDash?.attach(node), fileName: () => String(A?.store?.mspec?.name ?? 'uds').replace(/\.(stp|step)$/i, ''), onQuality: (v) => A.store.update('observe', (m) => { m.observe.quality = v; }) });
   a.optDash = createOptDash($('#m3-optdash'), { config: (k) => (A?.tileState ? tileConfigHtml(k, A.tileState) : { on: false, html: '' }), onSel: (k, v) => adSel(k, v), onUnlock: (k) => adUnlock(k), board: $('#m3-factor'), now: () => (A ? factorNow() : {}) }); a.simDash = createSimDash($('#m3-simdash'), { onCtl: () => cmdHandlers().onToggleCalc() });
   // 오른쪽 맨 위 광분포 시뮬레이션 ↕ 아래 광량 분포: 경계선 끌어 높이 조절(2026-10-30, 보는 사람별)
   mountSplit([$('#m3-simdash'), $('#m3-res')], { key: 'uds.m3.simSplit', dir: 'col', min: 80, init: [1, 3], onChange: () => window.dispatchEvent(new Event('resize')) });   // 아래 칸 = 기구 최적화 · 오른쪽 맨 위 = 광분포 시뮬레이션(항상 보임, 계산 제어 단추)
@@ -624,12 +624,15 @@ function renderAuto() {
 // 접은 창에 보일 현재 결과 — 실행 중 = 진행률, 결과 있음 = 후보 값, 그 밖 = 지금 값(길이·폭 균일도)
 function monitorSummary() {
   if (!A || !monitor) return;
+  const st0 = A.ad, av0 = adAvail(A.store.mspec), nSel = AD_ITEMS.filter(([, , ks]) => ks.some((k) => st0?.sel?.[k] && av0[k]?.ok)).length, noLine = !A.store.session.line;
+  monitor.setRun(st0?.running ? { label: '■ 중지', title: '기구 최적화 중지', fn: adStop }
+    : { label: st0?.result ? '▶ 다시 실행' : '▶ 실행', title: noLine ? '관측 라인이 없음' : !nSel ? '펼쳐서 최적화할 항목을 체크하세요' : st0?.result ? '지금 결과를 버리고 다시 실행' : '체크한 항목으로 실행', disabled: noLine || !nSel, fn: () => { if (adState().result) adCancel(); adRunBoost(); } });
   const st = A.ad, M = A.store.mspec, cell = (t, v, g) => `<b class="${Number.isFinite(v) && Number.isFinite(g) ? (v + 1e-9 >= g ? 'ok' : 'bad') : ''}">${t} ${Number.isFinite(v) ? v.toFixed(2) : '–'}</b>`;
   if (st?.running) { monitor.setSummary(`<b>진행 ${Math.round((st.running.frac ?? 0) * 100)}%</b>`); return; }
   const b = st?.result?.best, sn = A.prog?.snapshot(), s = sn?.stats, calc = ['running', 'pending', 'starting'].includes(sn?.state) ? `<b>계산 ${Math.round(simPct(s?.relNoise, sn.targetNoise))}%</b> ` : '';
-  if (!b && (!s || s.empty || s.relNoise > 0.05)) { monitor.setSummary(calc || '<span>계산 중</span>'); return; }   // 초반 값은 노이즈
+  if (!b && (!s || s.empty || s.relNoise > 0.05)) { monitor.setSummary(`<b>실행 전</b> ${calc || '<span>계산 중</span>'}`); return; }   // 초반 값은 노이즈
   const U = b ? [b.Ulen, b.Uwid] : [s.Ulen, s.Uwid];
-  monitor.setSummary(`${b ? '<b>진행 100%</b> <span>후보</span> ' : calc}${cell('길이', U[0], M.observe.targetLen)} ${cell('폭', U[1], M.observe.targetWid)}`);
+  monitor.setSummary(`${b ? '<b>진행 100%</b> <span>후보</span> ' : `<b>실행 전</b> ${calc}`}${cell('길이', U[0], M.observe.targetLen)} ${cell('폭', U[1], M.observe.targetWid)}`);
 }
 function adStop() { const st = adState(); if (!st.running || !st.runner) return; st.runner.cancel(); setStatus('기구 최적화 중지됨'); A.optDash?.stop(); }
 // 실행 문맥 = 시작 때 스냅샷 { M0: mspec 복사, line, G, obs, rt: 기구 런타임, mp: ① 대상 부품 } — 평가·미리보기·적용이 모두 이것 기준
@@ -1640,19 +1643,20 @@ function cmdHandlers() {
     // ① LED 지정: 광원이 아직 없거나 발광 방향 미지정이면 먼저 자동 선택(같은 부품 2개 이상 · PCB 위 · PCB 반대쪽 발광) — 못 찾으면 기존 흐름
     onLed: () => { const L0 = A.store.mspec.light; if ((L0.kind === 'none' || (L0.kind === 'step' && !L0.step?.emitters?.length)) && autoMechLight(true)) return; A.store.update('session', (m, x) => { const stp = m.light.kind === 'step' && m.light.step; x.node = stp ? 'leds' : 'light'; x.pick = stp && !stp.virtual ? (x.pick === 'led' ? null : 'led') : null; }); },
     onObs: () => A.store.update('session', (_, x) => { x.node = 'obs'; x.pick = x.pick === 'obs' ? null : 'obs'; }),
-    onTarget: () => { setLpTab('obs', 'basic'); A.store.update('session', (_, x) => { x.node = 'obs'; x.sel = null; x.ledSel = null; x.pick = null; }); },   // 목표 = 관측면 기본 탭
+    onTarget: () => { setLpTab('obs', 'basic'); A.store.update('session', (_, x) => { x.node = 'obs'; x.sel = null; x.ledSel = null; x.pick = null; });
+      setTimeout(() => { const q = $('[data-lp-tgt="targetLen"]'); q?.scrollIntoView?.({ block: 'center' }); q?.focus(); q?.select?.(); }, 0); },   // 목표 = 관측면 기본 탭의 ③ 칸
     onSection: () => A.store.update('view', (_, x) => {
       if (x.section) { x.section = null; return; }
       const b = bounds(getMech3d().combined.positions);
       x.section = { axis: 'x', pos: (b[0] + b[3]) / 2, box: b };
     }),
     onFit: () => A.view?.fitAll(),   // 맞춤 = 보이는 부품 전체를 창에 꽉 차게(보는 방향은 그대로)
-    onToggleCalc: () => {   // '⏸ 계산 중'(대기·장면 준비 포함) → 일시정지, 일시정지 → 재개, 그 밖(완료·오류·대기) → 다시 계산
+    onToggleCalc: (A.toggleCalc = () => {   // '⏸ 계산 중'(대기·장면 준비 포함) → 일시정지, 일시정지 → 재개, 그 밖(완료·오류·대기) → 다시 계산
       // 기구 최적화 중: 계산이 끝났거나 대기였으면(미룬 계산 없음) = 다시 계산 요청, 아니면 일시정지 여부를 뒤집음
       if (A.ad?.running) { const st = A.ad; st.userPaused = st.deferred ? !st.userPaused : false; st.deferred = true; setStatus(st.userPaused ? '기구 최적화가 끝나도 계산은 멈춰 둠' : '기구 최적화가 끝나면 계산 재개'); return; }
       const s = A.prog.snapshot().state;
       if (s === 'running' || s === 'pending' || s === 'starting') A.prog.pause(); else if (s === 'paused') A.prog.resume(); else restartCalc();
-    },
+    }),
     onAuto: () => adSetOpen(!adState().open),
     // 흐름 4·5단계 단추 — 해당 칸을 보여 주고 잠깐 강조(모니터가 열려 있으면 그 안에서)
     onSim: () => A.results.toggleBig(),
@@ -1769,7 +1773,7 @@ function renderAll(tag = 'all') {
       x.multi = []; x.node = id; x.sel = id.startsWith('part:') ? { part: +id.slice(5), face: null } : null; if (id !== 'leds') x.ledSel = null;
     }),
     onEye: (id, only) => st.update('view', (m, x) => Object.assign(x, id.startsWith('led:') ? toggleLed(+id.slice(4), ledsNow().list.map((it) => it.n), x.hiddenLeds, x.hideLeds, only) : toggleVisibility(id, only, m.parts.length, x.hidden, x.hideLeds, id.startsWith('group:') ? groupMembers(m, id.slice(6)) : []))),
-    onFold: (id) => st.update('session', (_, x) => { const k = id === 'parts' || id === 'leds' ? id : id.slice(6), def = k === '_light' || (k === 'leds' && ledFoldDefault(A.ledTotal)); x.fold = { ...x.fold, [k]: !(x.fold?.[k] ?? def) }; }),   // 접기·펼치기(세션)
+    onFold: (id) => st.update('session', (_, x) => { const k = id === 'parts' || id === 'leds' || id === 'light' ? id : id.slice(6), def = k === '_light' || (k === 'leds' && ledFoldDefault(A.ledTotal)); x.fold = { ...x.fold, [k]: !(x.fold?.[k] ?? def) }; }),   // 접기·펼치기(세션)
     // 우클릭: 고른 것에 없으면 그것만 고름(고른 것 위에서 우클릭하면 여러 개 그대로)
     onCtxSelect: (id) => st.update('session', (_, x) => {
       if (id === x.node || (x.multi ?? []).includes(id)) return;
