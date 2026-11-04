@@ -472,6 +472,11 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   const lab = (M, o) => treeCtxItems(M, {}, 'led:0', o).find((x) => x.k === 'ledOff')?.label;
   ok(lab(step) === '이 LED 빛 끄기' && lab(step, { excluded: true }) === '이 LED 빛 다시 켜기' && lab(virt) === '이 LED 삭제' && lab(man) === undefined, 'LED 한 개 메뉴');
 }
+{ // 2D 우클릭 메뉴
+  const { mapMenuItems } = await import('../src/ui/m3/results-panel.js');
+  const K = (a, b) => mapMenuItems(a, b).map((x) => x.k).join();
+  ok(K(true, false) === 'pinCsv,png,copy' && mapMenuItems(true, true)[0].label.startsWith('선택 선') && mapMenuItems(false, true)[0].label.startsWith('이 위치') && K(false, false) === 'png,copy', '선택 선 있으면 CSV · 없으면 누른 자리 · 여백이면 이미지만');
+}
 done();
 
 { const { clearDbHtml } = await import('../src/ui/mech3d-panel.js');

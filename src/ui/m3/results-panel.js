@@ -2,6 +2,7 @@ import { mountSplit } from './pane-split.js';
 import { clampRect, fitRect, dragBy, raiseWin, mountResizers, COLLAPSED_W } from './monitor.js';
 import { simPct } from './opt-dash.js';
 import { simCtl, setCtl, setStepMark } from './run-ctl.js';
+import { showCtxMenu } from './feature-tree.js';
 // 결과 패널 — spec 2026-10-15 m3-cad-ui §2(시안 m3-ui-mockup 오른쪽):
 // ① 2D 광량 분포(관측면 펼침 s×w) + 평균 광량(목표 대비)·광 효율 ② 길이 1D 프로파일(목표선) + 길이 균일도 ③ 폭 1D 프로파일(최저 창) + 폭 균일도.
 // update({ snap(progressive snapshot), observe(spec.mech3d.observe), message(안내 | ''), leds?: [{s, w}](LED 위치 — 프로파일 아래 표시) })
@@ -397,6 +398,7 @@ function wireMapHover(cv) {
   };
   cv.addEventListener('mousemove', (e) => { const M = cv._mapv; if (M) drawMap(cv, M.v, M.dpr, cell(e), M.equal); });
   cv.addEventListener('mouseleave', () => { const M = cv._mapv; if (M) drawMap(cv, M.v, M.dpr, null, M.equal); });
+  cv.addEventListener('contextmenu', (e) => { if (!cv._mapv || !cv._onMenu) return; e.preventDefault(); cv._onMenu(e, cell(e), cv); });   // 우클릭 = CSV·이미지 메뉴
   cv.addEventListener('click', (e) => { const M = cv._mapv, c = cell(e); if (M && c) cv._onPin?.(c, M.v.G); else cv._onPinOff?.(); });   // 클릭 = 그 점 프로파일 지정 · 그림 밖 여백 = 해제
 }
 const clearCanvas = (c) => c.getContext('2d').clearRect(0, 0, c.width, c.height);
@@ -423,7 +425,12 @@ function bigRectLoad() {
 }
 function bigRectSave(r) { try { localStorage.setItem(BIG_KEY, JSON.stringify({ x: r.x, y: r.y, w: r.w, h: r.h })); } catch {} }
 let PIN_OUTSIDE = null, pinOutsideOn = false;   // 패널을 다시 만들어도 문서 처리는 하나
-export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds', onLeak = null, onBig = null, onCalc = null, calcBusy = () => false } = {}) {
+// 2D 우클릭 메뉴 항목(순수) — hasPin = 선택 선 있음, onCell = 분포 위에서 누름
+export const mapMenuItems = (hasPin, onCell) => [
+  ...(hasPin ? [{ k: 'pinCsv', label: '선택 선 길이·폭 프로파일 CSV 저장' }] : onCell ? [{ k: 'pinCsv', label: '이 위치 길이·폭 프로파일 CSV 저장' }] : []),
+  { k: 'png', label: '2D 이미지 저장 (PNG)' }, { k: 'copy', label: '2D 이미지 복사' },
+];
+export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds', onLeak = null, onBig = null, onCalc = null, calcBusy = () => false, onNote = null } = {}) {
   const gaugeHtml = (k) => `<div class="m3-gauge" data-r="${k}"><div class="f"></div><div class="tg"></div></div>`;
   el.innerHTML = `
     <div class="m3-res-h">시뮬레이션 결과</div>
@@ -432,7 +439,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
       <div class="m3-withm"><canvas class="m3-g" data-r="map" width="600" height="200"></canvas>
         <div class="m3-m"><div class="l">평균 광량</div><div class="v" data-r="avg">–</div><div class="s" data-r="avgs"></div>${gaugeHtml('avgg')}
           <div class="l" style="margin-top:6px">광 효율</div><div class="v sm" data-r="eff">–</div><div class="s">관측면 원뿔 안 / LED 총 방출</div><button type="button" class="m3-leak" data-r="leak" hidden title="누르면 3D 에서 가장 많이 새는 면을 강조"></button></div></div></div>
-    <div class="m3-blk"><div class="m3-t"><b class="m3-tt">길이 방향 1D 프로파일 <i class="m3-info" data-r="psub" tabindex="0">ⓘ</i></b><span><span data-r="pinbtn"></span> <button type="button" class="m3-zoom" data-zoom="prof" title="큰 창으로 보기" aria-label="길이 프로파일 확대">⤢</button></span></div>
+    <div class="m3-blk"><div class="m3-t"><b class="m3-tt">길이 방향 1D 프로파일 <i class="m3-info" data-r="psub" tabindex="0">ⓘ</i></b><span><button type="button" class="m3-zoom" data-zoom="prof" title="큰 창으로 보기" aria-label="길이 프로파일 확대">⤢</button></span></div>
       <div class="m3-withm"><canvas class="m3-g" data-r="prof" width="600" height="150"></canvas>
         <div class="m3-m"><div class="l">길이 균일도</div><div class="v" data-r="ul">–</div>${gaugeHtml('ulg')}<div class="s" data-r="ulj"></div></div></div></div>
     <div class="m3-blk"><div class="m3-t"><b class="m3-tt">폭 방향 1D 프로파일 <i class="m3-info" data-r="wsub" tabindex="0">ⓘ</i></b><span><button type="button" class="m3-zoom" data-zoom="wprof" title="큰 창으로 보기" aria-label="폭 프로파일 확대">⤢</button></span></div>
@@ -445,9 +452,9 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
   let pin = null;
   const onPin = ([i, j], G) => { const s = (i + 0.5) * G.ds, w = G.w0 + (j + 0.5) * G.cell; pin = pin && Math.abs(pin.s - s) < G.ds / 2 && Math.abs(pin.w - w) < G.cell / 2 ? null : { s, w }; if (last) update(last); };
   const pinOff = () => { if (!pin) return; pin = null; if (last) update(last); };
-  q('map')._onPin = onPin; q('map')._onPinOff = pinOff;
-  // 지도 밖을 클릭하면 선택 선 해제 — 지도·선택 선 CSV·창 제목 줄(옮기기·접기)·경계선 끌기는 빼고
-  PIN_OUTSIDE = (e) => { const t = e.target; if (t === q('map') || t === big?.cvs.map || t.closest?.('[data-pin-txt], .m3-big-hd, .m3-psplit')) return; pinOff(); };
+  q('map')._onPin = onPin; q('map')._onPinOff = pinOff; q('map')._onMenu = (e, c, cv) => mapMenu(e, c, cv);
+  // 지도 밖을 클릭하면 선택 선 해제 — 지도·우클릭 메뉴·창 제목 줄(옮기기·접기)·경계선 끌기는 빼고
+  PIN_OUTSIDE = (e) => { const t = e.target; if (t === q('map') || t === big?.cvs.map || t.closest?.('.m3-ctx, .m3-big-hd, .m3-psplit')) return; pinOff(); };
   if (!pinOutsideOn && typeof document !== 'undefined') { pinOutsideOn = true; document.addEventListener('click', (e) => PIN_OUTSIDE?.(e)); }
   q('quality').onchange = (e) => onQuality?.(e.target.value);
   q('leak').onclick = () => onLeak?.();
@@ -475,6 +482,27 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
   const KINDS = ['map', 'prof', 'wprof'];
   const VIEW = { map: null, prof: null, wprof: null }, TITLE = { map: '2D 광량 분포 (관측면 펼침)', prof: '길이 방향 1D 프로파일', wprof: '폭 방향 1D 프로파일' };
   let big = null;
+  // 2D 우클릭 메뉴(2026-11-04): 선택 선 길이·폭 프로파일 CSV · 2D 이미지 저장·복사. 선택 선이 없으면 누른 자리를 선택
+  const mapPng = (cv) => new Promise((res, rej) => {
+    paint('map', cv);   // 마우스 십자선은 빼고
+    const o = document.createElement('canvas'); o.width = cv.width; o.height = cv.height;
+    const x = o.getContext('2d'); x.fillStyle = '#ffffff'; x.fillRect(0, 0, o.width, o.height); x.drawImage(cv, 0, 0);
+    o.toBlob((b) => (b ? res(b) : rej(new Error('이미지를 만들 수 없음'))), 'image/png');
+  });
+  const pngName = () => `${String(fileName() ?? 'uds').replace(/[\/:*?"<>|]/g, '_')}-2D분포.png`;
+  const savePng = async (cv) => { const b = await mapPng(cv), u = URL.createObjectURL(b), a = document.createElement('a'); a.href = u; a.download = pngName(); document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 1000); onNote?.(`2D 이미지 저장 — ${pngName()}`); };
+  const copyPng = async (cv) => {
+    try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': mapPng(cv) })]); onNote?.('2D 이미지를 복사함 — 붙여넣기(Ctrl+V) 가능'); }
+    catch (e) { onNote?.('이미지를 복사하지 못함 — 창을 한 번 클릭한 뒤 다시 하거나 [2D 이미지 저장] 을 쓰세요'); }
+  };
+  function mapMenu(e, c, cv) {
+    const G = cv._mapv.v.G, items = mapMenuItems(!!pin, !!c).filter((it) => it.k !== 'copy' || (navigator.clipboard?.write && globalThis.ClipboardItem));
+    showCtxMenu(cv.ownerDocument, e.clientX, e.clientY, items, (k) => {
+      if (k === 'pinCsv') { if (!pin) onPin(c, G); txtPin(); }
+      else if (k === 'png') savePng(cv).catch((er) => onNote?.(`이미지를 저장하지 못함: ${er.message}`));
+      else if (k === 'copy') copyPng(cv);
+    }, cv.closest('#mech3d-wrap') ?? cv.ownerDocument.body);
+  }
   const paint = (kind, cv, hover = null) => {
     const v = VIEW[kind], dpr = dprNow();
     if (!v) { clearCanvas(cv); return; }
@@ -504,7 +532,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     const rect = fitRect(bigRectLoad(), innerWidth, innerHeight);
     ov.className = 'm3-big-in'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', '광시뮬레이션');
     const cell = (k) => `<div class="m3-big-c" data-k="${k}"><div class="m3-big-ct"><b>${TITLE[k]}</b><span class="m3-big-sp"></span>${k === 'map' ? `<label class="m3-big-eq"><input type="checkbox" data-big-eq${eq0 ? ' checked' : ''}> 실제 비율</label>` : ''}<button type="button" data-big-txt="${k}" title="${k === 'map' ? '2D 분포 표(칸마다, 최대 대비 %)' : `${TITLE[k]} — ${k === 'prof' ? '폭 평균' : '최저 창·길이 평균'} 곡선(원자료 %, 고른 점이 있으면 그 곡선도)`}">${k === 'map' ? '2D CSV' : '평균값 CSV'}</button><button type="button" data-big-one="${k}">⤢ 이 그림만</button></div><canvas class="m3-big-cv" data-big-cv="${k}"></canvas></div>`;
-    ov.innerHTML = `<div class="m3-big-hd" title="끌어서 옮기기"><b title="진행 현황 · 2D · 1D — 2D 클릭 = 그 점 기준 1D 곡선(주황)"><i class="m3-fl" data-big-step>4</i>광시뮬레이션</b><span class="m3-mon-sum" data-big-sum></span><span class="m3-big-sp"></span><span class="m3-ctl" data-big-ctl></span><label class="m3-big-q">화질 <select data-big-q aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label><button type="button" data-pin-txt>선택 선 CSV</button><button type="button" data-big-min></button><button type="button" data-big-close title="Esc">✕ 닫기</button></div>
+    ov.innerHTML = `<div class="m3-big-hd" title="끌어서 옮기기"><b title="진행 현황 · 2D · 1D — 2D 클릭 = 그 점 기준 1D 곡선(주황) · 2D 우클릭 = CSV·이미지"><i class="m3-fl" data-big-step>4</i>광시뮬레이션</b><span class="m3-mon-sum" data-big-sum></span><span class="m3-big-sp"></span><span class="m3-ctl" data-big-ctl></span><label class="m3-big-q">화질 <select data-big-q aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label><button type="button" data-big-min></button><button type="button" data-big-close title="Esc">✕ 닫기</button></div>
       <div class="m3-big-grid"><div class="m3-big-prog" data-big-prog></div>${cell('map')}<div class="m3-big-row">${cell('prof')}${cell('wprof')}</div></div>`;
     (el.closest('#mech3d-wrap') ?? document.body).appendChild(ov);   // 설계 화면에 붙임(화면을 바꾸면 함께 숨음)
     const cvs = Object.fromEntries(KINDS.map((k) => [k, ov.querySelector(`[data-big-cv="${k}"]`)]));
@@ -532,12 +560,11 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     ov.addEventListener('click', (e) => {
       const one = e.target.closest('[data-big-one]'); if (one) { setFocus(big.focus === one.dataset.bigOne ? null : one.dataset.bigOne); return; }
       const t = e.target.closest('[data-big-txt]'); if (t) (t.dataset.bigTxt === 'map' ? txt2D() : txt1D(t.dataset.bigTxt));   // 그림마다 그 그림의 표
-      if (e.target.closest('[data-pin-txt]')) txtPin();   // 선택 선 원자료
     });
     ov.querySelector('[data-big-close]').onclick = closeBig;
     ov.querySelector('[data-big-q]').onchange = (e) => onQuality?.(e.target.value);
     const eq = ov.querySelector('[data-big-eq]'); eq.onchange = () => { big.equal = eq.checked; paint('map', cvs.map); };
-    wireMapHover(cvs.map); cvs.map._onPin = onPin; cvs.map._onPinOff = pinOff; wireHover(cvs.prof); wireHover(cvs.wprof);
+    wireMapHover(cvs.map); cvs.map._onPin = onPin; cvs.map._onPinOff = pinOff; cvs.map._onMenu = (e, c, cv) => mapMenu(e, c, cv); wireHover(cvs.prof); wireHover(cvs.wprof);
     // 창 안 크기 조절: 2D ↕ 1D(높이) · 길이 1D ↔ 폭 1D(폭) — 끌기 막대(비율 기억). 창 자체 = 오른쪽 아래 모서리(CSS resize)
     const C = (k) => ov.querySelector(`.m3-big-c[data-k="${k}"]`);
     mountSplit([C('map'), ov.querySelector('.m3-big-row')], { key: 'uds.m3.bigV', dir: 'col', min: 120, onChange: () => paintBig() });
@@ -548,17 +575,16 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
   // 큰 창 머리: 화질 = 지금 값, [선택 선 CSV] = 점을 골랐을 때만
   const syncBig = () => {
     if (!big) return;
-    const s = big.el.querySelector('[data-big-q]'), b = big.el.querySelector('[data-pin-txt]');
+    const s = big.el.querySelector('[data-big-q]');
     if (document.activeElement !== s) s.value = last?.observe?.quality ?? 'low';
     const su = big.el.querySelector('[data-big-sum]'), st0 = last?.snap?.stats, O = last?.observe, u = (t, v, g) => `<b class="${Number.isFinite(v) && Number.isFinite(g) ? (v + 1e-9 >= g ? 'ok' : 'bad') : ''}">${t} ${Number.isFinite(v) ? v.toFixed(2) : '–'}</b>`;
     const pr = last?.snap?.state === 'done' ? 100 : simPct(st0?.relNoise, last?.snap?.targetNoise ?? 0.01);
     setStepMark(big.el.querySelector('[data-big-step]'), 4, last?.snap?.state === 'done');
     setCtl(big.el.querySelector('[data-big-ctl]'), simCtl(last?.snap, calcBusy()), (k) => onCalc?.(k));
     if (su) su.innerHTML = `<b>진행 ${pr.toFixed(0)}%</b> ${!st0 || st0.empty || st0.relNoise > 0.05 ? '' : `${u('길이', st0.Ulen, O?.targetLen)} ${u('폭', st0.Uwid, O?.targetWid)}`}`;   // 접었을 때 보이는 현재 결과(계산 초반 값은 노이즈가라 숨김)
-    b.disabled = !pin; b.title = pin ? '고른 점을 지나는 길이·폭 방향 원자료(평활 없음, 2D 최대 대비 %)' : '2D 에서 점을 클릭하면 저장할 수 있음';
   };
   // onclick 대입(addEventListener 아님) — 패널을 다시 만들면(새 도면·프로젝트) 앞 패널의 처리를 대체. 쌓이면 큰 창이 2개 열리고 아래 창은 이전 계산 데이터였음
-  el.onclick = (e) => { if (e.target.closest('[data-pin-txt]')) { txtPin(); return; } const b = e.target.closest('[data-zoom]'); if (b) openBig(); };
+  el.onclick = (e) => { const b = e.target.closest('[data-zoom]'); if (b) openBig(); };
   // 메인 결과 칸 높이 조절(2D · 길이 1D · 폭 1D 사이 끌기 막대) — 전체 높이는 그대로, 비율만(보는 사람별)
   mountSplit([...el.querySelectorAll(':scope > .m3-blk')], { key: 'uds.m3.resSplit', dir: 'col', min: 110, onChange: () => { if (last) update(last); } });
   let last = null;
@@ -604,7 +630,6 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     VIEW.map = { G: FG, map: mapF, leds, pin, smooth: true };
     VIEW.prof = plotView([{ ys: Array.from(st.profile, (v) => v / pm), color: '#1f6fd1', name: '폭 평균', band: st.relNoise ?? 0 }, ...(pp ? [{ ys: Array.from(pp.along), color: PIN_COLOR, name: `지정 점 w=${pin.w.toFixed(1)}` }] : [])], observe.targetLen, { x0: 0, x1: G.L, xl: 's (mm)', leds: leds.map((p) => p.s), ledsOrig: (args.ledsOrig ?? []).map((p) => p.s) });
     q('psub').title = `${pin ? `폭 평균 + 지정 점(주황, ${ring} 방향) · 같은 점 다시 클릭 또는 바깥 클릭 = 해제` : '폭 평균 · 2D 클릭 = 그 점 기준 곡선 추가'} · 옅은 띠 = 계산 노이즈 범위 · 빨간 점선 = 목표 하한 · 곡선은 노이즈만 살짝 다듬어 그림(LED 리플 높이 유지) · 최저점·마우스 값·CSV·판정 = 원자료`;
-    q('pinbtn').innerHTML = pin ? '<button type="button" class="m3-pintxt" data-pin-txt title="고른 점을 지나는 길이·폭 방향 원자료(평활 없음, 2D 최대 대비 %)">선택 선 CSV</button>' : '';
     paint('map', q('map')); paint('prof', q('prof'));
     gauge('ul', st.Ulen, observe.targetLen, st.seLen, st.relNoise);
     if (pp && (st.Uwid == null || !st.win)) {   // 폭 판정이 없어도 지정 점의 폭(원형 = 반경) 방향 곡선은 보여 줌

@@ -537,7 +537,7 @@ main:has(#m3-start:not([hidden])) { grid-template-rows: minmax(0, 1fr); }
 .m3-big-hd b { white-space: nowrap; }
 .m3-big-in.min { grid-template-rows: auto; padding-bottom: 0; }   /* 접기 = 제목 줄만 */
 .m3-big-in.min .m3-big-hd { margin-bottom: 0; border-bottom: 0; }
-.m3-big-in.min .m3-big-grid, .m3-big-in.min .m3-big-q, .m3-big-in.min [data-pin-txt] { display: none; }
+.m3-big-in.min .m3-big-grid, .m3-big-in.min .m3-big-q { display: none; }
 header:has(.mb-drop) { z-index: 80; }   /* 메뉴를 펼치면 떠 있는 창 위로 */
 .od-path-note { font-size: 11px; margin-top: 2px; }
 .m3-big-sp { flex: 1; }
@@ -885,7 +885,6 @@ body.booting::after { content: "불러오는 중…"; position: fixed; left: 50%
 .m3-obs-t { width: 100%; font-size: 12px; }
 .m3-obs-t input[type=number] { width: 58px; }
 .m3-obs-t th:first-child { text-align: left; font-weight: 500; }
-.m3-pintxt { font: inherit; font-size: 11px; padding: 0 6px; margin-left: 4px; border: 1px solid var(--m3-line); border-radius: 5px; background: transparent; color: inherit; cursor: pointer; }
 /* 2D·1D 제목 — 설명은 ⓘ 에 마우스를 올리면(2026-11-02) */
 .m3-t .m3-tt { font-weight: 600; }
 .m3-info { font-style: normal; font-weight: 400; margin-left: 3px; cursor: help; opacity: .6; }
