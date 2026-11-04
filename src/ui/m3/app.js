@@ -1514,8 +1514,9 @@ function propHandlers() {
     // 'mech' = 3D 도면에서 지정: 자동 선택(반복되는 LED 모양 부품) → 못 찾으면 도면 LED 의 발광면 클릭 대기(pick 'mled'). 다른 방식으로 바꾸면 도면 광원 원본을 기구로 되돌림
     onLightKind: (k) => {
       if (k === 'mech' && autoMechLight(true)) return;   // 먼저 자동 선택 — 못 찾으면 LED 발광면 클릭 대기
-      if (k !== 'mech' && A.store.mspec.light.step?.fromMech) mechLightClear();
-      st.update('light', (m, x) => { if (k === 'mech') { x.pick = 'mled'; x.ledInfo = '3D 도면에서 LED 하나의 발광면(빛이 나오는 면)을 클릭하세요 — 같은 모양 부품을 모두 광원으로'; } else { m.light.kind = k; x.pick = null; } });
+      if (k !== 'mech' && k !== 'click' && A.store.mspec.light.step?.fromMech) mechLightClear();
+      st.update('light', (m, x) => { if (k === 'mech' || k === 'click') {   // click = 수동: 자동 선택 없이 바로 클릭 대기
+ x.pick = 'mled'; x.ledInfo = '3D 도면에서 LED 하나의 발광면(빛이 나오는 면)을 클릭하세요 — 같은 모양 부품을 모두 광원으로'; } else { m.light.kind = k; x.pick = null; } });
     },
     onMechLightClear: () => mechLightClear(),
     // [자동 선택] — 같은 모양이 반복되는 작은 부품(LED)을 찾아 광원으로(발광면 = PCB 반대쪽). 못 찾으면 LED 하나를 직접 클릭하게
@@ -1647,11 +1648,11 @@ function importLedStep(file) {
         const old = M.light.step;
         if (old?.ref && old.name === file.name) {
           M.light.step = { ...old, leds: [], pcb: -1, emitters: [] };
-          try { L.applyStepRecognition(M, x, M.light.step, old.ref); x.ledInfo = `저장된 LED 지정 복원 — ${x.ledInfo}`; x.pick = null; x.node = 'leds'; return; }
+          try { L.applyStepRecognition(M, x, M.light.step, old.ref); x.ledInfo = `저장된 LED 지정 복원 — ${x.ledInfo}`; x.pick = null; x.node = 'light'; return; }
           catch (e) { x.status = `저장된 LED 지정으로 인식 실패(${e.message}) — 새로 지정하세요`; }
         }
         M.light.step = { name: file.name, offset: [0, 0, 0], rot: [0, 0, 0], ref: null, leds: [], excluded: [], pcb: -1, emitters: [] };
-        x.ledInfo = `부품 ${m.data.parts.length}개 — LED 하나의 발광면을 클릭하세요`; x.pick = 'led'; x.node = 'leds';   // 발광면·제외 클릭 버튼은 LED 노드에
+        x.ledInfo = `부품 ${m.data.parts.length}개 — LED 하나의 발광면을 클릭하세요`; x.pick = 'led'; x.node = 'light';   // 발광면·제외 클릭 버튼은 광원 노드에
       });
     };
     w.onerror = (e) => { w.terminate(); say(`불러오기 실패: ${e.message ?? e}`); };
@@ -1664,7 +1665,7 @@ function cmdHandlers() {
   return {
     onImport: (f) => A.ctx.onImportMech3d(f),
     // ① LED 지정: 광원이 아직 없거나 발광 방향 미지정이면 먼저 자동 선택(같은 부품 2개 이상 · PCB 위 · PCB 반대쪽 발광) — 못 찾으면 기존 흐름
-    onLed: () => { const L0 = A.store.mspec.light; if ((L0.kind === 'none' || (L0.kind === 'step' && !L0.step?.emitters?.length)) && autoMechLight(true)) return; A.store.update('session', (m, x) => { const stp = m.light.kind === 'step' && m.light.step; x.node = stp ? 'leds' : 'light'; x.pick = stp && !stp.virtual ? (x.pick === 'led' ? null : 'led') : null; }); },
+    onLed: () => { const L0 = A.store.mspec.light; if ((L0.kind === 'none' || (L0.kind === 'step' && !L0.step?.emitters?.length)) && autoMechLight(true)) return; A.store.update('session', (m, x) => { const stp = m.light.kind === 'step' && m.light.step; x.node = 'light'; x.pick = stp && !stp.virtual ? (x.pick === 'led' ? null : 'led') : null; }); },
     onObs: () => A.store.update('session', (_, x) => { x.node = 'obs'; x.pick = x.pick === 'obs' ? null : 'obs'; }),
     onTarget: () => { setLpTab('obs', 'basic'); A.store.update('session', (_, x) => { x.node = 'obs'; x.sel = null; x.ledSel = null; x.pick = null; });
       setTimeout(() => { const q = $('[data-lp-tgt="targetLen"]'); q?.scrollIntoView?.({ block: 'center' }); q?.focus(); q?.select?.(); }, 0); },   // 목표 = 관측면 기본 탭의 ③ 칸
@@ -1827,7 +1828,7 @@ function renderAll(tag = 'all') {
   const pi = S.node?.startsWith('part:') ? +S.node.slice(5) : -1, clr = pi >= 0 ? clearanceOf(pi) : null;
   if (clr !== A.clrShown) { A.clrShown = clr; renderMarkers(); }
   watchNumInputs($('#m3-props'));
-  if (tag !== 'view') renderPropertyPanel($('#m3-props'), M, S, { admin: isAdmin(), dbList: A.ctx.materialDb()?.list() ?? [], catalog: reflCat(), clearList: clearUser(), clearUsed: M.parts.reduce((o, p) => { const id = p.material?.matId; if (id) o[id] = (o[id] ?? 0) + 1; return o; }, {}), milkyUsed: M.parts.reduce((o, p) => { const id = p.material?.kind === 'milky' && p.material.dbId; if (id) o[id] = (o[id] ?? 0) + 1; return o; }, {}), auto: autoGrid(), dir: M.observe.dir ?? S.line?.frame.d, lineInfo: lineInfo(), clearance: clr, xfInfo: pi >= 0 ? xformInfoOf(pi) : null, meshInfo: pi >= 0 ? partMeshInfo(pi) : null, xfMsg: S.xfMsg?.part === pi ? S.xfMsg.text : '', lay: lay ?? null, led: (S.node === 'leds' || S.node === 'light') && S.ledSel != null ? ledUi(LS, S.ledSel) : null, ...((S.node === 'leds' || S.node === 'light') ? { ledList: ledRows(LS), ledGap: minFinite(ledGaps(LS.em)), ledChange: ledChangeNow() } : {}) }, propHandlers());
+  if (tag !== 'view') renderPropertyPanel($('#m3-props'), M, S, { admin: isAdmin(), dbList: A.ctx.materialDb()?.list() ?? [], catalog: reflCat(), clearList: clearUser(), clearUsed: M.parts.reduce((o, p) => { const id = p.material?.matId; if (id) o[id] = (o[id] ?? 0) + 1; return o; }, {}), milkyUsed: M.parts.reduce((o, p) => { const id = p.material?.kind === 'milky' && p.material.dbId; if (id) o[id] = (o[id] ?? 0) + 1; return o; }, {}), auto: autoGrid(), dir: M.observe.dir ?? S.line?.frame.d, lineInfo: lineInfo(), clearance: clr, xfInfo: pi >= 0 ? xformInfoOf(pi) : null, meshInfo: pi >= 0 ? partMeshInfo(pi) : null, xfMsg: S.xfMsg?.part === pi ? S.xfMsg.text : '', lay: lay ?? null, led: S.node === 'leds' && S.ledSel != null ? ledUi(LS, S.ledSel) : null, ...(S.node === 'leds' ? { ledList: ledRows(LS), ledGap: minFinite(ledGaps(LS.em)), ledChange: ledChangeNow() } : {}) }, propHandlers());
   if (tag === 'session' || tag === 'all') renderMarkers();
   A.cmd.update(S, M);
   renderStatus();
