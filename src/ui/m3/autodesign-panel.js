@@ -60,7 +60,7 @@ export function stageAvailability(M, info) {
   const milkyParts = M.parts.map((p, i) => (p.material.kind === 'milky' ? i : -1)).filter((i) => i >= 0);
   const lit = M.parts.map((p, i) => (p.material.kind !== 'opaque' && p.role !== 'light' && !p.untrace && onP(i) ? i : -1)).filter((i) => i >= 0);   // 빛이 지나는 투과 부품
   const shapeParts = order(lit.filter((i) => (info.non25?.[i] ?? 1) <= 0.02)), shapeSkip = path ? order(lit.filter((i) => !shapeParts.includes(i))) : [];   // shapeSkip = 광경로 위지만 2.5D 가 아니라 형상을 못 바꿈
-  const opaque = order(M.parts.map((p, i) => (p.material.kind === 'opaque' && p.role !== 'light' && !p.untrace && onP(i) ? i : -1)).filter((i) => i >= 0));   // ④ 대상 = 계산에 드는 불투명 부품(광원으로 옮긴 LED·추적 제외 부품 빼고)
+  const opaque = order(M.parts.map((p, i) => (p.material.kind === 'opaque' && p.role !== 'light' && p.role !== 'pcb' && !p.untrace && onP(i) ? i : -1)).filter((i) => i >= 0));   // ④ 대상 = 계산에 드는 불투명 부품(광원으로 옮긴 LED·추적 제외·PCB 빼고 — PCB 면은 케이스처럼 바꾸지 않음)
   return {
     milky: milkyParts.length ? { ok: true, parts: milkyParts } : { ok: false, why: 'Milky 부품이 없음 — 부품 소재를 Milky 로 지정하세요' },
     leds: M.light.kind === 'manual' ? { ok: true } : M.light.kind === 'step' ? (stepRefEmitter(M.light.step) ? { ok: true, note: 'LED STEP — 기준 LED 를 복사해 개수·간격 조정' } : { ok: false, why: 'LED STEP — 기준이 될 LED 가 없음 · LED 발광면을 먼저 지정하세요' }) : { ok: false, why: '광원을 직접 배치로 지정하세요' },

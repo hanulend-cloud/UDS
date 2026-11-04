@@ -97,6 +97,29 @@ export function defaultPart(id, name, volume) {
   return { id, name, volume, material, finish: finishForMaterial(material), faceFinish: {} };
 }
 
+// PCB 부품(2026-11-04): 부품은 그대로 두고 role 'pcb' + 확산 반사 30% 면 하나로. 원래 이름·소재·면 처리는 pcbOrig 에 — 해제하면 되돌림
+export const PCB_FINISH = { kind: 'whiteDiffuse', R: 0.3 };
+const PCB_KEYS = ['material', 'finish', 'faceFinish', 'reflMaterial', 'coating'];
+function markPcb(p) {
+  if (p.role === 'pcb') return p;
+  const q = { ...p }, pcbOrig = { name: p.name };
+  for (const k of PCB_KEYS) { if (p[k] !== undefined) pcbOrig[k] = p[k]; delete q[k]; }
+  return { ...q, role: 'pcb', pcbOrig, material: defaultMaterial('opaque'), finish: { ...PCB_FINISH }, faceFinish: {} };
+}
+function unmarkPcb(p) {
+  if (p.role !== 'pcb') return p;
+  const { role, pcbOrig, ...q } = p;
+  for (const k of PCB_KEYS) delete q[k];
+  return { ...q, ...pcbOrig };
+}
+const numberPcb = (parts) => {   // 한 장 = PCB · 여러 장 = PCB 1, PCB 2 … (사용자가 바꾼 이름은 그대로)
+  const n = parts.filter((p) => p.role === 'pcb').length; let k = 0;
+  return parts.map((p) => { if (p.role !== 'pcb') return p; k++; return p.pcbOrig?.name !== p.name && !/^PCB( \d+)?$/.test(p.name) ? p : { ...p, name: n > 1 ? `PCB ${k}` : 'PCB' }; });
+};
+// ids = PCB 인 부품 번호 — 그 밖의 PCB 는 원래대로. 이미 PCB 인 부품은 고친 반사율을 유지
+export function syncPcb(parts, ids) { const S = new Set(ids); return numberPcb(parts.map((p, i) => (S.has(i) ? markPcb(p) : unmarkPcb(p)))); }
+export function setPcb(parts, i, on) { return numberPcb(parts.map((p, k) => (k !== i ? p : on ? markPcb(p) : unmarkPcb(p)))); }
+
 // 반사 소재·특수 처리 표시(spec P4 §2.3d)는 면 처리가 기본값으로 돌아가므로 해제
 export function setPartMaterial(part, kind) {
   const material = defaultMaterial(kind), { reflMaterial, coating, ...rest } = part;

@@ -126,7 +126,7 @@ function ledNodeBodyHtml(m, ui, adv = false, showBeam = false, noSize = false) {
       지향각<input type="number" min="10" max="170" step="5" value="${L.spec.beam}" data-lp-spec="beam">°</div>`}
     ${noSize ? '' : ledSizeRow(L)}
     ${adv ? '' : `<div class="m3-row"><label>광속</label><input type="number" min="0" step="1" value="${L.spec.fluxLm ?? 0}" data-lp-spec="fluxLm"> lm/개 <span class="mut">0 = 상대값(최대 대비 %)</span></div>`}
-    <div class="m3-row"><label>PCB 색</label><select data-lp-solder>${['백색', '녹색', '흑색'].map((c) => `<option ${c === L.solder ? 'selected' : ''}>${c}</option>`).join('')}</select></div>`;
+    ${st?.fromMech ? '' : `<div class="m3-row"><label>PCB 색</label><select data-lp-solder>${['백색', '녹색', '흑색'].map((c) => `<option ${c === L.solder ? 'selected' : ''}>${c}</option>`).join('')}</select></div>`}`;   // 도면 광원의 PCB = 기구 부품(부품 속성에서)
 }
 // 원설계 대비 변경(순수, 2026-11-02) — 위치·개수가 바뀌면 눈에 띄게. c = ledChange 결과 | null(비교 기준 없음)
 export function ledChangeHtml(c) {

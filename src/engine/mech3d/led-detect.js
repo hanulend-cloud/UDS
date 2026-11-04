@@ -273,6 +273,30 @@ function faceAlong(m, v) {
   return face >= 0 ? refineEmitterFace(m, face) : -1;
 }
 
+// 도면의 PCB 부품 찾기(2026-11-04): LED 마다 받침 부품 → 닿아 있고 · LED 보다 크고 · LED 축 방향 두께 ≤ maxThick 인 판.
+// 케이스 바닥에 LED 를 바로 올린 도면(PCB 를 안 그림)에서 케이스를 PCB 로 바꾸지 않게 판 모양을 본다. 여러 장이면 모두.
+// 반환 { pcbs: 부품 번호(오름차순), rejected: [{ part, why }] } — skip = 후보에서 뺄 부품(관측면 등)
+export const PCB_MAX_THICK = 3;
+export function findPcbParts(parts, leds, { skip = new Set(), maxThick = PCB_MAX_THICK } = {}) {
+  const out = new Set(), bad = new Map(), no = new Set([...leds, ...skip]);
+  for (const k of leds) {
+    const m = parts[k];
+    if ([...out].some((i) => touches(m, parts[i]))) continue;   // 이미 찾은 판 위 — 다시 안 봄(LED 많을 때 빠르게)
+    const sup = supportPart(parts, m, no);
+    if (sup < 0 || !touches(m, parts[sup])) continue;
+    const v = towardLed(parts[sup], meshStats(m).center);
+    if (!v) continue;
+    const P = parts[sup].positions;
+    let lo = Infinity, hi = -Infinity;
+    for (let j = 0; j < P.length; j += 3) { const d = P[j] * v[0] + P[j + 1] * v[1] + P[j + 2] * v[2]; if (d < lo) lo = d; if (d > hi) hi = d; }
+    const th = hi - lo;
+    if (th > maxThick) bad.set(sup, `두께 ${th.toFixed(1)} mm — PCB 로 보기엔 두꺼움(≤ ${maxThick} mm)`);
+    else if (meshStats(parts[sup]).rmax <= meshStats(m).rmax) bad.set(sup, 'LED 보다 작음');
+    else out.add(sup);
+  }
+  return { pcbs: [...out].sort((a, b) => a - b), rejected: [...bad].filter(([i]) => !out.has(i)).map(([part, why]) => ({ part, why })) };
+}
+
 // 도면 광원 자동 인식(STEP 불러온 직후·[자동 선택]): 같은 모양이 2개 이상 반복되는 작은 부품(크기 ≤ maxDiag mm) 무리 중 가장 많은 것.
 // 받침 부품(LED 에 닿아 있는 가장 가까운 부품 — PCB)이 있어야 하고, 발광면 = 받침 반대쪽 면. 못 찾으면 null.
 // skip = 후보에서 뺄 부품 번호(관측면 부품 등). 반환 { leds, ref, face, support }
