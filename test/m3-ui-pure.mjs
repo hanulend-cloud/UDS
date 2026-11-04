@@ -458,6 +458,10 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   const go = autoCardHtml(base), wait = autoCardHtml({ ...base, noLed: 'LED 도면을 읽는 중' });
   ok(!/data-ad="run" disabled/.test(go) && /data-ad="run" disabled title="LED 도면을 읽는 중"/.test(wait), '준비 전에는 실행 불가 · 이유 표시');
 }
+{ // 2D 최저 위치 점: 그림 크기에 맞춤, 2~5 px
+  const { minDotR } = await import('../src/ui/m3/results-panel.js');
+  ok(minDotR(40, 30) === 2 && minDotR(100, 100) === 3 && minDotR(800, 400) === 5 && minDotR(800, 400, 2) === 10, `점 크기: ${minDotR(40, 30)} ${minDotR(100, 100)} ${minDotR(800, 400)}`);
+}
 done();
 
 { const { clearDbHtml } = await import('../src/ui/mech3d-panel.js');

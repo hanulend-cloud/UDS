@@ -208,6 +208,8 @@ function wireHover(cv) {
 // 최저점 표시(값·위치), 마우스 위치 읽기. equal = 가로세로 같은 축척(실제 비율, 확대 창에서 선택). 모든 치수는 dpr 배
 // v = { G, map, leds:[{s,w}] } · cv._mapv 에 저장 → 마우스 읽기·확대 창이 다시 그림
 const MAP_PAD = { l: 40, r: 64, t: 8, b: 30 }, EXAG_MAX = 8, PIN_COLOR = '#ff8a1f';
+// 최저 위치 점 반지름(순수) — 그림의 짧은 변에 비례, 2~5 px
+export const minDotR = (w, h, dpr = 1) => Math.max(2 * dpr, Math.min(5 * dpr, Math.min(w, h) * 0.03));
 // 지도 배치(순수) — 한 줄(가로 = 길이 s, 1D 프로파일과 같은 가로축). 길고 좁은 관측면(예: 440 × 5.5 mm)은 상자 높이를 다 쓰면
 // 폭이 수십 배 과장되므로 폭 확대를 EXAG_MAX 배까지만(띠 높이 최소 28 px) — 띠는 상자 가운데. (예전엔 여러 줄로 접었지만 1D 프로파일과 맞춰 보기 어려움)
 // equal = 가로세로 같은 축척(확대 창에서 선택) — 줄 안에서 정확히 1:1.
@@ -353,21 +355,15 @@ export function drawMap(cv, v, dpr = 1, hover = null, equal = false) {
   x.textBaseline = 'middle'; x.strokeStyle = 'rgba(128,140,160,.6)';
   for (let w = Math.ceil(w0 / ws - 1e-9) * ws; w <= w1 + 1e-9; w += ws) { x.beginPath(); x.moveTo(ox - 3 * dpr, WY(w)); x.lineTo(ox, WY(w)); x.stroke(); x.fillText(`${+w.toFixed(1)}`, ox - 5 * dpr, WY(w)); }
   x.save(); x.translate(10 * dpr, oy + rowH / 2); x.rotate(-Math.PI / 2); x.textAlign = 'center'; x.fillText('w (mm)', 0, 0); x.restore();
-  // 색 막대(0~100%) + 최저 표시
+  // 색 막대(0~100%) + 최저 위치
   const cTop = MAP_PAD.t * dpr, PH = H - (MAP_PAD.t + MAP_PAD.b) * dpr, bx = W - (MAP_PAD.r - 12) * dpr, bw = 11 * dpr;
   for (let i = 0; i < PH; i++) { const l = lutIndex(1 - i / PH) * 3; x.fillStyle = `rgb(${LUT[l]},${LUT[l + 1]},${LUT[l + 2]})`; x.fillRect(bx, cTop + i, bw, 1.5); }
   x.strokeStyle = 'rgba(128,140,160,.7)'; x.strokeRect(bx, cTop, bw, PH);
   x.fillStyle = '#8a93a6'; x.textAlign = 'left'; x.textBaseline = 'middle';
   for (let p = 0; p <= 100; p += 20) x.fillText(`${p}%`, bx + bw + 4 * dpr, cTop + (1 - p / 100) * PH);
-  if (kMin >= 0) {
-    const t = map[kMin] / mx, i = Math.floor(kMin / G.nw), j = kMin % G.nw, [cs, cw] = mapCellSW(G, i, j), [px, py] = xy(cs, cw);
-    x.strokeStyle = '#ffffff'; x.lineWidth = 1.5 * dpr; x.beginPath(); x.moveTo(bx - 4 * dpr, cTop + (1 - t) * PH); x.lineTo(bx + bw, cTop + (1 - t) * PH); x.stroke();
-    x.beginPath(); x.arc(px, py, 5 * dpr, 0, 2 * Math.PI); x.stroke();
-    const lbl = `최저 ${(t * 100).toFixed(1)}% (s ${cs.toFixed(1)}, w ${cw.toFixed(1)})`, right = px > ox + PW * 0.6;
-    x.font = `600 ${10.5 * dpr}px sans-serif`; const tw = x.measureText(lbl).width, lx = right ? px - 8 * dpr - tw : px + 8 * dpr, ly = Math.max(oy + 2 * dpr, Math.min(yEnd - 15 * dpr, py - 7 * dpr));
-    x.fillStyle = 'rgba(20,26,38,.75)'; x.fillRect(lx - 3 * dpr, ly - 1 * dpr, tw + 6 * dpr, 14 * dpr);
-    x.fillStyle = '#ffffff'; x.textAlign = 'left'; x.textBaseline = 'top'; x.fillText(lbl, lx, ly);
-    x.font = `${10.5 * dpr}px sans-serif`;
+  if (kMin >= 0) {   // 최저 위치 = 회색 점만(글씨는 작은 그림을 가림, 2026-11-04) · 크기는 그림에 맞춤
+    const i = Math.floor(kMin / G.nw), j = kMin % G.nw, [cs, cw] = mapCellSW(G, i, j), [px, py] = xy(cs, cw);
+    x.beginPath(); x.arc(px, py, minDotR(PW, rowH, dpr), 0, 2 * Math.PI); x.fillStyle = '#8a8f98'; x.fill(); x.strokeStyle = '#ffffff'; x.lineWidth = dpr; x.stroke();
   }
   // 지정 점(클릭) — 주황 십자선 + 점: 이 점을 지나는 길이·폭 1D 프로파일이 아래에 함께 나옴
   if (v.pin) {
@@ -401,7 +397,7 @@ function wireMapHover(cv) {
   };
   cv.addEventListener('mousemove', (e) => { const M = cv._mapv; if (M) drawMap(cv, M.v, M.dpr, cell(e), M.equal); });
   cv.addEventListener('mouseleave', () => { const M = cv._mapv; if (M) drawMap(cv, M.v, M.dpr, null, M.equal); });
-  cv.addEventListener('click', (e) => { const M = cv._mapv, c = cell(e); if (M && c) cv._onPin?.(c, M.v.G); });   // 클릭 = 그 점 프로파일 지정
+  cv.addEventListener('click', (e) => { const M = cv._mapv, c = cell(e); if (M && c) cv._onPin?.(c, M.v.G); else cv._onPinOff?.(); });   // 클릭 = 그 점 프로파일 지정 · 그림 밖 여백 = 해제
 }
 const clearCanvas = (c) => c.getContext('2d').clearRect(0, 0, c.width, c.height);
 const dprNow = () => Math.max(1, globalThis.devicePixelRatio || 1);
@@ -426,6 +422,7 @@ function bigRectLoad() {
   return { x: Math.round((innerWidth - w) / 2), y: 56, w, h: Math.max(360, innerHeight - 72) };
 }
 function bigRectSave(r) { try { localStorage.setItem(BIG_KEY, JSON.stringify({ x: r.x, y: r.y, w: r.w, h: r.h })); } catch {} }
+let PIN_OUTSIDE = null, pinOutsideOn = false;   // 패널을 다시 만들어도 문서 처리는 하나
 export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds', onLeak = null, onBig = null, onCalc = null, calcBusy = () => false } = {}) {
   const gaugeHtml = (k) => `<div class="m3-gauge" data-r="${k}"><div class="f"></div><div class="tg"></div></div>`;
   el.innerHTML = `
@@ -447,7 +444,11 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
   // 지정 점(mm — 화질을 바꿔도 같은 위치). 같은 칸을 다시 누르면 해제
   let pin = null;
   const onPin = ([i, j], G) => { const s = (i + 0.5) * G.ds, w = G.w0 + (j + 0.5) * G.cell; pin = pin && Math.abs(pin.s - s) < G.ds / 2 && Math.abs(pin.w - w) < G.cell / 2 ? null : { s, w }; if (last) update(last); };
-  q('map')._onPin = onPin;
+  const pinOff = () => { if (!pin) return; pin = null; if (last) update(last); };
+  q('map')._onPin = onPin; q('map')._onPinOff = pinOff;
+  // 지도 밖을 클릭하면 선택 선 해제 — 지도·선택 선 CSV·창 제목 줄(옮기기·접기)·경계선 끌기는 빼고
+  PIN_OUTSIDE = (e) => { const t = e.target; if (t === q('map') || t === big?.cvs.map || t.closest?.('[data-pin-txt], .m3-big-hd, .m3-psplit')) return; pinOff(); };
+  if (!pinOutsideOn && typeof document !== 'undefined') { pinOutsideOn = true; document.addEventListener('click', (e) => PIN_OUTSIDE?.(e)); }
   q('quality').onchange = (e) => onQuality?.(e.target.value);
   q('leak').onclick = () => onLeak?.();
   // 2D = 칸 중심 값 그대로, 칸 사이만 선형 보간 · 1D = smoothCurve 로 노이즈만 다듬어 그림(값은 원자료)
@@ -536,7 +537,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     ov.querySelector('[data-big-close]').onclick = closeBig;
     ov.querySelector('[data-big-q]').onchange = (e) => onQuality?.(e.target.value);
     const eq = ov.querySelector('[data-big-eq]'); eq.onchange = () => { big.equal = eq.checked; paint('map', cvs.map); };
-    wireMapHover(cvs.map); cvs.map._onPin = onPin; wireHover(cvs.prof); wireHover(cvs.wprof);
+    wireMapHover(cvs.map); cvs.map._onPin = onPin; cvs.map._onPinOff = pinOff; wireHover(cvs.prof); wireHover(cvs.wprof);
     // 창 안 크기 조절: 2D ↕ 1D(높이) · 길이 1D ↔ 폭 1D(폭) — 끌기 막대(비율 기억). 창 자체 = 오른쪽 아래 모서리(CSS resize)
     const C = (k) => ov.querySelector(`.m3-big-c[data-k="${k}"]`);
     mountSplit([C('map'), ov.querySelector('.m3-big-row')], { key: 'uds.m3.bigV', dir: 'col', min: 120, onChange: () => paintBig() });
@@ -602,7 +603,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     const FG = fullG(G), mapF = st.mapAll ?? st.map, pp = pin ? pointProfiles(FG, mapF, pi, pj) : null, ring = G.closed ? '원주' : '길이', rad = G.closed ? '반경(폭)' : '폭';
     VIEW.map = { G: FG, map: mapF, leds, pin, smooth: true };
     VIEW.prof = plotView([{ ys: Array.from(st.profile, (v) => v / pm), color: '#1f6fd1', name: '폭 평균', band: st.relNoise ?? 0 }, ...(pp ? [{ ys: Array.from(pp.along), color: PIN_COLOR, name: `지정 점 w=${pin.w.toFixed(1)}` }] : [])], observe.targetLen, { x0: 0, x1: G.L, xl: 's (mm)', leds: leds.map((p) => p.s), ledsOrig: (args.ledsOrig ?? []).map((p) => p.s) });
-    q('psub').title = `${pin ? `폭 평균 + 지정 점(주황, ${ring} 방향) · 같은 점 다시 클릭 = 해제` : '폭 평균 · 2D 클릭 = 그 점 기준 곡선 추가'} · 옅은 띠 = 계산 노이즈 범위 · 빨간 점선 = 목표 하한 · 곡선은 노이즈만 살짝 다듬어 그림(LED 리플 높이 유지) · 최저점·마우스 값·CSV·판정 = 원자료`;
+    q('psub').title = `${pin ? `폭 평균 + 지정 점(주황, ${ring} 방향) · 같은 점 다시 클릭 또는 바깥 클릭 = 해제` : '폭 평균 · 2D 클릭 = 그 점 기준 곡선 추가'} · 옅은 띠 = 계산 노이즈 범위 · 빨간 점선 = 목표 하한 · 곡선은 노이즈만 살짝 다듬어 그림(LED 리플 높이 유지) · 최저점·마우스 값·CSV·판정 = 원자료`;
     q('pinbtn').innerHTML = pin ? '<button type="button" class="m3-pintxt" data-pin-txt title="고른 점을 지나는 길이·폭 방향 원자료(평활 없음, 2D 최대 대비 %)">선택 선 CSV</button>' : '';
     paint('map', q('map')); paint('prof', q('prof'));
     gauge('ul', st.Ulen, observe.targetLen, st.seLen, st.relNoise);
