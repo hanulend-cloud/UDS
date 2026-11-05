@@ -641,9 +641,9 @@ export async function runAutoDesign(cfg, io) {
     let best = await halving(shapeCands, async (cands, N, ms) => { const res = await io.evalShapes(d, cands, N, ms); res.forEach((r) => seen.set(r.cand, r)); return res; }, obs, cfg.schedule, stop);
     if (stop()) return { cancelled: true };
     if (cfg.shapeCands) {   // 빠른 형상 — 안 바뀌면 이유를 남김
-      const all = [...seen.values()], bad = all.filter((r) => !r.ok), lens = all.filter((r) => r.cand.h).length, n = (w) => bad.filter((r) => r.why === w).length;
-      if (!best || !all.some((r) => r.ok)) shapeNote = `렌즈 후보가 모두 탈락(${[n('간섭') ? `간섭 ${n('간섭')}개` : '', n('살두께') ? `살두께 ${n('살두께')}개` : ''].filter(Boolean).join(' · ') || '계산 실패'}) — 입광면 앞에 틈을 두거나 살두께에 여유를 주세요`;
-      else if (!(best.cand.h || best.cand.dt || best.cand.kF || best.cand.kL || best.cand.kW || best.cand.e || best.cand.c)) shapeNote = `렌즈 후보 ${lens}개 시험 — 지금보다 나은 형상 없음${bad.length ? ` (탈락 ${bad.length}개)` : ''}`;
+      const all = [...seen.values()], bad = all.filter((r) => !r.ok), lens = all.filter((r) => r.cand.h || r.cand.dt).length, n = (w) => bad.filter((r) => r.why === w).length;
+      if (!best || !all.some((r) => r.ok)) shapeNote = `형상 후보가 모두 탈락(${[n('간섭') ? `간섭 ${n('간섭')}개` : '', n('살두께') ? `살두께 ${n('살두께')}개` : ''].filter(Boolean).join(' · ') || '계산 실패'}) — 입광면 앞에 틈을 두거나 살두께에 여유를 주세요`;
+      else if (!(best.cand.h || best.cand.dt || best.cand.kF || best.cand.kL || best.cand.kW || best.cand.e || best.cand.c)) shapeNote = `형상 후보 ${lens}개 시험 — 지금보다 나은 형상 없음${bad.length ? ` (탈락 ${bad.length}개)` : ''}`;
     }
     best = await curveStage(best);
     if (best === undefined) return { cancelled: true };

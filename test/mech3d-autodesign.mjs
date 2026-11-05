@@ -468,7 +468,7 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
     const l1 = await runAutoDesign(lensCfg(), evL((cands) => cands.map((cd) => ({ cand: cd, ok: true, stats: sOf(cd.h ? 0.95 : 0.8), eff: 0.5 }))));
   ok(l1.best.shape?.h === 0.5 && !l1.shapeNote, `렌즈 후보가 나으면 채택 (h ${l1.best.shape?.h})`);
   const l2 = await runAutoDesign(lensCfg(), evL((cands) => cands.map((cd) => ({ cand: cd, ok: true, stats: sOf(0.8), eff: 0.5 }))));
-  ok(!l2.best.shape && /렌즈 후보 1개/.test(l2.shapeNote ?? '') && /나은 형상 없음/.test(l2.shapeNote), `효과 없으면 이유: ${l2.shapeNote}`);
+  ok(!l2.best.shape && /형상 후보 1개/.test(l2.shapeNote ?? '') && /나은 형상 없음/.test(l2.shapeNote), `효과 없으면 이유: ${l2.shapeNote}`);
   const l3 = await runAutoDesign(lensCfg(), evL((cands) => cands.map((cd) => ({ cand: cd, ok: false, why: '간섭' }))));
   ok(!l3.best.shape && /탈락/.test(l3.shapeNote ?? '') && /간섭/.test(l3.shapeNote), `모두 탈락: ${l3.shapeNote}`);
   const l4 = await runAutoDesign(lensCfg({ shapeCands: [], shapeEmptyWhy: '살두께 여유 없음' }), evL(() => []));

@@ -1031,10 +1031,11 @@ async function adRun(opt = {}) {
   const quickShape = !!stages.shape && !opt.precise;
   const lens = quickShape ? (() => {
     const base = adBaseMesh(sp, ctx), F = shapeFrame(base, line), H = heightsFor(base, F, 0.5), thick = minThickness(H, shapeModFor({ dt: 0, h: 0, R: 1 }, M0, line, F));
-    const pitch = cur.count > 1 ? (cur.pitch > 0 ? cur.pitch : line.length / cur.count) : line.length, cands = lensCandidates({ thick, minWall, pitch }), sm = M0.parts[sp]?.shapeMod;
+    const pitch = cur.count > 1 ? (cur.pitch > 0 ? cur.pitch : line.length / cur.count) : line.length, P0 = shapeModFor({ dt: 0, h: 0, R: 1 }, M0, line, F), rOut = fieldRoom(H, P0, F, 8, 3, rt.parts.filter((_, j) => j !== sp));   // 두껍게 할 여유 = 기구 부품까지(LED 는 렌즈가 비켜 가므로 후보 평가에서 거름)
+    const room = Math.min(...rOut), cands = lensCandidates({ thick, minWall, pitch, roomOut: Math.min(Number.isFinite(room) ? room : thick, thick) }), sm = M0.parts[sp]?.shapeMod;
     if (cands.length && sm) cands.push((({ dt, h, R, e, c, kL, kW, kF }) => ({ dt, h, R, e, c, kL, kW, kF }))(sm));   // 이미 적용한 형상도 후보 — 더 나으면 유지
     const sb = shapeBudget(currentVerified?.eff ?? snap0.photometry?.eff).schedule;
-    return { cands, schedule: [[99, sb[0][1], sb[0][2]], [3, sb[1][1], sb[1][2]]], why: `살두께 여유가 없음(두께 ${thick.toFixed(2)} mm · 최소 ${minWall} mm) — 렌즈를 넣지 못함` };
+    return { cands, schedule: [[99, sb[0][1], sb[0][2]], [3, sb[1][1], sb[1][2]]], why: `움직일 여유가 없음(두께 ${thick.toFixed(2)} mm · 최소 살두께 ${minWall} mm · 입광면 앞 틈 ${Number.isFinite(room) ? room.toFixed(2) : '–'} mm) — 형상을 바꾸지 못함` };
   })() : null;
   const shapeField = stages.shape && !quickShape ? (() => { const pitch = cur.count > 1 ? (cur.pitch > 0 ? cur.pitch : line.length / cur.count) : line.length, ds = Math.min(6, Math.max(2, pitch / 8)), sb = shapeBudget(currentVerified?.eff ?? snap0.photometry?.eff).schedule.at(-1); return { ns: Math.ceil(line.length / ds) + (line.closed ? 0 : 1), nw: 7, N: sb[1], maxMs: sb[2], W: line.width / 2, ledSOf: (d) => { try { const q = L.currentEmitters(designScene(d, ctx).M, line).map((e) => line.toSW(...line.to2D(e.pos))[0]).sort((a, b) => a - b); return q.filter((v, i) => !i || v - q[i - 1] > 1e-6); } catch { return []; } } }; })() : null;
   let shapeI = 0, shapeScr = 0, shapeTot = 1;
@@ -1877,7 +1878,7 @@ function renderAll(tag = 'all') {
         x.multi = [...set]; x.node = id; x.sel = { part: +id.slice(5), face: null }; return;
       }
       x.multi = []; x.node = id; x.sel = id.startsWith('part:') ? { part: +id.slice(5), face: null } : null; if (id !== 'leds') x.ledSel = null;
-      if (x.pick === 'mpcb' && id !== 'pcbs' && id !== 'steppcb') x.pick = null;   // PCB 메뉴를 벗어나면 수동 선택 끝(버튼이 안 보이는데 클릭이 PCB 를 바꾸지 않게)
+      if (x.pick === 'mpcb' && id !== 'pcbs') x.pick = null;   // PCB 메뉴를 벗어나면 수동 선택 끝(버튼이 안 보이는데 클릭이 PCB 를 바꾸지 않게)
     }),
     onEye: (id, only) => st.update('view', (m, x) => Object.assign(x, id.startsWith('led:') ? toggleLed(+id.slice(4), ledsNow().list.map((it) => it.n), x.hiddenLeds, x.hideLeds, only) : toggleVisibility(id, only, m.parts.length, x.hidden, x.hideLeds, id.startsWith('group:') ? groupMembers(m, id.slice(6)) : []))),
     onFold: (id) => st.update('session', (_, x) => { const k = id === 'parts' || id === 'leds' || id === 'light' ? id : id.slice(6), def = k === '_light' || (k === 'leds' && ledFoldDefault(A.ledTotal)); x.fold = { ...x.fold, [k]: !(x.fold?.[k] ?? def) }; }),   // 접기·펼치기(세션)
