@@ -423,7 +423,7 @@ export function refinedFor(mesh, F, centers, R, hMax, hBottom = 0) {
   return lru(memoR, mesh, JSON.stringify([F.u, F.v, F.d, centers, R, hMax, hBottom]), () => { stats.refine++; return refineForBumps(mesh, F, centers, R, hMax, { H: heightsFor(mesh, F, 0.5), hBottom }); });
 }
 
-// 빠른 형상(2026-11-05) — 부품 두께 × LED 위 오목 렌즈. 두껍게 = 입광면 앞 여유(roomOut)까지, 얇게 = 살두께까지. 렌즈 깊이는 그 두께에서 살두께를 남기는 만큼(½·전부).
+// 빠른 형상(2026-11-05) — 부품 두께 × LED 위 오목 렌즈. 두껍게 = 지금 두께의 ½·1·2배 + 입광면 앞 여유(roomOut, 간섭 직전) — 넓은 범위를 등분하면 좋은 두께를 건너뜀(실측: 예제 +1.15 mm 가 +2.08 mm 보다 나음), 얇게 = 살두께까지. 렌즈 깊이는 그 두께에서 살두께를 남기는 만큼(½·전부).
 // 반경 = 피치의 ⅛·¼·½(서로 겹치지 않게). LED 와의 간섭은 후보 평가가 거름(두꺼워져도 렌즈가 LED 를 비켜 가면 통과). 여유가 전혀 없으면 []
 export function lensCandidates({ thick, minWall, pitch, roomOut = 0 }) {
   const rd = (v) => Math.round(v * 1e3) / 1e3, cut = thick - minWall - 0.02, grow = Number.isFinite(roomOut) ? Math.max(0, roomOut) : 0;
@@ -431,7 +431,7 @@ export function lensCandidates({ thick, minWall, pitch, roomOut = 0 }) {
   const Rs = [0.125, 0.25, 0.5].map((k) => rd(k * pitch)), base = { e: 0, c: 0 }, out = [{ ...base, dt: 0, h: 0, R: Rs[1] }];
   const lens = (dt, fr) => { const room = cut + dt; if (room > 0.02) for (const f of fr) for (const R of Rs) out.push({ ...base, dt: rd(dt), h: rd(f * room), R }); };
   lens(0, [0.5, 1]);
-  if (grow > 0.02) for (const dt of [rd(grow / 2), rd(grow)]) { out.push({ ...base, dt, h: 0, R: Rs[1] }); lens(dt, [0.5, 1]); }
+  if (grow > 0.02) for (const dt of [...[0.5, 1, 2].map((k) => rd(k * thick)).filter((v) => v < grow - 0.02), rd(grow)]) { out.push({ ...base, dt, h: 0, R: Rs[1] }); lens(dt, [0.5, 1]); }
   if (cut > 0.04) { const dt = rd(-cut / 2); out.push({ ...base, dt, h: 0, R: Rs[1] }); lens(dt, [1]); }
   return out;
 }

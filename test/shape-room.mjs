@@ -79,13 +79,16 @@ for (const [name, part, others, lp, want] of cases) {
   const L3 = lensCandidates({ thick: 2, minWall: 0.8, pitch: 12, roomOut: 1.5 });
   const dts = [...new Set(L3.map((q) => q.dt))].sort((a, b) => a - b), Rs = new Set(L3.filter((q) => q.h > 0).map((q) => q.R));
   ok(L3[0].dt === 0 && L3[0].h === 0, '첫 후보 = 변경 없음');
-  ok(dts.at(-1) === 1.5 && dts.includes(0.75) && dts[0] < 0 && dts[0] >= -(2 - 0.8), `두께 범위 ${dts.join(', ')}: 더하기 = 앞 여유까지, 빼기 = 살두께까지`);
+  ok(dts.at(-1) === 1.5 && dts.includes(1) && dts[0] < 0 && dts[0] >= -(2 - 0.8), `두께 범위 ${dts.join(', ')}: 더하기 = 앞 여유까지, 빼기 = 살두께까지`);
   ok(L3.every((q) => 2 + q.dt - q.h >= 0.8 - 1e-9), '어느 후보든 LED 위 남는 두께 ≥ 최소 살두께');
   ok(Rs.size === 3 && Math.min(...Rs) === 1.5 && Math.max(...Rs) === 6, `반경 ${[...Rs].join(', ')}: 겹치지 않는 범위(피치 ½ 까지)`);
   const deep = L3.filter((q) => q.dt === 1.5), near = L3.filter((q) => q.dt === 0);
   ok(Math.max(...deep.map((q) => q.h)) > Math.max(...near.map((q) => q.h)), '두꺼워지면 렌즈를 더 깊게 팔 수 있음');
   ok(L3.some((q) => q.dt > 0 && q.h === 0), '렌즈 없이 두께만 바꾸는 후보도 있음');
-  ok(L3.length <= 30, `후보 수 ${L3.length} ≤ 30(빠른 탐색)`);
+  { const wide = lensCandidates({ thick: 1.15, minWall: 0.8, pitch: 12, roomOut: 6.24 }), up = [...new Set(wide.map((q) => q.dt))].filter((v) => v > 0).sort((a, b) => a - b);
+    ok(up.join() === '0.575,1.15,2.3,6.24', `앞 여유가 커도 작은 쪽을 촘촘히: 두께 +${up.join(', +')}`);
+    ok(wide.length <= 42, `후보 수 ${wide.length} ≤ 42(빠른 탐색)`); }
+
   ok(new Set(L3.map((q) => JSON.stringify(q))).size === L3.length, '중복 후보 없음');
   const none = lensCandidates({ thick: 0.8, minWall: 0.8, pitch: 12, roomOut: 0 });
   ok(none.length === 0, '살두께 여유도 앞 여유도 없으면 후보 없음');
