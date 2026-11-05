@@ -118,6 +118,7 @@ export function lightCtxItems(M, S, id, { excluded = false, closed = false } = {
   }
   return out;
 }
+export const treeHasCtx = (id) => id.startsWith('part:') || id.startsWith('group:') || id.startsWith('led:') || id === 'light' || id === 'leds' || id === 'pcbs';   // 우클릭 메뉴가 열리는 행
 export function treeCtxItems(M, S, id, opt = {}) {
   if (id === 'pcbs') {
     const ids = M.parts.map((p, i) => (p.role === 'pcb' ? i : -1)).filter((i) => i >= 0), sp = stepPcb(M.light), out = [{ k: 'pcbClick', label: 'PCB 수동 선택 — 3D 에서 클릭' }];
@@ -226,7 +227,7 @@ export function renderFeatureTree(el, M, S, h, lay, leds) {
     // 우클릭 메뉴 — 고르지 않은 노드면 그것만 고른 뒤, 고른 부품 수에 맞는 항목(새 그룹 · 그룹에서 빼기 · 그룹 해제 · 이름 · 보기)
     el.addEventListener('contextmenu', (e) => {
       const n = e.target.closest?.('[data-node]'); if (!n || !el.contains(n)) return;
-      const id = n.dataset.node; if (!id.startsWith('part:') && !id.startsWith('group:') && id !== 'light' && id !== 'leds' && !id.startsWith('led:')) return;
+      const id = n.dataset.node; if (!treeHasCtx(id)) return;
       e.preventDefault();
       B.h?.onCtxSelect?.(id);
       const items = treeCtxItems(B.M, B.S, id, { excluded: n.classList.contains('untr'), closed: n.querySelector('[data-fold]')?.getAttribute('aria-expanded') === 'false' }); if (!items.length) return;

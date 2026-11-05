@@ -637,6 +637,9 @@ done();
   ok(mh.includes('0.78') && !mh.includes('0.79') && mh.includes('0.70') && !mh.includes('0.71'), '최종 값 = 결과 카드와 같은 내림 표시(표·문장·지표)');
   const { chartHtml } = await import('../src/ui/m3/opt-dash.js');
   ok(chartHtml().includes('od-plot') && chartHtml().includes('od-legend'), '왼쪽 그래프 칸'); }
+{ // 우클릭 메뉴가 열리는 행 — 항목을 만들어 두고 화면에서 안 열리는 일이 없게(2026-11-05)
+  const { treeHasCtx } = await import('../src/ui/m3/feature-tree.js');
+  ok(['pcbs', 'part:0', 'group:a', 'light', 'leds', 'led:0'].every(treeHasCtx) && !treeHasCtx('plane') && !treeHasCtx('parts'), 'PCB 행도 우클릭 메뉴가 열림'); }
 { const { seedFits } = await import('../src/ui/m3/autodesign-panel.js');
   const G0 = { ns: 4, nw: 2 }, sd = (n) => ({ batches: [{ acc: new Float64Array(n) }] });
   ok(seedFits(sd(8), G0) && !seedFits(sd(6), G0) && !seedFits(null, G0) && !seedFits(sd(8), null) && !seedFits({ batches: [] }, G0), '판정 값을 화면으로: 칸 수가 같을 때만'); }
