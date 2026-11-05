@@ -1,4 +1,6 @@
 // UI 배선 + 실시간 재계산 — 프로젝트.md §3 출력6
+import { showStepLoad } from './ui/step-load-overlay.js';
+import { LOAD_LABEL, stepTimingText } from './engine/shape/step-load-plan.js';
 import { bundleJson, parseMaterialFile, loadClear, saveClear, clearImport } from './model/material-io.js';
 import { isAdmin, setAdmin } from './model/admin.js';
 import { DEFAULT_SPEC, LEVEL_DEFAULTS } from './model/defaults.js';
@@ -130,7 +132,7 @@ function buildForm() {
   }
   $('#btn-flat-mode').onclick = () => { spec.mode = 'flat'; persist(); applyMode(); schedule(); };   // 평판(초기 검토) — 이번 실행에서만(다음 실행은 3D)
   $('#btn-sample-project').onclick = () => loadSampleProject();
-  $('#file-mech3d-start').onchange = (e) => { const f = e.target.files?.[0]; if (f) importMech3d(f); e.target.value = ''; };
+  $('#file-mech3d-start').onchange = (e) => { const f = e.target.files?.[0]; if (f && /\.json$/i.test(f.name)) { importJson(e); return; } if (f) importMech3d(f); e.target.value = ''; };   // 시작 화면 = 프로젝트·STEP 모두
   $('#file-materials').onchange = (e) => { const f = e.target.files?.[0]; if (f) importMaterials(f); e.target.value = ''; };
   $('#file-mech3d').onchange = (e) => { const f = e.target.files?.[0]; if (f) importMech3d(f); e.target.value = ''; };
   $('#file-led').onchange = (e) => { const f = e.target.files?.[0]; if (f) m3app.importLed(f); e.target.value = ''; };
@@ -221,8 +223,12 @@ function clearShape() {
 function resetAll() { projFile?.clear(); spec = structuredClone(DEFAULT_SPEC); markSoloReset(); mount(); m3app.unmount(); m3app.resetWorkers(); applyMode(); schedule(); }
 const NO_SERVER = '프로그램 서버에 연결되지 않습니다 — serve.py 가 꺼져 있을 수 있습니다. 서버를 다시 켠 뒤 새로고침(Ctrl+F5) 하세요.';
 async function newProject() {
-  if (!confirm('지금 프로젝트를 닫고 예제 프로젝트로 새로 시작할까요?\n(파일로 저장하지 않은 작업은 사라집니다 — 먼저 [파일 › 다른 이름으로 저장] 권장)')) return;
-  // 예제를 받을 수 있는지 먼저 확인 — 못 받으면 지금 프로젝트를 닫지 않음
+  if (!confirm('지금 프로젝트를 닫고 빈 화면에서 새로 시작할까요?\n(파일로 저장하지 않은 작업은 사라집니다 — 먼저 [파일 › 다른 이름으로 저장] 권장)')) return;
+  projFile?.clear(); m3app.unmount(); spec.mech3d = null; spec.mech3dPending = null; spec.mode = 'mech3d'; persist(); applyMode(); $('#m3-start-msg').textContent = '';   // 예제를 자동으로 열지 않음 — 시작 화면에서 고름(2026-11-05)
+}
+// 메뉴의 [예제 불러오기] — 지금 프로젝트를 닫으므로 확인 후. 예제를 못 받으면 지금 프로젝트를 닫지 않음
+async function openSampleMenu() {
+  if ((spec.mech3d || spec.mech3dPending) && !confirm('지금 프로젝트를 닫고 예제를 불러올까요?\n(파일로 저장하지 않은 작업은 사라집니다)')) return;
   try { const r = await fetch('data/projects/v3.json', { cache: 'no-store' }); if (!r.ok) throw new Error(String(r.status)); }
   catch { alert(`예제 프로젝트를 열 수 없습니다. 지금 프로젝트는 그대로 둡니다.\n${NO_SERVER}`); return; }
   projFile?.clear(); m3app.unmount(); spec.mech3d = null; spec.mech3dPending = null; spec.mode = 'mech3d'; persist(); applyMode(); loadSampleProject(false);
@@ -254,7 +260,8 @@ function setupMenubar() {
   const m3 = () => m3app.isMounted(), flatMode = () => spec.mode === 'flat';
   const menus = [
     { label: '파일', items: [
-      { id: 'new', label: '새 프로젝트 (예제에서 시작)' },
+      { id: 'new', label: '새 프로젝트' },
+      { id: 'open-sample', label: '예제 불러오기' },
       { id: 'open-json', label: '프로젝트 열기…' },
       { id: 'save-json', label: '프로젝트 저장', key: 'Ctrl+S' },
       { id: 'save-as', label: '다른 이름으로 저장…', key: 'Ctrl+Shift+S' },
@@ -305,6 +312,7 @@ function setupMenubar() {
   ];
   const run = (id) => {
     if (id === 'new') return newProject();
+    if (id === 'open-sample') return openSampleMenu();
     if (id === 'open-json') return openProject();
     if (id === 'save-json') { m3app.flush(); return projFile.save(); }
     if (id === 'save-as') { m3app.flush(); return projFile.saveAs(); }
@@ -393,18 +401,24 @@ async function loadSampleProject(ask = true) {
 function importMech3d(file, onDone = null) {
   const say = (t) => { if (m3app.isMounted()) m3app.setStatus(t); else $('#timing').textContent = t; };
   say(`${file.name} 읽는 중…`);
+  // 2 MB 이상 = 불러오기 화면(진행률·경과 시간·취소·저해상도 미리보기). 작은 파일은 금방 끝나 깜빡이기만 함
+  let w = null, ov = null;
+  if (file.size >= 2e6) ov = showStepLoad(file, { onCancel: () => { w?.terminate(); say('불러오기 취소'); } });
   file.text().then((text) => {
-    const w = new Worker(new URL('./engine/mech3d/mech3d-worker.js', import.meta.url), { type: 'module' });
+    w = new Worker(new URL('./engine/mech3d/mech3d-worker.js', import.meta.url), { type: 'module' });
     w.onmessage = async (m) => {
-      if (m.data.stage) { say(m.data.stage); return; }
+      if (m.data.preview) { ov?.preview(m.data.preview); }
+      if (m.data.key) { ov?.stage(m.data.key, m.data.frac ?? 0, m.data.text ?? ''); if (!ov) say(`${LOAD_LABEL[m.data.key] ?? ''}${m.data.text ? ` — ${m.data.text}` : ''}`); return; }
       w.terminate();
-      if (m.data.error) { say(`불러오기 실패: ${m.data.error}`); return; }
+      if (m.data.error) { ov?.close(); say(`불러오기 실패: ${m.data.error}`); return; }
+      const after = () => `${m.data.relaxed ? ` · 큰 파일이라 메시 간격을 ${m.data.relaxed.linDefl} mm 로 넓힘(곡면 값이 조금 달라질 수 있음)` : ''}${ov ? ` · 걸린 시간: ${stepTimingText(m.data.timing)}` : ''}`;
+      ov?.stage('prep', 1, '화면 준비'); await new Promise((r) => setTimeout(r, 50));   // 아래 화면 준비 전에 100% 근처를 그릴 틈
       try {
         // 저장된 3D 설정(메쉬 없음 — 보관분, 또는 평판 모드로 나간 뒤 새로고침해 메쉬 미적재)이 있으면: 같은 기구 = 복원, 다르면 물어봄(취소 = 보관 유지·불러오기 중단)
         const pend = spec.mech3dPending ?? (spec.mech3d && !getMech3d() ? spec.mech3d : null), same = !!pend && matchesPending(pend, partInfo(m.data.parts));
         if (pend && !same && !confirm(`${file.name}: 저장된 3D 설정${pend.name ? `(${pend.name})` : ''}과 부품 구성이 다릅니다. 새 기구로 시작할까요?
 (취소 = 저장된 설정을 그대로 두고 불러오기 중단)`)) {
-          say('불러오기 취소 — 저장된 3D 설정은 그대로 보관됨'); return;
+          ov?.close(); say('불러오기 취소 — 저장된 3D 설정은 그대로 보관됨'); return;
         }
         m3app.unmount();
         setMech3dMesh(file.name, m.data.parts, m.data.prep);   // BVH·합친 메쉬·접촉면은 Worker 가 만들어 옴
@@ -420,13 +434,14 @@ function importMech3d(file, onDone = null) {
         if (!restored) for (let i = 0; i < 200 && !m3app.isMounted(); i++) await new Promise((r) => setTimeout(r, 50));   // mount 는 비동기
         const nLed = restored ? null : m3app.autoMechLight();   // 새 기구: 반복되는 작은 부품(LED)을 광원으로 자동 지정
         m3app.setStatus(restored
-          ? `복원함: 저장된 3D 설정 — ${file.name} · 부품 ${ms.parts.length}개 · 접촉면 ${ms.contacts.length}개${pend.name && pend.name !== file.name ? ` (저장 이름 ${pend.name})` : ''}`
-          : `불러옴: ${file.name} · 부품 ${m.data.parts.length}개 · 접촉면 ${ms.contacts.length}개${nLed ? ` · LED ${nLed}개 자동 인식(틀리면 광원에서 다시 지정)${m3app.pcbNote()}` : ''} — Milky 부품부터 지정하세요`);
-      } catch (e) { say(`불러오기 실패: ${e.message ?? e}`); }
+          ? `복원함: 저장된 3D 설정 — ${file.name} · 부품 ${ms.parts.length}개 · 접촉면 ${ms.contacts.length}개${pend.name && pend.name !== file.name ? ` (저장 이름 ${pend.name})` : ''}${after()}`
+          : `불러옴: ${file.name} · 부품 ${m.data.parts.length}개 · 접촉면 ${ms.contacts.length}개${nLed ? ` · LED ${nLed}개 자동 인식(틀리면 광원에서 다시 지정)${m3app.pcbNote()}` : ''} — Milky 부품부터 지정하세요${after()}`);
+        ov?.close();
+      } catch (e) { ov?.close(); say(`불러오기 실패: ${e.message ?? e}`); }
     };
-    w.onerror = (e) => { w.terminate(); say(`불러오기 실패: ${e.message ?? e}`); };
-    w.postMessage({ text });
-  }).catch((e) => say(`불러오기 실패: ${e.message ?? e}`));
+    w.onerror = (e) => { w.terminate(); ov?.close(); say(`불러오기 실패: ${e.message ?? e}`); };
+    w.postMessage({ text, bytes: file.size });
+  }).catch((e) => { ov?.close(); say(`불러오기 실패: ${e.message ?? e}`); });
 }
 
 // 실측소재 선택 — 소재의 μs'·g·μa 를 쓰고, Milky 입력칸에는 그 소재의 Milky(파생값)를 보여 준다
@@ -961,7 +976,5 @@ window.addEventListener('beforeunload', () => m3app.flush());
 forceHeatOnNextRun = true;   // 첫 계산에 히트맵 포함
 applyMode();
 document.body.classList.remove('booting');   // 시작 화면 가림 해제 — 모드가 정해지기 전 예전(평판) 화면이 잠깐 보이지 않게
-// 프로젝트 없는 첫 실행, 또는 기구만 불러오고 아무것도 정하지 않은(광원·관측면 없음) 빈 프로젝트 = 예제 프로젝트(data/projects/v3.json)
-const blankM3 = (m) => !!m && (m.light?.kind ?? 'none') === 'none' && !(m.observe?.faces?.length);
-if (spec.mode === 'mech3d' && ((!spec.mech3d && !spec.mech3dPending) || (blankM3(spec.mech3d) && !spec.mech3dPending))) { if (spec.mech3d) { m3app.unmount(); spec.mech3d = null; } loadSampleProject(false); }
+// 프로젝트 없는 첫 실행 = 시작 화면(기존 파일 / 예제) — 예제를 자동으로 열어 계산하지 않음(2026-11-05)
 schedule();

@@ -112,16 +112,19 @@
     <!-- 3D 기구 설계 시작 화면 — 3D 가 기본(메인) 화면. 기구 STEP 이 아직 없을 때 -->
     <section id="m3-start" hidden>
       <div class="m3-start-card">
-        <h2>3D 기구 설계로 시작</h2>
-        <ol>
-          <li><b>기구 STEP</b>(.stp/.step)을 불러옵니다 — 케이스·도광판·커버 등 모든 부품</li>
-          <li>왼쪽 트리 <b>광원</b>에서 <b>LED STEP</b> 을 불러오고 발광면을 지정합니다</li>
-          <li><b>관측면</b>(빛을 보는 면)을 클릭하면 균일도 계산이 시작됩니다</li>
-        </ol>
-        <label class="m3-start-btn">3D 기구 STEP 불러오기<input type="file" id="file-mech3d-start" accept=".stp,.step" hidden /></label>
-        <button type="button" id="btn-sample-project" class="m3-start-btn2">예제 프로젝트 열기 — 평판 구조 + LED 10개 1열</button>
+        <h2>프로젝트 시작</h2>
+        <div class="m3-start-two">
+          <label class="m3-start-opt">
+            <b>기존 파일 불러오기</b>
+            <span>프로젝트(.json) 또는 기구 STEP(.stp·.step)</span>
+            <input type="file" id="file-mech3d-start" accept=".json,.stp,.step" hidden />
+          </label>
+          <button type="button" id="btn-sample-project" class="m3-start-opt">
+            <b>예제 불러오기</b>
+            <span>평판 구조 + LED 10개 1열</span>
+          </button>
+        </div>
         <p id="m3-start-msg" class="m3-start-sub" role="status"></p>
-        <p class="m3-start-sub">이전 작업이 있으면 같은 기구 STEP 을 불러올 때 설정이 복원됩니다 · 프로젝트 JSON 은 위 <b>불러오기</b>로.</p>
         <button type="button" id="btn-flat-mode" class="m3-start-link">평판 확산판 화면(초기 검토 버전) 열기</button>
       </div>
     </section>

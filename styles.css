@@ -1118,3 +1118,26 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 .sc-rec { color: #3a7bd5; }
 
 .m3-map-eq { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; white-space: nowrap; }
+
+/* 시작 화면 — 기존 파일 / 예제 두 갈래(2026-11-05) */
+.m3-start-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 8px; }
+.m3-start-opt { display: flex; flex-direction: column; gap: 6px; justify-content: center; text-align: left; min-height: 104px; padding: 16px; border: 1px solid #c9d2e0; border-radius: 8px; background: #f7f9fc; color: #3b4658; cursor: pointer; font: inherit; font-size: 13px; }
+.m3-start-opt b { font-size: 16px; color: #1f6fd1; }
+.m3-start-opt:hover, .m3-start-opt:focus-within, .m3-start-opt:focus-visible { border-color: #1f6fd1; background: #e4effc; }
+@media (max-width: 520px) { .m3-start-two { grid-template-columns: minmax(0, 1fr); } }
+
+/* 큰 STEP 불러오기 화면(2026-11-05) */
+#step-load { position: fixed; inset: 0; z-index: 900; background: #e6e9ee; display: flex; flex-direction: column; }
+#step-load[hidden] { display: none; }
+#step-load .sl-cv { flex: 1 1 auto; min-height: 0; width: 100%; display: block; }
+#step-load .sl-empty { position: absolute; top: 40%; left: 16px; right: 16px; text-align: center; color: #6b7385; font-size: 14px; }
+#step-load .sl-empty[hidden] { display: none; }
+#step-load .sl-bar { flex: none; background: #fff; border-top: 1px solid #d9dde5; padding: 10px 16px 12px; color: #3b4658; font-size: 13px; }
+#step-load .sl-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+#step-load .sl-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50%; }
+#step-load .sl-pct { font-size: 16px; font-weight: 700; color: #1f6fd1; }
+#step-load .sl-sp { flex: 1; }
+#step-load .sl-time { color: #6b7385; }
+#step-load .sl-track { height: 8px; background: #e4e8ef; border-radius: 4px; margin: 8px 0 6px; overflow: hidden; }
+#step-load .sl-fill { height: 100%; width: 0; background: #1f6fd1; transition: width .4s; }
+#step-load .sl-text { color: #6b7385; font-size: 12.5px; }

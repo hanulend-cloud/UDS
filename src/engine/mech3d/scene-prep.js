@@ -4,10 +4,10 @@ import { buildBvh } from './bvh.js';
 import { combineParts } from './mesh.js';
 import { findContacts } from './contacts.js';
 
-export function prepScene(rawParts, { contacts = false } = {}) {
+export function prepScene(rawParts, { contacts = false, chord } = {}) {
   const parts = rawParts.map((p) => (p.bvh ? p : { ...p, bvh: buildBvh(p.positions, p.triangles) }));
   const combined = combineParts(parts), bvh = buildBvh(combined.positions, combined.triangles);
-  return { parts, combined, bvh, contacts: contacts ? findContacts(parts) : null };
+  return { parts, combined, bvh, contacts: contacts ? findContacts(parts, chord != null ? { chord } : {}) : null };
 }
 export function prepTransfer(r) {
   const set = new Set();
