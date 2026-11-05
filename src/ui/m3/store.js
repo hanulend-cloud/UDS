@@ -20,6 +20,7 @@ export function initialSession() {
     hidden: [],          // 3D 에서 숨긴 기구 부품 번호(보기 전용 — 계산에는 그대로 포함)
     hideLeds: false,     // LED STEP 부품(PCB·LED) 숨김
     hiddenLeds: [],      // 한 개씩 숨긴 LED 번호(보기 전용 — 계산에는 그대로 포함)
+    hidePcb: false,      // LED STEP 파일의 PCB 숨김(보기 전용). 도면 PCB 는 hidden 으로
     xfMsg: null,         // 크기·위치 조절이 간섭으로 제한됐을 때 { part, text }
     multi: [],           // 피처 트리 여러 부품 선택(Ctrl/Shift+클릭 — 그룹 만들기)
     fold: {},            // 트리 접힘 { parts | 그룹 id: true } — 광원으로 옮긴 부품 묶음 '_light' 는 기본 접힘
@@ -27,11 +28,11 @@ export function initialSession() {
 }
 
 // 3D 숨김 상태 ↔ mspec.viewState(2026-11-05) — 프로젝트와 같이 저장해 새로고침해도 유지. 아무것도 안 숨기면 칸 없음
-const viewStateOf = (S) => (S.hidden?.length || S.hideLeds || S.hiddenLeds?.length ? { hidden: [...(S.hidden ?? [])], hideLeds: !!S.hideLeds, hiddenLeds: [...(S.hiddenLeds ?? [])] } : null);
+const viewStateOf = (S) => (S.hidden?.length || S.hideLeds || S.hiddenLeds?.length || S.hidePcb ? { hidden: [...(S.hidden ?? [])], hideLeds: !!S.hideLeds, hiddenLeds: [...(S.hiddenLeds ?? [])], hidePcb: !!S.hidePcb } : null);
 function restoreView(S, vs, nParts) {
   if (!vs) return;
   const idx = (a, max = Infinity) => (Array.isArray(a) ? a.filter((v) => Number.isInteger(v) && v >= 0 && v < max) : []);
-  S.hidden = idx(vs.hidden, nParts ?? Infinity); S.hideLeds = vs.hideLeds === true; S.hiddenLeds = idx(vs.hiddenLeds);
+  S.hidden = idx(vs.hidden, nParts ?? Infinity); S.hideLeds = vs.hideLeds === true; S.hiddenLeds = idx(vs.hiddenLeds); S.hidePcb = vs.hidePcb === true;
 }
 export function createStore(mspec, { persist = () => {}, delay = 300, timers = globalThis } = {}) {
   const subs = new Set();

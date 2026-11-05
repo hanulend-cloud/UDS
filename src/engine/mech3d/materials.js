@@ -146,6 +146,15 @@ export function pcbNames(M) {
   const st = M.light?.kind === 'step' ? M.light.step : null;
   return [...(M.parts ?? []).filter((p) => p.role === 'pcb').map((p) => p.name), ...(st && !st.fromMech && st.pcb >= 0 ? ['LED STEP PCB'] : [])];
 }
+// PCB 빛 계산 제외(2026-11-05) — 도면 PCB = 부품의 untrace, LED STEP PCB = light.pcbOff(job.composeScene)
+export function setPcbOff(M, on) {
+  for (const p of M.parts ?? []) if (p.role === 'pcb') { if (on) p.untrace = true; else delete p.untrace; }
+  if (on && M.light?.kind === 'step' && M.light.step && !M.light.step.fromMech && M.light.step.pcb >= 0) M.light.pcbOff = true; else if (M.light) delete M.light.pcbOff;
+}
+export function pcbAllOff(M) {
+  const parts = (M.parts ?? []).filter((p) => p.role === 'pcb'), st = M.light?.kind === 'step' ? M.light.step : null, sp = !!st && !st.fromMech && st.pcb >= 0;
+  return (parts.length > 0 || sp) && parts.every((p) => p.untrace) && (!sp || !!M.light.pcbOff);
+}
 const numberPcb = (parts) => {   // 한 장 = PCB · 여러 장 = PCB 1, PCB 2 … (사용자가 바꾼 이름은 그대로)
   const n = parts.filter((p) => p.role === 'pcb').length; let k = 0;
   return parts.map((p) => { if (p.role !== 'pcb') return p; k++; return p.pcbOrig?.name !== p.name && !/^PCB( \d+)?$/.test(p.name) ? p : { ...p, name: n > 1 ? `PCB ${k}` : 'PCB' }; });

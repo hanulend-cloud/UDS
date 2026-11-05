@@ -49,7 +49,7 @@ ok(partBadge(setPartMaterial(defaultPart(0, 'p', 1), 'clear')).startsWith('투�
   ok(treeNodes(stp, { node: null, line: null, hideLeds: true }).find((n) => n.id === 'leds').eye === 'off', 'LED STEP 노드 눈 단추');
   const T = toggleVisibility;
   ok(JSON.stringify(T('part:1', false, 3, [], false)) === '{"hidden":[1],"hideLeds":false}' && JSON.stringify(T('part:1', false, 3, [1], false)) === '{"hidden":[],"hideLeds":false}'
-    && JSON.stringify(T('part:1', true, 3, [], false)) === '{"hidden":[0,2],"hideLeds":true}' && JSON.stringify(T('parts', false, 3, [0, 2], true)) === '{"hidden":[],"hideLeds":false,"hiddenLeds":[]}'
+    && JSON.stringify(T('part:1', true, 3, [], false)) === '{"hidden":[0,2],"hideLeds":true}' && JSON.stringify(T('parts', false, 3, [0, 2], true)) === '{"hidden":[],"hideLeds":false,"hiddenLeds":[],"hidePcb":false}'
     && JSON.stringify(T('leds', false, 3, [2], false)) === '{"hidden":[2],"hideLeds":true}' && JSON.stringify(T('leds', true, 3, [], true)) === '{"hidden":[0,1,2],"hideLeds":false}', 'toggleVisibility: 끄기·켜기·이것만·모두 보기·LED'); }
 { const cls = []; const el = { listeners: {}, addEventListener(k, f) { this.listeners[k] = f; }, contains: () => true, ownerDocument: null, querySelectorAll: () => [], set innerHTML(v) { this._h = v; }, get innerHTML() { return this._h; } };
   let eye = null, node = null;

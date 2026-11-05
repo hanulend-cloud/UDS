@@ -1,5 +1,6 @@
 // 피처 트리 — spec 2026-10-15 m3-cad-ui §2: 관측면(라인 종류·길이·폭 · 목표, 맨 위) · 부품(소재 배지) · 광원(LED 개수·피치) · 접촉면.
 // 노드 id: 'parts' | 'part:i' | 'light' | 'leds' | 'obs' | 'contacts'. 클릭 → h.onNode(id)
+import { pcbAllOff } from '../../engine/mech3d/materials.js';
 import { PART_KINDS } from '../../engine/mech3d/materials.js';
 
 export const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -25,7 +26,7 @@ export function treeNodes(M, S, lay, leds = []) {
   // 관측면 = 맨 위(무엇을 어떻게 맞출지 먼저, 부품·광원과 성격이 달라 밑줄로 구분) · 목표는 관측면 속성에 포함(2026-11-03)
   const ln = S.line, goal = `목표 ${Math.round(O.targetLen * 100)}/${Math.round(O.targetWid * 100)}%`;
   node('obs', '◎ 관측면', ln ? `${LINE_KIND[ln.kind] ?? ln.kind} ${ln.length.toFixed(0)}×${ln.width.toFixed(0)} mm · ${goal}` : S.lineErr && O.faces.length ? '라인 인식 실패' : O.faces.length ? `면 ${O.faces.length}개 · 인식 중` : '미지정 — 클릭', false, '', undefined, { top: true });
-  node('parts', '부품', String(M.parts.length + (stepPcb(L) ? 1 : 0)), false, '', hid.size || S.hideLeds || hl.size ? 'all' : undefined, { fold: fold('parts') ? 'closed' : 'open' });
+  node('parts', '부품', String(M.parts.length + (stepPcb(L) ? 1 : 0)), false, '', hid.size || S.hideLeds || hl.size || S.hidePcb ? 'all' : undefined, { fold: fold('parts') ? 'closed' : 'open' });
   // 그룹(2026-10-30): 사용자 그룹(M.groups) = 첫 부품 자리에 머리 + 펼치면 부품(들여쓰기 2단) · 그룹 밖 광원으로 옮긴 부품 = 자동 묶음 '_light'(기본 접힘)
   const gOf = new Map(), G = [...(M.groups ?? [])];
   for (const g of G) for (const i of g.parts) if (i < M.parts.length && !gOf.has(i)) gOf.set(i, g);
@@ -47,7 +48,8 @@ export function treeNodes(M, S, lay, leds = []) {
   const pcbIds = M.parts.map((p, i) => (p.role === 'pcb' ? i : -1)).filter((i) => i >= 0), sp = stepPcb(L), nPcb = pcbIds.length + (sp ? 1 : 0);
   if (!fold('parts') && (L.kind === 'step' || pcbIds.length)) {
     const R1 = pcbIds.length ? M.parts[pcbIds[0]].finish?.R : L.pcbR ?? 0.3;
-    node('pcbs', 'PCB', !nPcb ? '⚠ PCB 없음' : nPcb > 1 ? `${nPcb}장` : R1 != null ? `PCB 면 ${Math.round(R1 * 100)}%` : '', true, 'opaque', undefined);
+    const off = pcbAllOff(M), allHid = pcbIds.every((i) => hid.has(i)) && (!sp || !!S.hidePcb);
+    node('pcbs', 'PCB', !nPcb ? '⚠ PCB 없음' : `${off ? '제외 · ' : ''}${nPcb > 1 ? `${nPcb}장` : R1 != null ? `PCB 면 ${Math.round(R1 * 100)}%` : ''}`, true, off ? 'off' : 'opaque', nPcb ? (allHid ? 'off' : 'on') : undefined);
     for (const i of pcbIds) partNode(M.parts[i], i, 2);
   }
   // 광원 머리 눈 단추 = 광원 그룹(LED 몸체·PCB·지향각) 한 번에 켜기/끄기
@@ -86,6 +88,12 @@ export function untraceItem(M, ids) {
   const off = list.every((i) => M.parts[i].untrace), who = list.length > 1 ? `선택한 부품 ${list.length}개 ` : '';
   return { k: 'untrace', label: off ? `${who}빛 계산에 다시 포함` : `${who}빛 계산에서 제외`, ids: list, on: !off };
 }
+// PCB 눈 단추(순수, 2026-11-05) — 하나라도 보이면 모두 숨김, 다 숨었으면 모두 보임. 도면 PCB = hidden, LED STEP PCB = hidePcb
+export function togglePcb(M, S) {
+  const ids = M.parts.map((p, i) => (p.role === 'pcb' ? i : -1)).filter((i) => i >= 0), sp = stepPcb(M.light), h = new Set(S.hidden ?? []), show = ids.every((i) => h.has(i)) && (!sp || !!S.hidePcb);
+  for (const i of ids) { if (show) h.delete(i); else h.add(i); }
+  return { hidden: [...h].sort((a, b) => a - b), hidePcb: sp ? !show : false };
+}
 // 3D 보기 상태(순수, 2026-11-05) — prev·raw = 지금까지·이번 도면 원본. 같은 도면이면 숨긴 부품·카메라 유지, 다른 도면만 초기화
 export const viewKeep = (prev, raw) => ({ keepCamera: !!prev && prev === raw, reset: !!prev && prev !== raw });
 // 트리 우클릭 메뉴 항목(순수) — S.multi·S.node(우클릭한 노드가 선택에 포함된 뒤) 기준. k: group | out | ungroup | rename | eye
@@ -111,7 +119,13 @@ export function lightCtxItems(M, S, id, { excluded = false, closed = false } = {
   return out;
 }
 export function treeCtxItems(M, S, id, opt = {}) {
-  if (id === 'pcbs') return [{ k: 'pcbClick', label: 'PCB 수동 선택 — 3D 에서 클릭' }];
+  if (id === 'pcbs') {
+    const ids = M.parts.map((p, i) => (p.role === 'pcb' ? i : -1)).filter((i) => i >= 0), sp = stepPcb(M.light), out = [{ k: 'pcbClick', label: 'PCB 수동 선택 — 3D 에서 클릭' }];
+    if (!ids.length && !sp) return out;
+    const hid = new Set(S.hidden ?? []), allHid = ids.every((i) => hid.has(i)) && (!sp || !!S.hidePcb);
+    out.push({ k: 'eye', label: allHid ? 'PCB 보이기' : 'PCB 숨기기' }, { k: 'pcbOff', label: pcbAllOff(M) ? 'PCB 빛 계산에 다시 포함' : 'PCB 빛 계산에서 제외' });
+    return out;
+  }
   if (id === 'light' || id === 'leds' || id.startsWith('led:')) return lightCtxItems(M, S, id, opt);
   const parts = [...new Set([...(S.multi ?? []), ...(S.node?.startsWith('part:') ? [S.node] : [])])].filter((x) => x.startsWith('part:')).map((x) => +x.slice(5));
   const inG = new Set((M.groups ?? []).flatMap((g) => g.parts)), out = [];
@@ -127,7 +141,7 @@ export function treeCtxItems(M, S, id, opt = {}) {
   return out;
 }
 // 3D 우클릭 메뉴 항목(순수, 2026-11-02) — part = 누른 기구 부품 | null, isLed = LED 를 누름, selPart = 트리에서 고른 부품(숨겨져 있으면 [다시 보기])
-export function viewCtxItems({ part = null, isLed = false, ledRank = null, selPart = null, multi = [], hidden = [], hideLeds = false, hiddenLeds = [], names = [], untrace = null }) {
+export function viewCtxItems({ part = null, isLed = false, ledRank = null, selPart = null, multi = [], hidden = [], hideLeds = false, hiddenLeds = [], hidePcb = false, names = [], untrace = null }) {
   const out = [], nm = (i) => names[i] ?? `부품 ${i + 1}`;
   if (part != null) {
     if (multi.length > 1 && multi.includes(part)) out.push({ k: 'hideSel', label: `선택한 부품 ${multi.length}개 숨기기` });
@@ -140,7 +154,7 @@ export function viewCtxItems({ part = null, isLed = false, ledRank = null, selPa
   if (selPart != null && hidden.includes(selPart) && selPart !== part) out.push({ k: 'show', label: `${nm(selPart)} 다시 보기` });
   if (hideLeds && !isLed) out.push({ k: 'led', label: 'LED 다시 보기' });
   const cnt = [hidden.length ? `부품 ${hidden.length}개` : '', hiddenLeds.length ? `LED ${hiddenLeds.length}개` : ''].filter(Boolean).join(' · ');
-  if (hidden.length || hideLeds || hiddenLeds.length) out.push({ k: 'all', label: `숨긴 것 모두 보기${cnt ? ` (${cnt})` : ''}` });
+  if (hidden.length || hideLeds || hiddenLeds.length || hidePcb) out.push({ k: 'all', label: `숨긴 것 모두 보기${cnt ? ` (${cnt})` : ''}` });
   return out;
 }
 // 그룹 부품 번호 — '_light' = 그룹 밖 광원으로 옮긴 부품(자동 묶음)
@@ -151,7 +165,7 @@ export function groupMembers(M, id) {
 // 눈 단추 처리(순수): id = 'parts' | 'part:i' | 'group:g' | 'leds', only = Shift(이 부품만) → { hidden, hideLeds }. members = 그룹 부품(group: 일 때)
 export function toggleVisibility(id, only, nParts, hidden = [], hideLeds = false, members = []) {
   const h = new Set(hidden);
-  if (id === 'parts') return { hidden: [], hideLeds: false, hiddenLeds: [] };
+  if (id === 'parts') return { hidden: [], hideLeds: false, hiddenLeds: [], hidePcb: false };
   if (id.startsWith('group:')) {   // 하나라도 보이면 모두 숨김, 다 숨었으면 모두 보임 · Shift = 이 그룹만 보기
     if (only) return { hidden: [...Array(nParts).keys()].filter((k) => !members.includes(k)), hideLeds: true };
     const anyShown = members.some((k) => !h.has(k));

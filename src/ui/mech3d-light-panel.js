@@ -1,4 +1,4 @@
-import { pcbNames } from '../engine/mech3d/materials.js';
+import { pcbNames, pcbAllOff } from '../engine/mech3d/materials.js';
 // 3D 기구 — 광원 · LED · 관측면 · 목표 속성 편집기 (spec 2026-10-14 §4·§5, 2026-10-15 m3-cad-ui §2). 상태 없음.
 // P3 의 renderLightPanel 을 피처 트리 노드별로 나눴다. 계산 버튼·결과 표시는 자동 점진 계산(결과 패널·상태 띠)으로 옮김.
 import { ledDeltaText, pitchText } from './m3/led-change.js';
@@ -186,7 +186,8 @@ export function pcbPanelHtml(m, ui) {
   return `<div class="m3-h">PCB</div><div class="m3-card m3-untrace pcb"><div class="m3-sub">PCB 지정</div>
     <div class="m3-row">${pickBtn(ui, 'mpcb', wait ? '클릭 대기 중 — 끝내기' : 'PCB 수동 선택')}</div>
     <div class="m3-row">${names.length ? `<span class="mut">PCB: ${esc(names.join(', '))}</span>` : '<span class="m3-pcbwarn">⚠ PCB 없음 — LED 받침 판을 고르세요</span>'}</div>
-    ${wait ? '<div class="mut m3-note">3D 에서 PCB 부품 클릭 · 다시 클릭 = 해제 · 여러 장 가능</div>' : ''}</div>
+    ${wait ? '<div class="mut m3-note">3D 에서 PCB 부품 클릭 · 다시 클릭 = 해제 · 여러 장 가능</div>' : ''}
+    ${names.length ? `<label class="m3-sw"><input type="checkbox" data-lp-pcboff${pcbAllOff(m) ? ' checked' : ''}> 빛 계산에서 제외 <span class="mut">PCB 가 없는 것처럼 빛이 지나감</span></label>` : ''}</div>
   ${rows || stepRow ? `<div class="m3-card"><div class="m3-sub">PCB 면 반사율</div>${rows}${stepRow}<div class="mut">확산 반사면으로 계산 · 기구 최적화에서 면을 바꾸지 않음</div></div>` : ''}`;
 }
 export function renderPcbProps(el, m, ui, h) {
@@ -194,6 +195,7 @@ export function renderPcbProps(el, m, ui, h) {
   wirePick(el, ui, h);
   on(el, '[data-lp-pcbr]', 'change', (x) => h.onPcbR(x.value));
   on(el, '[data-m3-pcbr]', 'change', (x) => h.onPartPcbR(+x.dataset.i, x.value));
+  on(el, '[data-lp-pcboff]', 'change', (x) => h.onPcbOff(x.checked));
 }
 export function ledPanelHtml(m, ui) {
   if (m.light.kind === 'none' || ui.pickOnly) return `<div class="m3-h">속성 · 광원</div>${ledPickCardHtml(m, ui, m.light.kind === 'step' ? !!m.light.step?.emitters?.length : m.light.kind !== 'none')}`;

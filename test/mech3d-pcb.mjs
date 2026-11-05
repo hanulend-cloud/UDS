@@ -1,6 +1,6 @@
 // 도면 PCB 자동 인식·PCB 면 처리: node test/mech3d-pcb.mjs
 import { findPcbParts, autoLedGroup } from '../src/engine/mech3d/led-detect.js';
-import { defaultPart, setPartMaterial, syncPcb, resolveFinish, PCB_FINISH, setPcbR, pcbPickPlan, pcbNames, clampPcbPct } from '../src/engine/mech3d/materials.js';
+import { defaultPart, setPartMaterial, syncPcb, resolveFinish, PCB_FINISH, setPcbR, pcbPickPlan, pcbNames, clampPcbPct, setPcbOff, pcbAllOff } from '../src/engine/mech3d/materials.js';
 import { transformMesh } from '../src/engine/mech3d/xform.js';
 import { boxMesh, ok, done } from './mech3d-util.mjs';
 import { stageAvailability } from '../src/ui/m3/autodesign-panel.js';
@@ -8,10 +8,10 @@ import { partBadge } from '../src/ui/m3/feature-tree.js';
 import { pcbRCardHtml } from '../src/ui/mech3d-panel.js';
 import { ledPanelHtml, setLpTab } from '../src/ui/mech3d-light-panel.js';
 import { defaultLight, defaultObserve, defaultChecks, migrateMech3d } from '../src/engine/mech3d/defs.js';
-import { treeNodes, treeCtxItems as viewCtxItems0 } from '../src/ui/m3/feature-tree.js';
+import { treeNodes, togglePcb, treeCtxItems as viewCtxItems0 } from '../src/ui/m3/feature-tree.js';
 import { pcbPanelHtml } from '../src/ui/mech3d-light-panel.js';
 
-const viewCtxOf = (id) => viewCtxItems0({ parts: [], groups: [], light: { kind: 'step', step: {} } }, { node: id, multi: [] }, id);
+const viewCtxOf = (id) => viewCtxItems0({ parts: [], groups: [], light: { kind: 'step', step: { pcb: 0 } } }, { node: id, multi: [] }, id);
 const led = boxMesh(-1, -1, 0, 2, 2, 1), at = (x, z = 0) => transformMesh(led, [x, 0, z], [0, 0, 0]);
 const pcb = boxMesh(-40, -5, -1, 80, 10, 1), cover = boxMesh(-40, -5, 6, 80, 10, 3);
 
@@ -105,4 +105,28 @@ const base = () => { const c = setPartMaterial(defaultPart(1, '커버', 1), 'cle
 { const ms = { name: 'x', parts: [], contacts: [], observe: defaultObserve(), checks: defaultChecks(), light: { ...defaultLight(), kind: 'step', step: { name: 'd', offset: [0, 0, 0], rot: [0, 0, 0], leds: [0], excluded: [], pcb: -1, emitters: [{ part: 0, pos: [0, 0, 0], axis: [0, 0, 1] }], fromMech: [0] } } };
   setLpTab('leds', 'detail');
   ok(!/data-lp-solder/.test(ledPanelHtml(ms, { node: 'leds' })), '도면 광원 = PCB 색 칸 없음(PCB 는 부품 소재로)'); setLpTab('leds', 'basic'); }
+// --- PCB 보이기·숨기기 · 빛 계산 제외(2026-11-05) ---
+{ const stepL = (o = {}) => ({ ...defaultLight(), kind: 'step', step: { name: 'a.stp', leds: [1, 2], excluded: [], pcb: 0, emitters: [], ...o } });
+  const M = { parts: [defaultPart(0, '부품 1', 5)], observe: defaultObserve(), groups: [], light: stepL() };
+  const row = (m, S = {}) => treeNodes(m, S).find((x) => x.id === 'pcbs');
+  ok(row(M).eye === 'on', 'LED STEP PCB 줄에 눈 단추');
+  ok(row(M, { hidePcb: true }).eye === 'off', '숨기면 꺼짐 표시');
+  ok(row({ ...M, light: stepL({ pcb: -1 }) }).eye === undefined, 'PCB 가 없으면 눈 단추 없음');
+  ok(JSON.stringify(togglePcb(M, { hidden: [], hidePcb: false })) === '{"hidden":[],"hidePcb":true}' && JSON.stringify(togglePcb(M, { hidden: [], hidePcb: true })) === '{"hidden":[],"hidePcb":false}', 'LED STEP PCB 숨기기·보이기');
+  const D = { ...M, parts: syncPcb([defaultPart(0, 'a', 5), defaultPart(1, 'b', 5), defaultPart(2, 'c', 5)], [1, 2]), light: stepL({ fromMech: [], pcb: -1 }) };
+  ok(row(D, { hidden: [1] }).eye === 'on' && row(D, { hidden: [1, 2] }).eye === 'off', '도면 PCB: 다 숨어야 꺼짐');
+  ok(togglePcb(D, { hidden: [0, 1] }).hidden.join() === '0,1,2' && togglePcb(D, { hidden: [0, 1, 2] }).hidden.join() === '0', '도면 PCB 만 켜고 끔 · 다른 부품 숨김은 그대로');
+  const Off = JSON.parse(JSON.stringify(M)); setPcbOff(Off, true);
+  ok(Off.light.pcbOff === true && pcbAllOff(Off) && /제외/.test(row(Off).badge) && row(Off).kind === 'off', 'LED STEP PCB 제외 · 표시');
+  setPcbOff(Off, false); ok(!Off.light.pcbOff && !pcbAllOff(Off) && !/제외/.test(row(Off).badge), '다시 포함');
+  const DO = JSON.parse(JSON.stringify(D)); setPcbOff(DO, true);
+  ok(DO.parts[1].untrace === true && DO.parts[2].untrace === true && !DO.parts[0].untrace && pcbAllOff(DO), '도면 PCB 는 부품의 추적 제외와 같음');
+  setPcbOff(DO, false); ok(!DO.parts[1].untrace && !DO.parts[2].untrace, '도면 PCB 다시 포함');
+  const h = pcbPanelHtml(M, {}), h2 = pcbPanelHtml(Off, {});
+  ok(/data-lp-pcboff/.test(h) && /빛 계산에서 제외/.test(h) && !/data-lp-pcboff[^>]*checked/.test(h), 'PCB 속성에 제외 스위치');
+  setPcbOff(Off, true); ok(/data-lp-pcboff[^>]*checked/.test(pcbPanelHtml(Off, {})), '제외 중이면 체크');
+  ok(!/data-lp-pcboff/.test(pcbPanelHtml({ ...M, light: stepL({ pcb: -1 }) }, {})), 'PCB 가 없으면 스위치 없음');
+  const items = viewCtxOf('pcbs').map((x) => x.k);
+  ok(items.includes('pcbClick') && items.includes('eye') && items.includes('pcbOff'), `PCB 줄 우클릭 메뉴: ${items.join()}`);
+}
 done();

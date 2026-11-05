@@ -21,7 +21,8 @@ export function composeScene({ rt, mspec, ledParts, table, db, line }) {
     const st = L.step, ledSet = new Set(st.leds);
     ledParts.forEach((m, i) => {
       extraMeshes.push(transformMesh(m, st.offset, st.rot));
-      extraSpecs.push(setPartFinish(defaultPart(base + i, i === st.pcb ? 'PCB' : `LED ${i}`, 0), null, i === st.pcb ? solderFin : ledSet.has(i) ? LED_BODY_FINISH : { kind: 'whiteDiffuse', R: 0.5 }));
+      const spec = setPartFinish(defaultPart(base + i, i === st.pcb ? 'PCB' : `LED ${i}`, 0), null, i === st.pcb ? solderFin : ledSet.has(i) ? LED_BODY_FINISH : { kind: 'whiteDiffuse', R: 0.5 });
+      extraSpecs.push(i === st.pcb && L.pcbOff ? { ...spec, untrace: true } : spec);   // PCB 빛 계산 제외
     });
   } else if (L.kind === 'manual' && L.manual.pcb.kind === 'depth') {
     extraMeshes.push(pcbPlaneMesh(line, L.manual.pcb.depth));

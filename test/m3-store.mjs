@@ -47,8 +47,9 @@ st.dispose(); await T.advance(1000); ok(saved === 3, 'dispose → 남은 저장 
   const M = { parts: [{}, {}, {}], light: {} }, a = createStore(M, { persist: () => n3++, delay: 300, timers: T3 });
   ok(M.viewState === undefined && a.session.hidden.length === 0, '처음 = 숨김 없음 · 저장 칸 없음');
   a.update('view', (_, x) => { x.hidden = [1]; x.hideLeds = true; x.hiddenLeds = [2]; }); await T3.advance(400);
-  ok(JSON.stringify(M.viewState) === '{"hidden":[1],"hideLeds":true,"hiddenLeds":[2]}' && n3 === 1, '숨기면 저장');
+  ok(JSON.stringify(M.viewState) === '{"hidden":[1],"hideLeds":true,"hiddenLeds":[2],"hidePcb":false}' && n3 === 1, '숨기면 저장');
   const b = createStore(JSON.parse(JSON.stringify(M)), { persist() {}, delay: 300, timers: T3 });
+  { const M4 = { parts: [{}], light: {} }, d = createStore(M4, { persist() {}, delay: 300, timers: T3 }); d.update('view', (_, x) => { x.hidePcb = true; }); ok(M4.viewState?.hidePcb === true && createStore(JSON.parse(JSON.stringify(M4)), { persist() {}, delay: 300, timers: T3 }).session.hidePcb === true, 'PCB 숨김도 저장·복원'); d.dispose(); }
   ok(b.session.hidden.join() === '1' && b.session.hideLeds === true && b.session.hiddenLeds.join() === '2', '다시 열면 복원');
   const c2 = createStore({ parts: [{}, {}], viewState: { hidden: [1, 5, 'x', -1], hideLeds: 'no', hiddenLeds: [0, 1.5] } }, { persist() {}, delay: 300, timers: T3 });
   ok(c2.session.hidden.join() === '1' && c2.session.hideLeds === false && c2.session.hiddenLeds.join() === '0', '잘못된 저장값은 거름(없는 부품·숫자 아님)');
