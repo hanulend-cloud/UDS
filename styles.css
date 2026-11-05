@@ -1100,3 +1100,19 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 .od-lg .lg-dia { width: 8px; height: 8px; background: #20262f; transform: rotate(45deg); }
 .od-lg .lg-tg { width: 16px; height: 0; border-top: 1.5px dashed #d9473a; }
 .od-lg .lg-st { width: 16px; height: 0; border-top: 1.5px dotted #8a96a8; }
+
+/* 형상 후보 표(2026-11-05) */
+.sc-box { margin-top: 8px; font-size: 12.5px; }
+.sc-box > summary { cursor: pointer; font-weight: 600; }
+.sc-note { font-size: 11.5px; margin: 4px 0; }
+.sc-wrap { max-height: 240px; overflow: auto; border: 1px solid var(--m3-line); border-radius: 6px; }
+.sc-tb { width: 100%; }
+.sc-tb th button { background: none; border: 0; padding: 0; color: inherit; font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.sc-tb td { white-space: nowrap; }
+.sc-tb tr[data-ad] { cursor: pointer; }
+.sc-tb tr[data-ad]:hover, .sc-tb tr[data-ad]:focus-visible { background: rgba(90, 150, 255, .12); }
+.sc-tb tr.sel { background: rgba(90, 150, 255, .26); }
+.sc-tb tr.off { opacity: .55; }
+.sc-ok { color: #2e8b57; font-weight: 600; }
+.sc-bad { color: #b4552d; }
+.sc-rec { color: #3a7bd5; }

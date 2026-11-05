@@ -50,6 +50,7 @@ import { candidateGrid } from '../../engine/mech3d/basis.js';
 import { ledAtS, clampRowGap, rowGapOptions } from '../../engine/mech3d/placement.js';
 import { virtualEmittersAt, stepRefEmitter } from '../../engine/mech3d/virtual-leds.js';
 import { rw4 } from '../../engine/mech3d/layout-solver.js';
+import { caseKey, caseCand, caseFp, mergeCaseRows } from './shape-cases.js';
 import { heightsFor, deformPart, refinedFor, minThickness, pathFromLine, swOnPath, ledEll, lineVarH, splineInput, partFrame, bumpCenters, fieldThickness, clampField, fieldRoom, lensCandidates, swingCandidates } from '../../engine/mech3d/shape-opt.js';
 import { interferenceKeys, newInterference, travelDistance } from '../../engine/mech3d/clearance.js';
 import { pacer } from '../../engine/mech3d/yield.js';
@@ -245,6 +246,7 @@ function onChange(tag) {
   // 기구 최적화: 물리 편집이면 실행 중 = 중지(스냅샷과 어긋남), 결과 표시 중 = 결과 지움(옛 값 기준)
   const ad = A.ad;
   if (ad && PHYSICS.has(tag)) {
+    if (ad.caseSel) { ad.caseSel = null; ad.casePv = null; A.meshShown = null; }   // 형상 후보 미리보기는 지금 조건으로 만든 것
     if (ad.running && ad.runner && !ad.runner.stopped) { ad.runner.cancel(); A.store.session.status = '편집으로 기구 최적화를 중지함'; }
     else if (ad.result) { ad.result = null; A.meshShown = null; A.store.session.status = '값이 바뀌어 기구 최적화 결과를 지움'; }
   }
@@ -261,7 +263,7 @@ function rememberLedMesh() { const g = getLedMesh(); if (g?.name) (A.ledMeshes ?
 function histCapture() {
   rememberLedMesh();
   const S = A.store.session;
-  return JSON.stringify({ m: { ...A.store.mspec, viewState: undefined }, v: { hidden: S.hidden ?? [], hideLeds: !!S.hideLeds, hiddenLeds: S.hiddenLeds ?? [], hidePcb: !!S.hidePcb }, locked: Object.keys(A.ad?.locked ?? {}).sort() });
+  return JSON.stringify({ m: { ...A.store.mspec, viewState: undefined, shapeCases: undefined }, v: { hidden: S.hidden ?? [], hideLeds: !!S.hideLeds, hiddenLeds: S.hiddenLeds ?? [], hidePcb: !!S.hidePcb }, locked: Object.keys(A.ad?.locked ?? {}).sort() });
 }
 function histRestore(next, was) {
   const st = A.store, S = st.session, M = st.mspec, n = JSON.parse(next), w = JSON.parse(was);
@@ -274,8 +276,10 @@ function histRestore(next, was) {
   }
   if (JSON.stringify(n.m) === JSON.stringify(w.m)) { st.update('view'); return; }   // 보기만 바뀜 = 계산 그대로
   // spec.mech3d 객체는 main.js 와 공유 — 같은 객체 안을 바꿔 넣음(불러오기와 같은 경로로 메쉬·광원 다시 맞춤)
+  const cases0 = M.shapeCases;   // 형상 후보 표는 되돌리기 대상이 아님
   for (const k of Object.keys(M)) delete M[k];
   Object.assign(M, n.m);
+  if (cases0) M.shapeCases = cases0;
   S.xfMsg = null; S.pick = null; S.multi = [];
   const want = M.light?.step?.name;
   if (want && getLedMesh()?.name !== want) {
@@ -642,9 +646,9 @@ function renderAuto() {
     return;
   }
   A.optDash?.refresh();
-  renderAutoPanel(el, { avail, sel, running: st.running && { ...st.running, paused: !!st.paused }, result: st.result, resultOpen: !!st.resultOpen, names: M.parts.map((p) => p.name), canRevert: !!st.undo, applied: st.undo ? st.applied ?? null : null, noLine: !A.store.session.line, noLed: A.store.session.line ? adBlock() : '', milkyPart: mp, housingMat: hm ? { name: hm.name, max: hm.max } : null, catalog: reflCat() }, {
+  renderAutoPanel(el, { caseView: adCaseView(), avail, sel, running: st.running && { ...st.running, paused: !!st.paused }, result: st.result, resultOpen: !!st.resultOpen, names: M.parts.map((p) => p.name), canRevert: !!st.undo, applied: st.undo ? st.applied ?? null : null, noLine: !A.store.session.line, noLed: A.store.session.line ? adBlock() : '', milkyPart: mp, housingMat: hm ? { name: hm.name, max: hm.max } : null, catalog: reflCat() }, {
     onSel: (k, v) => adSel(k, v),
-    onAction: (k, v) => ({ shapeDeep: adShapeDeep, continue: adContinue, applyMilky: () => adApplyMilky(+v), close: () => monitor?.close(), apply: adApply, applyAlt: adApplyAlt, cancel: adCancel, revert: adRevert, step: adStep, view: () => { st.resultOpen = true; renderAuto(); }, hide: () => { st.resultOpen = false; renderAuto(); } })[k]?.(),
+    onAction: (k, v) => ({ caseSort: () => adCaseSort(v), casePick: () => adCasePick(v), caseRun: adCaseRun, shapeDeep: adShapeDeep, continue: adContinue, applyMilky: () => adApplyMilky(+v), close: () => monitor?.close(), apply: adApply, applyAlt: adApplyAlt, cancel: adCancel, revert: adRevert, step: adStep, view: () => { st.resultOpen = true; renderAuto(); }, hide: () => { st.resultOpen = false; renderAuto(); } })[k]?.(),
   });
 }
 // 접은 창에 보일 현재 결과 — 실행 중 = 진행률, 결과 있음 = 후보 값, 그 밖 = 지금 값(길이·폭 균일도)
@@ -1015,7 +1019,7 @@ async function adRun(opt = {}) {
   const snap0 = A.prog.snapshot(), ps = snap0.state, currentVerified = reusableCurrent(snap0, G), curS = lowQ ? null : reusableCurrent(snap0, Gs), currentScreen = curS ? { ...curS, sharp: true } : null;   // 수렴한 점진 결과 = 현재안(verify 생략)
   st.userPaused = ps === 'paused'; st.deferred = ['paused', 'running', 'pending', 'starting'].includes(ps);
   if (ps === 'pending') A.prog.cancel(); else A.prog.pause();
-  st.running = { frac: 0, text: '준비' }; st.result = null; A.meshShown = null; renderView(); renderAuto();
+  st.running = { frac: 0, text: '준비' }; st.result = null; st.caseSel = null; st.casePv = null; A.meshShown = null; renderView(); renderAuto();
   let hInfo = null; if (stages.height) { try { hInfo = await adHeightInfo(M0, line, rt); } catch { stages.height = false; } if (A !== a) return null; }   // 범위 계산 실패 = ⑤ 생략. 실행 중 표시(running) 뒤에 해야 양보하는 동안 두 번 실행되지 않음
   // LED STEP: 현재 = 가상이면 그 개수·피치, 아니면 현재 발광점 수·0(stepOrig = 원래 위치) · stepVirt = 설계가 가상 배치인가(② 가 STEP 에서 돌면 엔진이 true)
   const stp = M0.light.kind === 'step', sv0 = stp ? M0.light.step?.virtual ?? null : null, sv = sv0 && !sv0.positions ? sv0 : null;   // STEP 에서 편집한 배치(positions) = 원래 배치처럼 '현재 그대로'
@@ -1034,7 +1038,7 @@ async function adRun(opt = {}) {
   // ③ 변수 범위(Δt·h·R·e·c) — 엔진이 선별 → 격자 → 압축. 진행률 분모는 io.shapePlan 으로 받음(격자 크기 모르는 선별 중엔 최대 격자 27 로 어림)
   // ③ 입광면 보정 지도 — 길이 절점 간격 = LED 피치의 ⅛(2~6 mm, LED 물결을 잡게), 폭 7 절점. 광자 = 압축 마지막 단계 예산(광 효율 반비례)
   // ③ 기본 = 빠른 형상(LED 중심 렌즈 후보, 2026-11-05). opt.precise = 정밀(측정 응답으로 입광면 곡면 전체를 풂 — 시간이 더 걸림)
-  const quickShape = !!stages.shape && !opt.precise;
+  const quickShape = !!stages.shape && !opt.precise, caseLog = [];   // caseLog = 후보 표에 남길 평가 결과
   const lens = quickShape ? (() => {
     const base = adBaseMesh(sp, ctx), F = shapeFrame(base, line), H = heightsFor(base, F, 0.5), thick = minThickness(H, shapeModFor({ dt: 0, h: 0, R: 1 }, M0, line, F));
     const pitch = cur.count > 1 ? (cur.pitch > 0 ? cur.pitch : line.length / cur.count) : line.length, P0 = shapeModFor({ dt: 0, h: 0, R: 1 }, M0, line, F), lay = M0.light.kind === 'step' ? L.stepLayout(M0, line) : null, rOut = fieldRoom(H, P0, F, 8, 3, [...rt.parts.filter((_, j) => j !== sp), ...(lay?.pcb >= 0 && !M0.light.pcbOff ? [lay.parts[lay.pcb]] : [])]);   // 두껍게 할 여유 = 기구 부품·LED STEP PCB 까지(간섭 직전). LED 는 렌즈가 비켜 가므로 후보 평가에서 거름
@@ -1108,10 +1112,11 @@ async function adRun(opt = {}) {
         const { M: Md, parts } = designScene({ ...d, shape: { part: sp, ...c } }, ctx), mod = Md.parts[sp].shapeMod;
         const thin = minThickness(H, mod) < Math.min(minWall, (t00 ??= minThickness(H, { ...mod, dt: 0, h: 0, e: 0, c: 0, kL: null, kW: null, kF: null })) - 1e-3);   // 칸 중심 + LED 중심. 원래부터 얇은 자리(뾰족한 가장자리 등)는 더 얇아질 때만 탈락 — 전에는 변형 없는 안까지 탈락할 수 있었음
         const clash = !thin && newInterference(parts[sp], others, lp, before, 0.05) != null;   // 새 겹침 또는 기존보다 0.05 mm 넘게 깊어짐 — 찾는 즉시 멈춤(깊은 겹침도 빠르게)
-        if (thin || clash) { out.push({ cand: c, ok: false, why: thin ? '살두께' : '간섭' }); A.optDash?.evals('shape', [{ label: shapeText(c), ok: false, why: thin ? '살두께' : '간섭' }]); continue; }
+        if (thin || clash) { caseLog.push({ c: caseCand(c), ok: false, why: thin ? '살두께' : '간섭' }); out.push({ cand: c, ok: false, why: thin ? '살두께' : '간섭' }); A.optDash?.evals('shape', [{ label: shapeText(c), ok: false, why: thin ? '살두께' : '간섭' }]); continue; }
         // 같은 난수 비교(crn) — 형상 후보마다 같은 광자 난수(시드·청크·포트 고정)로 추적해 후보 차이만 남김(노이즈 ↓). N 전부(시간 제한 없음)
         const r = await R.trace(adJob(Md, parts, ctx), { N, batches: 4, crn: SHAPE_CRN }), stt = tallyStats(G, r.batches, obs);
         out.push({ cand: c, ok: !stt.empty, stats: stt, eff: adEff(r) });
+        caseLog.push({ c: caseCand(c), Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty, ...(stt.empty ? { why: '빛 없음' } : {}), N });
         A.optDash?.evals('shape', [{ label: shapeText(c), Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty }]);
       }
       return out;
@@ -1161,7 +1166,7 @@ async function adRun(opt = {}) {
   try {
     res = await runAutoDesign({
       stages, obs, G, line, current: cur, milkyMax: st.sel.milkyMax ?? null, housingProbe, finishText: (f) => finishText(f, reflCat()), nMax: Math.max(1, Math.min(60, Math.floor(line.length / 2))), pitchRange: null, stepMode: stp, currentIrregular: stages.leds && (() => { try { const q = pitchOf(L.currentEmitters(M0, line).map((e) => { const [s, w] = line.toSW(...line.to2D(e.pos)); return { s, w }; })); return !q.uniform; } catch { return false; } })(),
-      shapePart: sp, shapeField, ...(quickShape ? { shapeCands: lens.cands, schedule: lens.schedule, curve: false, shapeEmptyWhy: lens.cands.length ? null : lens.why } : {}),
+      shapePart: sp, shapeField, ...(opt.caseCheck ? { shapeCands: [opt.caseCheck], schedule: [[1, lens.schedule[0][1], lens.schedule[0][2]]], curve: false, fixedShape: true } : quickShape ? { shapeCands: lens.cands, schedule: lens.schedule, curve: false, shapeEmptyWhy: lens.cands.length ? null : lens.why } : {}),
       shapeStart: stages.shape && M0.parts[sp]?.shapeMod ? (({ dt, h, R, e, c, kL, kW, kF }) => ({ dt, h, R, e, c, kL, kW, kF }))(M0.parts[sp].shapeMod) : null,   // 이미 적용한 형상에서 이어서
       lateral, rowsOptions: st.sel.oneRow ? [1] : [1, 2], currentVerified, screenGrid: !lowQ, currentScreen, heightRange: hInfo?.range ?? null, housingPart: hp, finishCands, ledsAtCurrentMilky: !!opt.added?.length,
     }, io);
@@ -1176,13 +1181,14 @@ async function adRun(opt = {}) {
     let nStep = null; if (M0.light.kind === 'step') { try { nStep = L.currentEmitters(M0, line).length; } catch { nStep = 0; } }
     const smI = sp >= 0 && M0.parts[sp]?.shapeMod ? sp : M0.parts.findIndex((p) => p.shapeMod), sm = smI >= 0 ? M0.parts[smI].shapeMod : null;   // 비교표 '현재' 열 — 이미 적용된 형상(표시만)
     st.resultOpen = false;   // 끝나면 결과 카드(요약)만 — 자세한 결과 창은 [자세히]
-    st.result = { seed: res.verified?.raw ?? null, shapeLimited: !!res.steps?.find((x) => x.stage === 'shapeField')?.limited, milkyRows: stages.milky ? milkyTable(res.steps ?? []) : null, targets: { len: obs.targetLen, wid: obs.targetWid, judge: judgeStats(res.verified?.stats, A.store.mspec.observe) }, design: res.best, feasible: res.feasible, reason: res.reason, shapeSwing: quickShape && !opt.shapeDeep, shapeNote: res.shapeNote ?? null, hint: res.hint ?? null, peek: res.peek ?? null, lowered: res.milkyLowered ?? null, shape: res.best.shape ?? null, screen: res.steps?.find((x) => x.stage === 'shapeScreen')?.gains ?? null, stepLeds: nStep, unchanged: !!res.unchanged, ctx, stages,
+    st.result = { seed: res.verified?.raw ?? null, shapeLimited: !!res.steps?.find((x) => x.stage === 'shapeField')?.limited, milkyRows: stages.milky ? milkyTable(res.steps ?? []) : null, targets: { len: obs.targetLen, wid: obs.targetWid, judge: judgeStats(res.verified?.stats, A.store.mspec.observe) }, design: res.best, feasible: res.feasible, reason: res.reason, shapeSwing: quickShape && !opt.shapeDeep && !opt.caseCheck, caseCheck: !!opt.caseCheck, shapeNote: res.shapeNote ?? null, hint: res.hint ?? null, peek: res.peek ?? null, lowered: res.milkyLowered ?? null, shape: res.best.shape ?? null, screen: res.steps?.find((x) => x.stage === 'shapeScreen')?.gains ?? null, stepLeds: nStep, unchanged: !!res.unchanged, ctx, stages,
       added: opt.added ?? [], base: opt.base ?? null, clash: clashN,
       finish: stages.housing ? (() => { const c = { ...M0.parts[hp].finish, ...(M0.parts[hp].coating ? { coating: M0.parts[hp].coating } : {}) }; return { cur: c, best: res.best.finish ?? c }; })() : null, height: stages.height && hInfo ? { dz: res.best.dz ?? 0, gap: hInfo.gap } : null,
       cur: { ...cur, shape: sm ? { dt: sm.dt, h: sm.h, R: sm.R, e: sm.e ?? 0, c: sm.c ?? 0, kF: sm.kF ?? null } : null, Ulen: C?.stats?.Ulen, Uwid: C?.stats?.Uwid, eff: C?.eff ?? NaN, profile: C?.stats?.profile ?? null },
       best: { ...res.best, ...(stp ? { stepOrig: !res.best.stepVirt } : {}), Ulen: res.verified.stats.Ulen, Uwid: res.verified.stats.Uwid, eff: res.verified.eff, profile: res.verified.stats.profile ?? null } };
     const gd = res.unchanged ? res.steps?.find((x) => x.stage === 'guard') : null;   // 찾은 후보가 현재안보다 노이즈 수준만큼만 나음 — 원하면 적용
     if (gd?.tried && gd.triedVerified?.stats) st.result.alt = { design: gd.tried, Ulen: gd.triedVerified.stats.Ulen, Uwid: gd.triedVerified.stats.Uwid, eff: gd.triedVerified.eff, milky: gd.tried.milky };
+    if (stages.shape) adSaveCases({ opt, res, M0, sp, stages, caseLog });
   }
   // Worker 에 기구 최적화 장면이 올라가 있음 — 진행 중이던 계산·실행 중 편집은 다시 시작, 끝난 계산은 그대로.
   // restart 는 일시정지 상태를 이어가므로(wantPaused) 사용자가 멈춘 게 아니면 resume(대기 중 resume = 일시정지 요청 해제)
@@ -1191,8 +1197,58 @@ async function adRun(opt = {}) {
   if (res && !res.cancelled && !R.stopped && st.result) A.optDash?.finish(!!res.feasible, res.feasible ? '' : res.reason ?? '', st.result?.best?.eff, res.verified?.stats ?? null);
   return res && !res.cancelled && !R.stopped && st.result ? { feasible: !!res.feasible, stages } : null;
 }
-// 비교 중 3D 미리보기 — 결과마다 한 번 만들어 둠(meshKey 비교용 객체)
-function adPreview() {
+// 형상 후보 표(2026-11-05) — 마지막 실행 1회분을 mspec.shapeCases 에 저장. 스윙 뒤 이어서 한 정밀 탐색은 합침. 고른 후보를 계산하면 그 행에 정식 값
+function adSaveCases({ opt, res, M0, sp, stages, caseLog }) {
+  const M = A.store.mspec, cs = M.shapeCases, fp = caseFp(M0, sp);
+  const mark = (rows, c, v, extra = {}) => rows.map((r) => (caseKey(r.c) === caseKey(c) ? { ...r, ...extra, ...(v ? { exact: { Ulen: v.stats.Ulen, Uwid: v.stats.Uwid, eff: v.eff } } : {}) } : r));
+  if (opt.caseCheck) {   // 쓸 수 없는 후보(unchanged)·조건이 바뀐 표에는 값을 남기지 않음 — 결과 카드에는 보임
+    if (!cs || res.unchanged || cs.fp !== fp) return;
+    A.store.update('meta', (m) => { m.shapeCases = { ...cs, rows: mark(cs.rows, opt.caseCheck, res.verified) }; });
+    return;
+  }
+  if (!caseLog.length) return;
+  const mixed = Object.entries(stages).some(([k, v]) => k !== 'shape' && v), prev = opt.shapeDeep && cs?.part === sp && cs.fp === fp ? cs.rows.map(({ rec, ...r }) => r) : [];
+  let rows = mergeCaseRows(prev, caseLog);
+  const bestC = res.steps?.find((x) => x.stage === 'shape')?.best?.cand, gd = res.unchanged ? res.steps?.find((x) => x.stage === 'guard') : null;
+  if (bestC && !mixed) rows = mark(rows, bestC, res.unchanged ? gd?.triedVerified : res.verified, res.unchanged ? {} : { rec: true });
+  else if (bestC && !res.unchanged) rows = mark(rows, bestC, null, { rec: true });
+  A.store.update('meta', (m) => { m.shapeCases = { part: sp, fp, mixed, rows }; });
+}
+function adCaseView() {
+  const st = adState(), M = A.store.mspec, cs = M.shapeCases;
+  if (!cs?.rows?.length || !M.parts[cs.part]) return null;
+  return { cases: cs, fp: caseFp(M, cs.part), sort: st.caseSort ?? { key: 'dt', dir: 1 }, sel: st.caseSel ?? null, tg: { len: M.observe?.targetLen, wid: M.observe?.targetWid }, name: M.parts[cs.part].name, busy: !!st.running };
+}
+function adCaseSort(k) {
+  const st = adState(), o = st.caseSort ?? { key: 'dt', dir: 1 };
+  st.caseSort = o.key === k ? { key: k, dir: -o.dir } : { key: k, dir: k === 'Ulen' || k === 'Uwid' ? -1 : 1 };
+  renderAuto();
+}
+function adCasePick(v) {
+  const st = adState();
+  st.caseSel = v && v !== st.caseSel ? v : null; st.casePv = null; A.meshShown = null;
+  renderView(); renderAuto();
+}
+function adCasePreview() {
+  const st = A.ad;
+  if (!st?.caseSel) return null;
+  if (st.casePv) return st.casePv;
+  const M = A.store.mspec, cs = M.shapeCases, row = cs?.rows.find((r) => caseKey(r.c) === st.caseSel), line = A.store.session.line, rt = getMech3d();
+  if (!row || !line || !rt) return null;
+  try {
+    const { M: Md, parts } = designScene({ shape: { part: cs.part, ...row.c } }, { M0: adClone(M), line, rt, mp: null });
+    return (st.casePv = { M: Md, parts, raw: rt.raw });
+  } catch (e) { console.warn('[형상 후보] 미리보기 실패', e); st.caseSel = null; setStatus(`이 후보를 3D 로 만들지 못함: ${e.message}`); return null; }
+}
+function adCaseRun() {
+  const st = adState(), cs = A.store.mspec.shapeCases, row = cs?.rows.find((r) => caseKey(r.c) === st.caseSel);
+  if (!row || st.running) return;
+  st.sel.shapePart = cs.part; st.result = null; dashReset({ shape: true });
+  adRun({ stages: { shape: true }, caseCheck: row.c });
+}
+// 비교 중 3D 미리보기 — 고른 형상 후보가 먼저, 아니면 결과(결과마다 한 번 만들어 둠, meshKey 비교용 객체)
+function adPreview() { return adCasePreview() ?? adResultPreview(); }
+function adResultPreview() {
   const r = A.ad?.result;
   if (!r) return null;
   if (!r.preview) { const { M, parts } = designScene(r.design, r.ctx); r.preview = { M, parts, raw: r.ctx.rt.raw }; }
@@ -1209,7 +1265,7 @@ function adApply() {
   const lightCh = !!r.stages?.leds && M.light.kind === 'manual' && d.count != null && (d.count !== Lm.count || d.pitch !== Lm.pitch || rowsCh(Lm) || !samePos(d.positions, Lm.positions));
   const sv = M.light.kind === 'step' ? M.light.step?.virtual ?? null : null;   // LED STEP: 가상 배치로 바뀌었고 이전과 다르면
   const stepCh = !!r.stages?.leds && M.light.kind === 'step' && !!M.light.step && d.count != null && !!d.stepVirt && (!sv || (d.positions ? !samePos(d.positions, sv.positions) : sv.count !== d.count || sv.pitch !== d.pitch || rowsCh(sv)));
-  const mod = d.shape ? adPreview().M.parts[d.shape.part].shapeMod : null;
+  const mod = d.shape ? adResultPreview().M.parts[d.shape.part].shapeMod : null;
   const fp = d.finish?.part, pf = fp != null ? M.parts[fp]?.finish : null, pc = fp != null ? M.parts[fp]?.coating ?? null : null;
   const finCh = fp != null && !(pf?.kind === d.finish.kind && (pf?.R ?? null) === (d.finish.R ?? null) && pc === (d.finish.coating ?? null));   // ④ 면 처리(특수 처리 표시 포함)가 다르면
   const dzCh = Math.abs(d.dz ?? 0) > 1e-9 && (M.light.kind === 'step' ? !!M.light.step : M.light.manual?.pcb?.kind === 'depth');   // ⑤ 이동 있음
@@ -1301,7 +1357,7 @@ function adRevert() {
 function adStep() {
   const st = adState(), r = st.result, d = r?.design;
   if (!d?.shape || st.stepBusy) return;   // 생성 중 반복 클릭 무시
-  const { M } = adPreview(), i = d.shape.part, name = M.parts[i].name, file = `${String(name ?? 'part').replace(/[/\\:*?"<>|]/g, '_')}-p4.stp`;
+  const { M } = adResultPreview(), i = d.shape.part, name = M.parts[i].name, file = `${String(name ?? 'part').replace(/[/\\:*?"<>|]/g, '_')}-p4.stp`;
   const base = adBaseMesh(i, r.ctx), mod = M.parts[i].shapeMod, mesh = adShapeMesh(base, mod, 3), nTri = mesh.triangles.length / 3;   // 내보내기는 거친 세분(hMax = R/3) — 삼각형 수 줄임
   let spline = null; try { spline = splineInput(base, heightsFor(base, mod.frame, mod.cell), mod); } catch { /* 메쉬 경로 */ }   // 직사각형·평평한 윗면이면 B-스플라인 곡면 솔리드
   const w = new Worker(new URL('../../export/mesh-step-worker.js', import.meta.url), { type: 'module' });

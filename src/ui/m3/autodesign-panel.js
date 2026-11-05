@@ -1,5 +1,6 @@
 // 기구 최적화 카드 — spec P4 §3. 체크 5개(①~⑤) · ③·④ 대상 부품 · [실행]/[중지] · 진행 · 현재|최적 비교 · [적용][취소][되돌리기][STEP]
 import { fmtJudge } from '../../engine/mech3d/tally.js';
+import { shapeCasesHtml } from './shape-cases.js';
 import { stepRefEmitter } from '../../engine/mech3d/virtual-leds.js';   // 가상 배치 기준 LED(엔진과 같은 규칙)
 import { setPartFinish } from '../../engine/mech3d/materials.js';
 import { FINISH_GRADES, gradeOf, DEFAULT_FINISH_CATALOG } from '../../engine/mech3d/housing-led.js';
@@ -287,7 +288,7 @@ export function shapeDeepBtn(r) {
 }
 export const limitText = (reason) => { const m = /한계:\s*([^·)]+)/.exec(String(reason ?? '')); return m ? m[1].trim() : ''; };
 export function resultLineHtml(r) {
-  const verdict = r.unchanged ? ['keep', '현재안 유지', '더 나은 안 없음'] : r.targets?.judge?.all === 'near' ? ['near', '목표 근처', '통과·미달을 가를 수 없는 차이'] : r.feasible ? ['ok', '목표 통과', '최적안을 찾음'] : ['bad', '목표 미달', '가장 가까운 안'];
+  const verdict = r.unchanged ? ['keep', '현재안 유지', r.caseCheck ? '고른 후보를 쓸 수 없음' : '더 나은 안 없음'] : r.targets?.judge?.all === 'near' ? ['near', '목표 근처', '통과·미달을 가를 수 없는 차이'] : r.feasible ? ['ok', '목표 통과', r.caseCheck ? '고른 후보' : '최적안을 찾음'] : ['bad', '목표 미달', r.caseCheck ? '고른 후보' : '가장 가까운 안'];
   const P = cmpParts(r), chg = P.design.filter((x) => x.includes('class="chg"'));   // 설계 항목 = 바뀐 것만, 목표 지표 = 늘
   const rows = `${secRow('목표 지표')}${P.metric.join('')}${secRow('설계 최적화 항목')}${chg.length ? chg.join('') : '<tr><td colspan="3" class="mut">바뀐 항목 없음</td></tr>'}`;
   const lim = limitText(r.reason), clash = r.clash > 0 ? `<div class="m3-clash" role="alert">LED 몸체가 부품과 겹침(${r.clash}개) — 적용 불가</div>` : '';
@@ -306,9 +307,13 @@ export function renderAutoPanel(el, state, h) {
   const r = state.result, full = r ? compareHtml({ ...r, canRevert: state.canRevert, ...(state.catalog ? { catalog: state.catalog } : {}) }) : '';
   const html = r ? `${resultLineHtml(r)}${state.resultOpen ? `<div class="m3-rmodal" role="dialog" aria-modal="true" aria-label="기구 최적화 결과"><div class="m3-rmodal-in"><div class="m3-rmodal-hd"><b>기구 최적화 결과</b><span class="m3-ad-sp"></span><button type="button" data-ad="hide" title="결과는 남음">✕ 닫기</button></div>
       <div class="m3-rverdict ${r.unchanged ? '' : r.targets?.judge?.all === 'near' ? 'near' : r.feasible ? 'ok' : 'bad'}">${r.unchanged ? `현재 설계보다 나은 안을 찾지 못함 — 현재안 유지${r.alt ? ' (찾은 후보가 뚜렷이 낫지 않음 — 원하면 [후보로 바꾸기])' : ''}` : r.targets?.judge?.all === 'near' ? '≈ 목표 근처 — 목표와의 차이가 노이즈보다 작음' : r.feasible ? '✓ 목표 통과' : '✕ 목표 미달 — 가장 가까운 안'}</div>${full}</div></div>` : ''}` : autoCardHtml(state);
-  const key = r ? html : autoCardHtml(state);
+  const tb = state.caseView ? shapeCasesHtml(state.caseView) : '';   // 형상 후보 표 — 결과가 있든 없든 아래에 붙임
+  const key = (r ? html : autoCardHtml(state)) + tb;
   if (r && el._adKey === key) return;   // 결과가 그대로면 다시 만들지 않음 — 누르는 사이 단추가 바뀌면 클릭이 사라지고, 펼친 Milky 표도 닫힘
-  el._adKey = key; el.innerHTML = html;
+  const box0 = el.querySelector('.sc-box'), open0 = box0?.open, top0 = el.querySelector('.sc-wrap')?.scrollTop;   // 다시 그려도 표의 펼침·스크롤 유지
+  el._adKey = key; el.innerHTML = html + tb;
+  if (box0 && el.querySelector('.sc-box')) { el.querySelector('.sc-box').open = open0; el.querySelector('.sc-wrap').scrollTop = top0; }
+  el.querySelectorAll('tr[data-ad]').forEach((x) => { x.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); x.click(); } }; });
   el.querySelectorAll('[data-ad]').forEach((x) => {
     const k = x.dataset.ad;
     if (x.type === 'checkbox') x.onchange = () => h.onSel(k, x.checked);

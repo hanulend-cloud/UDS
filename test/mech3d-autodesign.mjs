@@ -535,4 +535,14 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   const calls = [], io = { milkyRows: async (d, ms) => rowsOf(ms), verify: async (d, o = {}) => { if (o.screen) calls.push([d.milky, o.maxMs]); return { stats: { ...st(d.milky === 3 ? 0.45 : 0.85, 0.9), relNoise: o.noise ?? 0.03 }, eff: 0.5, photons: 1e7 }; }, progress() {}, cancelled: () => false };
   const r = await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 3, count: 5, pitch: 0, shape: null }, milkyMax: 5, screenGrid: true }, io);
   ok(calls.length === 2 && calls.find((c) => c[0] === 3)?.[1] === 60000 && calls.find((c) => c[0] !== 3)?.[1] === undefined && r.feasible, `먼 현재안만 60 초 한도 (${JSON.stringify(calls)})`); }
+{ // 형상 후보 표에서 고른 후보(fixedShape) — 지금보다 나빠도 판정 결과로 보여 주고, '변경 없음'도 명시 형상으로 남김(적용된 형상을 되돌릴 수 있게)
+  const cur = { milky: 3, count: 5, pitch: 0, shape: null }, c = { dt: 0.2, h: 0, R: 2.75, e: 0, c: 0 }, z = { dt: 0, h: 0, R: 2.75, e: 0, c: 0 };
+  const io = { evalShapes: async (d, cs) => cs.map((q) => ({ cand: q, stats: st(0.7, 0.7), eff: 0.6, ok: true })), verify: async (d) => ({ stats: st(d.shape ? 0.7 : 0.9, 0.9), eff: 0.6 }), progress() {}, cancelled: () => false };
+  const r = await runAutoDesign({ stages: { shape: true }, obs, current: cur, shapePart: 0, shapeCands: [c], fixedShape: true }, io);
+  ok(!r.unchanged && r.best.shape?.dt === 0.2 && r.verified.stats.Ulen === 0.7 && r.feasible === false, '고른 후보 = 나빠도 결과로 나옴');
+  const rz = await runAutoDesign({ stages: { shape: true }, obs, current: cur, shapePart: 0, shapeCands: [z], fixedShape: true }, io);
+  ok(rz.best.shape?.part === 0 && rz.best.shape.dt === 0, '변경 없음 후보도 명시 형상');
+  const bad = { ...io, evalShapes: async (d, cs) => cs.map((q) => ({ cand: q, ok: false, why: '간섭' })) };
+  const rb = await runAutoDesign({ stages: { shape: true }, obs, current: cur, shapePart: 0, shapeCands: [c], fixedShape: true }, bad);
+  ok(rb.unchanged && /간섭/.test(rb.shapeNote ?? ''), '지금은 간섭 = 적용 불가, 이유 표시'); }
 done();

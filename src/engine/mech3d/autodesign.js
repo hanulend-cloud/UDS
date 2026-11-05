@@ -649,7 +649,7 @@ export async function runAutoDesign(cfg, io) {
     if (best === undefined) return { cancelled: true };
     steps.push({ stage: 'shape', best });
     if (best) {
-      const c = best.cand, zero = ['dt', 'h', 'e', 'c'].every((k) => !(c[k] ?? 0)) && !hasCurve(c);   // 전부 0 이면 R 무관 — 빈 shapeMod 안 만듦
+      const c = best.cand, zero = !cfg.fixedShape && ['dt', 'h', 'e', 'c'].every((k) => !(c[k] ?? 0)) && !hasCurve(c);   // 전부 0 이면 R 무관 — 빈 shapeMod 안 만듦
       d = { ...d, shape: zero ? null : { part: cfg.shapePart, ...c } };
       if (margin(best.stats, obs) < 0) { feasible = false; reason = `형상 최적안도 목표 미달 — 길이 균일도 ${best.stats.Ulen.toFixed(2)}${best.stats.Uwid == null ? '' : ` · 폭 균일도 ${best.stats.Uwid.toFixed(2)}`}`; }
       else { feasible = true; reason = ''; }
@@ -802,7 +802,7 @@ export async function runAutoDesign(cfg, io) {
   const fixGain = !!ledLimit && mgFix(verified.stats) >= 0 && (mgFix(currentVerified.stats) < 0 || totalLeds(d) < totalLeds(cfg.current)) && verified.stats.Uwid >= currentVerified.stats.Uwid - SCORE_EPS;
   // 지금 배치가 불규칙이면 등간격 안을 '현재안 유지' 로 묻지 않음(균일한 피치 원칙) — 값 비교는 결과 표로
   const regular = !!cfg.currentIrregular && !sameDesign(d, cfg.current) && !!stages.leds;
-  if (!fewer && !fixGain && !regular && !(sc(verified) - sc(currentVerified) >= SCORE_EPS)) {
+  if (!cfg.fixedShape && !fewer && !fixGain && !regular && !(sc(verified) - sc(currentVerified) >= SCORE_EPS)) {
     steps.push({ stage: 'guard', tried: d, triedVerified: verified, triedReason: reason });
     if (stages.shape && d.shape && !shapeNote) shapeNote = '찾은 형상이 최종 판정에서 지금보다 낫지 않음 — 현재 형상 유지';
     return { feasible: margin(currentVerified.stats, obs) >= 0, best: { ...cfg.current }, steps, reason: `현재안보다 나은 설계를 찾지 못함 — 현재안 유지${reason ? ` (${reason})` : ''}`, verified: currentVerified, current: currentVerified, unchanged: true, cancelled: false, hint, peek, milkyLowered: lowered, shapeNote };
