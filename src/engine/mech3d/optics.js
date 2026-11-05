@@ -3,7 +3,7 @@
 import { l2Material, L2_G, MUA_RESIN, MILKY_UI_MAX } from '../l2/material.js';
 import { musRFromMilky } from '../l2/milky.js';
 import { particleOptics } from '../l2/mie.js';
-import { materialN } from './materials.js';
+import { materialN, clearMua } from './materials.js';
 
 // 표의 수직 입사 행(μ = cosθ 가 1 에 가장 가까운 각도 행)
 export function normalRow(table) {
@@ -34,10 +34,7 @@ export function partOptics(part, { table, db = null }) {
   if (m.kind === 'opaque') return { transmissive: false };
   const n0 = materialN(m);   // 측정 굴절률(있으면) · 수지 기본값
   if (m.kind === 'clear') {
-    // 비간섭 다중 반사 슬랩: T = B·x/(1−R0²x²), x = e^{−μa t}, B = (1−R0)²
-    const R0 = ((n0 - 1) / (n0 + 1)) ** 2, B = (1 - R0) ** 2;
-    const x = m.T >= (1 - R0) / (1 + R0) ? 1 : 2 * m.T / (B + Math.sqrt(B * B + 4 * R0 * R0 * m.T * m.T));   // 근의 공식 유리화(T 극소 정밀도)
-    return { transmissive: true, n: n0, mus: 0, g: 0, mua: Math.max(0, -Math.log(Math.min(1, Math.max(x, 1e-300))) / m.tRef), phase: null };
+    return { transmissive: true, n: n0, mus: 0, g: 0, mua: clearMua(m), phase: null };
   }
   if (m.kind === 'whiteTrans') {
     const musR = whiteTransMusR(table, m.T, m.tRef, n0);

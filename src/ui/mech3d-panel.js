@@ -80,7 +80,7 @@ function basicMaterialHtml(p, dbList, catalog, sel = {}) {
   const mat = p.material, groups = materialGroups({ milky: dbList, clear: sel.clearList ?? [], refl: catalog });
   const milky = mat.kind === 'milky' ? `<div class="m3-row"><label>확산 정도</label><input type="number" min="0" max="10" step="0.1" value="${esc(mat.milky)}" data-m3-mat="milky" aria-label="Milky 값"> <span class="mut">${+mat.milky > 0 ? '' : '<b>지금 투명</b> · '}Milky · 0 = 투명 · 높을수록 고르게 · 어두워짐</span></div>` : '';
   return `<div class="m3-sub">소재</div><div class="m3-row"><label>소재 이름</label>${materialPickHtml(p, groups)}</div>${milky}
-    <div class="m3-row mut m3-matsum">${esc(materialSummary(p, { milky: dbList, refl: catalog }))}</div>
+    <div class="m3-row mut m3-matsum">${esc(materialSummary(p, { milky: dbList, refl: catalog, thick: sel?.meshInfo?.size ? Math.min(...sel.meshInfo.size) : null }))}</div>
     ${sel.admin ? `<div class="m3-admin"><div class="m3-sub">관리자 · 물성 직접 조정</div>${adminMaterialHtml(p, catalog)}</div>` : ''}`;
 }
 // 관리자 숫자 칸(순수) — 수지·투과율·두께·반사율

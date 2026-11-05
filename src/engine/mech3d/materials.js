@@ -15,6 +15,17 @@ export const CLEAR_BASE = [
 export const RESIN_N = Object.fromEntries(CLEAR_BASE.map((e) => [e.id, e.n]));
 // 부품 소재의 굴절률 — 측정값(material.n)이 있으면 그것, 없으면 수지 기본값
 export const materialN = (m) => (Number.isFinite(m?.n) && m.n > 1 ? m.n : RESIN_N[m?.resin] ?? RESIN_N.PC);
+// 투명 소재 흡수(순수) — 비간섭 다중 반사 슬랩 T = B·x/(1−R0²x²), x = e^{−μa t}, B = (1−R0)². T·tRef 는 표면 반사 포함 전광선 투과율
+export function clearMua(m) {
+  const n0 = materialN(m), R0 = ((n0 - 1) / (n0 + 1)) ** 2, B = (1 - R0) ** 2;
+  const x = m.T >= (1 - R0) / (1 + R0) ? 1 : 2 * m.T / (B + Math.sqrt(B * B + 4 * R0 * R0 * m.T * m.T));   // 근의 공식 유리화(T 극소 정밀도)
+  return Math.max(0, -Math.log(Math.min(1, Math.max(x, 1e-300))) / m.tRef);
+}
+// 두께 t(mm) 에서의 전광선 투과율(수직 입사)
+export function clearT(m, t) {
+  const n0 = materialN(m), R0 = ((n0 - 1) / (n0 + 1)) ** 2, B = (1 - R0) ** 2, x = Math.exp(-clearMua(m) * t);
+  return B * x / (1 - R0 * R0 * x * x);
+}
 // 투명 소재 고르기(불변) — 기본 항목: 수지 = id, 측정 굴절률 해제 · 사용자 항목: 수지 = 바탕 수지, n = 측정값. 둘 다 그 항목의 투과율·두께를 따름
 export function applyClearEntry(part, e) {
   if (!e) return part;
@@ -74,7 +85,7 @@ export const FINISH_KINDS = {
 export function defaultMaterial(kind) {
   switch (kind) {
     case 'milky': return { kind, dbId: '', milky: 5, resin: 'PC' };
-    case 'clear': return { kind, resin: 'PC', T: 1, tRef: 2 };
+    case 'clear': return { kind, resin: CLEAR_BASE[0].id, T: CLEAR_BASE[0].T, tRef: CLEAR_BASE[0].tRef };   // 기본 = PC 값(100% 는 흡수 없는 가상 소재라 쓰지 않음, 2026-11-05)
     case 'whiteTrans': return { kind, resin: 'PC', T: 0.1, tRef: 1.5 };
     case 'opaque': return { kind };
     default: throw new Error(`알 수 없는 소재 종류: ${kind}`);

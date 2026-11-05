@@ -16,7 +16,7 @@ const rel = (a, b) => Math.abs(a / b - 1);
 
 ok(partOptics(defaultPart(0, 'p', 1), ctx).transmissive === false, '불투명 → 비투과');
 {
-  const o = partOptics(P('clear'), ctx);
+  const o = partOptics(P('clear', { T: 1, tRef: 2 }), ctx);
   ok(o.transmissive && o.n === 1.586 && o.mus === 0 && o.mua === 0, `투명(T=1): n ${o.n}, μs ${o.mus}, μa ${o.mua}`);
   const R0 = (0.586 / 2.586) ** 2, o2 = partOptics(P('clear', { T: 0.8, tRef: 2 }), ctx), x = Math.exp(-o2.mua * 2), Tslab = (1 - R0) ** 2 * x / (1 - R0 * R0 * x * x);
   ok(Math.abs(Tslab - 0.8) < 1e-12, `투명 착색 T80%@2mm: μa ${o2.mua.toFixed(5)}, 슬랩 다중반사 T ${Tslab.toFixed(12)}`);
@@ -50,4 +50,19 @@ ok(partOptics(defaultPart(0, 'p', 1), ctx).transmissive === false, '불투명 �
   const ent = db.get('covestro-dq5142'), c = partOptics(P('milky', { dbId: ent.id, milky: 9.9 }), ctx), d = partOptics(P('milky', { dbId: ent.id, milky: 10 }), ctx);
   ok(a.mus === b.mus && c.mus === d.mus, `Milky 상한 9.9: 추상 μs ${b.mus.toFixed(2)}, DB μs ${d.mus.toFixed(2)}`);
 }
+// 투명 소재(2026-11-05): 고르면 그 소재의 2 mm 투과율 · 두께별 흡수
+{ const { defaultMaterial, clearT, CLEAR_BASE } = await import('../src/engine/mech3d/materials.js');
+  const { materialSummary } = await import('../src/engine/mech3d/material-pick.js');
+  const { migrateMech3d } = await import('../src/engine/mech3d/defs.js');
+  const d = defaultMaterial('clear');
+  ok(d.T === 0.89 && d.tRef === 2 && d.resin === 'PC', '투명 기본 = PC 2 mm 89%(100% 아님)');
+  ok(partOptics({ material: d, faceFinish: {} }, ctx).mua > 0, '기본 투명 = 흡수 있음');
+  ok(Math.abs(clearT(d, 2) - 0.89) < 1e-9 && clearT(d, 8) < clearT(d, 4) && clearT(d, 4) < clearT(d, 2) && clearT(d, 0.5) > clearT(d, 2), `두께별 투과율 2→${clearT(d, 2).toFixed(3)} 4→${clearT(d, 4).toFixed(3)} 8→${clearT(d, 8).toFixed(3)}`);
+  for (const e of CLEAR_BASE) ok(Math.abs(clearT(e.id === 'x' ? e : { resin: e.id, T: e.T, tRef: e.tRef }, 2) - e.T) < 1e-9, `${e.id} 2 mm = ${e.T}`);
+  ok(/4 mm → 8[0-9.]+%/.test(materialSummary({ material: d }, { thick: 4 })) && !/→/.test(materialSummary({ material: d })), `요약: ${materialSummary({ material: d }, { thick: 4 })}`);
+  const mig = (mat) => { const m = { parts: [{ material: mat }], light: {}, observe: {} }; migrateMech3d(m); return m.parts[0].material; };
+  ok(mig({ kind: 'clear', resin: 'PMMA', T: 1, tRef: 2 }).T === 0.92, '저장된 예전 기본값 100% → 그 소재 값');
+  ok(mig({ kind: 'clear', resin: 'PC', T: 0.85, tRef: 3 }).T === 0.85 && mig({ kind: 'clear', resin: 'PC', T: 1, tRef: 2, n: 1.58, matId: 'u:a' }).T === 1, '입력한 값·측정 항목은 그대로');
+  const twice = { parts: [{ material: { kind: 'clear', resin: 'PC', T: 1, tRef: 2 } }], light: {}, observe: {} }; migrateMech3d(twice); twice.parts[0].material.T = 1; migrateMech3d(twice);
+  ok(twice.parts[0].material.T === 1, '보정은 한 번만(그 뒤 입력한 100% 유지)'); }
 done();

@@ -1,5 +1,6 @@
 import { isAdjustWellFormed } from './led-adjust.js';
 // 3D 기구 광원·관측 지정 기본값 — spec 2026-10-14 §4·§5 (P3 계획 "데이터 모델"), 2026-10-15 m3-cad-ui(광속·목표·점검 기준).
+import { CLEAR_BASE } from './materials.js';
 const SOLDER_R = { '백색': 0.8, '녹색': 0.3, '흑색': 0.05 };
 export const LED_BODY_FINISH = { kind: 'whiteDiffuse', R: 0.8 };   // 백색 실리콘 패키지
 
@@ -29,6 +30,8 @@ export function migrateMech3d(m) {
   const f = Number(m.light.spec.fluxLm);
   m.light.spec.fluxLm = Number.isFinite(f) && f > 0 ? f : 0;
   m.observe.targetLum ??= null;
+  // 투명 소재 예전 기본값(2 mm 100%) → 그 소재 값(2026-11-05, 사용자 요청). 입력한 값·측정 항목은 그대로
+  if (m.clearRev !== 1) { for (const p of m.parts ?? []) { const q = p.material; if (q?.kind === 'clear' && q.T === 1 && q.tRef === 2 && q.matId == null && !Number.isFinite(q.n)) q.T = (CLEAR_BASE.find((e) => e.id === q.resin) ?? CLEAR_BASE[0]).T; } m.clearRev = 1; }
   m.groups ??= [];   // 부품 그룹 [{ id, name, parts }] (피처 트리, 2026-10-30)
   // 계산 오차 목표 기본 2% → 1%(2026-10-29: 1D 튐·2D 얼룩) — 예전 기본값(2%·없음)만 1% 로, 사용자가 고른 값은 그대로
   if (m.observe.noiseRev !== 1) { if (m.observe.targetNoise == null || m.observe.targetNoise === 0.02) m.observe.targetNoise = 0.01; m.observe.noiseRev = 1; }
