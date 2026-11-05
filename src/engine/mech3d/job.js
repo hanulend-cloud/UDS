@@ -14,7 +14,7 @@ import { REC } from './gpu-trace.js';
 // ledParts 는 변환 전 원본이고 composeScene 이 st.offset/rot 로 변환한다. emitters 는 이미 변환된 좌표여야 한다(xform.transformEmitters).
 // rt: 기구 장면(getMech3d()), mspec: spec.mech3d, ledParts: LED STEP 원본 메쉬(없으면 null), line: 인식된 관측 라인(가상 PCB 용)
 export function composeScene({ rt, mspec, ledParts, table, db, line }) {
-  const L = mspec.light, extraMeshes = [], extraSpecs = [], solderFin = { kind: 'whiteDiffuse', R: SOLDER_R[L.solder] ?? 0.8 };
+  const L = mspec.light, extraMeshes = [], extraSpecs = [], solderFin = { kind: 'whiteDiffuse', R: SOLDER_R[L.solder] ?? 0.3 };
   const base = rt.parts.length;
   if (L.kind === 'step' && !ledParts) throw new Error('LED STEP 메쉬가 없음 — LED STEP 을 다시 불러오세요');
   if (L.kind === 'step') {

@@ -90,7 +90,7 @@ const ui = (o = {}) => ({ line, ledList: list, ledGap: 6.25, ...o });
   ok(ledPanelHtml(ms, ui({ ledChange: { changed: true, moved: 1, pitchOrig: { uniform: true, pitch: 10 }, pitchCur: { uniform: true, pitch: 12 } } })).includes('원설계에서 변경됨'), '기본 탭에도 LED 변경 표시');
   setLpTab('leds', 'detail');
   const d = ledPanelHtml(ms, ui());
-  ok(!d.includes('인식 고치기') && d.includes('램버시안') && !/data-lp-spec="sizeX"/.test(d) && /data-lp-solder/.test(d) && d.includes('m3-ledlist') && /data-lp-spec="fluxLm"/.test(d), '상세 탭 = 배치 · 밝기 · 인식 고치기 · 배광 모델 · PCB 색');
+  ok(!d.includes('인식 고치기') && d.includes('램버시안') && !/data-lp-spec="sizeX"/.test(d) && !/data-lp-solder/.test(d) && d.includes('m3-ledlist') && /data-lp-spec="fluxLm"/.test(d), '상세 탭 = 배치 · 밝기 · 인식 고치기 · 배광 모델 · PCB 색');
   setLpTab('leds', 'basic'); }
 { // 지정은 광원 노드에서만, LED 노드·LED 한 개는 사양만(2026-11-04)
   const mech = { light: { ...defaultLight(), kind: 'step', step: { fromMech: [0, 1], leds: [0, 1], excluded: [], emitters: [{ pos: [0, 0, 0] }], offset: [0, 0, 0], rot: [0, 0, 0], name: 'x' } } };

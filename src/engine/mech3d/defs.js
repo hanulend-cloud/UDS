@@ -5,7 +5,7 @@ export const LED_BODY_FINISH = { kind: 'whiteDiffuse', R: 0.8 };   // 백색 실
 
 export function defaultLight() {
   return {
-    kind: 'none', solder: '백색',
+    kind: 'none', solder: '녹색', pcbRev: 1,   // PCB 면 기본 = 반사율 30%(도면 PCB 와 같게, 2026-11-05)
     spec: { model: 'lambertian', beam: 120, sizeX: 2, sizeY: 2, fluxLm: 0 },   // fluxLm: LED 1개 광속(lm), 0 = 상대값
     step: null,
     manual: { pcb: { kind: 'depth', depth: 10 }, count: 10, pitch: 0, side: 'direct', rows: 1, rowGap: 0 },   // rows 1|2, rowGap = 열 간격 ±δ mm
@@ -23,6 +23,8 @@ export function migrateMech3d(m) {
   m.light ??= defaultLight();
   m.observe ??= defaultObserve();
   m.light.spec ??= defaultLight().spec;
+  // PCB 면 30% 로 통일(2026-11-05, 사용자 확정) — 예전 기본값(백색 80%·없음)만, 직접 고른 흑색과 통일 뒤 고른 값은 그대로
+  if (m.light.pcbRev !== 1) { if (m.light.solder == null || m.light.solder === '백색') m.light.solder = '녹색'; m.light.pcbRev = 1; }
   const f = Number(m.light.spec.fluxLm);
   m.light.spec.fluxLm = Number.isFinite(f) && f > 0 ? f : 0;
   m.observe.targetLum ??= null;

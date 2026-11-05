@@ -1,5 +1,6 @@
 // 피처 트리 — spec 2026-10-15 m3-cad-ui §2: 관측면(라인 종류·길이·폭 · 목표, 맨 위) · 부품(소재 배지) · 광원(LED 개수·피치) · 접촉면.
 // 노드 id: 'parts' | 'part:i' | 'light' | 'leds' | 'obs' | 'contacts'. 클릭 → h.onNode(id)
+import { SOLDER_R } from '../../engine/mech3d/defs.js';
 import { PART_KINDS } from '../../engine/mech3d/materials.js';
 
 export const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -16,6 +17,8 @@ export function partBadge(p) {
 // eye: 보기 켜기/끄기 단추 — 'on' | 'off' (부품·LED 노드), 'all' (부품 머리: 숨긴 부품이 있을 때 "모두 보기")
 // leds = LED 목록(위치 순) [{ n, rank, s, excluded }] — 있으면 LED 노드 아래에 한 개씩(눈 단추 = 보기만)
 export const ledFoldDefault = (n) => n > 30;   // 많으면 처음엔 접어 둠
+// LED STEP 파일 안의 PCB — 메쉬는 LED STEP 에 그대로, 목록에서는 부품으로(반사율 = light.solder)
+const stepPcb = (L) => L.kind === 'step' && !L.step?.fromMech && L.step?.pcb >= 0;
 export function treeNodes(M, S, lay, leds = []) {
   const L = M.light, O = M.observe, out = [], hid = new Set(S.hidden ?? []), hl = new Set(S.hiddenLeds ?? []);
   const node = (id, label, badge, child = false, kind = '', eye, extra = {}) => out.push({ id, label, badge, child, kind, sel: S.node === id || (S.multi ?? []).includes(id), eye, depth: child ? 1 : 0, ...extra });
@@ -23,7 +26,7 @@ export function treeNodes(M, S, lay, leds = []) {
   // 관측면 = 맨 위(무엇을 어떻게 맞출지 먼저, 부품·광원과 성격이 달라 밑줄로 구분) · 목표는 관측면 속성에 포함(2026-11-03)
   const ln = S.line, goal = `목표 ${Math.round(O.targetLen * 100)}/${Math.round(O.targetWid * 100)}%`;
   node('obs', '◎ 관측면', ln ? `${LINE_KIND[ln.kind] ?? ln.kind} ${ln.length.toFixed(0)}×${ln.width.toFixed(0)} mm · ${goal}` : S.lineErr && O.faces.length ? '라인 인식 실패' : O.faces.length ? `면 ${O.faces.length}개 · 인식 중` : '미지정 — 클릭', false, '', undefined, { top: true });
-  node('parts', '부품', String(M.parts.length), false, '', hid.size || S.hideLeds || hl.size ? 'all' : undefined, { fold: fold('parts') ? 'closed' : 'open' });
+  node('parts', '부품', String(M.parts.length + (stepPcb(L) ? 1 : 0)), false, '', hid.size || S.hideLeds || hl.size ? 'all' : undefined, { fold: fold('parts') ? 'closed' : 'open' });
   // 그룹(2026-10-30): 사용자 그룹(M.groups) = 첫 부품 자리에 머리 + 펼치면 부품(들여쓰기 2단) · 그룹 밖 광원으로 옮긴 부품 = 자동 묶음 '_light'(기본 접힘)
   const gOf = new Map(), G = [...(M.groups ?? [])];
   for (const g of G) for (const i of g.parts) if (i < M.parts.length && !gOf.has(i)) gOf.set(i, g);
@@ -40,6 +43,7 @@ export function treeNodes(M, S, lay, leds = []) {
     node(`group:${g.id}`, g.name, String(mem.length), true, 'group', g.auto ? undefined : allHid ? 'off' : 'on', { fold: closed ? 'closed' : 'open', depth: 1, auto: !!g.auto, strike: !g.auto && mem.length > 0 && mem.every((k) => M.parts[k].untrace) });
     if (!closed) for (const k of mem) partNode(M.parts[k], k, 2);
   });
+  if (!fold('parts') && stepPcb(L)) node('steppcb', 'PCB', `PCB 면 ${Math.round((SOLDER_R[L.solder] ?? 0.3) * 100)}% · LED STEP`, true, 'opaque');
   // 광원 머리 눈 단추 = 광원 그룹(LED 몸체·PCB·지향각) 한 번에 켜기/끄기
   node('light', '광원', L.kind === 'step' && L.step?.fromMech ? '3D 도면' : { none: '지정 안 함', step: 'LED STEP', manual: '직접 배치' }[L.kind], false, '', L.kind === 'step' ? (S.hideLeds ? 'off' : 'on') : undefined, L.kind !== 'none' ? { fold: fold('light') ? 'closed' : 'open' } : {});
   if (L.kind !== 'none' && !fold('light')) {

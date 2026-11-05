@@ -126,7 +126,7 @@ function ledNodeBodyHtml(m, ui, adv = false, showBeam = false, noSize = false) {
       지향각<input type="number" min="10" max="170" step="5" value="${L.spec.beam}" data-lp-spec="beam">°</div>`}
     ${noSize ? '' : ledSizeRow(L)}
     ${adv ? '' : `<div class="m3-row"><label>광속</label><input type="number" min="0" step="1" value="${L.spec.fluxLm ?? 0}" data-lp-spec="fluxLm"> lm/개 <span class="mut">0 = 상대값(최대 대비 %)</span></div>`}
-    ${st?.fromMech ? '' : `<div class="m3-row"><label>PCB 색</label><select data-lp-solder>${['백색', '녹색', '흑색'].map((c) => `<option ${c === L.solder ? 'selected' : ''}>${c}</option>`).join('')}</select></div>`}`;   // 도면 광원의 PCB = 기구 부품(부품 속성에서)
+    ${L.kind === 'step' ? '' : solderRow(L, 'PCB 색')}`;   // 도면 광원의 PCB = 기구 부품(부품 속성에서)
 }
 // 원설계 대비 변경(순수, 2026-11-02) — 위치·개수가 바뀌면 눈에 띄게. c = ledChange 결과 | null(비교 기준 없음)
 export function ledChangeHtml(c) {
@@ -175,6 +175,10 @@ function ledTabHtml(m, ui, tab) {
     <div class="m3-card"><div class="m3-sub">발광면 크기 <span class="mut">(모든 LED)</span></div>${ledSizeRow(L)}</div>`;
 }
 // 광원 노드(ui.pickOnly) = ① LED 지정만. LED 노드·LED 한 개 = 사양만(2026-11-04): 기본(빛 퍼짐·발광면 크기) | 상세(배치·밝기·높이·배광 모델·PCB 색). 광원이 아직 없으면 ① 카드. ui = { led?(고른 LED), ledList:[{n,s,excluded}], ledGap, line, lay, pick, ledInfo }
+// PCB 반사율 줄(순수) — LED STEP 의 PCB 는 부품 목록의 PCB 속성에서, 직접 배치는 LED 상세 탭에서
+const solderRow = (L, label) => `<div class="m3-row"><label>${label}</label><select data-lp-solder>${[['녹색', 30], ['백색', 80], ['흑색', 5]].map(([c, r]) => `<option value="${c}"${c === L.solder ? ' selected' : ''}>${c} ${r}%</option>`).join('')}</select></div>`;
+export const stepPcbHtml = (m) => `<div class="m3-h">부품 · PCB <span class="mut">LED STEP 파일의 PCB</span></div><div class="m3-card m3-untrace pcb"><div class="m3-sub">PCB 면</div>${solderRow(m.light, '반사율')}<div class="mut">확산 반사면으로 계산 · 기구 최적화에서 면을 바꾸지 않음</div></div>`;
+export function renderStepPcbProps(el, m, h) { el.innerHTML = stepPcbHtml(m); on(el, '[data-lp-solder]', 'change', (x) => h.onSolder(x.value)); }
 export function ledPanelHtml(m, ui) {
   if (m.light.kind === 'none' || ui.pickOnly) return `<div class="m3-h">속성 · 광원</div>${ledPickCardHtml(m, ui, m.light.kind === 'step' ? !!m.light.step?.emitters?.length : m.light.kind !== 'none')}`;
   return `<div class="m3-h">속성 · LED</div>${tabsHtml('leds')}<div class="m3-edit" role="tabpanel">${ledTabHtml(m, ui, LP_TAB.leds)}</div>`;

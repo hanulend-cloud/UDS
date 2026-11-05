@@ -7,10 +7,32 @@ import { stageAvailability } from '../src/ui/m3/autodesign-panel.js';
 import { partBadge } from '../src/ui/m3/feature-tree.js';
 import { pcbCardHtml } from '../src/ui/mech3d-panel.js';
 import { ledPanelHtml, setLpTab } from '../src/ui/mech3d-light-panel.js';
-import { defaultLight, defaultObserve, defaultChecks } from '../src/engine/mech3d/defs.js';
+import { defaultLight, defaultObserve, defaultChecks, migrateMech3d, SOLDER_R } from '../src/engine/mech3d/defs.js';
+import { treeNodes } from '../src/ui/m3/feature-tree.js';
+import { stepPcbHtml } from '../src/ui/mech3d-light-panel.js';
 
 const led = boxMesh(-1, -1, 0, 2, 2, 1), at = (x, z = 0) => transformMesh(led, [x, 0, z], [0, 0, 0]);
 const pcb = boxMesh(-40, -5, -1, 80, 10, 1), cover = boxMesh(-40, -5, 6, 80, 10, 3);
+
+// --- LED STEP 파일 안의 PCB(2026-11-05, 기본 예제) — 부품 목록에 PCB 로 · 반사율 30% ---
+{ ok(defaultLight().solder === '녹색' && SOLDER_R[defaultLight().solder] === 0.3, '새 프로젝트 PCB 면 기본 30%');
+  const mig = (solder, extra = {}) => { const m = { light: { kind: 'step', solder, ...extra }, observe: {} }; migrateMech3d(m); return m.light.solder; };
+  ok(mig('백색') === '녹색' && mig(undefined) === '녹색', '저장된 백색 80% → 30% 로 통일');
+  ok(mig('흑색') === '흑색', '직접 고른 흑색은 그대로');
+  ok(mig('백색', { pcbRev: 1 }) === '백색', '통일 뒤 사용자가 고른 백색은 그대로');
+  const light = (o) => ({ ...defaultLight(), kind: 'step', step: { name: 'a.stp', leds: [1, 2], excluded: [], pcb: 0, emitters: [], ...o } });
+  const M = { parts: [defaultPart(0, '부품 1', 5)], observe: defaultObserve(), groups: [], light: light({}) };
+  const N = treeNodes(M, { node: 'steppcb', line: null }), n = N.find((x) => x.id === 'steppcb');
+  ok(n && n.label === 'PCB' && /PCB 면 30%/.test(n.badge) && n.sel && n.child, `LED STEP PCB = 부품 목록의 PCB: ${n?.badge}`);
+  ok(N.findIndex((x) => x.id === 'steppcb') < N.findIndex((x) => x.id === 'light'), '광원이 아니라 부품 쪽에');
+  ok(N.find((x) => x.id === 'parts').badge === '2', '부품 개수에 포함');
+  ok(!treeNodes({ ...M, light: light({ pcb: -1 }) }, {}).some((x) => x.id === 'steppcb'), 'PCB 를 못 찾은 LED STEP → 노드 없음');
+  ok(!treeNodes({ ...M, light: light({ fromMech: [1, 2] }) }, {}).some((x) => x.id === 'steppcb'), '도면 광원 → 노드 없음(PCB 가 기구 부품)');
+  ok(!treeNodes({ ...M, light: defaultLight() }, {}).some((x) => x.id === 'steppcb'), '광원 없음 → 노드 없음');
+  ok(treeNodes({ ...M, light: { ...light({}), solder: '백색' } }, {}).find((x) => x.id === 'steppcb').badge.includes('80%'), '배지 = 지금 반사율');
+  const h = stepPcbHtml(M);
+  ok(/data-lp-solder/.test(h) && /녹색 30%/.test(h) && /백색 80%/.test(h) && /흑색 5%/.test(h) && /value="녹색" selected/.test(h), 'PCB 속성 = 반사율 선택');
+}
 
 // --- 찾기 ---
 { const P = [pcb, cover, at(-20), at(0), at(20)], r = findPcbParts(P, [2, 3, 4]);
