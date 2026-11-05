@@ -271,7 +271,7 @@ export function createSimDash(el, { onCtl = null } = {}) {
   // names = 부품 이름, nMech = 기구 부품 수(LED STEP 부품 번호는 그 뒤 — 경로에서 뺌)
   let busy = false;   // 기구 최적화 중(점진 계산 일시정지)
   let diag = null;   // 빛 도달 진단(관측면 도달 < 1%)
-  let mini = null;   // 광시뮬레이션 창 안의 진행 현황 칸
+  let mini = null;   // 광분포 시뮬레이션 창 안의 진행 현황 칸
   function sample(snap, targetNoise, observe, nm = names, nMech = nm.length, adBusy = false, skip = []) {
     busy = adBusy; tgt = targetNoise ?? tgt; obs = observe ?? obs; state = snap?.state ?? ''; reason = snap?.reason ?? ''; stopped = !!snap?.stopped; names = nm; P = topPaths(snap?.paths, nMech, 3, skip);
     const ph = snap?.photons ?? 0, st = snap?.stats;
