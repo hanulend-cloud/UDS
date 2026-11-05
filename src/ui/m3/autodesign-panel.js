@@ -281,6 +281,7 @@ export function resultLineHtml(r) {
   return `<div class="m3-rcard ${verdict[0]}"><div class="m3-rcard-hd"><b class="m3-rv">${verdict[1]}</b><span class="mut">${verdict[2]}</span></div>
     <table class="m3-cmp m3-cmp-s"><tr><th></th><th>현재</th><th>최적화 후</th></tr>${rows}</table>${clash}
     ${lim ? `<div class="m3-rlim">💡 한계: ${esc(lim)}</div>` : ''}
+    ${r.shapeNote ? `<div class="m3-rlim">💡 형상 그대로: ${esc(r.shapeNote)}</div>` : ''}
     ${shapeMissText(r) ? `<div class="m3-rlim">${esc(shapeMissText(r))}</div>` : ''}
     ${r.lowered ? `<div class="m3-rlim">${esc(loweredText(r.lowered, r.unchanged))}</div>` : ''}
     ${!r.feasible && r.peek ? `<div class="m3-rlim">${esc(peekText(r.peek))}</div>` : ''}

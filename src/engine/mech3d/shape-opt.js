@@ -3,6 +3,7 @@
 // 정점 z' = z − w·D(x,y), w = (z_t − z)/(z_t − z_b) — 윗면(관측면 쪽) 고정, 아랫면만 움직이고 사이는 선형. 같은 자리 정점은 같은 결과라 닫힘 유지.
 import { meshToHeightfield } from '../shape/heightfield.js';
 import { meshVolume } from './mesh.js';
+import { buildBvh, intersectRay } from './bvh.js';
 
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 export const bump = (r) => (r >= 1 ? 0 : 0.5 * (1 + Math.cos(Math.PI * r)));
@@ -185,9 +186,34 @@ export function fieldThickness(H, P, ns, nw) {
   }
   return out;
 }
-// 절점값을 제약 안으로 — 살두께(minWall + 여유) 아래로 깎지 않고, 절댓값 ≤ Amax
-export function clampField(kF, thick, minWall, Amax = Infinity) {
-  const v = kF.v.map((x, n) => { const lo = Number.isFinite(thick[n]) ? Math.min(0, minWall + 0.02 - thick[n]) : -Amax; return Math.round(Math.min(Amax, Math.max(Math.max(lo, -Amax), x)) * 1e3) / 1e3; });
+// 입광면 쪽(아래)으로 더할 수 있는 여유(mm, 절점별, 2026-11-05) — 입광면 바로 앞 부품·LED 까지의 거리 − margin(닿아 있거나 박혀 있으면 0, 앞이 비면 Infinity).
+// fieldThickness 의 깎는 쪽 제한과 짝: 이것이 없으면 다른 부품에 닿은 입광면은 + 쪽이 곧 간섭이라 모드 후보가 통째로 탈락함(기본 예제 11개 전부)
+// 쏘는 곳 = 윗면 바로 안쪽 → 입광면보다 먼저 맞으면 박힌 것. 위쪽(관측 쪽) 부품은 맞지 않음. 칸 값이 네 절점 모두를 제한하므로 쌍선형 보간값도 여유 안
+const bvhOf = new WeakMap();
+function meshBvh(m) { if (m.bvh) return m.bvh; let b = bvhOf.get(m); if (!b) bvhOf.set(m, (b = buildBvh(m.positions, m.triangles))); return b; }
+export function fieldRoom(H, P, F, ns, nw, meshes, { margin = 0.02 } = {}) {
+  const out = new Float64Array(ns * nw).fill(Infinity), B = meshes.filter((m) => m?.positions).map(meshBvh);
+  if (!B.length) return out;
+  const { hf, cx, cy } = H, W = P.halfW, L = P.L, dn = F.d.map((v) => -v), lift = 1e-3;
+  for (let j = 0; j < hf.ny; j++) for (let i = 0; i < hf.nx; i++) {
+    if (!hf.mask[j * hf.nx + i]) continue;
+    const X = cx + hf.x0 + (i + 0.5) * hf.cell, Y = cy + hf.y0 + (j + 0.5) * hf.cell, [s, w] = swOnPath(P, X, Y);
+    if (Math.abs(w) >= W + FIELD_TAPER) continue;
+    const { zt, zb } = H.at(X, Y), o = fromFrame(F, [X, Y, zt - lift]);
+    let t = Infinity;
+    for (const b of B) { const h = intersectRay(b, o[0], o[1], o[2], dn[0], dn[1], dn[2], 1e-6, t); if (h && h.t < t) t = h.t; }
+    if (t === Infinity) continue;
+    const room = Math.max(0, t - (zt - zb - lift) - margin), x = P.closed ? (((s / L) % 1 + 1) % 1) * ns : Math.min(1, Math.max(0, s / L)) * (ns - 1), y = ((Math.min(W, Math.max(-W, w)) + W) / (2 * W)) * (nw - 1);
+    for (const a of [Math.floor(x), Math.floor(x) + 1]) for (const b of [Math.floor(y), Math.floor(y) + 1]) {
+      const ii = P.closed ? a % ns : Math.min(ns - 1, a), n = ii * nw + Math.min(nw - 1, b);
+      if (room < out[n]) out[n] = room;
+    }
+  }
+  return out;
+}
+// 절점값을 제약 안으로 — 살두께(minWall + 여유) 아래로 깎지 않고, 입광면 앞 여유(room) 넘게 더하지 않고, 절댓값 ≤ Amax
+export function clampField(kF, thick, minWall, Amax = Infinity, room = null) {
+  const v = kF.v.map((x, n) => { const lo = Number.isFinite(thick[n]) ? Math.min(0, minWall + 0.02 - thick[n]) : -Amax, hi = Math.min(Amax, room ? room[n] : Infinity); return Math.round(Math.min(hi, Math.max(Math.max(lo, -Amax), x)) * 1e3) / 1e3; });
   return { ...kF, v };
 }
 
@@ -204,7 +230,9 @@ export function deformPart(mesh, F, H, prm) {
     const p = fromFrame(F, q); out[i] = p[0]; out[i + 1] = p[1]; out[i + 2] = p[2];
   }
   const { bvh, ...rest } = mesh;
-  return { ...rest, positions: out, volume: meshVolume(out, mesh.triangles) };
+  // 삼각형 배열을 공유하지 않음 — 간섭 표본의 안쪽 방향은 배열별로 캐시(clearance.insetSides, 크기·이동 사본 전제)인데, 변형은 삼각형을 뒤집을 수 있어서
+  // 한 후보의 방향이 모든 후보에 남아 맞닿은 옆면이 0.05 mm 간섭으로 오탐됐음(기본 예제 부품 2, 2026-11-05)
+  return { ...rest, triangles: mesh.triangles.slice(), positions: out, volume: meshVolume(out, mesh.triangles) };
 }
 
 // 변형 아랫면 z_b'(x,y) = zb − D (deformPart 의 w = 1 정점과 같은 식, 두께 하한 포함)

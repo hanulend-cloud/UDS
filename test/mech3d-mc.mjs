@@ -3,12 +3,13 @@ import { runMC3D } from '../src/engine/mech3d/mc3d.js';
 import { ledSource, combineSources } from '../src/engine/mech3d/sources.js';
 import { buildTraceScene } from '../src/engine/mech3d/scene3d.js';
 import { setMech3dMesh, getMech3d } from '../src/engine/mech3d/runtime.js';
-import { defaultPart, setPartMaterial, setPartMaterialParam, setPartFinish } from '../src/engine/mech3d/materials.js';
+import { defaultPart, setPartMaterial, setPartMaterialParam, setPartFinish, clearT } from '../src/engine/mech3d/materials.js';
 import { loadTable } from './l2-util.mjs';
 import { boxMesh, ok, done } from './mech3d-util.mjs';
 
 const table = loadTable(), n = 1.586, R = ((n - 1) / (n + 1)) ** 2;
-const part = (i, kind, params = {}) => Object.entries(params).reduce((p, [k, v]) => setPartMaterialParam(p, k, v), setPartMaterial(defaultPart(i, `p${i}`, 1), kind));
+// 해석값과 비교하는 시험의 투명 판 = 흡수 없음(T 100%) — 소재 기본값(PC 89%)은 아래 '기본 투명' 항목에서 따로 검증
+const part = (i, kind, params = {}) => Object.entries({ ...(kind === 'clear' ? { T: 1, tRef: 2 } : {}), ...params }).reduce((p, [k, v]) => setPartMaterialParam(p, k, v), setPartMaterial(defaultPart(i, `p${i}`, 1), kind));
 const scene = (meshes, parts, contacts = []) => { setMech3dMesh('t', meshes); return buildTraceScene(getMech3d(), { name: 't', parts, contacts }, { table }); };
 const beam = { flux: 1, sample: (r) => [4.5 + r(), 4.5 + r(), -1, 0, 0, 1] };   // 1×1mm 수직 평행광(z=−1 → +z)
 const balance = (L) => Math.abs(L.emitted + L.rrGain - (L.escaped + L.absSurf + L.absVol + L.lost + L.rrLoss)) / L.emitted;
@@ -25,6 +26,9 @@ const transmit = (S, N = 200000) => { let up = 0; const res = runMC3D(S, { sourc
   ok(Math.abs(s.T - T2) < 0.004, `V3D-6 0.5mm 공기층: T ${s.T.toFixed(4)} (해석 ${T2.toFixed(4)})`);
   const one = transmit(scene([a], [part(0, 'clear')]));
   ok(Math.abs(one.T - T1) < 0.004, `판 1장: T ${one.T.toFixed(4)} (해석 ${T1.toFixed(4)})`);
+  { const def = setPartMaterial(defaultPart(0, 'p0', 1), 'clear'), d2 = transmit(scene([a], [def])), d8 = transmit(scene([boxMesh(0, 0, 0, 10, 10, 8)], [def]));
+    ok(Math.abs(d2.T - 0.89) < 0.004, `기본 투명(PC) 2 mm: 광선 추적 T ${d2.T.toFixed(4)} = 소재 값 0.89`);
+    ok(Math.abs(d8.T - clearT(def.material, 8)) < 0.004, `기본 투명 8 mm: 광선 추적 T ${d8.T.toFixed(4)} = 두께별 식 ${clearT(def.material, 8).toFixed(4)}`); }
   ok([c, g, s, one].every((x) => x.L.lost === 0 && balance(x.L) < 1e-9), 'V3D-2(투명): 원장 보존, lost 0');
 }
 {   // 추적 제외(untrace): 막는 불투명 판을 빼면 판 1장과 같고, 도면 광원으로 옮긴 부품(role 'light')도 같음

@@ -6,6 +6,7 @@ import { defaultChecks } from './defs.js';
 import { isUntraced } from './scene3d.js';
 
 const PARITY_DIR = [0.48, 0.6, 0.64];   // 단위 벡터, 축·대각과 어긋나게(모서리 스침 줄임)
+const unitV = (v) => { const l = Math.hypot(...v); return v.map((x) => x / l); }, PARITY_DIR2 = unitV([-0.5377, 0.2891, 0.7923]), PARITY_DIR3 = unitV([0.3119, -0.8253, 0.4708]);   // 무리수에 가까운 방향 — 격자 좌표에서 모서리를 동시에 지나지 않게
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
@@ -16,9 +17,9 @@ function triInfo(P, T, t) {
   return { n: n.map((v) => v / ln), area: l / 2, c: [(a[0] + b[0] + c[0]) / 3, (a[1] + b[1] + c[1]) / 3, (a[2] + b[2] + c[2]) / 3] };
 }
 
-// 점 p 가 닫힌 메쉬(부품) 안인가 — 반직선 교차 수의 홀짝
-export function insidePart(part, p) {
-  const [dx, dy, dz] = PARITY_DIR;
+// 점 p 가 닫힌 메쉬(부품) 안인가 — 반직선 교차 수의 홀짝, 두 방향이 다르면 세 번째로 다수결.
+// 광선 하나는 모서리·꼭짓점을 정확히 지나면 교차 수가 틀림(격자 좌표에서 흔함) — 빈 공간이 부품 안으로 판정돼 형상 후보가 간섭으로 탈락했음(기본 예제, 2026-11-05)
+function rayParity(part, p, [dx, dy, dz]) {
   let t0 = 1e-6, skip = -1, n = 0;
   for (let k = 0; k < 1000; k++) {
     const h = intersectRay(part.bvh, p[0], p[1], p[2], dx, dy, dz, t0, Infinity, skip);
@@ -26,6 +27,10 @@ export function insidePart(part, p) {
     n++; t0 = h.t + 1e-7; skip = h.tri;
   }
   return (n & 1) === 1;
+}
+export function insidePart(part, p) {
+  const a = rayParity(part, p, PARITY_DIR), b = rayParity(part, p, PARITY_DIR2);
+  return a === b ? a : rayParity(part, p, PARITY_DIR3);
 }
 
 // 삼각형–축정렬 상자 겹침(분리축 13개) — c: 상자 중심, h: 반 크기

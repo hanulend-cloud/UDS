@@ -435,7 +435,34 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   let nEv = 0; const rL = await solveShapeModes(st0, async (cands) => { nEv += cands.length; return cands.map((cd) => ({ cand: cd, ok: true, stats: statsOf(null), eff: 0.5 })); }, O, { G, ns: 21, nw: 5, W: 5, ledS, N: 1, maxMs: 1 });
   ok(rL.limited && rL.best === st0 && nEv === 11, `형상 응답이 없으면 모드만 재고 멈춤 (평가 ${nEv})`);
   const rB = await solveShapeModes(st0, async (cands) => cands.map((cd) => ({ cand: cd, ok: false, why: '간섭' })), O, { G, ns: 21, nw: 5, W: 5, ledS, N: 1, maxMs: 1 });
-  ok(rB.best === st0 && rB.pred === null, '모든 모드가 제약 위반이면 그대로'); }
+  ok(rB.best === st0 && rB.pred === null, '모든 모드가 제약 위반이면 그대로');
+  // 입광면이 다른 부품에 닿아 + 쪽이 막힌 경우(2026-11-05) — 실제로 움직인 양으로 응답을 재고, 한쪽 모드는 반대쪽으로 다시 잰다
+  const cutOnly = (cands) => cands.map((cd) => { const kF = cd.kF ? { ...cd.kF, v: cd.kF.v.map((v) => Math.min(0, v)) } : cd.kF, q = { ...cd, kF }; return { cand: q, ok: true, stats: statsOf(kF), eff: 0.5 }; });
+  const rC = await solveShapeModes(st0, async (cands) => cutOnly(cands), O, { G, ns: 21, nw: 5, W: 5, ledS, cmax: 3, N: 1, maxMs: 1 }), end = rC.modes.find((m) => m.name === '시작 끝단');
+  ok(rC.modes.every((m) => m.ok && Math.abs(m.a) > 0.02) && end.a < 0, `깎는 쪽만 가능 → 모드 전부 측정, 끝단은 반대 방향(a ${end.a.toFixed(2)})`);
+  ok(rC.best.stats.Ulen > st0.stats.Ulen && rC.best !== st0, `깎는 쪽만으로도 나아짐 (${st0.stats.Ulen.toFixed(3)} → ${rC.best.stats.Ulen.toFixed(3)})`);
+  const stuck = (cands) => cands.map((cd) => { const q = { ...cd, kF: cd.kF ? { ...cd.kF, v: cd.kF.v.map(() => 0) } : cd.kF }; return { cand: q, ok: true, stats: statsOf(null), eff: 0.5 }; });
+  const rN = await solveShapeModes(st0, async (cands) => stuck(cands), O, { G, ns: 21, nw: 5, W: 5, ledS, N: 1, maxMs: 1 });
+  ok(rN.best === st0 && rN.modes.every((m) => m.why === '여유 없음'), '움직일 여유가 전혀 없으면 이유를 남김');
+  // 불변 조건: 형상을 돌렸는데 안 바뀌면 이유가 반드시 결과에 있음(형상이 왜 안 움직였는지 숨기지 않음)
+  const baseCfg = { stages: { shape: true }, obs: O, current: { milky: 1, count: 5, pitch: 0, shape: null }, G, shapePart: 0, shapeField: { ns: 21, nw: 5, W: 5, N: 1, maxMs: 1, ledSOf: () => ledS } };
+  const vs = (d) => ({ stats: { ...statsOf(d.shape?.kF ?? null), relNoise: 0.01, empty: false }, eff: 0.5 });
+  const runN = async (ev, ver = vs, cfg = baseCfg) => runAutoDesign(cfg, { evalShapes: async (d, cands) => ev(cands), verify: async (d) => ver(d), progress() {}, cancelled: () => false });
+  const zeroOk = (cd) => !cd.kF;
+  const a1 = await runN((cands) => cands.map((cd) => (zeroOk(cd) ? { cand: cd, ok: true, stats: statsOf(null), eff: 0.5 } : { cand: cd, ok: false, why: '간섭' })));
+  ok(!a1.best.shape && /탈락/.test(a1.shapeNote ?? '') && /간섭/.test(a1.shapeNote) && /[0-9]+/.test(a1.shapeNote), `전부 간섭 → ${a1.shapeNote}`);
+  const a2 = await runN((cands) => cands.map((cd) => ({ cand: cd, ok: true, stats: statsOf(null), eff: 0.5 })));
+  ok(!a2.best.shape && /불균일|형상은 그대로/.test(a2.shapeNote ?? ''), `응답 없음 → ${a2.shapeNote}`);
+  const a3 = await runN((cands) => stuck(cands));
+  ok(!a3.best.shape && /여유 없음/.test(a3.shapeNote ?? ''), `움직일 여유 없음 → ${a3.shapeNote}`);
+  const a4 = await runN((cands) => cands.map((cd) => ({ cand: cd, ok: false, why: '살두께' })));
+  ok(!a4.best.shape && /살두께/.test(a4.shapeNote ?? ''), `지금 형상부터 위반 → ${a4.shapeNote}`);
+  const a5 = await runN((cands) => cands.map((cd) => ({ cand: cd, ok: true, stats: statsOf(null), eff: 0.5 })), vs, { ...baseCfg, obs: { targetLen: 0.1, targetWid: 0.1 } });
+  ok(!a5.best.shape && /목표 통과/.test(a5.shapeNote ?? ''), `이미 통과 → ${a5.shapeNote}`);
+  const a6 = await runN((cands) => cands.map((cd) => ({ cand: cd, ok: true, stats: statsOf(cd.kF ?? null), eff: 0.5 })), (d) => ({ stats: { ...statsOf(null), relNoise: 0.01, empty: false }, eff: 0.5 }));
+  ok(a6.unchanged && !a6.best.shape && /최종 판정/.test(a6.shapeNote ?? ''), `찾았지만 최종 판정에서 안 나음 → ${a6.shapeNote}`);
+  const a7 = await runN((cands) => cands.map((cd) => ({ cand: cd, ok: true, stats: statsOf(cd.kF ?? null), eff: 0.5 })));
+  ok(a7.best.shape && !a7.shapeNote, '형상이 바뀌면 이유 문구 없음'); }
 { // 판정 근처 최종안은 노이즈 0.5% 로 다시 계산해 판정(2026-11-03) — 먼 현재안은 다시 계산 안 함
   const obs2 = { targetLen: 0.8, targetWid: 0.8 }, U = (m) => (m >= 2 ? 0.79 : 0.6), calls = [];
   const io = (hi) => ({ milkyRows: async (d, ms) => rowsOf(ms, U), progress() {}, cancelled: () => false, verify: async (d, o) => { calls.push([d.milky, o?.noise ?? null]); return { stats: { Ulen: o?.noise ? hi : U(d.milky), Uwid: 0.85, empty: false, relNoise: o?.noise ?? 0.01 }, eff: 0.2, photons: 1e7 }; } });

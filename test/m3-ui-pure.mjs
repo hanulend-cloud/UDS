@@ -108,6 +108,7 @@ ok(judgeText(0.8004, 0.8009).cls === 'ok' && judgeText(0.7999, 0.8).cls === 'bad
   { const { resultLineHtml, peekText, loweredText } = await import('../src/ui/m3/autodesign-panel.js');
     { const b = { best: { Ulen: 0.7, Uwid: 0.7 }, cur: { Ulen: 0.6, Uwid: 0.6 }, reason: 'x', targets: {} };
       const miss = resultLineHtml({ ...b, feasible: false, stages: { shape: true } }), all = resultLineHtml({ ...b, feasible: false, stages: { shape: true, milky: true, leds: true } }), pass = resultLineHtml({ ...b, feasible: true, stages: { shape: true } }), other = resultLineHtml({ ...b, feasible: false, stages: { milky: true } });
+      ok(resultLineHtml({ ...b, feasible: false, unchanged: true, stages: { shape: true }, shapeNote: '후보 11개가 모두 탈락' }).includes('후보 11개가 모두 탈락'), '형상이 안 바뀐 이유가 결과 카드에 보임');
       ok(/형상만으로는 목표 미달/.test(miss) && /위치/.test(miss) && /Milky/.test(miss) && !/형상만으로는/.test(all) && !/형상만으로는/.test(pass) && !/형상만으로는/.test(other), '형상 미달 안내: 형상만 돌렸을 때 다음 항목을 알려 줌'); }
     const pk = { cap: 5, rows: [], best: { milky: 7, Ulen: 0.84, Uwid: 0.66, eff: 0.31 } };
     ok(/Milky 7.*길이 약 0\.8.*폭 약 0\.7.*광 효율 약 31%.*대략값/.test(peekText(pk)) && /최적화에는 쓰지 않음/.test(peekText(pk)), `참고 문구: ${peekText(pk)}`);

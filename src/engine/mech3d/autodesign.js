@@ -199,12 +199,22 @@ export async function solveShapeModes(start, evalFn, obs, { G, ns, nw, W, ledS, 
   if (margin(cur.stats, obs) >= 0 || cancelled()) return info;
   const y0 = foldMap(cur.stats, G, ledS, W), b0 = base(), res = await evalFn(modes.map((md) => withC(b0, [md], [a])), N, maxMs);
   tried.push(...res); if (cancelled()) return info;
+  // 실제로 움직인 양(제약으로 잘린 뒤, 모드 방향 투영) — 응답은 이 값으로 나눔. 잘린 만큼 응답을 작게 재면 풀이가 엉뚱해짐(2026-11-05)
+  const ampOf = (r, md) => { const v = r?.cand?.kF?.v; if (!v) return a; let p = 0, q = 0; md.v.forEach((m, n) => { p += (v[n] - b0[n]) * m; q += m * m; }); return q > 0 ? p / q : a; };
+  // 한쪽이 막혀 거의 못 움직였으면(다른 부품에 닿은 입광면) 반대쪽으로 다시 잼
+  const weak = modes.map((_, i) => i).filter((i) => !res[i]?.ok || Math.abs(ampOf(res[i], modes[i])) < 0.25 * a);
+  if (weak.length) {
+    const back = await evalFn(weak.map((i) => withC(b0, [modes[i]], [-a])), N, maxMs);
+    tried.push(...back); if (cancelled()) return info;
+    weak.forEach((i, k) => { const q = back[k]; if (q?.ok && (!res[i]?.ok || Math.abs(ampOf(q, modes[i])) > Math.abs(ampOf(res[i], modes[i])))) res[i] = q; });
+  }
   const use = [], R = [];
   res.forEach((r, i) => {
-    const row = { name: modes[i].name, ok: !!r?.ok, why: r?.why ?? null, Ulen: r?.stats?.Ulen ?? null, Uwid: r?.stats?.Uwid ?? null, gain: 0, c: 0 };
+    const ae = r?.ok ? ampOf(r, modes[i]) : 0, free = Math.abs(ae) >= 0.02;
+    const row = { name: modes[i].name, ok: !!r?.ok && free, why: r?.ok && !free ? '여유 없음' : r?.why ?? null, Ulen: r?.stats?.Ulen ?? null, Uwid: r?.stats?.Uwid ?? null, gain: 0, c: 0, a: ae };
     info.modes.push(row);
-    if (!r?.ok) return;
-    const d = foldMap(r.stats, G, ledS, W).map((v, k) => (v - y0[k]) / a);
+    if (!row.ok) return;
+    const d = foldMap(r.stats, G, ledS, W).map((v, k) => (v - y0[k]) / ae);
     row.gain = rms(d); use.push(i); R.push(d);
   });
   if (!use.length) return info;
@@ -224,6 +234,17 @@ export async function solveShapeModes(start, evalFn, obs, { G, ns, nw, W, ledS, 
     c = solveBox(R, foldMap(cur.stats, G, ledS, W), { lam, cmax });
   }
   return info;
+}
+// 형상이 안 움직인 이유(순수, 2026-11-05) — 형상을 돌렸는데 그대로면 반드시 이유를 남김
+export function shapeWhyNot(r, r0, obs, reason = '') {
+  if (r.limited) return reason;
+  if (margin(r0.stats, obs) >= 0) return '이미 목표 통과 — 형상을 바꾸지 않음';
+  const T = r.tried ?? [], ok = T.filter((x) => x?.ok), n = (w) => T.filter((x) => x?.why === w).length, room = (r.modes ?? []).filter((m) => m.why === '여유 없음').length, mv = (r.modes ?? []).filter((m) => m.ok).length;
+  if (r.modes?.length && !mv) {
+    const parts = [n('간섭') ? `간섭 ${n('간섭')}개` : '', n('살두께') ? `살두께 ${n('살두께')}개` : '', room ? `움직일 여유 없음 ${room}개` : ''].filter(Boolean).join(' · ');
+    return `입광면이 막혀 형상 후보가 모두 탈락(${parts || '측정 실패'}) — 입광면 앞에 틈을 두거나 살두께에 여유를 주세요`;
+  }
+  return `후보 ${ok.length}개 시험 — 지금보다 나은 형상 없음${T.length > ok.length ? ` (탈락 ${T.length - ok.length}개)` : ''}`;
 }
 // 단계별 평가 후보 수 합(진행률 분모) — 실제로는 통과 후보가 적으면 더 적음
 export const halvingTotal = (n, schedule = SHAPE_SCHEDULE) => schedule.reduce((s, [keep], i) => { const k = i === 0 ? n : Math.min(keep, s.last); return { sum: s.sum + k, last: k }; }, { sum: 0, last: n }).sum;
@@ -461,7 +482,7 @@ export function pickLateral(res, obs) {
 export const LADDER_MS = 150000, LADDER_GAIN = 0.005;
 export async function runAutoDesign(cfg, io) {
   const { stages, obs } = cfg, steps = [], sCap = Math.min(cfg.milkyMax ?? MILKY_OPT_MAX, MILKY_OPT_MAX), mCap = sCap;
-  let d = { ...cfg.current }, feasible = true, reason = '', hint = null, peek = null, ledAlts = null, ledMore = null, ledLimit = null;
+  let d = { ...cfg.current }, feasible = true, reason = '', hint = null, peek = null, shapeNote = null, ledAlts = null, ledMore = null, ledLimit = null;
   const stop = () => io.cancelled?.();
   if (stop()) return { cancelled: true };
   const clock = io.now ?? Date.now;   // 일시정지한 시간은 빼고 잼
@@ -554,7 +575,7 @@ export async function runAutoDesign(cfg, io) {
     io.progress?.('shape', 0, '입광면 보정 — 광량 지도 측정');
     const [r0] = await io.evalShapes(d, [st], f.N, f.maxMs);
     if (stop()) return { cancelled: true };
-    if (!r0?.ok) { feasible = false; reason = '제약(살두께·간섭)을 만족하는 형상 후보가 없음 — 범위를 줄이세요'; }
+    if (!r0?.ok) { feasible = false; reason = '제약(살두께·간섭)을 만족하는 형상 후보가 없음 — 범위를 줄이세요'; shapeNote = `지금 형상부터 ${r0?.why ?? '제약'} 위반 — 형상을 움직이지 못함`; }
     else {
       const ledS = f.ledSOf?.(d) ?? [], ev = (cands, n, t) => io.evalShapes(d, cands, n, t);
       const r = ledS.length >= 4 ? await solveShapeModes(r0, ev, obs, { ...f, ledS, G: cfg.G, cancelled: stop }) : await refineShapeField(r0, ev, obs, { ...f, G: cfg.G, cancelled: stop });   // LED 가 적으면 반복 구조가 아니라 측정 오차로 직접 보정
@@ -566,6 +587,7 @@ export async function runAutoDesign(cfg, io) {
       if (margin(b.stats, obs) < 0) { feasible = false; reason = `형상 최적안도 목표 미달 — 길이 균일도 ${b.stats.Ulen.toFixed(2)}${b.stats.Uwid == null ? '' : ` · 폭 균일도 ${b.stats.Uwid.toFixed(2)}`}`; }
       else { feasible = true; reason = ''; }
       if (r.limited) reason = `형상으로 줄일 수 있는 불균일이 약 ${Math.max(0, Math.round((1 - r.pred.rmsP / r.pred.rms0) * 100))}% 뿐 — 형상은 그대로 둠`;
+      if (none) shapeNote = shapeWhyNot(r, r0, obs, reason);
     }
   }
   if (stages.shape && cfg.shapeRanges) {   // ③ 1단계 선별 → 2단계 격자 (cfg.shapeCands 만 있으면 아래 기존 경로)
@@ -675,7 +697,7 @@ export async function runAutoDesign(cfg, io) {
     if (stop()) return { cancelled: true };   // 현재안이 최선 — 현재안이 목표 미달이면 이유를 비워 두지 않음
     const okCur = margin(currentVerified.stats, obs) >= 0, cs = currentVerified.stats;
     const why = reason || (okCur ? '' : `현재 설계가 최선 — 목표 미달(길이 균일도 ${cs.Ulen.toFixed(2)}${cs.Uwid == null ? '' : ` · 폭 균일도 ${cs.Uwid.toFixed(2)}`})`);
-    return { feasible: feasible && okCur, best: { ...cfg.current }, steps, reason: why, verified: currentVerified, current: currentVerified, unchanged: true, cancelled: false, hint, peek, milkyLowered: lowered };
+    return { feasible: feasible && okCur, best: { ...cfg.current }, steps, reason: why, verified: currentVerified, current: currentVerified, unchanged: true, cancelled: false, hint, peek, milkyLowered: lowered, shapeNote };
   }
   let verified = await io.verify(d);
   // 개수로 고칠 수 있는 방향만 본 여유 — 폭이 어떤 개수로도 못 닿으면(ledLimit) 길이로 판정
@@ -774,7 +796,8 @@ export async function runAutoDesign(cfg, io) {
   const regular = !!cfg.currentIrregular && !sameDesign(d, cfg.current) && !!stages.leds;
   if (!fewer && !fixGain && !regular && !(sc(verified) - sc(currentVerified) >= SCORE_EPS)) {
     steps.push({ stage: 'guard', tried: d, triedVerified: verified, triedReason: reason });
-    return { feasible: margin(currentVerified.stats, obs) >= 0, best: { ...cfg.current }, steps, reason: `현재안보다 나은 설계를 찾지 못함 — 현재안 유지${reason ? ` (${reason})` : ''}`, verified: currentVerified, current: currentVerified, unchanged: true, cancelled: false, hint, peek, milkyLowered: lowered };
+    if (stages.shape && d.shape && !shapeNote) shapeNote = '찾은 형상이 최종 판정에서 지금보다 낫지 않음 — 현재 형상 유지';
+    return { feasible: margin(currentVerified.stats, obs) >= 0, best: { ...cfg.current }, steps, reason: `현재안보다 나은 설계를 찾지 못함 — 현재안 유지${reason ? ` (${reason})` : ''}`, verified: currentVerified, current: currentVerified, unchanged: true, cancelled: false, hint, peek, milkyLowered: lowered, shapeNote };
   }
   // 판정·문구는 정밀 재계산 값 기준(후보 평가값은 광자가 적어 노이즈가 큼)
   const vs = verified.stats, ok = margin(vs, obs) >= 0;
@@ -789,5 +812,5 @@ export async function runAutoDesign(cfg, io) {
       reason = /길이 균일도 [\d.]+( · 폭 균일도 [\d.]+)?/.test(reason) ? reason.replace(/길이 균일도 [\d.]+( · 폭 균일도 [\d.]+)?/, vt) : `${reason} — ${vt}`;
     }
   }
-  return { feasible, best: d, steps, reason, verified, current: currentVerified, cancelled: false, hint, peek, milkyLowered: lowered };
+  return { feasible, best: d, steps, reason, verified, current: currentVerified, cancelled: false, hint, peek, milkyLowered: lowered, shapeNote };
 }
