@@ -1,5 +1,5 @@
 // LED STEP 인식: node test/mech3d-led.mjs
-import { findLeds, findEmitters, pcbIndex, faceInfo, refineEmitterFace, emitterFaceAway, autoLedGroup } from '../src/engine/mech3d/led-detect.js';
+import { findLeds, findEmitters, pcbIndex, faceInfo, refineEmitterFace, emitterFaceAway, autoLedGroup, autoStepLeds } from '../src/engine/mech3d/led-detect.js';
 import { transformMesh, eulerMatrix, applyPoint } from '../src/engine/mech3d/xform.js';
 import { boxMesh, mergeMeshes, ok, done } from './mech3d-util.mjs';
 
@@ -118,4 +118,16 @@ ok(pad && pad.leds.join() === '2,3,4,5,6', `PCB 위 0.4 mm 뜬 LED 5개 → 인�
 const farG = autoLedGroup([scene[0], scene[1], ...[-25, -15, -5, 5].map((x) => transformMesh(domeLed, [x, 0, 1.5], [0, 0, 0])), ...[-10, 10].map((x) => boxMesh(x - 1, 2, 0, 2, 2, 1))]);
 ok(farG && farG.leds.length === 2 && farG.rejected?.[0]?.count === 4 && /PCB/.test(farG.rejected[0].why), `뺀 후보 보고: ${farG?.rejected?.map((r) => `${r.count}개 ${r.why}`).join(' · ')}`);
 ok(autoLedGroup([scene[0], scene[1], ...[-25, -15, -5, 5].map((x) => transformMesh(domeLed, [x, 0, 2], [0, 0, 0]))]) === null, '떠 있는 반복 부품(받침 없음) → 인식 안 함');
+// LED 가 도면 부품이 아닌 경우(LED STEP 파일): 앞의 커버가 파일에 없어도, 파일이 도면과 아직 안 맞아도 찾음
+{ const stepLeds = [-20, -10, 0, 10].map((x) => transformMesh(domeLed, [x, 0, 0], [0, 0, 0])), stepPcb = boxMesh(-40, -5, -1, 80, 10, 1), far = [boxMesh(500, 500, 500, 80, 10, 3)];
+  ok(autoLedGroup([stepPcb, ...stepLeds]) === null, 'autoLedGroup(도면 규칙)은 그대로: 앞에 커버 없으면 LED 아님');
+  const a = autoStepLeds([stepPcb, ...stepLeds], far);
+  ok(a && a.leds.join() === '1,2,3,4' && a.face === 6 && a.support === 0, `LED STEP(PCB 포함): 도면과 떨어져 있어도 LED ${a?.leds.join()} · 면 ${a?.face}`);
+  const b = autoStepLeds(stepLeds, [stepPcb]);
+  ok(b && b.leds.join() === '0,1,2,3' && b.face === 6 && b.support === 4, `LED STEP(LED 만) + 도면 PCB: LED ${b?.leds.join()} · 받침 = 도면 부품`);
+  const why = [];
+  ok(autoStepLeds(stepLeds, far, { why }) === null && why.length > 0, `LED STEP(LED 만) + 받칠 부품 없음 → 못 찾음: ${why[0]?.why}`);
+  ok(autoStepLeds([stepPcb, stepLeds[0]], far) === null, 'LED STEP 에 LED 1개 → 못 찾음(같은 부품 2개 이상)');
+  ok(autoStepLeds([], far) === null, 'LED STEP 비었음 → 못 찾음');
+}
 done();

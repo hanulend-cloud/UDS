@@ -326,7 +326,7 @@ function touches(led, sup, tol = Math.max(0.5, 0.3 * meshStats(led).rmax)) {
 }
 // 반환 { leds, ref, face, support, rejected:[{ count, why }] } — rejected = 더 많은데 뺀 반복 부품 무리와 이유(사용자 안내용). 못 찾으면 null
 // why(선택) = 배열을 넘기면 못 찾았을 때도 뺀 후보·이유를 채워 줌
-export function autoLedGroup(parts, { skip = new Set(), minCount = 2, maxDiag = 20, why = null } = {}) {
+export function autoLedGroup(parts, { skip = new Set(), minCount = 2, maxDiag = 20, why = null, front = true } = {}) {
   const seen = new Set(), groups = [], rejected = why ?? [];
   parts.forEach((p, i) => {
     if (!p || seen.has(i) || skip.has(i)) return;
@@ -345,8 +345,18 @@ export function autoLedGroup(parts, { skip = new Set(), minCount = 2, maxDiag = 
     if (face < 0) { rejected.push({ count: g.length, why: 'PCB 반대쪽 면을 못 찾음' }); continue; }
     // 발광 방향 앞에 다른 부품(커버·확산판)이 있어야 LED — PCB 뒤에 붙은 나사·보스 등은 앞이 비어 있음
     const own = new Set([...g, sup]);
-    if (parts.some((p, i) => p && !own.has(i) && rayHitsBox(c, v, bbox(p)))) return { leds: g, ref, face, support: sup, rejected: rejected.filter((r) => r.count > g.length) };
+    if (!front || parts.some((p, i) => p && !own.has(i) && rayHitsBox(c, v, bbox(p)))) return { leds: g, ref, face, support: sup, rejected: rejected.filter((r) => r.count > g.length) };
     rejected.push({ count: g.length, why: 'PCB 반대쪽(발광 방향) 앞에 커버·확산판이 없음' });
   }
   return null;
+}
+// LED 가 도면 부품이 아닐 때(LED STEP 파일, 2026-11-05): 같은 규칙(같은 부품 2개 이상 · PCB 위 · PCB 반대쪽 발광)을 파일 안에서 먼저 적용.
+// LED 전용 파일이라 앞의 커버는 보지 않음(파일에 없고, 위치 보정 전이면 도면과도 떨어져 있음 — 나사를 걸러 내는 도면용 검사).
+// 파일에 PCB 가 없으면 도면 부품을 받침으로. 반환 번호는 LED STEP 부품 번호(support 는 stepParts 뒤에 mechParts 를 이은 번호)
+export function autoStepLeds(stepParts, mechParts = [], { why = null } = {}) {
+  if (!stepParts?.length) return null;
+  const a = autoLedGroup(stepParts, { front: false, why });
+  if (a || !mechParts.length) return a;
+  const n = stepParts.length, skip = new Set(mechParts.map((_, i) => n + i));
+  return autoLedGroup([...stepParts, ...mechParts], { skip, front: false, why });
 }

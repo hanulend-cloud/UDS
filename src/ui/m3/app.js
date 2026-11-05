@@ -10,7 +10,7 @@ import { ledChange, ledDeltaText, ledDeltaXYZ, pitchOf } from './led-change.js';
 import { installCommitInputs } from './commit-input.js';
 import { createHistory } from './history.js';
 import { mountSplit } from './pane-split.js';
-import { findLeds, supportPart, emitterFaceAway, autoLedGroup, findPcbParts } from '../../engine/mech3d/led-detect.js';
+import { findLeds, supportPart, emitterFaceAway, autoLedGroup, autoStepLeds, findPcbParts } from '../../engine/mech3d/led-detect.js';
 import { loadClear, saveClear, clearExportJson, clearImport, parseMaterialFile } from '../../model/material-io.js';
 import { setPartMaterial, setPartMaterialParam, syncPcb, setPcb, CLEAR_BASE, applyClearEntry, clearEntryFromForm, editClearEntry, syncClearParts } from '../../engine/mech3d/materials.js';
 import { lineFromData, lightData, obsDirection } from '../../engine/mech3d/line.js';
@@ -1291,6 +1291,31 @@ function adStep() {
 // 광원이 이미 지정돼 있거나 못 찾으면 그대로. 틀렸으면 광원 노드의 [직접 고르기]·[도면 광원 해제]로 고친다
 // force = 광원 속성의 [자동 선택] — 이미 지정된 광원이 있어도 다시 찾음(도면 광원은 먼저 해제)
 export const pcbNote = () => A?.pcbNote ?? '';   // 마지막 도면 광원 지정의 PCB 인식 결과(불러오기 상태줄)
+const whyTxt = (rs) => rs.slice(0, 3).map((r) => `같은 부품 ${r.count}개: ${r.why}`).join(' · ');
+// LED 가 도면 부품이 아닐 때: 지정된 LED STEP 파일 안에서 찾음(2026-11-05). 찾으면 LED 개수, 못 찾으면 null(이유는 A.autoWhy)
+function autoStepLight() {
+  const st = A.store, M = st.mspec, s0 = M.light.step, parts = s0 && !s0.fromMech ? L.ledPartsNow(M) : null;
+  if (!parts) return null;
+  const why = [], g = autoStepLeds(parts, getMech3d()?.parts ?? [], { why });
+  if (!g) { A.autoWhy = `LED STEP ${whyTxt(why) || '같은 모양 부품 2개 이상이 없음'}`; return null; }
+  const had = M.light.kind === 'step' && s0.emitters?.length && s0.leds?.includes(g.ref) && s0.ref?.face === g.face;
+  if (had) {   // 이미 같은 LED 를 쓰는 중 — 고친 내용(빛 끈 LED 등)을 그대로 두고 알려만 줌
+    st.update('session', (_, x) => { x.pick = null; x.node = 'light'; x.hideLeds = false; x.ledInfo = `LED STEP 의 LED ${s0.leds.length}개를 이미 쓰는 중 — 도면에는 LED 부품이 없음`; });
+    return s0.leds.length;
+  }
+  const off = s0.excluded?.length ?? 0;
+  let n = null;
+  st.update('light', (m, x) => {
+    try {
+      m.light.kind = 'step'; L.applyStepRecognition(m, x, m.light.step, { part: g.ref, face: g.face });
+      n = m.light.step.leds.length; x.ledInfo = `LED STEP 에서 자동 인식 — ${x.ledInfo}${off && !m.light.step.excluded.length ? ` · 빛 끈 LED ${off}개 다시 켬` : ''}`;
+      x.pick = null; x.node = 'light'; x.hideLeds = false;
+    } catch (e) { A.autoWhy = `LED STEP: ${e.message}`; }
+  });
+  return n;
+}
+// LED 자동 선택: 도면 부품 → 없으면 LED STEP 파일
+function autoLed() { const n = autoMechLight(true); if (n) return n; const w = A.autoWhy; return autoStepLight() ?? ((A.autoWhy ||= w), null); }
 export function autoMechLight(force = false) {
   if (!A) return null;
   if (force && A.store.mspec.light.step?.fromMech) mechLightClear();
@@ -1298,7 +1323,6 @@ export function autoMechLight(force = false) {
   if (!rt || (!force && M.light.kind && M.light.kind !== 'none')) return null;
   const cand = rt.parts.map((p, i) => ({ positions: p.positions, triangles: p.triangles, faceIds: p.faceIds, faceCount: rt.raw.parts[i]?.faceCount }));
   const why = [], g = autoLedGroup(cand, { skip: new Set(M.observe.faces.map((f) => f.part)), why });
-  const whyTxt = (rs) => rs.slice(0, 3).map((r) => `같은 부품 ${r.count}개: ${r.why}`).join(' · ');
   A.autoWhy = g ? '' : whyTxt(why);   // 못 찾은 이유(onMechAuto 안내)
   if (!g) return null;
   mechLightFromPick({ part: g.ref, face: g.face }, true);
@@ -1542,7 +1566,7 @@ function propHandlers() {
     onContact: (i, mode) => st.update('contacts', (m) => { m.contacts[i] = { ...m.contacts[i], mode }; }),
     // 'mech' = 3D 도면에서 지정: 자동 선택(반복되는 LED 모양 부품) → 못 찾으면 도면 LED 의 발광면 클릭 대기(pick 'mled'). 다른 방식으로 바꾸면 도면 광원 원본을 기구로 되돌림
     onLightKind: (k) => {
-      if (k === 'mech' && autoMechLight(true)) return;   // 먼저 자동 선택 — 못 찾으면 LED 발광면 클릭 대기
+      if (k === 'mech' && autoLed()) return;   // 먼저 자동 선택 — 못 찾으면 LED 발광면 클릭 대기
       if (k !== 'mech' && k !== 'click' && A.store.mspec.light.step?.fromMech) mechLightClear();
       st.update('light', (m, x) => { if (k === 'mech' || k === 'click') {   // click = 수동: 자동 선택 없이 바로 클릭 대기
  x.pick = 'mled'; x.ledInfo = '3D 도면에서 LED 하나의 발광면(빛이 나오는 면)을 클릭하세요 — 같은 모양 부품을 모두 광원으로'; } else { m.light.kind = k; x.pick = null; } });
@@ -1550,8 +1574,10 @@ function propHandlers() {
     onMechLightClear: () => mechLightClear(),
     // [자동 선택] — 같은 모양이 반복되는 작은 부품(LED)을 찾아 광원으로(발광면 = PCB 반대쪽). 못 찾으면 LED 하나를 직접 클릭하게
     onMechAuto: () => {
-      const n = autoMechLight(true);
-      if (!n) st.update('light', (_, x) => { x.pick = 'mled'; x.node = 'light'; x.ledInfo = `자동 선택: LED 를 못 찾음${A.autoWhy ? `(${A.autoWhy})` : '(같은 모양 부품 2개 이상이 없음)'} — 3D 도면에서 LED 하나의 빛 나오는 면을 직접 클릭하세요`; });
+      A.autoWhy = '';
+      const n = autoLed();
+      if (!n) st.update('light', (m, x) => { const stp = m.light.kind === 'step' && !m.light.step?.fromMech && L.ledPartsNow(m) && !m.light.step.virtual;   // 클릭 대상 = 있는 LED — LED STEP 이면 그 LED, 아니면 도면 부품
+        x.pick = stp ? 'led' : 'mled'; x.node = 'light'; x.ledInfo = `자동 선택: LED 를 못 찾음${A.autoWhy ? `(${A.autoWhy})` : '(같은 모양 부품 2개 이상이 없음)'} — 3D ${stp ? '에서' : '도면에서'} LED 하나의 빛 나오는 면을 직접 클릭하세요`; });
     },
     onLedFile: (f) => importLedStep(f),
     onPick: (mode) => st.update('session', (_, x) => { x.pick = mode; }),
@@ -1683,6 +1709,7 @@ function importLedStep(file) {
         M.light.step = { name: file.name, offset: [0, 0, 0], rot: [0, 0, 0], ref: null, leds: [], excluded: [], pcb: -1, emitters: [] };
         x.ledInfo = `부품 ${m.data.parts.length}개 — LED 하나의 발광면을 클릭하세요`; x.pick = 'led'; x.node = 'light';   // 발광면·제외 클릭 버튼은 광원 노드에
       });
+      if (!st.mspec.light.step?.emitters?.length) autoStepLight();   // 새 파일 — 자동으로 찾고, 못 찾으면 위의 클릭 안내 그대로
     };
     w.onerror = (e) => { w.terminate(); say(`불러오기 실패: ${e.message ?? e}`); };
     w.postMessage({ text });
@@ -1694,7 +1721,7 @@ function cmdHandlers() {
   return {
     onImport: (f) => A.ctx.onImportMech3d(f),
     // ① LED 지정: 광원이 아직 없거나 발광 방향 미지정이면 먼저 자동 선택(같은 부품 2개 이상 · PCB 위 · PCB 반대쪽 발광) — 못 찾으면 기존 흐름
-    onLed: () => { const L0 = A.store.mspec.light; if ((L0.kind === 'none' || (L0.kind === 'step' && !L0.step?.emitters?.length)) && autoMechLight(true)) return; A.store.update('session', (m, x) => { const stp = m.light.kind === 'step' && m.light.step; x.node = 'light'; x.pick = stp && !stp.virtual ? (x.pick === 'led' ? null : 'led') : null; }); },
+    onLed: () => { const L0 = A.store.mspec.light; if ((L0.kind === 'none' || (L0.kind === 'step' && !L0.step?.emitters?.length)) && autoLed()) return; A.store.update('session', (m, x) => { const stp = m.light.kind === 'step' && m.light.step; x.node = 'light'; x.pick = stp && !stp.virtual ? (x.pick === 'led' ? null : 'led') : null; }); },
     onObs: () => A.store.update('session', (_, x) => { x.node = 'obs'; x.pick = x.pick === 'obs' ? null : 'obs'; }),
     onTarget: () => { setLpTab('obs', 'basic'); A.store.update('session', (_, x) => { x.node = 'obs'; x.sel = null; x.ledSel = null; x.pick = null; });
       setTimeout(() => { const q = $('[data-lp-tgt="targetLen"]'); q?.scrollIntoView?.({ block: 'center' }); q?.focus(); q?.select?.(); }, 0); },   // 목표 = 관측면 기본 탭의 ③ 칸
