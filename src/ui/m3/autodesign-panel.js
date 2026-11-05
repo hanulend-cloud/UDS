@@ -265,6 +265,13 @@ export function loweredText(l, unchanged = false) {
   const f = (+l.from).toFixed(2);
   return unchanged ? `Milky ${f} 은 최적화에 쓰지 않아 ${l.to} 로 낮춰 찾았지만 지금 설계보다 낫지 않음${l.rough ? ' (현재 값은 대략값)' : ''}` : `Milky ${f} → ${l.to} 로 낮춰 최적화함 (Milky ${l.to} 초과는 최적화에 쓰지 않음${l.rough ? ' · 현재 값은 대략값' : ''})`;
 }
+// 형상만 돌려 미달일 때 다음 항목 안내(2026-11-05) — 체크하지 않은 항목은 자동으로 돌리지 않음
+export function shapeMissText(r) {
+  const s = r.stages;
+  if (!s?.shape || r.feasible) return '';
+  const rest = [!s.leds && '① 위치', !s.milky && '④ Milky'].filter(Boolean);
+  return rest.length === 2 ? `형상만으로는 목표 미달 — ${rest.join(' · ')} 를 체크하고 [이 안에서 이어서 ▸] 로 실행하세요` : '';
+}
 export const limitText = (reason) => { const m = /한계:\s*([^·)]+)/.exec(String(reason ?? '')); return m ? m[1].trim() : ''; };
 export function resultLineHtml(r) {
   const verdict = r.unchanged ? ['keep', '현재안 유지', '더 나은 안 없음'] : r.targets?.judge?.all === 'near' ? ['near', '목표 근처', '통과·미달을 가를 수 없는 차이'] : r.feasible ? ['ok', '목표 통과', '최적안을 찾음'] : ['bad', '목표 미달', '가장 가까운 안'];
@@ -274,6 +281,7 @@ export function resultLineHtml(r) {
   return `<div class="m3-rcard ${verdict[0]}"><div class="m3-rcard-hd"><b class="m3-rv">${verdict[1]}</b><span class="mut">${verdict[2]}</span></div>
     <table class="m3-cmp m3-cmp-s"><tr><th></th><th>현재</th><th>최적화 후</th></tr>${rows}</table>${clash}
     ${lim ? `<div class="m3-rlim">💡 한계: ${esc(lim)}</div>` : ''}
+    ${shapeMissText(r) ? `<div class="m3-rlim">${esc(shapeMissText(r))}</div>` : ''}
     ${r.lowered ? `<div class="m3-rlim">${esc(loweredText(r.lowered, r.unchanged))}</div>` : ''}
     ${!r.feasible && r.peek ? `<div class="m3-rlim">${esc(peekText(r.peek))}</div>` : ''}
     ${milkyTableHtml(r.milkyRows, r.best?.milky, r.targets ?? {})}

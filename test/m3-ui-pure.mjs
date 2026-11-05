@@ -106,6 +106,9 @@ ok(judgeText(0.8004, 0.8009).cls === 'ok' && judgeText(0.7999, 0.8).cls === 'bad
   const a = { milky: { ok: true }, leds: { ok: true }, shape: { ok: false } };
   ok(capDefault({ milky: true }, a, 3) === 5 && capDefault({ milky: true, leds: true }, a, 3) === 5 && capDefault({ milky: true, leds: true }, a, 6) === 5, 'Milky 상한 기본: 언제나 5');
   { const { resultLineHtml, peekText, loweredText } = await import('../src/ui/m3/autodesign-panel.js');
+    { const b = { best: { Ulen: 0.7, Uwid: 0.7 }, cur: { Ulen: 0.6, Uwid: 0.6 }, reason: 'x', targets: {} };
+      const miss = resultLineHtml({ ...b, feasible: false, stages: { shape: true } }), all = resultLineHtml({ ...b, feasible: false, stages: { shape: true, milky: true, leds: true } }), pass = resultLineHtml({ ...b, feasible: true, stages: { shape: true } }), other = resultLineHtml({ ...b, feasible: false, stages: { milky: true } });
+      ok(/형상만으로는 목표 미달/.test(miss) && /위치/.test(miss) && /Milky/.test(miss) && !/형상만으로는/.test(all) && !/형상만으로는/.test(pass) && !/형상만으로는/.test(other), '형상 미달 안내: 형상만 돌렸을 때 다음 항목을 알려 줌'); }
     const pk = { cap: 5, rows: [], best: { milky: 7, Ulen: 0.84, Uwid: 0.66, eff: 0.31 } };
     ok(/Milky 7.*길이 약 0\.8.*폭 약 0\.7.*광 효율 약 31%.*대략값/.test(peekText(pk)) && /최적화에는 쓰지 않음/.test(peekText(pk)), `참고 문구: ${peekText(pk)}`);
     ok(/5 보다 높여도.*오르지 않음/.test(peekText({ cap: 5, rows: [], best: null })) && peekText(null) === '', '참고 문구: 이득 없음 · 없음');
@@ -475,7 +478,7 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   const keys = (M, S, id, o) => treeCtxItems(M, S, id, o).map((x) => x.k).join();
   const step = { light: { kind: 'step', step: { emitters: [{}], leds: [0], excluded: [] } } }, none = { light: { kind: 'none' } }, mech = { light: { kind: 'step', step: { emitters: [{}], leds: [0], fromMech: [1] } } }, virt = { light: { kind: 'step', step: { emitters: [{}], leds: [0], virtual: { positions: [] } } } }, man = { light: { kind: 'manual' } };
   ok(keys(none, {}, 'light') === 'ledAuto,ledClick', '광원 없음 = 자동·수동');
-  ok(keys(step, {}, 'light') === 'ledAuto,ledClick,pcbClick,ledFace,ledOut,eye,fold' && keys(mech, {}, 'light').includes('ledClear') && !keys(virt, {}, 'light').includes('ledFace') && !keys(man, {}, 'light').includes('eye'), '광원 메뉴는 상태에 맞게');
+  ok(keys(step, {}, 'light') === 'ledAuto,ledClick,ledFace,ledOut,eye,fold' && keys(mech, {}, 'light').includes('ledClear') && !keys(virt, {}, 'light').includes('ledFace') && !keys(man, {}, 'light').includes('eye'), '광원 메뉴는 상태에 맞게');
   ok(keys(step, { hiddenLeds: [1] }, 'leds') === 'eye,ledShowAll,fold' && keys(step, {}, 'leds') === 'eye,fold', 'LED ×n 메뉴');
   const lab = (M, o) => treeCtxItems(M, {}, 'led:0', o).find((x) => x.k === 'ledOff')?.label;
   ok(lab(step) === '이 LED 빛 끄기' && lab(step, { excluded: true }) === '이 LED 빛 다시 켜기' && lab(virt) === '이 LED 삭제' && lab(man) === undefined, 'LED 한 개 메뉴');

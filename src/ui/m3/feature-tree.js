@@ -35,14 +35,22 @@ export function treeNodes(M, S, lay, leds = []) {
   // 도면에서 광원으로 옮긴 부품 = '→ 광원'(보기는 광원 그룹이 함) · 추적 제외 = '제외 ·' 접두
   const partNode = (p, i, depth) => node(`part:${i}`, p.name, p.role === 'light' ? '→ 광원' : `${p.untrace ? '제외 · ' : ''}${p.shapeMod ? '형상 변경 · ' : ''}${partBadge(p)}`, true, p.role === 'light' ? 'led' : p.untrace ? 'off' : p.material.kind, p.role === 'light' ? undefined : hid.has(i) ? 'off' : 'on', { depth, strike: !!p.untrace });   // 빛 계산 제외 = 취소선
   if (!fold('parts')) M.parts.forEach((p, i) => {
+    if (p.role === 'pcb') return;   // PCB 는 아래 PCB 메뉴에
     const g = gOf.get(i);
     if (!g) { partNode(p, i, 1); return; }
     if (shown.has(g.id)) return; shown.add(g.id);
     const mem = g.parts.filter((k) => k < M.parts.length), allHid = mem.length && mem.every((k) => hid.has(k)), closed = fold(g.id, !!g.auto);
     node(`group:${g.id}`, g.name, String(mem.length), true, 'group', g.auto ? undefined : allHid ? 'off' : 'on', { fold: closed ? 'closed' : 'open', depth: 1, auto: !!g.auto, strike: !g.auto && mem.length > 0 && mem.every((k) => M.parts[k].untrace) });
-    if (!closed) for (const k of mem) partNode(M.parts[k], k, 2);
+    if (!closed) for (const k of mem) if (M.parts[k].role !== 'pcb') partNode(M.parts[k], k, 2);
   });
-  if (!fold('parts') && stepPcb(L)) node('steppcb', 'PCB', `PCB 면 ${Math.round((L.pcbR ?? 0.3) * 100)}% · LED STEP`, true, 'opaque');
+  // PCB 메뉴(2026-11-05) — 광원이 있으면 PCB 를 못 찾았어도 늘 보임. 수동 선택·반사율은 여기서. 도면 PCB = 부품 그대로 이 아래에
+  const pcbIds = M.parts.map((p, i) => (p.role === 'pcb' ? i : -1)).filter((i) => i >= 0), sp = stepPcb(L), nPcb = pcbIds.length + (sp ? 1 : 0);
+  if (!fold('parts') && (L.kind === 'step' || pcbIds.length)) {
+    const R1 = pcbIds.length ? M.parts[pcbIds[0]].finish?.R : L.pcbR ?? 0.3;
+    node('pcbs', 'PCB', !nPcb ? '⚠ PCB 없음' : nPcb > 1 ? `${nPcb}장` : R1 != null ? `PCB 면 ${Math.round(R1 * 100)}%` : '', true, 'opaque', undefined);
+    for (const i of pcbIds) partNode(M.parts[i], i, 2);
+    if (sp) node('steppcb', 'LED STEP PCB', `PCB 면 ${Math.round((L.pcbR ?? 0.3) * 100)}%`, true, 'opaque', undefined, { depth: 2 });
+  }
   // 광원 머리 눈 단추 = 광원 그룹(LED 몸체·PCB·지향각) 한 번에 켜기/끄기
   node('light', '광원', L.kind === 'step' && L.step?.fromMech ? '3D 도면' : { none: '지정 안 함', step: 'LED STEP', manual: '직접 배치' }[L.kind], false, '', L.kind === 'step' ? (S.hideLeds ? 'off' : 'on') : undefined, L.kind !== 'none' ? { fold: fold('light') ? 'closed' : 'open' } : {});
   if (L.kind !== 'none' && !fold('light')) {
@@ -86,7 +94,6 @@ export function lightCtxItems(M, S, id, { excluded = false, closed = false } = {
   const foldItem = { k: 'fold', label: closed ? '펼치기' : '접기' };
   if (id === 'light') {
     out.push({ k: 'ledAuto', label: 'LED 자동 선택' }, { k: 'ledClick', label: 'LED 수동 선택 — 3D 에서 클릭' });
-    if (L.kind === 'step') out.push({ k: 'pcbClick', label: 'PCB 수동 선택 — 3D 에서 클릭' });
     if (st?.emitters?.length && !st.virtual) out.push({ k: 'ledFace', label: '빛 나오는 면 다시 지정' }, { k: 'ledOut', label: 'LED 빼기 / 다시 넣기' });
     if (st?.fromMech) out.push({ k: 'ledClear', label: '도면 광원 해제' });
     if (L.kind === 'step') out.push({ k: 'eye', label: S.hideLeds ? '광원 보이기' : '광원 숨기기' });
@@ -103,6 +110,7 @@ export function lightCtxItems(M, S, id, { excluded = false, closed = false } = {
   return out;
 }
 export function treeCtxItems(M, S, id, opt = {}) {
+  if (id === 'pcbs' || id === 'steppcb') return [{ k: 'pcbClick', label: 'PCB 수동 선택 — 3D 에서 클릭' }];
   if (id === 'light' || id === 'leds' || id.startsWith('led:')) return lightCtxItems(M, S, id, opt);
   const parts = [...new Set([...(S.multi ?? []), ...(S.node?.startsWith('part:') ? [S.node] : [])])].filter((x) => x.startsWith('part:')).map((x) => +x.slice(5));
   const inG = new Set((M.groups ?? []).flatMap((g) => g.parts)), out = [];

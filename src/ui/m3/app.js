@@ -951,20 +951,6 @@ async function adRunBoost() {
   dashReset();
   let r = await adRun();
   if (!r || r.feasible || !st.result) return;
-  if (r.stages.shape) {   // ③ 형상으로 목표에 못 닿으면 Milky → LED 개수 순서로 보완(2026-11-02) — LED 는 부품이 늘어 뒤로. 결과는 적용 전 보완 내용과 함께 보여 줌(몰래 바꾸지 않음)
-    const b = st.result, base = { Ulen: b.best.Ulen, Uwid: b.best.Uwid, milky: b.best.milky, reason: b.reason, unchanged: b.unchanged }, av = adAvail(A.store.mspec), keep = { ...r.stages, shape: !b.shapeLimited && !b.unchanged };
-    const sets = [['milky'], ['milky', 'leds']].map((set) => set.filter((k) => !r.stages[k] && av[k]?.ok)).filter((set, i, all) => set.length && all.findIndex((x) => x.join() === set.join()) === i);
-    let good = b;
-    for (const [i, set] of sets.entries()) {
-      const added = set.map((k) => BOOST_LABEL[k]);
-      A.optDash?.addStages({ milky: set.includes('milky'), position: set.includes('leds') }, `보완 ${i + 1}/${sets.length}: ${added.join(' + ')}`);
-      r = await adRun({ stages: { ...keep, ...Object.fromEntries(set.map((k) => [k, true])) }, added, base, step: `${i + 1}/${sets.length}` });
-      if (!r) { if (A && !st.running) { st.result = { ...good, note: `보완(${added.join(' + ')}) 계산이 끝나지 못함 — 직전 결과를 표시` }; A.meshShown = null; renderView(); renderAuto(); } return; }
-      good = st.result;
-      if (r.feasible) return;
-    }
-    return;
-  }
   if (st.sel.boost === false) return;
   const b0 = st.result, base = { Ulen: b0.best.Ulen, Uwid: b0.best.Uwid, milky: b0.best.milky, reason: b0.reason, unchanged: b0.unchanged };
   const avail = adAvail(A.store.mspec), checked = r.stages;
@@ -1443,7 +1429,7 @@ function onPick(s) {
     if (a.err) { say(a.err); return; }
     st.update('light', (m, x) => {
       if (a.ids) m.parts = syncPcb(m.parts, a.ids); else m.light.step.pcb = a.stepPcb;
-      const ns = pcbNames(m); x.status = ns.length ? `PCB: ${ns.join(', ')}` : 'PCB 없음 — LED 받침 판을 고르세요'; x.node = 'light';
+      const ns = pcbNames(m); x.status = ns.length ? `PCB: ${ns.join(', ')}` : 'PCB 없음 — LED 받침 판을 고르세요'; x.node = 'pcbs';
     });
     return;
   }
@@ -1860,6 +1846,7 @@ function renderAll(tag = 'all') {
         x.multi = [...set]; x.node = id; x.sel = { part: +id.slice(5), face: null }; return;
       }
       x.multi = []; x.node = id; x.sel = id.startsWith('part:') ? { part: +id.slice(5), face: null } : null; if (id !== 'leds') x.ledSel = null;
+      if (x.pick === 'mpcb' && id !== 'pcbs' && id !== 'steppcb') x.pick = null;   // PCB 메뉴를 벗어나면 수동 선택 끝(버튼이 안 보이는데 클릭이 PCB 를 바꾸지 않게)
     }),
     onEye: (id, only) => st.update('view', (m, x) => Object.assign(x, id.startsWith('led:') ? toggleLed(+id.slice(4), ledsNow().list.map((it) => it.n), x.hiddenLeds, x.hideLeds, only) : toggleVisibility(id, only, m.parts.length, x.hidden, x.hideLeds, id.startsWith('group:') ? groupMembers(m, id.slice(6)) : []))),
     onFold: (id) => st.update('session', (_, x) => { const k = id === 'parts' || id === 'leds' || id === 'light' ? id : id.slice(6), def = k === '_light' || (k === 'leds' && ledFoldDefault(A.ledTotal)); x.fold = { ...x.fold, [k]: !(x.fold?.[k] ?? def) }; }),   // 접기·펼치기(세션)
@@ -1872,7 +1859,7 @@ function renderAll(tag = 'all') {
     onTreeAct: (k) => {   // 우클릭 메뉴: 새 그룹(선택한 부품들) · 그룹에서 빼기 · 그룹 해제 · 광원 지정
       if (k === 'ledAuto') { propHandlers().onMechAuto(); return; }
       if (k === 'ledClick') { propHandlers().onLightKind('click'); return; }
-      if (k === 'pcbClick') { st.update('session', (_, x) => { x.node = 'light'; x.pick = 'mpcb'; }); return; }
+      if (k === 'pcbClick') { st.update('session', (_, x) => { x.node = 'pcbs'; x.pick = 'mpcb'; }); return; }
       if (k === 'ledFace' || k === 'ledOut') { st.update('session', (_, x) => { x.node = 'light'; x.pick = k === 'ledFace' ? 'led' : 'ledx'; }); return; }
       if (k === 'ledClear') { mechLightClear(); return; }
       if (k === 'ledShowAll') { st.update('view', (_, x) => { x.hiddenLeds = []; x.hideLeds = false; }); return; }

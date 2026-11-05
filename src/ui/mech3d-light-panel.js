@@ -55,12 +55,6 @@ export const setManualOpen = (v) => { MANUAL_OPEN = !!v; };
 const recogHtml = (m, ui) => { const L = m.light, st = L.step, v = L.kind === 'step' ? st?.virtual : null; return L.kind === 'step' && st ? (v ? '<div class="m3-row mut">배치를 편집한 상태 — 인식 고치기(빛 나오는 면·빼기)는 [STEP 원래대로] 뒤에</div>' : `<div class="m3-card"><div class="m3-sub">인식 고치기 <span class="mut">(자동 인식이 틀렸을 때만)</span></div>
       <div class="m3-row">${pickBtn(ui, 'led', ui.pick === 'led' ? '클릭 대기 중 — 취소' : '빛 나오는 면 다시 지정')} <span class="mut">3D 에서 LED 1개의 빛 나오는 면 클릭 → 모든 LED 에 같이 적용</span></div>
       <div class="m3-row">${pickBtn(ui, 'ledx', ui.pick === 'ledx' ? '클릭 대기 중 — 끝내기' : 'LED 빼기 / 다시 넣기')} <span class="mut">LED 가 아닌 부품이 잡혔거나 끌 LED 를 3D 에서 클릭 · 다시 클릭 = 다시 넣기</span></div></div>`) : ''; };
-// PCB 수동 선택 줄(순수, 2026-11-05) — 자동 인식이 틀렸거나 못 찾았을 때. LED 는 PCB 위에 있으니 없으면 경고
-function pcbPickRow(m, ui) {
-  if (m.light.kind !== 'step') return '';
-  const names = pcbNames(m), wait = ui.pick === 'mpcb';
-  return `<div class="m3-row">${pickBtn(ui, 'mpcb', wait ? '클릭 대기 중 — 끝내기' : 'PCB 수동 선택')} ${names.length ? `<span class="mut">PCB: ${esc(names.join(', '))}</span>` : '<span class="m3-pcbwarn">⚠ PCB 없음 — LED 받침 판을 고르세요</span>'}</div>${wait ? '<div class="mut m3-note">3D 에서 PCB 부품 클릭 · 다시 클릭 = 해제 · 여러 장 가능</div>' : ''}`;
-}
 // ① LED 지정 카드(순수) — 광원을 정하는 곳은 여기 하나(2026-11-04: 광원 노드와 LED 노드에 나뉘어 겹치던 것을 합침). 자동 → 수동 → 다른 방식
 function ledPickCardHtml(m, ui, ready = true) {
   const L = m.light, st = L.step, man = L.manual, fromMech = L.kind === 'step' && !!st?.fromMech;
@@ -85,7 +79,6 @@ function ledPickCardHtml(m, ui, ready = true) {
   return `<div class="m3-card m3-ledpick"><div class="m3-sub"><i class="m3-fl">1</i> LED 지정</div>
     <div class="m3-row"><button type="button" class="${L.kind === 'none' || !ready ? 'm3-primary' : ''}" data-lp-mauto title="같은 모양 부품 2개 이상 · PCB 위에 올라간 것 = LED, 발광면 = PCB 반대쪽. 도면 부품에 없으면 LED STEP 파일에서 찾음">LED 자동 선택</button> <span class="mut">도면·LED STEP 에서 LED 를 찾음</span></div>
     <div class="m3-row"><button type="button" data-lp-manual aria-expanded="${open}">LED 수동 선택 ${open ? '▴' : '▾'}</button> <span class="mut">방식을 골라 직접 지정</span></div>
-    ${pcbPickRow(m, ui)}
     ${open ? `<div class="m3-ledman"><div class="m3-row"><label>방식</label><select data-lp-kind aria-label="광원 지정 방식"><option value="click" ${fromMech || ui.pick === 'mled' ? 'selected' : ''}>3D 도면에서 지정</option><option value="step" ${L.kind === 'step' && !fromMech && ui.pick !== 'mled' ? 'selected' : ''}>LED STEP 불러오기</option><option value="manual" ${sel(L.kind, 'manual')}>관측 라인 따라 직접 배치</option><option value="none" ${L.kind === 'none' && ui.pick !== 'mled' ? 'selected' : ''}>지정 안 함</option></select></div>
     ${mechHtml}${stepHtml}${manHtml}${recogHtml(m, ui)}</div>` : ''}</div>`;
 }
@@ -185,8 +178,23 @@ function ledTabHtml(m, ui, tab) {
 // 광원 노드(ui.pickOnly) = ① LED 지정만. LED 노드·LED 한 개 = 사양만(2026-11-04): 기본(빛 퍼짐·발광면 크기) | 상세(배치·밝기·높이·배광 모델·PCB 색). 광원이 아직 없으면 ① 카드. ui = { led?(고른 LED), ledList:[{n,s,excluded}], ledGap, line, lay, pick, ledInfo }
 // PCB 반사율 줄(순수) — LED STEP 의 PCB 는 부품 목록의 PCB 속성에서, 직접 배치는 LED 상세 탭에서
 const pcbRRow = (L, label) => `<div class="m3-row"><label>${label}</label><input type="number" min="0" max="100" step="1" value="${+(100 * (L.pcbR ?? 0.3)).toFixed(1)}" data-lp-pcbr aria-label="PCB 반사율 %"> %</div>`;
-export const stepPcbHtml = (m) => `<div class="m3-h">부품 · PCB <span class="mut">LED STEP 파일의 PCB</span></div><div class="m3-card m3-untrace pcb"><div class="m3-sub">PCB 면</div>${pcbRRow(m.light, '반사율')}<div class="mut">확산 반사면으로 계산 · 기구 최적화에서 면을 바꾸지 않음</div></div>`;
-export function renderStepPcbProps(el, m, h) { el.innerHTML = stepPcbHtml(m); on(el, '[data-lp-pcbr]', 'change', (x) => h.onPcbR(x.value)); }
+// PCB 메뉴(순수, 2026-11-05) — 수동 선택 + 반사율. LED 는 PCB 위에 있으니 없으면 경고
+export function pcbPanelHtml(m, ui) {
+  const L = m.light, names = pcbNames(m), wait = ui.pick === 'mpcb', st = L.kind === 'step' ? L.step : null;
+  const rows = (m.parts ?? []).map((p, i) => (p.role !== 'pcb' ? '' : `<div class="m3-row"><label>${esc(p.name)}</label><input type="number" min="0" max="100" step="1" value="${+(100 * (p.finish?.R ?? 0.3)).toFixed(1)}" data-m3-pcbr data-i="${i}" aria-label="${esc(p.name)} 반사율 %"> %</div>`)).join('');
+  const stepRow = st && !st.fromMech && st.pcb >= 0 ? pcbRRow(L, 'LED STEP PCB') : '';
+  return `<div class="m3-h">PCB</div><div class="m3-card m3-untrace pcb"><div class="m3-sub">PCB 지정</div>
+    <div class="m3-row">${pickBtn(ui, 'mpcb', wait ? '클릭 대기 중 — 끝내기' : 'PCB 수동 선택')}</div>
+    <div class="m3-row">${names.length ? `<span class="mut">PCB: ${esc(names.join(', '))}</span>` : '<span class="m3-pcbwarn">⚠ PCB 없음 — LED 받침 판을 고르세요</span>'}</div>
+    ${wait ? '<div class="mut m3-note">3D 에서 PCB 부품 클릭 · 다시 클릭 = 해제 · 여러 장 가능</div>' : ''}</div>
+  ${rows || stepRow ? `<div class="m3-card"><div class="m3-sub">PCB 면 반사율</div>${rows}${stepRow}<div class="mut">확산 반사면으로 계산 · 기구 최적화에서 면을 바꾸지 않음</div></div>` : ''}`;
+}
+export function renderPcbProps(el, m, ui, h) {
+  el.innerHTML = pcbPanelHtml(m, ui);
+  wirePick(el, ui, h);
+  on(el, '[data-lp-pcbr]', 'change', (x) => h.onPcbR(x.value));
+  on(el, '[data-m3-pcbr]', 'change', (x) => h.onPartPcbR(+x.dataset.i, x.value));
+}
 export function ledPanelHtml(m, ui) {
   if (m.light.kind === 'none' || ui.pickOnly) return `<div class="m3-h">속성 · 광원</div>${ledPickCardHtml(m, ui, m.light.kind === 'step' ? !!m.light.step?.emitters?.length : m.light.kind !== 'none')}`;
   return `<div class="m3-h">속성 · LED</div>${tabsHtml('leds')}<div class="m3-edit" role="tabpanel">${ledTabHtml(m, ui, LP_TAB.leds)}</div>`;
