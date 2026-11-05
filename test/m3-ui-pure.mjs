@@ -640,6 +640,9 @@ done();
 { // 우클릭 메뉴가 열리는 행 — 항목을 만들어 두고 화면에서 안 열리는 일이 없게(2026-11-05)
   const { treeHasCtx } = await import('../src/ui/m3/feature-tree.js');
   ok(['pcbs', 'part:0', 'group:a', 'light', 'leds', 'led:0'].every(treeHasCtx) && !treeHasCtx('plane') && !treeHasCtx('parts'), 'PCB 행도 우클릭 메뉴가 열림'); }
+{ // 평판(초기 검토) 화면은 어디서도 열 수 없음(2026-11-05)
+  const { readFileSync } = await import('node:fs'), html = readFileSync(new URL('../index.html', import.meta.url), 'utf8'), main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  ok(!/초기 검토|btn-flat-mode/.test(html) && !/mode-flat|export-flat|spec\.mode = 'flat'/.test(main), '시작 화면·메뉴에 평판 화면 없음'); }
 { const { seedFits } = await import('../src/ui/m3/autodesign-panel.js');
   const G0 = { ns: 4, nw: 2 }, sd = (n) => ({ batches: [{ acc: new Float64Array(n) }] });
   ok(seedFits(sd(8), G0) && !seedFits(sd(6), G0) && !seedFits(null, G0) && !seedFits(sd(8), null) && !seedFits({ batches: [] }, G0), '판정 값을 화면으로: 칸 수가 같을 때만'); }

@@ -1842,7 +1842,6 @@ function cmdHandlers() {
     onSim: () => A.results.toggleBig(),
     onOpt: () => monitor?.toggle(),   // ⑤ 기구 최적화 창 열고 닫기(기본 화면에는 최적화 칸 없음)
     adFlow: () => ({ running: !!A?.ad?.running, result: !!A?.ad?.result }),
-    onExit: () => A.ctx.onExit(),
   };
 }
 

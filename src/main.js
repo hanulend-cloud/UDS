@@ -22,7 +22,6 @@ import { drawIso } from './ui/iso.js';
 import { drawPlan } from './ui/plan.js';
 import { drawHeatmap } from './ui/heatmap.js';
 import { buildLevels, updateLevels, renderVerdict, drawProfiles } from './ui/analysis.js';
-import { exportStep } from './export/step-ui.js';
 import { setMech3dMesh, getMech3d, initialMech3dSpec, saveMech3dIDB, loadMech3dIDB, loadLedIDB, getLedMesh, applyPartMods, redetectContacts } from './engine/mech3d/runtime.js';
 import { matchesPending, restorePending } from './engine/mech3d/restore.js';
 import { bounds } from './engine/mech3d/mesh.js';
@@ -130,7 +129,6 @@ function buildForm() {
     }
     form.appendChild(grp);
   }
-  $('#btn-flat-mode').onclick = () => { spec.mode = 'flat'; persist(); applyMode(); schedule(); };   // 평판(초기 검토) — 이번 실행에서만(다음 실행은 3D)
   $('#btn-sample-project').onclick = () => loadSampleProject();
   $('#file-mech3d-start').onchange = (e) => { const f = e.target.files?.[0]; if (f && /\.json$/i.test(f.name)) { importJson(e); return; } if (f) importMech3d(f); e.target.value = ''; };   // 시작 화면 = 프로젝트·STEP 모두
   $('#file-materials').onchange = (e) => { const f = e.target.files?.[0]; if (f) importMaterials(f); e.target.value = ''; };
@@ -257,7 +255,7 @@ async function importMaterials(file) {
   } catch (e) { alert(`소재 DB 불러오기 실패: ${e.message}`); }
 }
 function setupMenubar() {
-  const m3 = () => m3app.isMounted(), flatMode = () => spec.mode === 'flat';
+  const m3 = () => m3app.isMounted();
   const menus = [
     { label: '파일', items: [
       { id: 'new', label: '새 프로젝트' },
@@ -269,7 +267,6 @@ function setupMenubar() {
       { id: 'import-mech', label: '3D 기구 STEP 불러오기…' },
       { id: 'import-led', label: 'LED STEP 불러오기…', enabled: m3 },
       { id: 'export-mech', label: '3D 기구 STEP 내보내기 (수정 반영)', enabled: m3 },
-      { id: 'export-flat', label: '평판 형상 STEP 내보내기', enabled: () => flatMode() && !!last },
       '-',
       { id: 'mat-export', label: '소재·표면 DB 내보내기 (JSON)', enabled: isAdmin },
       { id: 'mat-import', label: '소재·표면 DB 불러오기…', enabled: isAdmin },
@@ -293,9 +290,6 @@ function setupMenubar() {
       { id: 'theme', label: '3D 배경 어둡게', checked: () => m3app.theme() === 'dark', enabled: m3 },
       { id: 'xray', label: '투시 보기 (전체 반투명)', checked: () => m3app.xrayOn(), enabled: m3 },
       { id: 'paths', label: '광경로 화살표', checked: () => m3app.pathsOn(), enabled: m3 },
-      '-',
-      { id: 'mode-3d', label: '3D 기구 설계 화면', checked: () => !flatMode() },
-      { id: 'mode-flat', label: '평판 확산판 화면 (초기 검토)', checked: flatMode },
     ] },
     { label: '계산', items: [
       { id: 'calc', label: '다시 계산 / 일시정지', enabled: m3 },
@@ -320,10 +314,7 @@ function setupMenubar() {
     if (id === 'mat-import') return $('#file-materials').click();
     if (id === 'import-mech') return $('#file-mech3d').click();
     if (id === 'import-led') return $('#file-led').click();
-    if (id === 'export-flat') { if (last) exportStep(spec, last.combo, last.geom, last.active); return; }
     if (id === 'reset') { if (confirm('모든 설정을 기본값으로 되돌릴까요? (불러온 기구·LED 설정도 지워짐)')) resetAll(); return; }
-    if (id === 'mode-3d') { spec.mode = 'mech3d'; persist(); applyMode(); return; }
-    if (id === 'mode-flat') { spec.mode = 'flat'; persist(); applyMode(); schedule(); return; }
     if (id === 'mat-db') return m3app.openMaterialDb();
     if (id === 'admin') { setAdmin(!isAdmin()); return m3app.adminChanged(); }
     if (id === 'paths') return m3app.setPathsOn(!m3app.pathsOn());
@@ -345,7 +336,6 @@ function m3ctx() {
     mspec: spec.mech3d, persist, canSave: () => tabLock.canWrite(), dbLists, materialDb, reflectDb: () => reflectDb, l2Table: () => l2State().table, l2Raw, milkyFromMusR,
     onImportMech3d: importMech3d,
     onMaterialDbChanged: () => { solver?.postMessage({ type: 'db', db: dbLists() }); markSoloReset(); },   // 3D 실측 맞춤 대화상자에서 실측소재 DB 가 바뀜 → 평판 solver 도
-    onExit: () => { spec.mode = 'flat'; persist(); applyMode(); schedule(); },
   };
 }
 function applyMode() {
