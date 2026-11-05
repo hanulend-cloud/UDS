@@ -37,5 +37,5 @@ export function buildTraceScene(rt, mspec, ctx) {
   const off = mspec.parts.map(isUntraced);
   let skip = null;
   if (off.some(Boolean)) { skip = new Uint8Array(nT); for (let t = 0; t < nT; t++) if (off[partOf[t]]) skip[t] = 1; }
-  return { P, T, partOf, faceOf, normals, bvh: rt.bvh, optics, fins, finOf, contact, film, finishOfFace, skip };
+  return { P, T, partOf, faceOf, normals, bvh: rt.bvh, optics, fins, finOf, contact, film, finishOfFace, skip, off };
 }

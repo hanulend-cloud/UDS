@@ -81,7 +81,9 @@ export function tallyGeometry(line, obs) {
 }
 
 // rw = { C: rwCoeffs 결과 } | null — 있으면 관측 셀에 집계되는 탈출마다 Milky 격자 j 별 가중 w·f_j 도 더한다(acc 와 같은 셀 배열을 격자 수만큼 이어 붙임)
-export function makeAccumulator(G, line, obs, rw = null) {
+// virtual = 관측 부품이 빛 계산에서 빠짐(2026-11-05) — 면을 지나는 출사가 없으니 탈출 광선이 관측 평면을 지나는 점에서 잼(관측면 위치는 라인 인식 값 그대로)
+export function makeAccumulator(G, line, obs, rw = null, { virtual = false } = {}) {
+  const nP = line.frame.d, hP = virtual ? (([a, b, c]) => a * nP[0] + b * nP[1] + c * nP[2])(line.to3D(0, 0, 0)) : 0;
   const faces = new Set(obs.faces.map((f) => `${f.part}|${f.face}`)), d = obs.dir ?? line.frame.d, cosC = Math.cos(((obs.cone ?? 10) * Math.PI) / 180);
   const R = G.pix, nCell = G.ns * G.nw, acc = new Float64Array(nCell), accAll = new Float64Array(nCell), cnt = new Uint32Array(nCell);
   const C = rw?.C ?? null, nJ = C ? C.n : 0, racc = C ? new Float64Array(nJ * nCell) : null, sf = C ? new Float64Array(nJ) : null, sf2 = C ? new Float64Array(nJ) : null;
@@ -92,7 +94,13 @@ export function makeAccumulator(G, line, obs, rw = null) {
     // p = 광자 번호(runMC3D 가 마지막 인자로 전달). 탈출 광자가 마지막 출사 광자와 같을 때만 집계 — 흡수·소실된 광자의 낡은 출사점을 쓰지 않는다.
     onExit(part, face, x, y, z, dx, dy, dz, w, p) { has = faces.has(`${part}|${face}`); lx = x; ly = y; lz = z; lp = p; },
     onEscape(x, y, z, dx, dy, dz, w, p, tL = 0, tK = 0) {   // tL/tK 는 runMC3D 의 track 옵션이 줌 — rw 인데 track 없으면 모든 f = 1
-      if (!has || lp !== p) return;
+      if (!has || lp !== p) {
+        if (!virtual) return;
+        const dn = dx * nP[0] + dy * nP[1] + dz * nP[2];
+        if (!(dn > 1e-9) || dx * d[0] + dy * d[1] + dz * d[2] < cosC) return;
+        const t = (hP - (x * nP[0] + y * nP[1] + z * nP[2])) / dn;
+        return t >= -1e-6 ? add(x + t * dx, y + t * dy, z + t * dz, w, tL, tK) : undefined;
+      }
       has = false;
       if (dx * d[0] + dy * d[1] + dz * d[2] < cosC) return;
       return add(lx, ly, lz, w, tL, tK);   // 집계했으면 true(광경로 집계용)

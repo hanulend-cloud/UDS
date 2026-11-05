@@ -1,7 +1,7 @@
 // 점진 계산 Worker 의 장면 캐시·청크 처리 — spec 2026-10-15 m3-cad-ui §4. 순수(Worker 와 Node 시험이 같이 씀).
 // 'scene': 장면·BVH·관측 라인을 한 번 만들어 sceneKey 로 기억. 'chunk': 기억한 장면과 sceneKey 가 같을 때만 runChunk.
 import { lineFromData } from './line.js';
-import { composeScene, runChunk, runChunkGpu, samplePath, partsOnPath } from './job.js';
+import { composeScene, runChunk, runChunkGpu, samplePath, partsOnPath, obsVirtual } from './job.js';
 import { milkyGridOptics, rwCoeffs } from './reweight.js';
 
 // getTable(): L2 산란 응답표, getDb(): 실측소재 DB(없으면 null)
@@ -50,7 +50,7 @@ export function makeChunkHost({ getTable, getDb = () => null }) {
           rw = { part: m.rw.part, C: rwCoeffs(S.optics[m.rw.part], grid) };
         }
         const args = { S, line, obs, G, emitters, ledSpec, N: m.N, seed: m.seed, rw };
-        if (gpu && !gpu.lost) {
+        if (gpu && !gpu.lost && !obsVirtual(S, obs)) {
           return runChunkGpu(gpu, args).then((r) => pack(m, r), (e) => { const msg = String(e?.message ?? e); gpu = null; gpuFail(msg); return pack(m, runChunk(args)); });
         }
         return pack(m, runChunk(args));

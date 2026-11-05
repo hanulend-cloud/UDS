@@ -43,9 +43,11 @@ export function ledSources(emitters, ledSpec) {
 // leak: 관측면이 아닌 면으로 탈출한 빛 — 탈출 광자의 마지막 출사 (부품, 면) 별 가중치 합. 출사 기록이 없으면(투과 부품을 거치지 않고 틈으로 바로) '-1|-1'.
 // escObs: 마지막 출사가 관측면인 탈출 가중치(방향 무관). Σleak + escObs = ledger.escaped.
 // rw = { part, C } | null — 있으면 Milky 부품 경로를 추적(track)해 격자별 지도(rw.acc: 격자 수 × 셀)·Σf·Σf²·n 을 함께 돌려준다(spec P4 §2.1)
+// 관측 부품이 빛 계산에서 빠졌는가 → 가상 관측면으로 잼(tally.makeAccumulator). GPU 는 탈출 위치를 돌려주지 않아 이때는 CPU 로
+export const obsVirtual = (S, obs) => !!S.off && (obs.faces ?? []).some((f) => S.off[f.part]);
 export function runChunk({ S, line, obs, G, emitters, ledSpec, N, seed, rw = null }) {
-  const src = ledSources(emitters, ledSpec), a = makeAccumulator(G, line, obs, rw ? { C: rw.C } : null);
-  const faces = new Set(obs.faces.map((f) => `${f.part}|${f.face}`)), leak = {}, paths = {};
+  const src = ledSources(emitters, ledSpec), a = makeAccumulator(G, line, obs, rw ? { C: rw.C } : null, { virtual: obsVirtual(S, obs) });
+  const virtual = obsVirtual(S, obs), faces = new Set(obs.faces.map((f) => `${f.part}|${f.face}`)), leak = {}, paths = {};
   let lastPart = -1, lastFace = -1, lastP = -1, escObs = 0, curP = -1, seq = [], refl = false;
   const r = runMC3D(S, {
     source: src, N, seed, track: rw ? rw.part : -1,
@@ -57,9 +59,10 @@ export function runChunk({ S, line, obs, G, emitters, ledSpec, N, seed, rw = nul
       if (S.optics[part]?.transmissive) { if (seq[seq.length - 1] !== part && seq.length < 5) seq.push(part); } else refl = true;
     },
     onEscape(x, y, z, dx, dy, dz, w, p, tL, tK) {
-      if (a.onEscape(x, y, z, dx, dy, dz, w, p, tL, tK) && curP === p) { const key = `${refl ? 'R' : ''}:${seq.join('>')}`; paths[key] = (paths[key] ?? 0) + w; }
+      const scored = a.onEscape(x, y, z, dx, dy, dz, w, p, tL, tK);
+      if (scored && curP === p) { const key = `${refl ? 'R' : ''}:${seq.join('>')}`; paths[key] = (paths[key] ?? 0) + w; }
       const k = lastP === p ? `${lastPart}|${lastFace}` : '-1|-1';
-      if (faces.has(k)) escObs += w; else leak[k] = (leak[k] ?? 0) + w;
+      if (faces.has(k) || (scored && virtual)) escObs += w; else leak[k] = (leak[k] ?? 0) + w;
     },
   });
   return { acc: a.acc, accAll: a.accAll, cnt: a.cnt, ledger: r.ledger, leak, escObs, paths, ms: r.ms, rw: a.rw };
@@ -71,7 +74,7 @@ export function runChunk({ S, line, obs, G, emitters, ledSpec, N, seed, rw = nul
 export function samplePath({ S, line, obs, G, emitters, ledSpec, want, nMech = Infinity, N = 400, seed = 1, batches = 6, maxEvents = 4000, enough = 15 }) {
   const src0 = ledSources(emitters, ledSpec), found = [];
   for (let b = 0; b < batches && found.length < enough; b++) {
-    const a = makeAccumulator(G, line, obs);
+    const a = makeAccumulator(G, line, obs, null, { virtual: obsVirtual(S, obs) });
     let curP = -1, pts = [], seq = [], at = [], refl = false, start = null;
     const source = { ...src0, sample: (rnd) => { const s0 = src0.sample(rnd); start = [s0[0], s0[1], s0[2]]; return s0; } };
     runMC3D(S, {
@@ -102,7 +105,7 @@ export function partsOnPath({ S, line, obs, G, emitters, ledSpec, nMech = Infini
   const src = ledSources(emitters, ledSpec), tr = {}, op = {}, t0 = now();
   let emitted = 0, observed = 0, photons = 0;
   for (let b = 0; b < batches && (b === 0 || now() - t0 < maxMs); b++) {
-    const a = makeAccumulator(G, line, obs);
+    const a = makeAccumulator(G, line, obs, null, { virtual: obsVirtual(S, obs) });
     let curP = -1, seen = new Set();
     const r = runMC3D(S, {
       source: src, N, seed: seed * 7919 + b, maxEvents,
@@ -130,7 +133,7 @@ export function partsOnPath({ S, line, obs, G, emitters, ledSpec, nMech = Infini
 // GPU 청크 — runChunk 와 같은 결과 형식. 광원 표본은 CPU 가 뽑고(seed), GPU 가 추적한 광자별 기록(gpu-trace.js REC)을
 // 같은 집계기에 차례로 넣는다(마지막 출사 → 탈출). gpu = createGpuTracer() 결과
 export async function runChunkGpu(gpu, { S, line, obs, G, emitters, ledSpec, N, seed, rw = null }) {
-  const src = ledSources(emitters, ledSpec), a = makeAccumulator(G, line, obs, rw ? { C: rw.C } : null), rnd = rng(seed);
+  const src = ledSources(emitters, ledSpec), a = makeAccumulator(G, line, obs, rw ? { C: rw.C } : null, { virtual: obsVirtual(S, obs) }), rnd = rng(seed);
   const starts = new Float32Array(N * 6);
   for (let p = 0; p < N; p++) starts.set(src.sample(rnd), p * 6);
   const w0 = src.flux / N, { rec, ms } = await gpu.trace(S, { starts, N, seed: (seed * 2654435761) >>> 0, track: rw ? rw.part : -1, w0, wMin: w0 * 1e-3 });
@@ -162,7 +165,7 @@ export function runJob({ S, line, obs, G, emitters, ledSpec, N, seed, batches = 
   let ms = 0;
   const per = Math.ceil(N / batches);
   for (let b = 0; b < batches; b++) {
-    const a = makeAccumulator(G, line, obs);
+    const a = makeAccumulator(G, line, obs, null, { virtual: obsVirtual(S, obs) });
     const r = runMC3D(S, { source: src, N: per, seed: seed * 7919 + b, onExit: a.onExit, onEscape: a.onEscape });
     accs.push(a.acc); cnts.push(a.cnt); ms += r.ms;
     for (const k in ledger) ledger[k] += r.ledger[k];

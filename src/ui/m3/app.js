@@ -1851,7 +1851,7 @@ function ledDist(g) {
 // ---- 그리기 ----
 function lineInfo() {
   const S = A.store.session, M = A.store.mspec, l = S.line;
-  if (l) return `라인: ${{ line: '직선', circle: '원', path: '곡선' }[l.kind]}${l.closed ? '(닫힘)' : ''} · 길이 ${l.length.toFixed(1)}mm · 폭 ${l.width.toFixed(1)}mm${l.branched ? ' · ⚠ 갈래 있음(가장 긴 경로 사용)' : ''}`;
+  if (l) return `라인: ${{ line: '직선', circle: '원', path: '곡선' }[l.kind]}${l.closed ? '(닫힘)' : ''} · 길이 ${l.length.toFixed(1)}mm · 폭 ${l.width.toFixed(1)}mm${l.branched ? ' · ⚠ 갈래 있음(가장 긴 경로 사용)' : ''}${M.observe.faces.some((f) => isUntraced(M.parts[f.part])) ? ' · 관측 부품이 빛 계산에서 빠짐 — 그 자리의 가상 평면에서 잼' : ''}`;
   return M.observe.faces.length && !S.lineErr ? '라인 인식 중…' : '';
 }
 // 자동 격자 값(표시용 — tally.js 규칙과 같음. w 칸은 최대 국소 폭 대신 라인 폭으로 근사) (main.js:376)
