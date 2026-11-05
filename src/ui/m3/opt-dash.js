@@ -7,7 +7,7 @@ import { judgeStats, uVerdict } from '../../engine/mech3d/tally.js';
 import { simCtl, setCtl, setStepMark } from './run-ctl.js';
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 // 계산 순서대로(엔진: 위치 → 케이스 면 → 형상 → Milky, 2026-10-30) — 번호도 이 순서
-export const STAGES = [['position', '① 위치'], ['housing', '② 케이스 면'], ['shape', '③ 형상'], ['milky', '④ Milky']];
+export const STAGES = [['position', '① 위치'], ['shape', '② 형상'], ['milky', '③ 확산도(Milky)']];   // 케이스 면은 부품 속성에서 직접(2026-11-05)
 // 기구 최적화 진행 단계 이름 → 타일(LED 배치·높이 = ② 기구 위치). 현재안·기준·검증 = 타일 없음(머리 줄 문구로만)
 export const tileOf = (stage) => (stage === 'milky' || stage === 'shape' || stage === 'housing' ? stage : stage === 'leds' || stage === 'height' ? 'position' : null);
 const f2 = (v) => (Number.isFinite(v) ? v.toFixed(2) : '–');
@@ -48,7 +48,7 @@ export function factorBoardHtml(S, nw = {}, cfg = null) {
   // 그래프는 오른쪽 모니터로(2026-10-30) — 여기는 입력(체크·옵션)과 상태만
   const nowOf = { position: nw.leds ?? '–', housing: nw.housing ?? '–', shape: nw.shape ?? '원래 형상', milky: Number.isFinite(nw.milky) ? `Milky ${f2(nw.milky)}` : '확산 부품 없음' };
   return `<div class="od-h">설계 인자 <span class="mut">체크 = 이번에 최적화 · 🔒 = 적용해서 고정</span> <span class="mut">${Number.isFinite(nw.Ulen) ? `지금 ${fmtJudge(nw.Ulen)}/${fmtJudge(nw.Uwid)}` : ''}</span></div>
-    ${STAGES.map(([k, name]) => row(k, name, nowOf[k])).join('')}
+    <div class="fb-cards">${STAGES.map(([k, name]) => row(k, name, nowOf[k])).join('')}</div>
     <div class="mut fb-hint">한 항목씩: 체크 → ▶ 실행 → [적용] = 🔒 고정 → 다음 항목 체크 → ▶ 실행</div>`;
 }
 // 최적화 그래프 2개(순수, 2026-11-04) — 길이·폭 균일도를 따로. 연한 점 = 시험한 후보 · 굵은 선 = 지금까지 고른 최고안 · 빨간 점선 = 목표 · 색 띠 = 그때 시험한 항목. W×H = 칸의 실제 px
@@ -140,7 +140,7 @@ export function optMatrixHtml(S) {
     return [row(name, st, t.evals.length || '–', e)];
   });
   const stF = S.final ? '완료' : S.stopped ? '중지' : '대기';
-  return `<div class="om-mx"><div class="mut om-lh">최적화 현황</div><table class="om-mx-t"><tr><th>항목</th><th>상태</th><th>시험 후보</th><th>길이 최고</th><th>폭 최고</th><th>최고안</th></tr>${rows.join('')}${row('최종 판정', stF, '–', S.final, 'om-mx-f')}</table></div>`;
+  return `<div class="om-mx"><div class="mut om-lh">최적화 현황</div><table class="om-mx-t"><tr><th>항목</th><th>상태</th><th>시험 후보</th><th>길이 최고</th><th>폭 최고</th><th>최고안</th></tr>${rows.join('')}${row('최종 판정', stF, '–', S.final, 'om-mx-f')}</table><div class="mut od-tx">항목 줄 = 적은 광선으로 빠르게 비교한 대략값(길이·폭 최고는 서로 다른 후보일 수 있음) · 최종 판정 = 고른 한 안을 많은 광선으로 잰 확정값</div></div>`;
 }
 // 후보의 점수(목표 대비 여유 — 둘 다 있으면 작은 쪽)
 const scoreOf = (e, tl, tw) => (e.ok === false || !Number.isFinite(e.Ulen) ? -Infinity : Math.min(e.Ulen - tl, Number.isFinite(e.Uwid) && Number.isFinite(tw) ? e.Uwid - tw : Infinity));

@@ -63,7 +63,7 @@ const peakRows = (ms, top, { len = 0.5, wid = 0.5, Uw = () => 0.9 } = {}) => ms.
   const r = await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 1 }, housingProbe: probe, finishText: (f) => `백색 ${Math.round(f.R * 100)}%` }, io);
   ok(!r.feasible && /LED 리플/.test(r.reason) && /폭/.test(r.reason) && !/가장자리 감쇠/.test(r.reason), `폭 한계 · 리플: ${r.reason}`);
   ok(calls.length === 1 && calls[0].cs[0].finish === probe && calls[0].N === 3e5 && Math.abs(calls[0].milky - r.best.milky) < 1e-9 && r.hint?.Ulen === 0.93 && r.hint?.Uwid === 0.62 && r.hint.finish === probe
-    && /④ 케이스 백색 90% 를 함께 쓰면 나아짐/.test(r.reason) && !/와 함께 쓰면 길이 균일도/.test(r.reason), `보완 계산 1회 → ${r.reason}`); }
+    && /케이스 백색 90% 를 함께 쓰면 나아짐/.test(r.reason) && !/④/.test(r.reason) && !/와 함께 쓰면 길이 균일도/.test(r.reason), `보완 계산 1회 → ${r.reason}`); }
 { // 최적화 = Milky 5 까지(2026-11-05). 5 초과는 참고 계산만 — 단계 기록(Milky 표)·추천에 안 들어감
   const seen = [], U = (m) => 0.5 + 0.02 * m;
   const io = { milkyRows: async (d, ms) => { seen.push(...ms); return rowsOf(ms, U); }, verify: async (d) => ({ stats: st(U(d.milky ?? 1), 0.9), eff: 1 }), progress() {}, cancelled: () => false };

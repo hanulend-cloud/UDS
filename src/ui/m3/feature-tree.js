@@ -86,6 +86,8 @@ export function untraceItem(M, ids) {
   const off = list.every((i) => M.parts[i].untrace), who = list.length > 1 ? `선택한 부품 ${list.length}개 ` : '';
   return { k: 'untrace', label: off ? `${who}빛 계산에 다시 포함` : `${who}빛 계산에서 제외`, ids: list, on: !off };
 }
+// 3D 보기 상태(순수, 2026-11-05) — prev·raw = 지금까지·이번 도면 원본. 같은 도면이면 숨긴 부품·카메라 유지, 다른 도면만 초기화
+export const viewKeep = (prev, raw) => ({ keepCamera: !!prev && prev === raw, reset: !!prev && prev !== raw });
 // 트리 우클릭 메뉴 항목(순수) — S.multi·S.node(우클릭한 노드가 선택에 포함된 뒤) 기준. k: group | out | ungroup | rename | eye
 // 광원·LED 우클릭 메뉴(순수, 2026-11-04) — 광원 = 지정 · LED ×n = 보기 · LED 한 개 = 보기·빛 끄기. excluded = 그 LED 빛 끔, closed = 접힌 상태
 export function lightCtxItems(M, S, id, { excluded = false, closed = false } = {}) {

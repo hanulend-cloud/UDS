@@ -1,7 +1,7 @@
 // 형상 종류별로 입광면 후보가 실제로 움직이는가(2026-11-05): node test/shape-room.mjs
 // 재발 방지: 입광면이 다른 부품에 닿아 있으면 모드 후보가 전부 간섭으로 탈락해 형상이 조용히 안 움직였음(기본 예제 11/11).
 // 조건: 모든 모드·양방향에서 (1) 간섭 없음 (2) 살두께 지킴 (3) 움직일 여유가 있는 형상이면 실제로 움직임
-import { lensCandidates, fieldThickness, fieldRoom, clampField, deformPart, refinedFor, heightsFor, partFrame, lineVarH, minThickness } from '../src/engine/mech3d/shape-opt.js';
+import { swingCandidates, lensCandidates, fieldThickness, fieldRoom, clampField, deformPart, refinedFor, heightsFor, partFrame, lineVarH, minThickness } from '../src/engine/mech3d/shape-opt.js';
 import { shapeModes } from '../src/engine/mech3d/autodesign.js';
 import { newInterference, interferenceKeys } from '../src/engine/mech3d/clearance.js';
 import { transformMesh } from '../src/engine/mech3d/xform.js';
@@ -95,5 +95,16 @@ for (const [name, part, others, lp, want] of cases) {
   const out = lensCandidates({ thick: 0.8, minWall: 0.8, pitch: 12, roomOut: 1 });
   ok(out.length > 0 && out.every((q) => q.dt >= 0), '지금은 살두께 여유가 없어도 두꺼워질 수 있으면 후보 있음');
   ok(Math.max(...lensCandidates({ thick: 2, minWall: 0.8, pitch: 12 }).map((q) => q.dt)) === 0, '앞 여유를 모르면 두껍게 하지 않음');
+}
+{ // 스윙(2026-11-05): 형상을 크게 바꿔 보는 소수 후보 — 가능성만 빠르게. 맨 앞 = 변경 없음
+  const S = swingCandidates({ thick: 1.15, minWall: 0.8, pitch: 11.6, roomOut: 6.24 });
+  ok(S[0].h === 0 && S[0].dt === 0 && S.length <= 10 && S.length >= 6, `후보 ${S.length}개`);
+  ok(S.some((q) => q.dt === 1.15 && q.h > 1 && q.R === 5.8), '두께 +1배 · 깊은 렌즈(예제에서 효과가 컸던 형상)가 들어 있음');
+  ok(S.some((q) => q.dt === 6.24) && S.some((q) => q.dt === 2.3) && S.some((q) => q.dt === 0 && q.h > 0) && S.some((q) => q.dt > 0 && q.h === 0), '렌즈만 · 두께만 · 2배 · 간섭 직전까지 크게');
+  ok(S.every((q) => 1.15 + q.dt - q.h >= 0.8 - 1e-9), '남는 두께 ≥ 최소 살두께');
+  ok(new Set(S.map((q) => JSON.stringify(q))).size === S.length, '중복 없음');
+  ok(swingCandidates({ thick: 0.8, minWall: 0.8, pitch: 12, roomOut: 0 }).length === 0, '여유가 없으면 후보 없음');
+  const tiny = swingCandidates({ thick: 2, minWall: 0.8, pitch: 12, roomOut: 0 });
+  ok(tiny.length >= 3 && tiny.every((q) => q.dt === 0), '앞 여유가 없으면 렌즈만');
 }
 done();

@@ -435,6 +435,19 @@ export function lensCandidates({ thick, minWall, pitch, roomOut = 0 }) {
   if (cut > 0.04) { const dt = rd(-cut / 2); out.push({ ...base, dt, h: 0, R: Rs[1] }); lens(dt, [1]); }
   return out;
 }
+// 스윙(2026-11-05) — 형상을 크게 바꿔 보는 소수 후보. 가능성이 있는지만 빨리 보고, 있으면 lensCandidates(정밀 탐색)로 넘김. 맨 앞 = 변경 없음. 여유가 없으면 []
+export function swingCandidates({ thick, minWall, pitch, roomOut = 0 }) {
+  const rd = (v) => Math.round(v * 1e3) / 1e3, cut = thick - minWall - 0.02, grow = Number.isFinite(roomOut) ? Math.max(0, roomOut) : 0;
+  if (!(cut > 0.02) && !(grow > 0.02)) return [];
+  const Rs = [0.25, 0.5].map((k) => rd(k * pitch)), base = { e: 0, c: 0 }, out = [{ ...base, dt: 0, h: 0, R: Rs[0] }];
+  const lens = (dt) => { const room = cut + dt; if (room > 0.02) for (const R of Rs) out.push({ ...base, dt: rd(dt), h: rd(room), R }); };
+  lens(0);
+  const one = Math.min(grow, thick), two = Math.min(grow, 2 * thick);
+  if (one > 0.02) { out.push({ ...base, dt: rd(one), h: 0, R: Rs[0] }); lens(one); }
+  if (two > one + 0.02) lens(two);
+  if (grow > two + 0.02) { const room = cut + grow; out.push({ ...base, dt: rd(grow), h: rd(room), R: Rs[1] }); }
+  return out;
+}
 // 후보 27개(3×3×3) — 범위는 spec §2.3 기본. LED 중심이 없으면 Δt 만 3개
 // Δt·h 는 {lo, 0, hi} — 현재 형상(Δt=0·h=0)이 늘 후보에 들게(가운데 값 대신 0). R 은 {lo, 중간, hi}
 export function shapeCandidates({ t0, pitch, hasCenters, ranges = null }) {

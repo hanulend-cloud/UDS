@@ -114,7 +114,7 @@ const ITEMS = [['milky', '① Milky 레벨'], ['leds', '② LED 개수·피치']
 // 최적화 타일(가운데 칸)의 켜기 스위치·항목 설정(순수) — 고르는 곳 = 진행을 보는 곳(아래 칸 대시보드와 한 자리)
 // state = { avail, sel, running, names, milkyPart, housingMat } → { on, html }(html = 스위치 + 설정, 쓸 수 없으면 이유)
 // 화면의 기구 최적화 = 3 항목: ① Milky · ② 기구 위치(= 엔진 ② LED 배치 + ⑤ LED 높이) · ③ 기구 형상. 케이스 반사율(④)은 부품 속성에서 직접
-export const AD_ITEMS = [['position', '① 위치', ['leds', 'height']], ['housing', '② 케이스 면', ['housing']], ['shape', '③ 형상', ['shape']], ['milky', '④ Milky', ['milky']]];   // 계산 순서(2026-10-30)
+export const AD_ITEMS = [['position', '① 위치', ['leds', 'height']], ['shape', '② 형상', ['shape']], ['milky', '③ 확산도(Milky)', ['milky']]];   // 계산 순서(2026-10-30)
 export const TILE_NOTE = { position: '부족한 방향으로 LED 를 옮기고, 그래도 모자라면 개수를 늘려 피치를 줄임', milky: 'Milky 5 까지에서 균일도 최고점을 찾음(밝기는 줄어듦)', leds: 'LED 개수·피치·열을 바꿈', shape: '도광판 아랫면 형상(두께·끝단·가장자리)', housing: '케이스 반사율(소재 상한 안)', height: 'LED–커버 거리' };
 export function tileConfigHtml(k, { avail, sel, running, names = [], milkyPart = null, housingMat = null, path = null }) {
   const pname = (i) => esc(names[i] ?? `부품 ${i + 1}`), dis = running ? ' disabled' : '';
@@ -274,8 +274,16 @@ export const seedFits = (seed, G) => !!seed?.batches?.length && !!G && seed.batc
 export function shapeMissText(r) {
   const s = r.stages;
   if (!s?.shape || r.feasible) return '';
-  const rest = [!s.leds && '① 위치', !s.milky && '④ Milky'].filter(Boolean);
+  const rest = [!s.leds && '① 위치', !s.milky && '③ 확산도(Milky)'].filter(Boolean);
   return rest.length === 2 ? `형상만으로는 목표 미달 — ${rest.join(' · ')} 를 체크하고 [이 안에서 이어서 ▸] 로 실행하세요` : '';
+}
+// 스윙 결과 → 정밀 탐색(2026-11-05) — 형상만 돌렸을 때. 효과가 보이면 권함, 없어도 원하면 돌릴 수 있음
+export function shapeDeepBtn(r) {
+  const s = r.stages ?? {};
+  if (!r.shapeSwing || !s.shape || s.milky || s.leds || s.height || s.housing) return '';
+  return r.design?.shape && !r.unchanged
+    ? '<button type="button" data-ad="shapeDeep" title="후보를 넓게 다시 탐색 — 약 3분">형상 정밀 탐색 ▸ (가능성 있음 · 약 3분)</button>'
+    : '<button type="button" data-ad="shapeDeep" title="후보를 넓게 다시 탐색 — 약 3분">그래도 정밀 탐색 ▸ (약 3분)</button>';
 }
 export const limitText = (reason) => { const m = /한계:\s*([^·)]+)/.exec(String(reason ?? '')); return m ? m[1].trim() : ''; };
 export function resultLineHtml(r) {
@@ -291,7 +299,7 @@ export function resultLineHtml(r) {
     ${r.lowered ? `<div class="m3-rlim">${esc(loweredText(r.lowered, r.unchanged))}</div>` : ''}
     ${!r.feasible && r.peek ? `<div class="m3-rlim">${esc(peekText(r.peek))}</div>` : ''}
     ${milkyTableHtml(r.milkyRows, r.best?.milky, r.targets ?? {})}
-    ${altNote(r)}<div class="m3-rbtn">${applyBtn(r, 'LED 몸체가 부품과 겹침')}${altBtn(r)}<button type="button" data-ad="cancel">취소</button>${r.clash > 0 ? '' : `<button type="button" data-ad="continue" title="${r.unchanged ? '지금 설계 그대로' : '이 안을 적용한 뒤'}, 체크했지만 이번에 돌리지 않은 항목(예: 위치·Milky)을 그 위에서 이어서 최적화">이 안에서 이어서 ▸</button>`}<span class="m3-ad-sp"></span><button type="button" data-ad="view" title="프로파일 비교·사유 전문">자세히 ▸</button></div></div>`;
+    ${altNote(r)}<div class="m3-rbtn">${applyBtn(r, 'LED 몸체가 부품과 겹침')}${altBtn(r)}${shapeDeepBtn(r)}<button type="button" data-ad="cancel">취소</button>${r.clash > 0 ? '' : `<button type="button" data-ad="continue" title="${r.unchanged ? '지금 설계 그대로' : '이 안을 적용한 뒤'}, 체크했지만 이번에 돌리지 않은 항목(예: 위치·Milky)을 그 위에서 이어서 최적화">이 안에서 이어서 ▸</button>`}<span class="m3-ad-sp"></span><button type="button" data-ad="view" title="프로파일 비교·사유 전문">자세히 ▸</button></div></div>`;
 }
 // el 에 그리고 이벤트를 h 로 넘김. state = { avail, sel, running, result, resultOpen, … } — 결과가 있으면 한 줄 + (열림) 결과 창
 export function renderAutoPanel(el, state, h) {

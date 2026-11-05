@@ -663,17 +663,17 @@ export async function runAutoDesign(cfg, io) {
     else {
       const p = m.peak, atCap = p.milky >= sCap - 0.3;
       feasible = false; d = { ...d, milky: p.milky };
-      reason = `균일도 최고 Milky ${p.milky}에서도 ${uText(p)} — 목표 ${obs.targetLen.toFixed(2)}${p.Uwid == null ? '' : ` / ${obs.targetWid.toFixed(2)}`} 미달 · ${limitText(p, obs)}${atCap ? ` · Milky 상한(${sCap}) — ②~⑤ 를 함께 쓰세요` : ''}`;
+      reason = `균일도 최고 Milky ${p.milky}에서도 ${uText(p)} — 목표 ${obs.targetLen.toFixed(2)}${p.Uwid == null ? '' : ` / ${obs.targetWid.toFixed(2)}`} 미달 · ${limitText(p, obs)}${atCap ? ` · Milky 상한(${sCap}) — 위치·형상을 함께 쓰세요` : ''}`;
       peek = await peekAbove(d, p, sCap, io);
       if (stop()) return { cancelled: true };
       if (cfg.housingProbe && io.evalVariants && !stop()) {   // 보완 계산: 최고점 Milky 에서 케이스 면 한 단계 위 한 번
-        io.progress?.('milky', 0.95, '보완 계산 (④ 케이스 면 한 단계 위)');
+        io.progress?.('milky', 0.95, '보완 계산 (케이스 면 한 단계 위)');
         const [h] = await io.evalVariants(d, [{ finish: cfg.housingProbe }], 3e5, 6000);
         if (stop()) return { cancelled: true };
         if (h?.ok) {
           hint = { finish: cfg.housingProbe, Ulen: h.stats.Ulen, Uwid: h.stats.Uwid };
           const ft = cfg.finishText ?? ((f) => `${f.kind}${f.R != null ? ` ${Math.round(f.R * 100)}%` : ''}`);
-          reason += ` · ④ 케이스 ${ft(cfg.housingProbe)} 와 함께 쓰면 ${uText(hint)}`;
+          reason += ` · 케이스 ${ft(cfg.housingProbe)} 와 함께 쓰면 ${uText(hint)}`;
         }
       }
     }
@@ -816,7 +816,7 @@ export async function runAutoDesign(cfg, io) {
     if (reason.startsWith('형상 최적안도')) reason = `형상 최적안도 목표 미달 — ${vt}`;
     else if (!reason) reason = `최종 정밀 재계산에서 목표 미달 — ${vt} (후보 평가와 차이: 노이즈·LED 몸체 영향)`;
     else {   // 문구 속 균일도는 정밀 재계산 값 하나만(후보 선별값·④ 함께 쓰기 선별값은 뺌 — 두 숫자가 섞이면 헷갈림)
-      reason = reason.replace(/( · ④ 케이스 .*?) 와 함께 쓰면 길이 균일도 [\d.]+( · 폭 균일도 [\d.]+)?/, '$1 를 함께 쓰면 나아짐');
+      reason = reason.replace(/( · 케이스 .*?) 와 함께 쓰면 길이 균일도 [\d.]+( · 폭 균일도 [\d.]+)?/, '$1 를 함께 쓰면 나아짐');
       reason = /길이 균일도 [\d.]+( · 폭 균일도 [\d.]+)?/.test(reason) ? reason.replace(/길이 균일도 [\d.]+( · 폭 균일도 [\d.]+)?/, vt) : `${reason} — ${vt}`;
     }
   }

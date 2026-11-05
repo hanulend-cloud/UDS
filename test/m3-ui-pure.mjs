@@ -324,7 +324,7 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   ok(a.y0 === 70 && a.y1 === 102 && b.y0 === 20 && c.y0 === 90, `plotRange: ${[a.y0, b.y0, c.y0]}`); }
 { // 최적화·시뮬레이션 대시보드(순수)
   const { tileOf, evalSparkSvg, simPct, STAGES } = await import('../src/ui/m3/opt-dash.js');
-  ok(STAGES.length === 4 && tileOf('milky') === 'milky' && tileOf('leds') === 'position' && tileOf('height') === 'position' && tileOf('shape') === 'shape' && tileOf('verify') === null && tileOf('housing') === 'housing', `4 타일(Milky · 기구 위치 · 기구 형상 · 케이스 면) · 단계 → 타일`);
+  ok(STAGES.length === 3 && STAGES.map(([k]) => k).join() === 'position,shape,milky' && !/케이스/.test(JSON.stringify(STAGES)) && tileOf('milky') === 'milky' && tileOf('leds') === 'position' && tileOf('height') === 'position' && tileOf('shape') === 'shape' && tileOf('verify') === null && tileOf('housing') === 'housing', `4 타일(Milky · 기구 위치 · 기구 형상 · 케이스 면) · 단계 → 타일`);
   const sv = evalSparkSvg([{ label: 'a', Ulen: 0.7, Uwid: 0.6 }, { label: 'b', ok: false, why: '간섭' }, { label: 'c', Ulen: 0.82, Uwid: 0.81 }], 0.8, 0.8, 2);
   ok(sv.includes('od-l1') && sv.includes('od-d1') && sv.includes('od-best') && sv.includes('od-tg') && sv.includes('×'), '후보 그래프: 점·최고·목표·탈락(×)');
   ok(evalSparkSvg([], 0.8, 0.8).includes('후보 결과 없음'), '후보 없음');
@@ -506,7 +506,7 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   const seq = [{ k: 'milky', label: 'Milky 1', Ulen: 0.7, Uwid: 0.9 }, { k: 'milky', label: 'Milky 2', Ulen: 0.82, Uwid: 0.84 }, { k: 'milky', label: 'Milky 3', Ulen: 0.75, Uwid: 0.86 }];
   const S = { tgLen: 0.8, tgWid: 0.8, seq, before: { Ulen: 0.6, Uwid: 0.7 }, overall: 0.44, tiles: Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', evals: [] }])) };
   const g = factorChartSvg(S, S.before, 600, 170);
-  ok((g.match(/<svg/g) ?? []).length === 2 && g.includes('길이 균일도') && g.includes('폭 균일도') && g.includes('최고 0.82') && g.includes('최고 0.84') && g.includes('시작 0.60') && g.includes('④ Milky') && (g.match(/od-cand/g) ?? []).length === 6 && g.includes('<title>후보 2'), '그래프 2개: 최고 = 같은 후보 · 후보 점 · 항목 이름');
+  ok((g.match(/<svg/g) ?? []).length === 2 && g.includes('길이 균일도') && g.includes('폭 균일도') && g.includes('최고 0.82') && g.includes('최고 0.84') && g.includes('시작 0.60') && g.includes('③ 확산도(Milky)') && (g.match(/od-cand/g) ?? []).length === 6 && g.includes('<title>후보 2'), '그래프 2개: 최고 = 같은 후보 · 후보 점 · 항목 이름');
   ok(factorChartSvg({ ...S, seq: [] }, {}, 600, 170).includes('후보를 시험하면'), '후보 전 안내');
   const m = monitorHtml(S, 65); ok(m.includes('<b>44%</b>') && m.includes('width:44%') && m.includes('진행 01:05') && /role="progressbar"[^>]*aria-valuenow="44"/.test(m) && m.indexOf('44%') < m.indexOf('om-steps'), '맨 위 진행 막대 % · aria');
   ok(monitorHtml({ ...S, ended: true, endSec: 5 }, 5).includes('<b>100%</b>'), '끝나면 100%');
@@ -514,8 +514,8 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
 { // 설계 인자 상자 · 현재안 %
   const { factorBoardHtml, monitorHtml, STAGES } = await import('../src/ui/m3/opt-dash.js');
   const tiles = Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', evals: [] }])); tiles.milky = { status: 'run', frac: 0.4, evals: [] }; tiles.shape = { status: 'done', frac: 1, evals: [] };
-  const h = factorBoardHtml({ tgLen: 0.8, tgWid: 0.8, tiles }, { locked: { position: {} }, on: {} }, (k) => ({ on: k === 'housing', box: `<input type="checkbox" data-ad="${k}">`, opt: '', why: '' }));
-  ok((h.match(/class="fb-card/g) ?? []).length === 4 && (h.match(/class="fb-head"/g) ?? []).length === 4 && h.includes('st-lock') && h.includes('st-on') && h.includes('st-run') && h.includes('st-done') && h.indexOf('fb-head') < h.indexOf('fb-in') && (h.match(/class="fb-sw"/g) ?? []).length === 3, '네 항목 같은 상자 · 상태 표시');
+  const h = factorBoardHtml({ tgLen: 0.8, tgWid: 0.8, tiles }, { locked: { position: {} }, on: {} }, (k) => ({ on: k === 'shape', box: `<input type="checkbox" data-ad="${k}">`, opt: '', why: '' }));
+  ok((h.match(/class="fb-card[ "]/g) ?? []).length === 3 && (h.match(/class="fb-head"/g) ?? []).length === 3 && h.includes('st-lock') && h.includes('st-run') && h.includes('st-done') && h.indexOf('fb-head') < h.indexOf('fb-in') && (h.match(/class="fb-sw"/g) ?? []).length === 2, '세 항목 같은 상자 · 상태 표시');
   const m = monitorHtml({ tgLen: 0.8, tgWid: 0.8, seq: [], before: {}, tiles, curFrac: 0.37 }, 3); ok(m.includes('<b>현재안</b><span>37%</span>'), '현재안 계산 %');
   const v = monitorHtml({ tgLen: 0.8, tgWid: 0.8, seq: [{ k: 'milky', Ulen: 0.7, Uwid: 0.7 }], before: {}, tiles, verFrac: 0.5 }, 3); ok(v.includes('<b>검증</b><span>50%</span>'), '검증 %');
 }
@@ -606,6 +606,22 @@ done();
   const r1 = flowState({ state: 'running', stats: { relNoise: 0.02 } }, st(0.58, 0.64), M), r2 = flowState({ state: 'done' }, st(0.58, 0.64), M), r3 = flowState({ state: 'done' }, st(0.85, 0.9), M), r4 = flowState({ state: 'done' }, st(0.58, 0.64), M, { running: true });
   console.log(r1.sim.text === '계산 중 25% · 58% / 64%' && r1.opt.text === '시뮬레이션 뒤' && r2.sim.cls === 'bad' && r2.sim.done && r2.opt.cls === 'need' && r3.sim.cls === 'ok' && r3.opt.done && r4.opt.text === '진행 중' && flowState(null, null, M).sim.text === '–'
     ? 'PASS 흐름 4 광분포 시뮬레이션 · 5 기구 최적화 상태' : (process.exitCode = 1, `FAIL 흐름 ${JSON.stringify([r1, r2, r3, r4])}`)); }
+{ // 3D 보기 상태(2026-11-05): 같은 도면이면 유지 — 최적화 시작·취소·적용·되돌리기에도 숨긴 부품이 풀리지 않게. 다른 도면만 초기화
+  const { viewKeep } = await import('../src/ui/m3/feature-tree.js'), a = {}, b = {};
+  ok(viewKeep(a, a).keepCamera && !viewKeep(a, a).reset, '같은 도면 = 유지');
+  ok(!viewKeep(a, b).keepCamera && viewKeep(a, b).reset, '다른 도면 = 초기화');
+  ok(!viewKeep(null, a).keepCamera && !viewKeep(null, a).reset, '처음 = 카메라 맞춤, 초기화할 것 없음'); }
+{ // 스윙 결과 → 정밀 탐색 버튼
+  const { resultLineHtml } = await import('../src/ui/m3/autodesign-panel.js');
+  const b = { best: { Ulen: 0.7, Uwid: 0.7, shape: { h: 1 } }, cur: { Ulen: 0.6, Uwid: 0.6 }, reason: '', targets: {}, stages: { shape: true }, feasible: false };
+  const yes = resultLineHtml({ ...b, shapeSwing: true, design: { shape: { h: 1 } } }), no = resultLineHtml({ ...b, shapeSwing: true, design: {}, unchanged: true }), deep = resultLineHtml({ ...b, shapeSwing: false, design: { shape: { h: 1 } } }), mix = resultLineHtml({ ...b, shapeSwing: true, stages: { shape: true, milky: true }, design: { shape: { h: 1 } } });
+  ok(/data-ad="shapeDeep"/.test(yes) && /가능성 있음/.test(yes), '효과 있으면 정밀 탐색 추천');
+  ok(/data-ad="shapeDeep"/.test(no) && /그래도/.test(no), '효과 없어도 원하면 정밀 탐색');
+  ok(!/data-ad="shapeDeep"/.test(deep) && !/data-ad="shapeDeep"/.test(mix), '정밀 뒤 · 다른 항목과 함께 돌린 뒤에는 없음'); }
+{ // 최적화 현황 표: 후보 값은 대략값이라고 알림
+  const { optMatrixHtml, STAGES } = await import('../src/ui/m3/opt-dash.js');
+  const h = optMatrixHtml({ tgLen: 0.8, tgWid: 0.8, tiles: Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', evals: [] }])), final: {} });
+  ok(/적은 광선/.test(h) && /최종 판정/.test(h), '현황 표에 후보 값 설명'); }
 { const { seedFits } = await import('../src/ui/m3/autodesign-panel.js');
   const G0 = { ns: 4, nw: 2 }, sd = (n) => ({ batches: [{ acc: new Float64Array(n) }] });
   ok(seedFits(sd(8), G0) && !seedFits(sd(6), G0) && !seedFits(null, G0) && !seedFits(sd(8), null) && !seedFits({ batches: [] }, G0), '판정 값을 화면으로: 칸 수가 같을 때만'); }
@@ -661,8 +677,8 @@ done();
   const S = { tgLen: 0.8, tgWid: 0.8, t0: 0, tiles: { position: { status: 'done', frac: 1, evals: [{ label: '1열 17개', Ulen: 0.84, Uwid: 0.81 }] }, housing: { status: 'off', evals: [] }, shape: { status: 'run', frac: 0.46, evals: [] }, milky: { status: 'off', evals: [] } },
     seq: [{ k: 'position', label: '1열 17개', Ulen: 0.84, Uwid: 0.81 }], before: { Ulen: 0.55, Uwid: 0.62 }, log: [{ sec: 92, k: 'position', label: '1열 17개', Ulen: 0.84, Uwid: 0.81 }], locked: { milky: true } };
   const m = monitorHtml(S, 130);
-  const okMon = m.indexOf('① 위치') < m.indexOf('③ 형상') && m.includes('46%') && /고정/.test(m) && m.includes('0.84') && m.includes('▲0.29') && m.includes('1열 17개') && m.includes('od-plot');
-  console.log(order === 'position,housing,shape,milky' && okLock && okMon ? 'PASS 기구 최적화 창: 계산 순서 · 고정 항목 · 모니터(진행 줄·지표·기록)' : (process.exitCode = 1, `FAIL 최적화 창: ${order} lock ${okLock} mon ${okMon}`)); }
+  const okMon = m.indexOf('① 위치') < m.indexOf('② 형상') && m.includes('46%') && /고정/.test(m) && m.includes('0.84') && m.includes('▲0.29') && m.includes('1열 17개') && m.includes('od-plot');
+  console.log(order === 'position,shape,milky' && okLock && okMon ? 'PASS 기구 최적화 창: 계산 순서 · 고정 항목 · 모니터(진행 줄·지표·기록)' : (process.exitCode = 1, `FAIL 최적화 창: ${order} lock ${okLock} mon ${okMon}`)); }
 { // 트리 우클릭 메뉴(2026-10-30): 고른 부품 수에 맞는 항목 · 그룹에서 빼기 · Shift 범위 선택
   const { treeCtxItems, removeFromGroups, rangeSelect } = await import('../src/ui/m3/feature-tree.js');
   const M = { parts: [{}, {}, {}, {}], groups: [{ id: 'g1', name: '그룹 1', parts: [1, 2] }] };
