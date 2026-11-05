@@ -29,3 +29,26 @@ export function mountSplit(items, { key, dir = 'col', min = 60, init = null, onC
   apply();
   return { reset: () => { w = def(); apply(); save(); onChange(); } };
 }
+
+// 기구 최적화 창 아래 칸의 좌우 경계(2026-11-05) — x = 왼쪽 폭(px), W = 전체 폭. 왼쪽 ≥ minL, 오른쪽 ≥ minR(좁으면 왼쪽 우선)
+export const clampLeft = (x, W, minL = 300, minR = 320) => Math.max(minL, Math.min(x, W - minR));
+// grid 칸(--m3-mon-l)을 끌어서 조절 · 보는 사람별로 기억 · 더블클릭 = 처음 비율 · 방향키 = 20 px
+export function mountColSplit(body, { key = 'uds.m3.monLeft', onChange = () => {} } = {}) {
+  if (!body || body.querySelector(':scope > .m3-mon-colsplit')) return null;
+  const h = document.createElement('div');
+  h.className = 'm3-mon-colsplit'; h.setAttribute('role', 'separator'); h.setAttribute('aria-orientation', 'vertical'); h.setAttribute('aria-label', '왼쪽·오른쪽 칸 폭'); h.tabIndex = 0; h.title = '끌어서 좌우 폭 조절 · 더블클릭 = 처음 비율';
+  body.appendChild(h);
+  const set = (x, save = true) => { body.style.setProperty('--m3-mon-l', `${Math.round(x)}px`); if (save) { try { localStorage.setItem(key, String(Math.round(x))); } catch {} } onChange(); };
+  try { const v = +localStorage.getItem(key); if (v > 0) body.style.setProperty('--m3-mon-l', `${v}px`); } catch {}
+  const leftOf = () => h.getBoundingClientRect().left + h.offsetWidth / 2 - body.getBoundingClientRect().left;
+  h.addEventListener('pointerdown', (e) => {
+    e.preventDefault(); h.setPointerCapture(e.pointerId); h.classList.add('on');
+    const x0 = e.clientX, l0 = leftOf();
+    const mv = (m) => set(clampLeft(l0 + m.clientX - x0, body.clientWidth), false);
+    const up = () => { h.removeEventListener('pointermove', mv); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', up); h.classList.remove('on'); set(leftOf()); };
+    h.addEventListener('pointermove', mv); h.addEventListener('pointerup', up); h.addEventListener('pointercancel', up);
+  });
+  h.addEventListener('dblclick', () => { body.style.removeProperty('--m3-mon-l'); try { localStorage.removeItem(key); } catch {} onChange(); });
+  h.addEventListener('keydown', (e) => { if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return; e.preventDefault(); set(clampLeft(leftOf() + (e.key === 'ArrowLeft' ? -20 : 20), body.clientWidth)); });
+  return h;
+}

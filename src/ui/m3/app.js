@@ -9,7 +9,7 @@ import { reportError } from '../error-log.js';
 import { ledChange, ledDeltaText, ledDeltaXYZ, pitchOf } from './led-change.js';
 import { installCommitInputs } from './commit-input.js';
 import { createHistory } from './history.js';
-import { mountSplit } from './pane-split.js';
+import { mountSplit, mountColSplit } from './pane-split.js';
 import { findLeds, supportPart, emitterFaceAway, autoLedGroup, autoStepLeds, findPcbParts } from '../../engine/mech3d/led-detect.js';
 import { loadClear, saveClear, clearExportJson, clearImport, parseMaterialFile } from '../../model/material-io.js';
 import { setPartMaterial, setPartMaterialParam, syncPcb, setPcbR, pcbPickPlan, pcbNames, clampPcbPct, CLEAR_BASE, applyClearEntry, clearEntryFromForm, editClearEntry, syncClearParts } from '../../engine/mech3d/materials.js';
@@ -182,7 +182,7 @@ export async function mount(ctx) {
   // 기구 최적화 창 안: 왼쪽 설계 인자 ↔ 오른쪽 실행·진행 폭 조절(가운데 세로 경계선 끌기, 보는 사람별)
   // 실행 줄·결과 카드(#m3-auto) = 왼쪽 설계 인자 바로 아래(2026-10-30) — 고르고 → 실행 → 결과를 한 칸에서, 오른쪽은 진행 모니터만
   if ($('#m3-auto') && $('#m3-auto').parentElement !== $('#m3-factor')) $('#m3-factor')?.appendChild($('#m3-auto'));
-  mountSplit([$('#m3-factor'), $('#m3-dock')], { key: 'uds.m3.monSplitH', dir: 'row', min: 280, onChange: () => window.dispatchEvent(new Event('resize')) });
+  mountColSplit($('#m3-factor')?.parentElement, { onChange: () => window.dispatchEvent(new Event('resize')) });   // 설계 인자 아래 칸 좌우 폭(2026-11-05)
   mountFacSplitter(document.querySelector('#m3-factor'), document.querySelector('.m3-left'));   // 왼쪽 맨 아래(부품 속성 밑) 설계 인자 현황 높이 조절
   if (A && A.ctx.mspec === ctx.mspec) { A.ctx = ctx; return; }   // 같은 기구 — 그대로
   unmount();
