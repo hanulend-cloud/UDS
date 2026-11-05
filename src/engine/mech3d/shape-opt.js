@@ -423,6 +423,13 @@ export function refinedFor(mesh, F, centers, R, hMax, hBottom = 0) {
   return lru(memoR, mesh, JSON.stringify([F.u, F.v, F.d, centers, R, hMax, hBottom]), () => { stats.refine++; return refineForBumps(mesh, F, centers, R, hMax, { H: heightsFor(mesh, F, 0.5), hBottom }); });
 }
 
+// 빠른 형상(2026-11-05) — 각 LED 위 입광면을 오목하게 파는 단순 렌즈: 깊이 3단(살두께 여유까지) × 반경 3단(LED 피치 기준) + 변경 없음. 여유가 없으면 []
+export function lensCandidates({ thick, minWall, pitch }) {
+  const room = thick - minWall - 0.02;
+  if (!(room > 0.02)) return [];
+  const rd = (v) => Math.round(v * 1e3) / 1e3, Rs = [0.25, 0.5, 0.75].map((k) => rd(k * pitch)), base = { dt: 0, e: 0, c: 0 };
+  return [{ ...base, h: 0, R: Rs[1] }, ...[1 / 3, 2 / 3, 1].flatMap((f) => Rs.map((R) => ({ ...base, h: rd(f * room), R })))];
+}
 // 후보 27개(3×3×3) — 범위는 spec §2.3 기본. LED 중심이 없으면 Δt 만 3개
 // Δt·h 는 {lo, 0, hi} — 현재 형상(Δt=0·h=0)이 늘 후보에 들게(가운데 값 대신 0). R 은 {lo, 중간, hi}
 export function shapeCandidates({ t0, pitch, hasCenters, ranges = null }) {

@@ -1,7 +1,7 @@
 // 형상 종류별로 입광면 후보가 실제로 움직이는가(2026-11-05): node test/shape-room.mjs
 // 재발 방지: 입광면이 다른 부품에 닿아 있으면 모드 후보가 전부 간섭으로 탈락해 형상이 조용히 안 움직였음(기본 예제 11/11).
 // 조건: 모든 모드·양방향에서 (1) 간섭 없음 (2) 살두께 지킴 (3) 움직일 여유가 있는 형상이면 실제로 움직임
-import { fieldThickness, fieldRoom, clampField, deformPart, refinedFor, heightsFor, partFrame, lineVarH, minThickness } from '../src/engine/mech3d/shape-opt.js';
+import { lensCandidates, fieldThickness, fieldRoom, clampField, deformPart, refinedFor, heightsFor, partFrame, lineVarH, minThickness } from '../src/engine/mech3d/shape-opt.js';
 import { shapeModes } from '../src/engine/mech3d/autodesign.js';
 import { newInterference, interferenceKeys } from '../src/engine/mech3d/clearance.js';
 import { transformMesh } from '../src/engine/mech3d/xform.js';
@@ -74,5 +74,11 @@ for (const [name, part, others, lp, want] of cases) {
   let bad = 0; const box = solid(boxMesh(0, 0, 0, 8, 8, 8));   // 격자 점에서 쏘면 모서리·꼭짓점을 자주 지남
   for (let i = -8; i <= 24; i++) for (let j = -8; j <= 24; j++) for (let k = -8; k <= 24; k++) { const p = [i / 2 + 1e-9, j / 2 + 1e-9, k / 2 + 1e-9], inside = p.every((v) => v > 0 && v < 8); if (p.some((v) => Math.abs(v) < 1e-6 || Math.abs(v - 8) < 1e-6)) continue; if (insidePart(box, p) !== inside) bad++; }
   ok(bad === 0, `격자 점 안/밖 오판 ${bad}개`);
+}
+{ // 빠른 형상(2026-11-05): LED 중심 렌즈 후보 — 살두께 여유 안에서 깊이 3단 × 반경 3단 + 변경 없음
+  const L3 = lensCandidates({ thick: 2, minWall: 0.8, pitch: 12 });
+  ok(L3.length === 10 && L3.filter((q) => q.h > 0).length === 9 && L3.some((q) => q.h === 0), `후보 ${L3.length}개(변경 없음 포함)`);
+  ok(Math.max(...L3.map((q) => q.h)) <= 2 - 0.8 && new Set(L3.filter((q) => q.h > 0).map((q) => q.R)).size === 3, '깊이 ≤ 살두께 여유, 반경 3단');
+  ok(lensCandidates({ thick: 0.8, minWall: 0.8, pitch: 12 }).length === 0, '살두께 여유가 없으면 후보 없음');
 }
 done();

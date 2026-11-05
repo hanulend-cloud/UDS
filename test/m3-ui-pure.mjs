@@ -105,6 +105,16 @@ ok(judgeText(0.8004, 0.8009).cls === 'ok' && judgeText(0.7999, 0.8).cls === 'bad
 { // Milky 상한 기본: ① 만 = 9.9 · ② 함께 = max(현재, 5) · 카드 값도 같음
   const a = { milky: { ok: true }, leds: { ok: true }, shape: { ok: false } };
   ok(capDefault({ milky: true }, a, 3) === 5 && capDefault({ milky: true, leds: true }, a, 3) === 5 && capDefault({ milky: true, leds: true }, a, 6) === 5, 'Milky 상한 기본: 언제나 5');
+  { // ③ 대상 추천(2026-11-05): 투명 부품 먼저(빛이 처음 맞는 부품 우선), 확산 부품을 고르면 안내
+    const pm = (kind) => ({ material: { kind }, faceFinish: {} }), M3 = { parts: [pm('opaque'), pm('milky'), pm('clear'), pm('clear')], light: { kind: 'manual' }, observe: {} };
+    const sh = (info) => stageAvailability(M3, { non25: [0, 0, 0, 0], ...info }).shape;
+    ok(sh({ path: { shares: { 1: 0.9, 2: 0.5, 3: 0.7 } } }).parts.join() === '3,2,1', '투명 부품 먼저(비중 순), 확산은 뒤');
+    ok(sh({ path: { shares: { 1: 0.9, 2: 0.5, 3: 0.7 } }, firstHit: 2 }).parts.join() === '2,3,1', '빛이 처음 맞는 투명 부품이 맨 앞');
+    ok(sh({ path: { shares: { 1: 0.9, 2: 0.5, 3: 0.7 } }, firstHit: 1 }).parts.join() === '3,2,1', '처음 맞는 부품이 확산이어도 투명 먼저');
+    const av = { milky: { ok: true }, shape: sh({ path: { shares: { 1: 0.9, 2: 0.5 } }, firstHit: 2 }) }, cfg = (part) => tileConfigHtml('shape', { avail: av, sel: { shape: true, shapePart: part }, names: ['a', '확산판', '도광판', 'd'], path: null }).opt ?? tileConfigHtml('shape', { avail: av, sel: { shape: true, shapePart: part }, names: ['a', '확산판', '도광판', 'd'] }).html;
+    ok(/형상 효과가 작음/.test(cfg(1)) && /도광판/.test(cfg(1)) && !/형상 효과가 작음/.test(cfg(2)), '확산 부품을 고르면 투명 부품 추천');
+    const noClear = stageAvailability({ ...M3, parts: [pm('opaque'), pm('milky')] }, { non25: [0, 0] }).shape;
+    ok(noClear.ok && noClear.parts.join() === '1' && noClear.rec == null, '투명 부품이 없으면 확산 부품 그대로'); }
   { const { resultLineHtml, peekText, loweredText } = await import('../src/ui/m3/autodesign-panel.js');
     { const b = { best: { Ulen: 0.7, Uwid: 0.7 }, cur: { Ulen: 0.6, Uwid: 0.6 }, reason: 'x', targets: {} };
       const miss = resultLineHtml({ ...b, feasible: false, stages: { shape: true } }), all = resultLineHtml({ ...b, feasible: false, stages: { shape: true, milky: true, leds: true } }), pass = resultLineHtml({ ...b, feasible: true, stages: { shape: true } }), other = resultLineHtml({ ...b, feasible: false, stages: { milky: true } });
@@ -330,7 +340,7 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   const { stageAvailability, tileConfigHtml, PATH_MIN } = await import('../src/ui/m3/autodesign-panel.js');
   const K = (kind, x = {}) => ({ material: { kind }, ...x }), M = { parts: [K('milky'), K('clear'), K('clear'), K('opaque'), K('opaque'), K('opaque', { untrace: true })], light: { kind: 'manual' }, observe: { faces: [] } };
   const non25 = [0, 0, 0.5, 1, 1, 1], all = stageAvailability(M, { non25 });
-  ok(all.shape.parts.join() === '0,1' && all.housing.parts.join() === '3,4', '검출 전: 쓸 수 있는 부품 전체(추적 제외는 뺌)');
+  ok(all.shape.parts.join() === '1,0' && all.housing.parts.join() === '3,4', '검출 전: 쓸 수 있는 부품 전체(추적 제외는 뺌)');
   const path = { shares: { 0: 0.4, 1: 1, 2: 0.9, 3: PATH_MIN / 2, 4: 0.3 } }, a = stageAvailability(M, { non25, path });
   ok(a.shape.parts.join() === '1,0' && a.shape.skip.join() === '2' && a.housing.parts.join() === '4', '검출 뒤: 광경로 위만 · 빛 많은 순 · 2.5D 아닌 부품은 skip · 1% 미만 뺌');
   const none = stageAvailability(M, { non25, path: { shares: {} } });

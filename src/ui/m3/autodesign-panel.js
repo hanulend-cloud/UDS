@@ -59,12 +59,14 @@ export function stageAvailability(M, info) {
   const path = info.path ?? null, shr = (i) => path?.shares?.[i] ?? 0, onP = (i) => !path || shr(i) >= PATH_MIN, order = (a) => (path ? a.sort((x, y) => shr(y) - shr(x) || x - y) : a);
   const milkyParts = M.parts.map((p, i) => (p.material.kind === 'milky' ? i : -1)).filter((i) => i >= 0);
   const lit = M.parts.map((p, i) => (p.material.kind !== 'opaque' && p.role !== 'light' && !p.untrace && onP(i) ? i : -1)).filter((i) => i >= 0);   // 빛이 지나는 투과 부품
-  const shapeParts = order(lit.filter((i) => (info.non25?.[i] ?? 1) <= 0.02)), shapeSkip = path ? order(lit.filter((i) => !shapeParts.includes(i))) : [];   // shapeSkip = 광경로 위지만 2.5D 가 아니라 형상을 못 바꿈
+  // ③ 대상 = 투명 부품 먼저(입광면에서 굴절로 빛을 옮길 수 있음, 빛이 처음 맞는 부품 우선) · 확산 부품은 들어가자마자 산란해 효과가 작아 뒤로(2026-11-05)
+  const clearFirst = (a) => { const isC = (i) => M.parts[i].material.kind === 'clear'; return [...a.filter((i) => isC(i) && i === info.firstHit), ...a.filter((i) => isC(i) && i !== info.firstHit), ...a.filter((i) => !isC(i))]; };
+  const shapeParts = clearFirst(order(lit.filter((i) => (info.non25?.[i] ?? 1) <= 0.02))), shapeRec = shapeParts.find((i) => M.parts[i].material.kind === 'clear') ?? null, shapeDiffuse = shapeParts.filter((i) => M.parts[i].material.kind === 'milky'), shapeSkip = path ? order(lit.filter((i) => !shapeParts.includes(i))) : [];   // shapeSkip = 광경로 위지만 2.5D 가 아니라 형상을 못 바꿈
   const opaque = order(M.parts.map((p, i) => (p.material.kind === 'opaque' && p.role !== 'light' && p.role !== 'pcb' && !p.untrace && onP(i) ? i : -1)).filter((i) => i >= 0));   // ④ 대상 = 계산에 드는 불투명 부품(광원으로 옮긴 LED·추적 제외·PCB 빼고 — PCB 면은 케이스처럼 바꾸지 않음)
   return {
     milky: milkyParts.length ? { ok: true, parts: milkyParts } : { ok: false, why: 'Milky 부품이 없음 — 부품 소재를 Milky 로 지정하세요' },
     leds: M.light.kind === 'manual' ? { ok: true } : M.light.kind === 'step' ? (stepRefEmitter(M.light.step) ? { ok: true, note: 'LED STEP — 기준 LED 를 복사해 개수·간격 조정' } : { ok: false, why: 'LED STEP — 기준이 될 LED 가 없음 · LED 발광면을 먼저 지정하세요' }) : { ok: false, why: '광원을 직접 배치로 지정하세요' },
-    shape: shapeParts.length ? { ok: true, parts: shapeParts, skip: shapeSkip } : { ok: false, why: !path ? '관측 방향으로 2.5D 인 투과 부품이 없음' : shapeSkip.length ? '광경로의 투과 부품이 관측 방향으로 2.5D 가 아님' : '광경로에 투과 부품이 없음' },
+    shape: shapeParts.length ? { ok: true, parts: shapeParts, skip: shapeSkip, rec: shapeRec, diffuse: shapeDiffuse } : { ok: false, why: !path ? '관측 방향으로 2.5D 인 투과 부품이 없음' : shapeSkip.length ? '광경로의 투과 부품이 관측 방향으로 2.5D 가 아님' : '광경로에 투과 부품이 없음' },
     height: heightAvail(M.light),
     housing: opaque.length ? { ok: true, parts: opaque } : { ok: false, why: path ? '빛이 닿는 불투명 부품이 없음' : '불투명 부품이 없음 — 케이스 부품 소재를 불투명으로 지정하세요' },
   };
@@ -132,6 +134,7 @@ export function tileConfigHtml(k, { avail, sel, running, names = [], milkyPart =
   let opt = '';
   if (on && k === 'milky') opt = milkyPart != null ? `<div class="od-opt mut">대상: ${pname(milkyPart)}</div>` : '';   // 상한 입력칸은 뺌(2026-10-29) — 상한 = capDefault 자동
   if (k === 'shape') opt = `<div class="od-opt">형상 바꿀 부품 <select data-ad="shapePart" aria-label="③ 대상 부품"${dis}>${avail.shape.parts.map((i) => `<option value="${i}"${i === sel.shapePart ? ' selected' : ''}>${pname(i)}${pct(i)}</option>`).join('')}${(avail.shape.skip ?? []).map((i) => `<option value="${i}" disabled>${pname(i)}${pct(i)} · 2.5D 아님</option>`).join('')}</select></div>${pathNote('빛 % = 관측면에 닿은 빛 중 그 부품을 지난 비중(1% 미만 부품은 목록에서 뺌)')}`;
+  if (k === 'shape' && avail.shape.rec != null && avail.shape.diffuse?.includes(sel.shapePart)) opt += `<div class="od-opt m3-pcbwarn">확산 부품은 형상 효과가 작음 — ${pname(avail.shape.rec)} 추천</div>`;
   if (k === 'housing') opt = `<div class="od-opt">대상 <select data-ad="housingPart" aria-label="④ 대상 부품"${dis}>${avail.housing.parts.map((i) => `<option value="${i}"${i === sel.housingPart ? ' selected' : ''}>${pname(i)}${pct(i)}</option>`).join('')}</select> <span class="mut">${housingMat ? `${esc(housingMat.name)} · 최대 ${Math.round(housingMat.max * 100)}%` : '소재 미지정'}</span></div>${pathNote('빛 % = LED 에서 나온 빛 중 그 면에 닿은 비중(1% 미만 부품은 목록에서 뺌)')}
     <label class="od-opt"><input type="checkbox" data-ad="housingSpecial"${sel.housingSpecial ? ' checked' : ''}${dis}> 특수 표면처리 허용</label>`;
   const why = `${TILE_NOTE[k] ?? ''}${a.note ? ` · ${a.note}` : ''}`;

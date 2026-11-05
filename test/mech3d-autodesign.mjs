@@ -461,6 +461,18 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   ok(!a5.best.shape && /목표 통과/.test(a5.shapeNote ?? ''), `이미 통과 → ${a5.shapeNote}`);
   const a6 = await runN((cands) => cands.map((cd) => ({ cand: cd, ok: true, stats: statsOf(cd.kF ?? null), eff: 0.5 })), (d) => ({ stats: { ...statsOf(null), relNoise: 0.01, empty: false }, eff: 0.5 }));
   ok(a6.unchanged && !a6.best.shape && /최종 판정/.test(a6.shapeNote ?? ''), `찾았지만 최종 판정에서 안 나음 → ${a6.shapeNote}`);
+  // 빠른 형상(렌즈 후보 + 일정 2단계): 결과·이유
+  const lensCfg = (extra) => ({ stages: { shape: true }, obs: O, current: { milky: 1, count: 5, pitch: 0, shape: null }, G, shapePart: 0, curve: false, schedule: [[99, 1, 1], [3, 2, 1]], shapeCands: [{ dt: 0, h: 0, R: 3, e: 0, c: 0 }, { dt: 0, h: 0.5, R: 3, e: 0, c: 0 }], ...extra });
+    const sOf = (u) => ({ ...statsOf(null), profile: Array.from({ length: 100 }, (_, i) => u + ((1 - u) * i) / 99), Ulen: u, Uwid: 0.98 });
+  const evL = (fn) => ({ evalShapes: async (d, cands) => fn(cands), verify: async (d) => ({ stats: { ...sOf(d.shape ? 0.95 : 0.8), relNoise: 0.01, empty: false }, eff: 0.5 }), progress() {}, cancelled: () => false });
+    const l1 = await runAutoDesign(lensCfg(), evL((cands) => cands.map((cd) => ({ cand: cd, ok: true, stats: sOf(cd.h ? 0.95 : 0.8), eff: 0.5 }))));
+  ok(l1.best.shape?.h === 0.5 && !l1.shapeNote, `렌즈 후보가 나으면 채택 (h ${l1.best.shape?.h})`);
+  const l2 = await runAutoDesign(lensCfg(), evL((cands) => cands.map((cd) => ({ cand: cd, ok: true, stats: sOf(0.8), eff: 0.5 }))));
+  ok(!l2.best.shape && /렌즈 후보 1개/.test(l2.shapeNote ?? '') && /나은 형상 없음/.test(l2.shapeNote), `효과 없으면 이유: ${l2.shapeNote}`);
+  const l3 = await runAutoDesign(lensCfg(), evL((cands) => cands.map((cd) => ({ cand: cd, ok: false, why: '간섭' }))));
+  ok(!l3.best.shape && /탈락/.test(l3.shapeNote ?? '') && /간섭/.test(l3.shapeNote), `모두 탈락: ${l3.shapeNote}`);
+  const l4 = await runAutoDesign(lensCfg({ shapeCands: [], shapeEmptyWhy: '살두께 여유 없음' }), evL(() => []));
+  ok(!l4.best.shape && l4.shapeNote === '살두께 여유 없음', '후보를 못 만든 이유 그대로');
   const a7 = await runN((cands) => cands.map((cd) => ({ cand: cd, ok: true, stats: statsOf(cd.kF ?? null), eff: 0.5 })));
   ok(a7.best.shape && !a7.shapeNote, '형상이 바뀌면 이유 문구 없음'); }
 { // 판정 근처 최종안은 노이즈 0.5% 로 다시 계산해 판정(2026-11-03) — 먼 현재안은 다시 계산 안 함

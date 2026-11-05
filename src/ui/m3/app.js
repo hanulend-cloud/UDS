@@ -50,7 +50,7 @@ import { candidateGrid } from '../../engine/mech3d/basis.js';
 import { ledAtS, clampRowGap, rowGapOptions } from '../../engine/mech3d/placement.js';
 import { virtualEmittersAt, stepRefEmitter } from '../../engine/mech3d/virtual-leds.js';
 import { rw4 } from '../../engine/mech3d/layout-solver.js';
-import { heightsFor, deformPart, refinedFor, minThickness, pathFromLine, swOnPath, ledEll, lineVarH, splineInput, partFrame, bumpCenters, fieldThickness, clampField, fieldRoom } from '../../engine/mech3d/shape-opt.js';
+import { heightsFor, deformPart, refinedFor, minThickness, pathFromLine, swOnPath, ledEll, lineVarH, splineInput, partFrame, bumpCenters, fieldThickness, clampField, fieldRoom, lensCandidates } from '../../engine/mech3d/shape-opt.js';
 import { interferenceKeys, newInterference, travelDistance } from '../../engine/mech3d/clearance.js';
 import { pacer } from '../../engine/mech3d/yield.js';
 import { scaleMoveMesh, isIdentityXform } from '../../engine/mech3d/xform.js';
@@ -556,7 +556,26 @@ function adInfo() {   // 부품별 비 2.5D 비율(부품 윗면 기준 — part
   if (!st.info || st.info.rt !== rt || st.info.line !== S.line) st.info = { rt, line: S.line, non25: S.line && rt ? rt.parts.map((p) => heightsFor(p, partFrame(p, S.line.frame), 0.5).non25) : [], boxes: rt ? rt.parts.map((p) => bounds(p.positions)) : [] };   // boxes = ④ 기본 대상용 외곽
   return st.info;
 }
-const adAvail = (M) => stageAvailability(M, { ...adInfo(), path: adState().path ?? null });
+// LED 빛이 처음 맞는 부품 — LED 축 방향 광선(최대 5개)의 다수결. (기구·라인·광원 배치)별 메모, 못 재면 null
+function adFirstHit(M) {
+  const st = adState(), line = A.store.session.line, rt = getMech3d();
+  if (!line || !rt) return null;
+  const key = JSON.stringify([M.light.kind, M.light.step?.offset, M.light.step?.virtual, M.light.manual, M.parts.map((p) => [p.role, p.untrace])]);
+  if (st.fh?.rt === rt && st.fh.line === line && st.fh.key === key) return st.fh.v;
+  let v = null;
+  try {
+    const em = L.currentEmitters(M, line), pick = em.length > 5 ? [0, 1, 2, 3, 4].map((i) => em[Math.round((i * (em.length - 1)) / 4)]) : em, cnt = new Map();
+    for (const e of pick) {
+      let t = Infinity, k = -1;
+      rt.parts.forEach((m, i) => { const p = M.parts[i]; if (!p || p.role === 'light' || p.role === 'pcb' || p.untrace) return; const h = rayT(m, e.pos, e.axis); if (h < t) { t = h; k = i; } });
+      if (k >= 0) cnt.set(k, (cnt.get(k) ?? 0) + 1);
+    }
+    v = [...cnt].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  } catch { v = null; }
+  st.fh = { rt, line, key, v };
+  return v;
+}
+const adAvail = (M) => stageAvailability(M, { ...adInfo(), path: adState().path ?? null, firstHit: adFirstHit(M) });
 // 광경로 위 부품 검출 — 계산 중인 장면(Worker 0)에서 광자로 재서 ③ 형상·② 케이스 대상 목록을 좁힘. 장면마다 한 번, 기구 최적화 창이 열려 있을 때만.
 // 최적화 실행 중에는 Worker 장면이 후보로 바뀌므로 쉼. 관측면에 빛이 안 닿으면 path = null(전체 목록)
 function adDetectPath() {
@@ -1008,7 +1027,16 @@ async function adRun(opt = {}) {
   const minWall = { ...defaultChecks(), ...(M0.checks ?? {}) }.minWall, t0 = R.now();
   // ③ 변수 범위(Δt·h·R·e·c) — 엔진이 선별 → 격자 → 압축. 진행률 분모는 io.shapePlan 으로 받음(격자 크기 모르는 선별 중엔 최대 격자 27 로 어림)
   // ③ 입광면 보정 지도 — 길이 절점 간격 = LED 피치의 ⅛(2~6 mm, LED 물결을 잡게), 폭 7 절점. 광자 = 압축 마지막 단계 예산(광 효율 반비례)
-  const shapeField = stages.shape ? (() => { const pitch = cur.count > 1 ? (cur.pitch > 0 ? cur.pitch : line.length / cur.count) : line.length, ds = Math.min(6, Math.max(2, pitch / 8)), sb = shapeBudget(currentVerified?.eff ?? snap0.photometry?.eff).schedule.at(-1); return { ns: Math.ceil(line.length / ds) + (line.closed ? 0 : 1), nw: 7, N: sb[1], maxMs: sb[2], W: line.width / 2, ledSOf: (d) => { try { const q = L.currentEmitters(designScene(d, ctx).M, line).map((e) => line.toSW(...line.to2D(e.pos))[0]).sort((a, b) => a - b); return q.filter((v, i) => !i || v - q[i - 1] > 1e-6); } catch { return []; } } }; })() : null;
+  // ③ 기본 = 빠른 형상(LED 중심 렌즈 후보, 2026-11-05). opt.precise = 정밀(측정 응답으로 입광면 곡면 전체를 풂 — 시간이 더 걸림)
+  const quickShape = !!stages.shape && !opt.precise;
+  const lens = quickShape ? (() => {
+    const base = adBaseMesh(sp, ctx), F = shapeFrame(base, line), H = heightsFor(base, F, 0.5), thick = minThickness(H, shapeModFor({ dt: 0, h: 0, R: 1 }, M0, line, F));
+    const pitch = cur.count > 1 ? (cur.pitch > 0 ? cur.pitch : line.length / cur.count) : line.length, cands = lensCandidates({ thick, minWall, pitch }), sm = M0.parts[sp]?.shapeMod;
+    if (cands.length && sm) cands.push((({ dt, h, R, e, c, kL, kW, kF }) => ({ dt, h, R, e, c, kL, kW, kF }))(sm));   // 이미 적용한 형상도 후보 — 더 나으면 유지
+    const sb = shapeBudget(currentVerified?.eff ?? snap0.photometry?.eff).schedule;
+    return { cands, schedule: [[99, sb[0][1], sb[0][2]], [3, sb[1][1], sb[1][2]]], why: `살두께 여유가 없음(두께 ${thick.toFixed(2)} mm · 최소 ${minWall} mm) — 렌즈를 넣지 못함` };
+  })() : null;
+  const shapeField = stages.shape && !quickShape ? (() => { const pitch = cur.count > 1 ? (cur.pitch > 0 ? cur.pitch : line.length / cur.count) : line.length, ds = Math.min(6, Math.max(2, pitch / 8)), sb = shapeBudget(currentVerified?.eff ?? snap0.photometry?.eff).schedule.at(-1); return { ns: Math.ceil(line.length / ds) + (line.closed ? 0 : 1), nw: 7, N: sb[1], maxMs: sb[2], W: line.width / 2, ledSOf: (d) => { try { const q = L.currentEmitters(designScene(d, ctx).M, line).map((e) => line.toSW(...line.to2D(e.pos))[0]).sort((a, b) => a - b); return q.filter((v, i) => !i || v - q[i - 1] > 1e-6); } catch { return []; } } }; })() : null;
   let shapeI = 0, shapeScr = 0, shapeTot = 1;
   const progress = (stage, frac, text) => {   // 전체 진행률(단계 무게) + 남은 시간
     if (A !== a || R.stopped) return;
@@ -1126,7 +1154,7 @@ async function adRun(opt = {}) {
   try {
     res = await runAutoDesign({
       stages, obs, G, line, current: cur, milkyMax: st.sel.milkyMax ?? null, housingProbe, finishText: (f) => finishText(f, reflCat()), nMax: Math.max(1, Math.min(60, Math.floor(line.length / 2))), pitchRange: null, stepMode: stp, currentIrregular: stages.leds && (() => { try { const q = pitchOf(L.currentEmitters(M0, line).map((e) => { const [s, w] = line.toSW(...line.to2D(e.pos)); return { s, w }; })); return !q.uniform; } catch { return false; } })(),
-      shapePart: sp, shapeField,
+      shapePart: sp, shapeField, ...(quickShape ? { shapeCands: lens.cands, schedule: lens.schedule, curve: false, shapeEmptyWhy: lens.cands.length ? null : lens.why } : {}),
       shapeStart: stages.shape && M0.parts[sp]?.shapeMod ? (({ dt, h, R, e, c, kL, kW, kF }) => ({ dt, h, R, e, c, kL, kW, kF }))(M0.parts[sp].shapeMod) : null,   // 이미 적용한 형상에서 이어서
       lateral, rowsOptions: st.sel.oneRow ? [1] : [1, 2], currentVerified, screenGrid: !lowQ, currentScreen, heightRange: hInfo?.range ?? null, housingPart: hp, finishCands, ledsAtCurrentMilky: !!opt.added?.length,
     }, io);
