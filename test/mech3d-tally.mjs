@@ -172,12 +172,13 @@ ok(S.counted === nV && S.noiseWarn === false, `집계 셀 ${S.counted}, 노이�
   ok(hit(on, 50, 3, 0, 0, 0, 1) === true && sum(on) === 1, '가상: 평면 아래에서 나온 빛을 평면에서 셈');
   const k0 = on.acc.findIndex((v) => v > 0); ok(k0 === 50 * G.nw + Math.floor((0 - G.w0) / G.cell), `수직 광선 = 바로 위 칸 (${k0})`);
   const on2 = makeAccumulator(G, line, obs, null, { virtual: true }); hit(on2, 50, 3, 0, 0.1 / l, 0, 1 / l);
-  ok(on2.acc.findIndex((v) => v > 0) === 50 * G.nw + Math.floor((0 - G.w0) / G.cell), '기울어진 광선 = 평면을 지나는 점(z 0→2, x +0.2)');
+  ok(on2.acc.findIndex((v) => v > 0) === 49 * G.nw + Math.floor((0 - G.w0) / G.cell), '기울어진 광선 = 평면을 지나는 점(z 0→2, x +0.2 — 이 라인은 s 가 x 반대 방향)');
   const on3 = makeAccumulator(G, line, obs, null, { virtual: true });
   ok(!hit(on3, 50, 3, 5, 0, 0, 1) && sum(on3) === 0, '평면 위에서 나온 빛은 안 셈');
   ok(!hit(on3, 50, 3, 0, 0, 0, -1) && !hit(on3, 50, 3, 0, 0.8, 0, 0.6) && sum(on3) === 0, '아래로 가는 빛 · 관측 원뿔 밖은 안 셈');
   ok(!hit(on3, 500, 3, 0, 0, 0, 1) && sum(on3) === 0, '관측면 밖은 안 셈');
   const on4 = makeAccumulator(G, line, obs, null, { virtual: true }); on4.onExit(0, 1, 40, 3, 2, 0, 0, 1, 1, 7); on4.onEscape(40, 3, 2, 0, 0, 1, 1, 7);
-  ok(sum(on4) === 1 && on4.acc.findIndex((v) => v > 0) === 40 * G.nw + Math.floor((0 - G.w0) / G.cell), '관측면으로 나온 빛은 한 번만');
+  const nm = makeAccumulator(G, line, obs); nm.onExit(0, 1, 40, 3, 2, 0, 0, 1, 1, 7); nm.onEscape(40, 3, 2, 0, 0, 1, 1, 7);
+  ok(sum(on4) === 1 && on4.acc.findIndex((v) => v > 0) === nm.acc.findIndex((v) => v > 0), '관측면으로 나온 빛은 한 번만 · 보통 집계와 같은 칸');
 }
 done();
