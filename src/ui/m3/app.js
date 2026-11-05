@@ -50,6 +50,7 @@ import { candidateGrid } from '../../engine/mech3d/basis.js';
 import { ledAtS, clampRowGap, rowGapOptions } from '../../engine/mech3d/placement.js';
 import { virtualEmittersAt, stepRefEmitter } from '../../engine/mech3d/virtual-leds.js';
 import { rw4 } from '../../engine/mech3d/layout-solver.js';
+import { LOAD_LABEL } from '../../engine/shape/step-load-plan.js';
 import { partLook } from './part-look.js';
 import { caseKey, caseCand, caseFp, mergeCaseRows } from './shape-cases.js';
 import { heightsFor, deformPart, refinedFor, minThickness, pathFromLine, swOnPath, ledEll, lineVarH, splineInput, partFrame, bumpCenters, fieldThickness, clampField, fieldRoom, lensCandidates, swingCandidates } from '../../engine/mech3d/shape-opt.js';
@@ -1793,7 +1794,7 @@ function importLedStep(file) {
   file.text().then((text) => {
     const w = new Worker(new URL('../../engine/mech3d/mech3d-worker.js', import.meta.url), { type: 'module' });
     w.onmessage = (m) => {
-      if (m.data.stage) { say(m.data.stage); return; }
+      if (m.data.key) { say(`${LOAD_LABEL[m.data.key] ?? ''}${m.data.text ? ` — ${m.data.text}` : ''}`); return; }   // 진행 알림 — 결과가 아님
       w.terminate();
       if (m.data.error) { say(`불러오기 실패: ${m.data.error}`); return; }
       if (A?.store !== st) return;

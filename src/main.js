@@ -1,6 +1,6 @@
 // UI 배선 + 실시간 재계산 — 프로젝트.md §3 출력6
 import { showStepLoad } from './ui/step-load-overlay.js';
-import { isFreshStart } from './ui/fresh-start.js';
+import { isFreshStart, shouldWarnClose } from './ui/fresh-start.js';
 import { LOAD_LABEL, stepTimingText } from './engine/shape/step-load-plan.js';
 import { bundleJson, parseMaterialFile, loadClear, saveClear, clearImport } from './model/material-io.js';
 import { isAdmin, setAdmin } from './model/admin.js';
@@ -906,6 +906,7 @@ function migrate(s) {
 // 새로고침해 최신 저장값을 다시 읽은 뒤 편집 탭으로 시작한다(그 사이 연 탭도 시작 시 take 로 읽기 전용).
 // 프로그램을 새로 열면 브라우저에 남은 프로젝트를 불러오지 않음 — 새로고침만 이어서(2026-11-05)
 const freshStart = isFreshStart(sessionStorage, performance.getEntriesByType('navigation')[0]?.type);
+let leaveOk = false;   // 프로그램이 스스로 새로고침할 때는 나가기 확인을 띄우지 않음(같은 탭이라 작업이 이어짐)
 const TAKE_FLAG = 'uds.tab.take';
 let takeOnStart = false;
 try { takeOnStart = sessionStorage.getItem(TAKE_FLAG) === '1'; sessionStorage.removeItem(TAKE_FLAG); } catch {}
@@ -918,10 +919,10 @@ const tabLock = createTabLock({
 // 오래된 메모리 설정을 써 버리므로, 이 탭은 읽기 전용인 채로 떠난다.
 $('#tab-lock [data-take]').onclick = () => {
   try { sessionStorage.setItem(TAKE_FLAG, '1'); } catch {}
-  location.reload();
+  leaveOk = true; location.reload();
 };
-$('#tab-lock [data-reload]').onclick = () => location.reload();
-$('#tab-changed [data-reload]').onclick = () => location.reload();
+$('#tab-lock [data-reload]').onclick = () => { leaveOk = true; location.reload(); };
+$('#tab-changed [data-reload]').onclick = () => { leaveOk = true; location.reload(); };
 $('#tab-changed [data-close]').onclick = () => { $('#tab-changed').hidden = true; };
 // 편집 탭인데 다른 탭이 설정 키를 바꿈(잠금 이전 버전 탭·비정상 종료 뒤 등) — 막지 않고 안내만
 window.addEventListener('storage', (e) => { if (e.key === LS_KEY && tabLock.canWrite()) $('#tab-changed').hidden = false; });
@@ -966,7 +967,10 @@ setupProjectFile();
 window.addEventListener('resize', schedule);
 // 3D 모드 디바운스 저장 마저 쓰기(탭 닫기·새로고침·모바일 백그라운드)
 window.addEventListener('pagehide', () => m3app.flush());
-window.addEventListener('beforeunload', () => m3app.flush());
+window.addEventListener('beforeunload', (e) => {
+  m3app.flush();
+  if (!leaveOk && shouldWarnClose(!!(spec?.mech3d || spec?.mech3dPending), projFile?.state())) { e.preventDefault(); e.returnValue = ''; }   // 저장 안 한 프로젝트 — 브라우저가 나가기 확인을 띄움(문구는 브라우저 고정)
+});
 forceHeatOnNextRun = true;   // 첫 계산에 히트맵 포함
 applyMode();
 document.body.classList.remove('booting');   // 시작 화면 가림 해제 — 모드가 정해지기 전 예전(평판) 화면이 잠깐 보이지 않게

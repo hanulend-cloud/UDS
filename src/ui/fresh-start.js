@@ -6,3 +6,5 @@ export function isFreshStart(session, navType) {
   try { alive = session.getItem(KEY) === '1'; session.setItem(KEY, '1'); } catch { /* 쓸 수 없음 */ }
   return !alive && navType !== 'reload';
 }
+// 탭을 닫을 때 경고할지 — 프로젝트가 있는데 파일에 실시간 저장되고 있지 않으면 닫는 순간 사라짐
+export const shouldWarnClose = (hasProject, fileState) => !!hasProject && !(fileState?.hasFile && fileState.perm === 'granted' && !fileState.err && !fileState.saving);

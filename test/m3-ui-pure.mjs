@@ -650,6 +650,17 @@ done();
   ok(isFreshStart(mem(), 'navigate') === true, '탭을 닫고 다시 열면 새로 시작');
   const bad = { getItem() { throw new Error('x'); }, setItem() { throw new Error('x'); } };
   ok(isFreshStart(bad, 'reload') === false && isFreshStart(bad, 'navigate') === true, '저장소를 못 써도 새로고침은 이어서'); }
+{ // 닫을 때 경고: 프로젝트가 있고 파일에 실시간 저장되지 않을 때만(2026-11-05)
+  const { shouldWarnClose } = await import('../src/ui/fresh-start.js'), live = { hasFile: true, perm: 'granted', saving: false, err: '' };
+  ok(!shouldWarnClose(false, { hasFile: false }), '빈 화면 = 경고 없음');
+  ok(shouldWarnClose(true, { hasFile: false }), '파일 없음 = 경고');
+  ok(!shouldWarnClose(true, live), '실시간 저장 중인 파일 = 경고 없음');
+  ok(shouldWarnClose(true, { ...live, perm: 'prompt' }) && shouldWarnClose(true, { ...live, err: 'x' }) && shouldWarnClose(true, { ...live, saving: true }), '권한 없음·저장 실패·저장 중 = 경고');
+  ok(shouldWarnClose(true, null), '파일 상태를 모르면 경고'); }
+{ // 기구·LED 불러오기 모두 작업자의 진행 알림(key)을 결과로 착각하지 않음(2026-11-05 — LED STEP 이 안 불러와졌음)
+  const { readFileSync } = await import('node:fs'), src = (f) => readFileSync(new URL(f, import.meta.url), 'utf8'), wk = src('../src/engine/mech3d/mech3d-worker.js');
+  ok(/postMessage\(\{ key:/.test(wk) && !/postMessage\(\{ stage:/.test(wk), '작업자 진행 알림 = key');
+  for (const f of ['../src/main.js', '../src/ui/m3/app.js']) { const t = src(f); ok(/new URL\('[^']*mech3d-worker\.js'/.test(t) && /if \(m\.data\.key\)/.test(t), `${f} 가 진행 알림을 먼저 거름`); } }
 { const { seedFits } = await import('../src/ui/m3/autodesign-panel.js');
   const G0 = { ns: 4, nw: 2 }, sd = (n) => ({ batches: [{ acc: new Float64Array(n) }] });
   ok(seedFits(sd(8), G0) && !seedFits(sd(6), G0) && !seedFits(null, G0) && !seedFits(sd(8), null) && !seedFits({ batches: [] }, G0), '판정 값을 화면으로: 칸 수가 같을 때만'); }
