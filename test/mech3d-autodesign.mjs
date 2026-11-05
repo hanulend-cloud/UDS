@@ -64,16 +64,54 @@ const peakRows = (ms, top, { len = 0.5, wid = 0.5, Uw = () => 0.9 } = {}) => ms.
   ok(!r.feasible && /LED 리플/.test(r.reason) && /폭/.test(r.reason) && !/가장자리 감쇠/.test(r.reason), `폭 한계 · 리플: ${r.reason}`);
   ok(calls.length === 1 && calls[0].cs[0].finish === probe && calls[0].N === 3e5 && Math.abs(calls[0].milky - r.best.milky) < 1e-9 && r.hint?.Ulen === 0.93 && r.hint?.Uwid === 0.62 && r.hint.finish === probe
     && /④ 케이스 백색 90% 를 함께 쓰면 나아짐/.test(r.reason) && !/와 함께 쓰면 길이 균일도/.test(r.reason), `보완 계산 1회 → ${r.reason}`); }
-{ // ① 만 · 상한 입력 없음 → 9.9 까지(U 가 계속 오름) · ②+① 이면 ② 기준은 5, ① 은 그대로 9.9 까지
+{ // 최적화 = Milky 5 까지(2026-11-05). 5 초과는 참고 계산만 — 단계 기록(Milky 표)·추천에 안 들어감
   const seen = [], U = (m) => 0.5 + 0.02 * m;
   const io = { milkyRows: async (d, ms) => { seen.push(...ms); return rowsOf(ms, U); }, verify: async (d) => ({ stats: st(U(d.milky ?? 1), 0.9), eff: 1 }), progress() {}, cancelled: () => false };
   const r = await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 1 } }, io);
-  ok(!r.feasible && Math.max(...seen) === 9.9 && r.best.milky === 9.9 && /상한\(9\.9\)/.test(r.reason), `① 만 상한 9.9: Milky ${r.best.milky} · ${r.reason}`);
+  const inSteps = r.steps.flatMap((x) => (x.rows ?? []).map((q) => q.milky));
+  ok(!r.feasible && r.best.milky <= 5 && r.best.milky >= 4.7 && Math.max(...inSteps) <= 5 && /상한\(5\)/.test(r.reason), `① 만 상한 5: Milky ${r.best.milky} · ${r.reason}`);
+  ok(r.peek?.best?.milky === 8 && r.peek.rows.map((q) => q.milky).join() === '6,7,8' && Math.max(...seen) < 9, `참고 계산 6·7·8 → Milky ${r.peek?.best?.milky} U ${r.peek?.best?.Ulen}`);
   let basisMilky = null; seen.length = 0;
   const G = { ns: 2, nw: 1, ds: 1, cell: 1, w0: -0.5, L: 2, closed: false, winS: 5, area: new Float64Array([1, 1]), valid: new Uint8Array([1, 1]) };
   const io2 = { ...io, basis: async (d) => { basisMilky = d.milky; return { cand: [0, 1, 2], maps: [0, 1, 2].map(() => Float32Array.from([1, 1])), emitted: 1 }; } };
   await runAutoDesign({ stages: { milky: true, leds: true }, obs: { targetLen: 0.8, targetWid: 0 }, current: { milky: 3, count: 5, pitch: 0 }, G, line: { length: 2, closed: false }, nMax: 4 }, io2);
-  ok(basisMilky >= 4.7 && basisMilky <= 5 && Math.max(...seen) === 9.9, `②+①: ② 기준 Milky ${basisMilky}(거친 최고점 ≤ 5) · ① 탐색 ${Math.max(...seen)} 까지`); }
+  ok(basisMilky >= 4.7 && basisMilky <= 5, `②+①: ② 기준 Milky ${basisMilky}(거친 최고점 ≤ 5)`); }
+{ // 최고점이 5 안에 있으면(이미 하락) 5 초과는 계산하지 않고 '오르지 않음'
+  const seen = [], U = (m) => 0.7 - 0.02 * (m - 3) ** 2;
+  const io = { milkyRows: async (d, ms) => { seen.push(...ms); return rowsOf(ms, U); }, verify: async (d) => ({ stats: st(U(d.milky ?? 1), 0.9), eff: 1 }), progress() {}, cancelled: () => false };
+  const r = await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 1 } }, io);
+  ok(!r.feasible && Math.max(...seen) <= 5 && r.peek && !r.peek.best && !r.peek.rows.length, `최고점 ${r.best.milky} ≤ 5 → 추가 계산 없음(본 Milky 최대 ${Math.max(...seen)})`); }
+{ // 5 보다 높여도 나빠지면: 한 칸 보고 멈춤 · 이득 없음
+  const seen = [], U = (m) => (m <= 5 ? 0.5 + 0.04 * m : 0.7 - 0.05 * (m - 5));
+  const io = { milkyRows: async (d, ms) => { seen.push(...ms); return rowsOf(ms, U); }, verify: async (d) => ({ stats: st(U(d.milky ?? 1), 0.9), eff: 1 }), progress() {}, cancelled: () => false };
+  const r = await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 1 } }, io);
+  ok(r.peek && !r.peek.best && r.peek.rows.length === 1 && r.peek.rows[0].milky === 6, `5 초과에서 하락 → Milky 6 만 보고 이득 없음(${r.peek?.rows.map((q) => q.milky)})`); }
+{ // 목표 통과면 참고 계산 없음
+  const seen = [];
+  const io = { milkyRows: async (d, ms) => { seen.push(...ms); return rowsOf(ms); }, verify: async () => ({ stats: st(0.81, 0.9), eff: 1 }), progress() {}, cancelled: () => false };
+  const r = await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 1 } }, io);
+  ok(r.feasible && !r.peek && Math.max(...seen) <= 5, '목표 통과 → 참고 계산 없음'); }
+{ // 현재 Milky 7 + 위치(②)만: '현재' 열은 7 로 계산, 최적화는 5 로 낮춰서 · 적용 안은 Milky 5 · 표시
+  let basisMilky = null; const verified = [];
+  const G = { ns: 2, nw: 1, ds: 1, cell: 1, w0: -0.5, L: 2, closed: false, winS: 5, area: new Float64Array([1, 1]), valid: new Uint8Array([1, 1]) };
+  const io = { basis: async (d) => { basisMilky = d.milky; return { cand: [0, 1, 2], maps: [0, 1, 2].map(() => Float32Array.from([1, 1])), emitted: 1 }; }, milkyRows: async () => { throw new Error('Milky 탐색 금지'); },
+    verify: async (d) => { verified.push(d.milky); return { stats: d.milky === 7 ? st(0.5, 0.5) : st(0.9, 0.9), eff: 1 }; }, progress() {}, cancelled: () => false };
+  const r = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0 }, current: { milky: 7, count: 5, pitch: 0 }, G, line: { length: 2, closed: false }, nMax: 4 }, io);
+  ok(verified[0] === 7 && basisMilky === 5 && r.best.milky === 5 && r.milkyLowered?.from === 7 && r.milkyLowered?.to === 5 && r.milkyLowered?.rough === true && r.current.stats.Ulen === 0.5, `현재 7 → 최적화 ${basisMilky} · 최종 ${r.best.milky} · 표시 ${JSON.stringify(r.milkyLowered)}`); }
+{ // 현재 Milky 7 인데 낮춘 안이 더 나쁘면 현재안 유지(몰래 안 바꿈) · 표시는 남음
+  const G = { ns: 2, nw: 1, ds: 1, cell: 1, w0: -0.5, L: 2, closed: false, winS: 5, area: new Float64Array([1, 1]), valid: new Uint8Array([1, 1]) };
+  const io = { basis: async () => ({ cand: [0, 1, 2], maps: [0, 1, 2].map(() => Float32Array.from([1, 1])), emitted: 1 }), verify: async (d) => ({ stats: d.milky === 7 ? st(0.9, 0.9) : st(0.5, 0.5), eff: 1 }), progress() {}, cancelled: () => false };
+  const r = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0 }, current: { milky: 7, count: 5, pitch: 0 }, G, line: { length: 2, closed: false }, nMax: 4 }, io);
+  ok(r.unchanged && r.best.milky === 7 && r.milkyLowered?.from === 7, `낮춘 안이 나쁨 → 현재안 Milky ${r.best.milky} 유지`); }
+{ // 현재 Milky 7 은 비교용 — 계산마다 60 초 한도, 목표 근처여도 더 안 잼(낮춘 안은 한도 없음)
+  const calls = [], G = { ns: 2, nw: 1, ds: 1, cell: 1, w0: -0.5, L: 2, closed: false, winS: 5, area: new Float64Array([1, 1]), valid: new Uint8Array([1, 1]) };
+  const io = { basis: async () => ({ cand: [0, 1, 2], maps: [0, 1, 2].map(() => Float32Array.from([1, 1])), emitted: 1 }), verify: async (d, o = {}) => { calls.push([d.milky, o.maxMs ?? null, !!o.screen, o.noise ?? null, !!o.rough]); return { stats: { ...st(0.8, 0.9), relNoise: 0.01 }, eff: 1, screen: !!o.screen }; }, progress() {}, cancelled: () => false };
+  await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0 }, current: { milky: 7, count: 5, pitch: 0 }, G, line: { length: 2, closed: false }, nMax: 4, screenGrid: true }, io);
+  const c7 = calls.filter((c) => c[0] === 7);
+  ok(c7.length >= 2 && c7.every((c) => c[1] === 60000 && c[4]) && calls.some((c) => c[0] === 5 && c[1] == null && !c[4]), `현재 Milky 7 = 대략 계산 60 초 한도: ${JSON.stringify(calls)}`); }
+{ // 현재 5 이하 → 표시 없음
+  const io = { milkyRows: async (d, ms) => rowsOf(ms), verify: async () => ({ stats: st(0.81, 0.9), eff: 1 }), progress() {}, cancelled: () => false };
+  ok(!(await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 5 } }, io)).milkyLowered, '현재 Milky 5 → 낮춤 표시 없음'); }
 { // ②+①: 후보 지도는 Milky 상한(5)에서 추적, 최소 개수 뒤 ① 이 Milky 를 낮춤
   let basisMilky = null;
   const G = { ns: 2, nw: 1, ds: 1, cell: 1, w0: -0.5, L: 2, closed: false, winS: 5, area: new Float64Array([1, 1]), valid: new Uint8Array([1, 1]) };

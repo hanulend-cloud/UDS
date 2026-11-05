@@ -958,7 +958,7 @@ body.booting::after { content: "불러오는 중…"; position: fixed; left: 50%
 .m3-mon-sum span { color: #667085; }
 .m3-mon.min .m3-mon-sum, .m3-big-in.min .m3-mon-sum { display: inline; }
 .m3-mon.min .m3-mon-body { display: none; }
-.m3-mon.min { grid-template-rows: auto; }
+.m3-mon.min { grid-template-rows: auto; height: auto !important; }
 .m3-mon.min .m3-mon-hd { border-bottom: 0; }
 /* 숫자 칸: 고쳤지만 아직 적용 안 함(Enter 대기) */
 input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background: rgba(247,144,9,.14); }

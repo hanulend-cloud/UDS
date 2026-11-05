@@ -333,6 +333,25 @@ export function limitText(row, obs) {
   const cause = f == null ? '' : f < EDGE_FRAC || f > 1 - EDGE_FRAC ? ` — ${wid ? '폭 가장자리가' : '길이 끝단이'} 가장 어두움(가장자리 감쇠)` : ' — 가운데 쪽이 가장 어두움(LED 리플)';
   return `한계: ${wid ? '폭' : '길이'} 방향${cause}`;
 }
+// 상한 초과 참고 계산(짧게, 최적화에 안 씀): 최고점이 상한 근처일 때만 6·7·8 을 보고 나빠지면 멈춤. 최고점이 이미 상한 안이면 계산 없이 '오르지 않음'.
+// 반환 { cap, rows:[{ milky, Ulen, Uwid, eff, margin }], best(상한보다 나은 행 | null) }. 단계 기록(steps)에 넣지 않음 — Milky 표·적용 대상 아님
+async function peekAbove(d, p, cap, io) {
+  const rows = [];
+  if (p.milky < cap - 0.3) return { cap, rows, best: null };
+  let last = p.margin;
+  for (const m of MILKY_PEEK) {
+    if (io.cancelled?.()) break;
+    io.progress?.('milky', 0.97, `참고 계산 (Milky ${m}, 최적화에는 쓰지 않음)`);
+    const rs = (await io.milkyRows({ ...d, milky: m }, milkyAxis(m, MILKY_STEP), { peek: true })).filter((r) => r.trusted);
+    if (!rs.length) break;
+    const r = rs.reduce((a, b) => (Math.abs(b.milky - m) < Math.abs(a.milky - m) ? b : a));
+    rows.push({ milky: m, Ulen: r.Ulen, Uwid: r.Uwid, eff: r.eff, margin: r.margin });
+    if (r.margin < last) break;
+    last = r.margin;
+  }
+  const top = rows.reduce((a, b) => (!a || b.margin > a.margin ? b : a), null);
+  return { cap, rows, best: top && top.margin >= p.margin + 0.01 ? top : null };
+}
 // ① 균일도 우선(spec §2.1a): 거친 탐색 0.5, 1.5, … ≤ 상한(최고점 뒤 두 번 연속 하락이면 멈춤 · 오르는 쪽에서 통과 창이 나오면 멈춤)
 // → 통과 없으면 최고점 주변 정밀 창 → 거기서 통과하면 오르는 구간에서 최소 통과 Milky. 반환 { found(pick), peak(행), cap } | null(중지)
 const coarseBases = (cap) => Array.from({ length: Math.max(1, Math.floor((cap - 0.5) / COARSE_STEP + 1e-9) + 1) }, (_, k) => Math.min(cap, 0.5 + k * COARSE_STEP));
@@ -405,8 +424,9 @@ function ledAlternatives(r, two) {
   return (r.tried ?? []).filter((e) => !same(e) && tot(e) >= T0 && !seen.has(key(e)) && seen.add(key(e)))
     .sort((a, b) => tot(a) - tot(b) || mg(b) - mg(a));   // tot ≥ T0 이므로 총수 오름 = 같은 총수 먼저
 }
-// 상한: ① 탐색 = cfg.milkyMax ?? 9.9 · ② 기준 Milky = cfg.milkyMax ?? max(현재, 5)(계산 시간) — spec §2.1a
-export const MILKY_SEARCH_MAX = 9.9;
+// 최적화 Milky 상한 = 5(2026-11-05, 사용자 확정) — 높은 Milky 는 광자당 매우 느리고 노이즈가 커서 다른 인자를 그 위에서 최적화하지 않는다. 지금 Milky 가 더 높아도 5 로 낮춰서 — spec §2.1a
+// 5 초과는 '이 정도 차폐력이면 균일도가 어디까지 오르나' 안내용 참고 계산만(MILKY_PEEK, 추천·판정·Milky 표에 안 들어감)
+export const MILKY_OPT_MAX = 5, MILKY_PEEK = [6, 7, 8];
 // 후보 지도 길이 방향 3칸 평균(제자리, 칸 ≥ 40 일 때만) — 후보당 광자가 적어 칸마다 노이즈가 큼(노이즈를 불균일로 착각하면 개수가 늘어남). 유효 칸만
 const two0 = (B) => typeof B.cand?.[0] === 'object';
 export function smoothMapsS(maps, G) {
@@ -440,14 +460,17 @@ export function pickLateral(res, obs) {
 // 정밀 재계산이 미달일 때 1열 개수를 하나씩 늘리는 한도 — 시간 · 나아짐이 이만큼도 없으면 두 번 만에 멈춤(폭 부족은 개수로 안 올라감)
 export const LADDER_MS = 150000, LADDER_GAIN = 0.005;
 export async function runAutoDesign(cfg, io) {
-  const { stages, obs } = cfg, steps = [], mCap = cfg.milkyMax ?? Math.max(cfg.current?.milky ?? 0, 5), sCap = cfg.milkyMax ?? MILKY_SEARCH_MAX;
-  let d = { ...cfg.current }, feasible = true, reason = '', hint = null, ledAlts = null, ledMore = null, ledLimit = null;
+  const { stages, obs } = cfg, steps = [], sCap = Math.min(cfg.milkyMax ?? MILKY_OPT_MAX, MILKY_OPT_MAX), mCap = sCap;
+  let d = { ...cfg.current }, feasible = true, reason = '', hint = null, peek = null, ledAlts = null, ledMore = null, ledLimit = null;
   const stop = () => io.cancelled?.();
   if (stop()) return { cancelled: true };
   const clock = io.now ?? Date.now;   // 일시정지한 시간은 빼고 잼
   io.progress?.('current', 0, '현재안 계산');   // 비교표 '현재' 열 — 최종안과 같은 추정기(io.verify). 수렴한 점진 결과가 있으면 재사용
-  let currentVerified = cfg.currentVerified ?? await io.verify(d);
+  // 지금 Milky 가 상한보다 높으면 '현재' 열은 그 값 그대로(비교용 — 계산마다 시간 한도), 최적화는 상한으로 낮춰서 — 결과에 표시(milkyLowered)
+  const lowered = cfg.current?.milky > sCap ? { from: cfg.current.milky, to: sCap, rough: !cfg.currentVerified } : null;
+  let currentVerified = cfg.currentVerified ?? await (lowered ? io.verify(d, { maxMs: FAR_MS, rough: true }) : io.verify(d));
   if (stop()) return { cancelled: true };
+  if (lowered) d = { ...d, milky: sCap };
   const hasFin = 'finish' in d, fin0 = d.finish;   // ④ 전에 되돌릴 현재 케이스 면
   if (stages.leds) {   // ② — 함께 켠 ①·④ 는 유리한 쪽에서 개수를 정함(spec §2.2c): ① → 거친 최고점 Milky(≤ 상한), ④ → 케이스 최고 등급
     const ref = stages.milky || (stages.housing && cfg.finishCands?.length);
@@ -610,7 +633,9 @@ export async function runAutoDesign(cfg, io) {
     else {
       const p = m.peak, atCap = p.milky >= sCap - 0.3;
       feasible = false; d = { ...d, milky: p.milky };
-      reason = `균일도 최고 Milky ${p.milky}에서도 ${uText(p)} — 목표 ${obs.targetLen.toFixed(2)}${p.Uwid == null ? '' : ` / ${obs.targetWid.toFixed(2)}`} 미달 · ${limitText(p, obs)}${atCap ? ` · Milky 상한(${sCap})을 올리거나 ②~⑤ 를 함께 쓰세요` : ''}`;
+      reason = `균일도 최고 Milky ${p.milky}에서도 ${uText(p)} — 목표 ${obs.targetLen.toFixed(2)}${p.Uwid == null ? '' : ` / ${obs.targetWid.toFixed(2)}`} 미달 · ${limitText(p, obs)}${atCap ? ` · Milky 상한(${sCap}) — ②~⑤ 를 함께 쓰세요` : ''}`;
+      peek = await peekAbove(d, p, sCap, io);
+      if (stop()) return { cancelled: true };
       if (cfg.housingProbe && io.evalVariants && !stop()) {   // 보완 계산: 최고점 Milky 에서 케이스 면 한 단계 위 한 번
         io.progress?.('milky', 0.95, '보완 계산 (④ 케이스 면 한 단계 위)');
         const [h] = await io.evalVariants(d, [{ finish: cfg.housingProbe }], 3e5, 6000);
@@ -640,13 +665,17 @@ export async function runAutoDesign(cfg, io) {
     if (nearTarget(r.stats, obs) && r.stats.relNoise > JUDGE_NOISE * 1.1 && !stop()) r = await io.verify(e, { noise: JUDGE_NOISE, from: r, screen: true });
     return { ...r, sharp: true };
   };
-  const judgeCurrent = (v) => (cfg.screenGrid && cfg.currentScreen ? cfg.currentScreen : judge(cfg.current, v));
+  const judgeCurrent = async (v) => {
+    if (cfg.screenGrid && cfg.currentScreen) return cfg.currentScreen;
+    if (!lowered) return judge(cfg.current, v);
+    return cfg.screenGrid ? { ...await io.verify(cfg.current, { noise: obs.targetNoise ?? 0.01, from: v, screen: true, maxMs: FAR_MS, rough: true }), sharp: true } : v;   // 상한 초과 현재안은 더 정밀하게 재지 않음
+  };
   if (sameDesign(d, cfg.current)) {
     currentVerified = await judgeCurrent(currentVerified);
     if (stop()) return { cancelled: true };   // 현재안이 최선 — 현재안이 목표 미달이면 이유를 비워 두지 않음
     const okCur = margin(currentVerified.stats, obs) >= 0, cs = currentVerified.stats;
     const why = reason || (okCur ? '' : `현재 설계가 최선 — 목표 미달(길이 균일도 ${cs.Ulen.toFixed(2)}${cs.Uwid == null ? '' : ` · 폭 균일도 ${cs.Uwid.toFixed(2)}`})`);
-    return { feasible: feasible && okCur, best: { ...cfg.current }, steps, reason: why, verified: currentVerified, current: currentVerified, unchanged: true, cancelled: false, hint };
+    return { feasible: feasible && okCur, best: { ...cfg.current }, steps, reason: why, verified: currentVerified, current: currentVerified, unchanged: true, cancelled: false, hint, peek, milkyLowered: lowered };
   }
   let verified = await io.verify(d);
   // 개수로 고칠 수 있는 방향만 본 여유 — 폭이 어떤 개수로도 못 닿으면(ledLimit) 길이로 판정
@@ -745,7 +774,7 @@ export async function runAutoDesign(cfg, io) {
   const regular = !!cfg.currentIrregular && !sameDesign(d, cfg.current) && !!stages.leds;
   if (!fewer && !fixGain && !regular && !(sc(verified) - sc(currentVerified) >= SCORE_EPS)) {
     steps.push({ stage: 'guard', tried: d, triedVerified: verified, triedReason: reason });
-    return { feasible: margin(currentVerified.stats, obs) >= 0, best: { ...cfg.current }, steps, reason: `현재안보다 나은 설계를 찾지 못함 — 현재안 유지${reason ? ` (${reason})` : ''}`, verified: currentVerified, current: currentVerified, unchanged: true, cancelled: false, hint };
+    return { feasible: margin(currentVerified.stats, obs) >= 0, best: { ...cfg.current }, steps, reason: `현재안보다 나은 설계를 찾지 못함 — 현재안 유지${reason ? ` (${reason})` : ''}`, verified: currentVerified, current: currentVerified, unchanged: true, cancelled: false, hint, peek, milkyLowered: lowered };
   }
   // 판정·문구는 정밀 재계산 값 기준(후보 평가값은 광자가 적어 노이즈가 큼)
   const vs = verified.stats, ok = margin(vs, obs) >= 0;
@@ -760,5 +789,5 @@ export async function runAutoDesign(cfg, io) {
       reason = /길이 균일도 [\d.]+( · 폭 균일도 [\d.]+)?/.test(reason) ? reason.replace(/길이 균일도 [\d.]+( · 폭 균일도 [\d.]+)?/, vt) : `${reason} — ${vt}`;
     }
   }
-  return { feasible, best: d, steps, reason, verified, current: currentVerified, cancelled: false, hint };
+  return { feasible, best: d, steps, reason, verified, current: currentVerified, cancelled: false, hint, peek, milkyLowered: lowered };
 }

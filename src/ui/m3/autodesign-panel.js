@@ -8,8 +8,8 @@ const f2 = (v) => (Number.isFinite(v) ? v.toFixed(2) : '–');
 
 // Milky 상한 입력 — 0.5~9.9 로 자름. 빈칸·0·음수·NaN = null(기본값)
 export const clampCap = (v) => (Number.isFinite(v) && v > 0 ? Math.min(9.9, Math.max(0.5, v)) : null);
-// 상한 기본값(입력 없음) — ① 만 = 9.9(균일도 최고점까지), ② 함께 = max(현재, 5)(② 기준 Milky · 계산 시간) — spec §2.1a
-export const capDefault = (sel, avail, curMilky = 0) => (sel.leds && avail.leds?.ok ? Math.max(curMilky ?? 0, 5) : 9.9);
+// 상한 기본값 = 5(2026-11-05) — 5 초과는 참고 문구로만 — spec §2.1a
+export const capDefault = () => 5;
 // ④ 보완 계산 후보 — 현재보다 높은 등급 중 가장 낮은 것(없으면 null)
 // ④ 보완 안내용 면 처리: 같은 종류(없으면 백색)에서 반사율 +0.10 이상 중 가장 낮은 것, 없으면 그 종류 최고(현재보다 높을 때만).
 //   실측: 백색 85 → 95 % 가 길이·폭 모두 개선, 경면 88 % 는 폭 균일도 를 낮춤 — 종류를 바꾸지 않는다
@@ -113,7 +113,7 @@ const ITEMS = [['milky', '① Milky 레벨'], ['leds', '② LED 개수·피치']
 // state = { avail, sel, running, names, milkyPart, housingMat } → { on, html }(html = 스위치 + 설정, 쓸 수 없으면 이유)
 // 화면의 기구 최적화 = 3 항목: ① Milky · ② 기구 위치(= 엔진 ② LED 배치 + ⑤ LED 높이) · ③ 기구 형상. 케이스 반사율(④)은 부품 속성에서 직접
 export const AD_ITEMS = [['position', '① 위치', ['leds', 'height']], ['housing', '② 케이스 면', ['housing']], ['shape', '③ 형상', ['shape']], ['milky', '④ Milky', ['milky']]];   // 계산 순서(2026-10-30)
-export const TILE_NOTE = { position: '부족한 방향으로 LED 를 옮기고, 그래도 모자라면 개수를 늘려 피치를 줄임', milky: 'Milky 값을 바꿔 균일도 최고점을 찾음(밝기는 줄어듦)', leds: 'LED 개수·피치·열을 바꿈', shape: '도광판 아랫면 형상(두께·끝단·가장자리)', housing: '케이스 반사율(소재 상한 안)', height: 'LED–커버 거리' };
+export const TILE_NOTE = { position: '부족한 방향으로 LED 를 옮기고, 그래도 모자라면 개수를 늘려 피치를 줄임', milky: 'Milky 5 까지에서 균일도 최고점을 찾음(밝기는 줄어듦)', leds: 'LED 개수·피치·열을 바꿈', shape: '도광판 아랫면 형상(두께·끝단·가장자리)', housing: '케이스 반사율(소재 상한 안)', height: 'LED–커버 거리' };
 export function tileConfigHtml(k, { avail, sel, running, names = [], milkyPart = null, housingMat = null, path = null }) {
   const pname = (i) => esc(names[i] ?? `부품 ${i + 1}`), dis = running ? ' disabled' : '';
   const pct = (i) => (path ? ` · 빛 ${Math.round((path.shares?.[i] ?? 0) * 100)}%` : '');
@@ -253,6 +253,18 @@ export function milkyTableHtml(rows, chosen, tg = {}) {
 }
 // 결과 카드(2026-10-29: 같은 내용이 여러 번 반복되던 것을 하나로) — 판정 한 단어 · 작은 비교표(바뀐 사양 + 길이 균일도·폭 균일도·광 효율) ·
 // 한계 한 줄 · [적용] [그래도 적용] [취소] [자세히](프로파일·사유 전문 = 결과 창)
+// Milky 5 초과 안내(2026-11-05) — 참고 계산은 소수 1자리 대략값만, 적용 버튼 없음
+export function peekText(pk) {
+  if (!pk) return '';
+  const b = pk.best;
+  if (!b) return `참고: Milky 를 ${pk.cap} 보다 높여도 균일도가 오르지 않음`;
+  return `참고: Milky ${b.milky}이면 길이 약 ${b.Ulen.toFixed(1)}${b.Uwid == null ? '' : ` · 폭 약 ${b.Uwid.toFixed(1)}`}, 광 효율 약 ${Math.round(b.eff * 100)}% (대략값 · 최적화에는 쓰지 않음)`;
+}
+export function loweredText(l, unchanged = false) {
+  if (!l) return '';
+  const f = (+l.from).toFixed(2);
+  return unchanged ? `Milky ${f} 은 최적화에 쓰지 않아 ${l.to} 로 낮춰 찾았지만 지금 설계보다 낫지 않음${l.rough ? ' (현재 값은 대략값)' : ''}` : `Milky ${f} → ${l.to} 로 낮춰 최적화함 (Milky ${l.to} 초과는 최적화에 쓰지 않음${l.rough ? ' · 현재 값은 대략값' : ''})`;
+}
 export const limitText = (reason) => { const m = /한계:\s*([^·)]+)/.exec(String(reason ?? '')); return m ? m[1].trim() : ''; };
 export function resultLineHtml(r) {
   const verdict = r.unchanged ? ['keep', '현재안 유지', '더 나은 안 없음'] : r.targets?.judge?.all === 'near' ? ['near', '목표 근처', '통과·미달을 가를 수 없는 차이'] : r.feasible ? ['ok', '목표 통과', '최적안을 찾음'] : ['bad', '목표 미달', '가장 가까운 안'];
@@ -262,6 +274,8 @@ export function resultLineHtml(r) {
   return `<div class="m3-rcard ${verdict[0]}"><div class="m3-rcard-hd"><b class="m3-rv">${verdict[1]}</b><span class="mut">${verdict[2]}</span></div>
     <table class="m3-cmp m3-cmp-s"><tr><th></th><th>현재</th><th>최적화 후</th></tr>${rows}</table>${clash}
     ${lim ? `<div class="m3-rlim">💡 한계: ${esc(lim)}</div>` : ''}
+    ${r.lowered ? `<div class="m3-rlim">${esc(loweredText(r.lowered, r.unchanged))}</div>` : ''}
+    ${!r.feasible && r.peek ? `<div class="m3-rlim">${esc(peekText(r.peek))}</div>` : ''}
     ${milkyTableHtml(r.milkyRows, r.best?.milky, r.targets ?? {})}
     ${altNote(r)}<div class="m3-rbtn">${applyBtn(r, 'LED 몸체가 부품과 겹침')}${altBtn(r)}<button type="button" data-ad="cancel">취소</button>${r.clash > 0 ? '' : `<button type="button" data-ad="continue" title="${r.unchanged ? '지금 설계 그대로' : '이 안을 적용한 뒤'}, 체크했지만 이번에 돌리지 않은 항목(예: 위치·Milky)을 그 위에서 이어서 최적화">이 안에서 이어서 ▸</button>`}<span class="m3-ad-sp"></span><button type="button" data-ad="view" title="프로파일 비교·사유 전문">자세히 ▸</button></div></div>`;
 }

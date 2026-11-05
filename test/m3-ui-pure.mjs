@@ -104,7 +104,15 @@ ok(judgeText(0.8004, 0.8009).cls === 'ok' && judgeText(0.7999, 0.8).cls === 'bad
   ok(cu.includes('현재안 유지') && !cu.includes('data-ad="apply"') && !/data-ad="apply"[^>]*disabled/.test(c), '비교표: 현재안 유지 → 사유 표시 · 적용 단추 없음'); }
 { // Milky 상한 기본: ① 만 = 9.9 · ② 함께 = max(현재, 5) · 카드 값도 같음
   const a = { milky: { ok: true }, leds: { ok: true }, shape: { ok: false } };
-  ok(capDefault({ milky: true }, a, 3) === 9.9 && capDefault({ milky: true, leds: true }, a, 3) === 5 && capDefault({ milky: true, leds: true }, a, 6) === 6 && capDefault({ milky: true, leds: true }, { ...a, leds: { ok: false } }, 3) === 9.9, 'Milky 상한 기본: ① 만 9.9 · ② 함께 5');
+  ok(capDefault({ milky: true }, a, 3) === 5 && capDefault({ milky: true, leds: true }, a, 3) === 5 && capDefault({ milky: true, leds: true }, a, 6) === 5, 'Milky 상한 기본: 언제나 5');
+  { const { resultLineHtml, peekText, loweredText } = await import('../src/ui/m3/autodesign-panel.js');
+    const pk = { cap: 5, rows: [], best: { milky: 7, Ulen: 0.84, Uwid: 0.66, eff: 0.31 } };
+    ok(/Milky 7.*길이 약 0\.8.*폭 약 0\.7.*광 효율 약 31%.*대략값/.test(peekText(pk)) && /최적화에는 쓰지 않음/.test(peekText(pk)), `참고 문구: ${peekText(pk)}`);
+    ok(/5 보다 높여도.*오르지 않음/.test(peekText({ cap: 5, rows: [], best: null })) && peekText(null) === '', '참고 문구: 이득 없음 · 없음');
+    ok(/Milky 7\.00? → 5/.test(loweredText({ from: 7, to: 5 }, false)) && /낫지 않음/.test(loweredText({ from: 7, to: 5 }, true)) && loweredText(null) === '' && /현재 값은 대략값/.test(loweredText({ from: 7, to: 5, rough: true }, false)) && !/대략값/.test(loweredText({ from: 7, to: 5 }, false)), `낮춤 문구: ${loweredText({ from: 7, to: 5 }, false)}`);
+    const base = { best: { Ulen: 0.7, Uwid: 0.7 }, cur: { Ulen: 0.6, Uwid: 0.6 }, reason: 'x', targets: {} };
+    const hBad = resultLineHtml({ ...base, feasible: false, peek: pk }), hOk = resultLineHtml({ ...base, feasible: true, peek: pk }), hLow = resultLineHtml({ ...base, feasible: true, lowered: { from: 7, to: 5 } });
+    ok(hBad.includes('참고: Milky 7') && !/data-ad="[a-zA-Z]*"[^>]*>[^<]*Milky 7/.test(hBad) && !hOk.includes('참고: Milky 7') && hLow.includes('Milky 7'), '결과 카드: 미달일 때만 참고 문구 · 적용 버튼 없음 · 낮춤 표시'); }
   const h1 = card({ avail: a, sel: { milky: true }, running: null }), h2 = card({ avail: a, sel: { milky: true, leds: true }, running: null });
   ok(!h1.includes('data-ad="milkyMax"') && !h2.includes('data-ad="milkyMax"'), '카드: Milky 상한 입력칸 없음(상한 = 자동)'); }
 // ④ 보완 계산 후보: 현재보다 높은 등급(gradeOf) 중 가장 낮은 것 · 최고 등급이면 null
