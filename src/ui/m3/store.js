@@ -26,26 +26,39 @@ export function initialSession() {
   };
 }
 
+// 3D 숨김 상태 ↔ mspec.viewState(2026-11-05) — 프로젝트와 같이 저장해 새로고침해도 유지. 아무것도 안 숨기면 칸 없음
+const viewStateOf = (S) => (S.hidden?.length || S.hideLeds || S.hiddenLeds?.length ? { hidden: [...(S.hidden ?? [])], hideLeds: !!S.hideLeds, hiddenLeds: [...(S.hiddenLeds ?? [])] } : null);
+function restoreView(S, vs, nParts) {
+  if (!vs) return;
+  const idx = (a, max = Infinity) => (Array.isArray(a) ? a.filter((v) => Number.isInteger(v) && v >= 0 && v < max) : []);
+  S.hidden = idx(vs.hidden, nParts ?? Infinity); S.hideLeds = vs.hideLeds === true; S.hiddenLeds = idx(vs.hiddenLeds);
+}
 export function createStore(mspec, { persist = () => {}, delay = 300, timers = globalThis } = {}) {
   const subs = new Set();
   let t = null, disposed = false;
   // 저장 오류·구독자 오류는 삼키고 기록만 — 한 곳의 실패가 다른 구독자·update 호출자를 막지 않게
   const save = () => { try { persist(); } catch (e) { console.error('[m3 store] 저장 실패', e); } };
+  const schedule = () => { if (t != null) timers.clearTimeout(t); t = timers.setTimeout(() => { t = null; save(); }, delay); };
+  // 보기가 바뀌었으면 저장 칸에 반영 — 숨김은 'view' 말고 다른 태그에서도 바뀜(LED 재지정 등). 지금 값과 비교해 되돌리기로 칸이 지워져도 다시 맞춤
+  const syncView = () => {
+    const vs = viewStateOf(store.session);
+    if (JSON.stringify(store.mspec.viewState ?? null) === JSON.stringify(vs)) return false;
+    if (vs) store.mspec.viewState = vs; else delete store.mspec.viewState;
+    return true;
+  };
   const store = {
     mspec, session: initialSession(),
     update(tag, fn) {
       if (!TAGS.includes(tag)) throw new Error(`알 수 없는 변경 태그: ${tag}`);
       if (disposed) return;
       if (fn) fn(store.mspec, store.session);
-      if (PERSIST_TAGS.has(tag)) {
-        if (t != null) timers.clearTimeout(t);
-        t = timers.setTimeout(() => { t = null; save(); }, delay);
-      }
+      if (syncView() || PERSIST_TAGS.has(tag)) schedule();
       for (const f of [...subs]) { try { f(tag); } catch (e) { console.error('[m3 store] 구독자 오류', e); } }
     },
     subscribe(f) { subs.add(f); return () => subs.delete(f); },
     flush() { if (t != null) { timers.clearTimeout(t); t = null; save(); } },
     dispose() { try { store.flush(); } finally { disposed = true; subs.clear(); } },
   };
+  restoreView(store.session, mspec?.viewState, mspec?.parts?.length);
   return store;
 }

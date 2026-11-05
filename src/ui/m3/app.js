@@ -259,7 +259,7 @@ function rememberLedMesh() { const g = getLedMesh(); if (g?.name) (A.ledMeshes ?
 function histCapture() {
   rememberLedMesh();
   const S = A.store.session;
-  return JSON.stringify({ m: A.store.mspec, v: { hidden: S.hidden ?? [], hideLeds: !!S.hideLeds, hiddenLeds: S.hiddenLeds ?? [] }, locked: Object.keys(A.ad?.locked ?? {}).sort() });
+  return JSON.stringify({ m: { ...A.store.mspec, viewState: undefined }, v: { hidden: S.hidden ?? [], hideLeds: !!S.hideLeds, hiddenLeds: S.hiddenLeds ?? [] }, locked: Object.keys(A.ad?.locked ?? {}).sort() });
 }
 function histRestore(next, was) {
   const st = A.store, S = st.session, M = st.mspec, n = JSON.parse(next), w = JSON.parse(was);
@@ -1872,8 +1872,8 @@ function autoGrid() { const l = A.store.session.line; return l ? { ...autoCells(
 function renderAll(tag = 'all') {
   const st = A.store, M = st.mspec, S = st.session;
   const LS = ledsNow();
-  if (A.ledTotal !== LS.list.length && S.hiddenLeds?.length) S.hiddenLeds = [];   // 개수가 바뀌면(최적화 적용 등) 번호가 달라짐
-  A.ledTotal = LS.list.length;
+  if (A.ledTotal > 0 && LS.list.length > 0 && A.ledTotal !== LS.list.length && S.hiddenLeds?.length) S.hiddenLeds = [];   // 개수가 바뀌면(최적화 적용 등) 번호가 달라짐. 라인·LED 를 읽는 중(0개)은 판단 안 함 — 저장된 숨김이 새로고침 때 지워지지 않게
+  if (LS.list.length > 0) A.ledTotal = LS.list.length;
   if (S.ledSel != null && !(S.ledSel < LS.list.length)) S.ledSel = null;   // 배치가 바뀌어 번호가 없어짐
   renderView();
   const lay = M.light.kind === 'step' ? L.stepLayout(M, S.line) : undefined;   // LED STEP 실제 배치(가상 실패 표시용)

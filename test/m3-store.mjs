@@ -42,4 +42,24 @@ st.dispose(); await T.advance(1000); ok(saved === 3, 'dispose → 남은 저장 
   ok(tries === 3 && n2 === 0, 'dispose 뒤 update → 저장 예약·알림 없음');
   console.error = cerr;
 }
+{ // 3D 숨김 저장(2026-11-05): 새로고침해도 유지 — 프로젝트와 같이 저장, 아무것도 안 숨기면 저장 칸 없음
+  const T3 = fakeTimers(); let n3 = 0;
+  const M = { parts: [{}, {}, {}], light: {} }, a = createStore(M, { persist: () => n3++, delay: 300, timers: T3 });
+  ok(M.viewState === undefined && a.session.hidden.length === 0, '처음 = 숨김 없음 · 저장 칸 없음');
+  a.update('view', (_, x) => { x.hidden = [1]; x.hideLeds = true; x.hiddenLeds = [2]; }); await T3.advance(400);
+  ok(JSON.stringify(M.viewState) === '{"hidden":[1],"hideLeds":true,"hiddenLeds":[2]}' && n3 === 1, '숨기면 저장');
+  const b = createStore(JSON.parse(JSON.stringify(M)), { persist() {}, delay: 300, timers: T3 });
+  ok(b.session.hidden.join() === '1' && b.session.hideLeds === true && b.session.hiddenLeds.join() === '2', '다시 열면 복원');
+  const c2 = createStore({ parts: [{}, {}], viewState: { hidden: [1, 5, 'x', -1], hideLeds: 'no', hiddenLeds: [0, 1.5] } }, { persist() {}, delay: 300, timers: T3 });
+  ok(c2.session.hidden.join() === '1' && c2.session.hideLeds === false && c2.session.hiddenLeds.join() === '0', '잘못된 저장값은 거름(없는 부품·숫자 아님)');
+  a.update('session', (_, x) => { x.hideLeds = false; }); await T3.advance(400);
+  ok(M.viewState.hideLeds === false && n3 === 2, 'LED 재지정 등 다른 경로로 바뀌어도 저장');
+  a.update('view', (_, x) => { x.hidden = []; x.hiddenLeds = []; }); await T3.advance(400);
+  ok(M.viewState === undefined && n3 === 3, '모두 보이면 저장 칸 지움');
+  a.update('session'); await T3.advance(400);
+  ok(n3 === 3, '보기가 안 바뀌면 저장 안 함');
+  delete M.viewState; a.update('view', (_, x) => { x.hidden = [0]; }); delete M.viewState; a.update('session');
+  ok(M.viewState?.hidden.join() === '0', '되돌리기로 칸이 지워져도 다시 맞춤');
+  a.dispose();
+}
 done();
