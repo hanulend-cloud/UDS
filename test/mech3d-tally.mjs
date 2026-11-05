@@ -162,7 +162,7 @@ ok(S.counted === nV && S.noiseWarn === false, `집계 셀 ${S.counted}, 노이�
   ok(judgeNoise({ Ulen: 0.78, Uwid: 0.85 }, O, 0.01) === JUDGE_NOISE && judgeNoise({ Ulen: 0.81, Uwid: 0.85 }, O, 0.01) === 0.01 && judgeNoise({ Ulen: 0.78, Uwid: 0.85 }, O, 0.002) === 0.002, '근처만 0.5% 로 · 사용자가 더 낮게 정했으면 그 값');
 }
 { // 목표 바로 아래 값이 반올림으로 목표처럼 보이지 않게
-  ok(fmtJudge(0.7952, 0.8) === '0.795' && fmtJudge(0.81, 0.8) === '0.81' && fmtJudge(0.72, 0.8) === '0.72' && fmtJudge(0.8, 0.8) === '0.80' && fmtJudge(NaN, 0.8) === '–' && fmtJudge(0.7952) === '0.80', '미달인데 0.80 으로 보일 때만 세 자리');
+  ok(fmtJudge(0.7952, 0.8) === '0.79' && fmtJudge(0.7886, 0.8) === '0.78' && fmtJudge(0.7999, 0.8) === '0.79' && fmtJudge(0.81, 0.8) === '0.81' && fmtJudge(0.72, 0.8) === '0.72' && fmtJudge(0.8, 0.8) === '0.80' && fmtJudge(NaN, 0.8) === '–' && fmtJudge(0.7952) === '0.79', '균일도 표시 = 내림 — 미달이 0.80 으로 보이지 않고, 화면과 같은 값');
 }
 { // 가상 관측면(2026-11-05): 관측 부품이 빛 계산에서 빠져도 그 자리 평면에서 잼 — 어느 면으로 나왔든 탈출 광선이 평면을 지나는 점으로
   const hit = (a, x, y, z, dx, dy, dz, w = 1, p = 1) => a.onEscape(x, y, z, dx, dy, dz, w, p);

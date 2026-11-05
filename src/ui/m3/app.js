@@ -40,7 +40,7 @@ import { positionsFromLayout, addPosition, alignPositions } from '../../engine/m
 import { createResultsPanel } from './results-panel.js';
 import { renderStatusBar, leakText } from './status-bar.js';
 import { createAdRunner, resumable } from './autodesign-run.js';
-import { renderAutoPanel, milkyTable, stageAvailability, clampCap, overallFrac, etaText, reusableCurrent, defaultHousingPart, applyDz, applyFinish, capDefault, nextFinish, finishText, shapeText, tileConfigHtml, AD_ITEMS } from './autodesign-panel.js';
+import { renderAutoPanel, seedFits, milkyTable, stageAvailability, clampCap, overallFrac, etaText, reusableCurrent, defaultHousingPart, applyDz, applyFinish, capDefault, nextFinish, finishText, shapeText, tileConfigHtml, AD_ITEMS } from './autodesign-panel.js';
 import { ledHeightRange, heightCandidates, catalogOf, finishCandidatesFor, setReflMaterial, partFinishEdit } from '../../engine/mech3d/housing-led.js';
 import { migrateFinishCatalog, reflectPatch, copyAsUser, entryFromForm, addSamples, parsePercents, uniqueReflId } from '../../model/reflect-db.js';
 import { intersectRay } from '../../engine/mech3d/bvh.js';
@@ -324,7 +324,11 @@ async function refreshLine() {
     if (A?.store === st && key === A.lineKey) { S.line = null; S.lineErr = `라인 인식 실패: ${e.message}`; afterLine(); }
   }
 }
-function afterLine() { restartCalc(); rerunGeomChecks(); A.store.update('session'); }
+function afterLine() {
+  const held = A.adSeedLine; A.adSeedLine = null;
+  if (held && A.store.session.line && seedFits(held, geometry(tallyObs(A.store.mspec.observe, A.store.mspec.observe.dir ?? A.store.session.line.frame.d)))) { A.adSeed = held; A.adSeedSealed = false; }
+  restartCalc(); rerunGeomChecks(); A.store.update('session');
+}
 
 // ---- 점진 계산 ----
 // 집계 격자 인자(빈칸 = 자동) — tally.js 계약: cellS·cellW·winS(null = 자동). 구버전 obs.cell 은 쓰지 않음 (main.js:284)
@@ -1208,7 +1212,9 @@ function adApply() {
   const finCh = fp != null && !(pf?.kind === d.finish.kind && (pf?.R ?? null) === (d.finish.R ?? null) && pc === (d.finish.coating ?? null));   // ④ 면 처리(특수 처리 표시 포함)가 다르면
   const dzCh = Math.abs(d.dz ?? 0) > 1e-9 && (M.light.kind === 'step' ? !!M.light.step : M.light.manual?.pcb?.kind === 'depth');   // ⑤ 이동 있음
   A.hist?.hold();   // 적용 한 번 = 되돌리기 한 칸(형상 적용은 오래 걸릴 수 있음)
-  A.adSeed = mod ? null : r.seed ?? null; A.adSeedSealed = false;   // 화면 = 최종 판정 값 그대로(다시 재면 노이즈로 판정이 뒤집힘). 형상 변경은 관측 라인을 다시 잡아 다시 계산
+  // 화면 = 최종 판정 값 그대로(다시 재면 노이즈로 판정이 뒤집힘). 형상 변경은 관측 라인을 다시 잡으므로 라인이 잡힌 뒤에 넘김(afterLine)
+  // — 전에는 형상만 버리고 처음부터 재서 노이즈 1% 값(최저÷최고라 약 2%p 낮음)이 나와 결과 카드와 달랐음(2026-11-05)
+  A.adSeed = mod ? null : r.seed ?? null; A.adSeedSealed = false; A.adSeedLine = mod ? r.seed ?? null : null;
   const undo = { milky: milkyCh ? [mp, adClone(M.parts[mp].material)] : null, manual: lightCh ? adClone(Lm) : null, stepVirt: stepCh ? { v: adClone(sv) } : null, shape: mod ? [d.shape.part, adClone(M.parts[d.shape.part].shapeMod ?? null)] : null,
     finish: finCh ? [fp, adClone(pf), pc] : null, dz: dzCh ? (M.light.kind === 'step' ? { step: adClone({ offset: M.light.step.offset, emitters: M.light.step.emitters }) } : { depth: M.light.manual.pcb.depth }) : null };
   const tm = new Date();
@@ -1228,7 +1234,7 @@ function adApply() {
   if (dzCh) A.store.update('light', (m) => { applyDz(m, d.dz, r.ctx.line.frame.d); });   // STEP: 발광점도 같은 이동(재인식과 같음)
   A.hist?.release();
   A.adSeedSealed = true;
-  setStatus(undo.milky || undo.manual || undo.stepVirt || undo.shape || undo.finish || undo.dz ? (A.adSeed ? '적용함 — 최종 판정 값을 화면에 표시' : '적용함 — 다시 계산 중') : '적용할 변경이 없음(지금 설계와 같음)');
+  setStatus(undo.milky || undo.manual || undo.stepVirt || undo.shape || undo.finish || undo.dz ? (A.adSeed || A.adSeedLine ? '적용함 — 최종 판정 값을 화면에 표시' : '적용함 — 다시 계산 중') : '적용할 변경이 없음(지금 설계와 같음)');
   renderAuto();
 }
 // 이 안에서 이어서(2026-10-30) — 결과를 적용한 뒤, 체크했지만 이번 실행에서 돌리지 않은 항목만 그 위에서 최적화(예: ③ 형상 결과 → ② 위치·① Milky).

@@ -207,7 +207,7 @@ export const secRow = (t, n = 3) => `<tr class="m3-sec"><td colspan="${n}">${t}<
 function cmpRows(r) { const { metric, design } = cmpParts(r); return `${secRow('목표 지표')}${metric.join('')}${secRow('설계 최적화 항목')}${design.join('')}`; }
 export function compareHtml(r) {
   const { cur, best, feasible, reason, shape, canRevert = false, unchanged = false, screen = null } = r;
-  const bs = r.base, boost = r.added?.length ? `<div class="m3-boost">체크한 항목만으로는 목표 미달${bs ? ` (길이 균일도 ${f2(bs.Ulen)} · 폭 균일도 ${f2(bs.Uwid)}${bs.reason ? ` — ${esc(bs.reason)}` : ''})` : ''} → 보완 자동 추가: <b>${r.added.map(esc).join(' · ')}</b></div>` : '';
+  const bs = r.base, boost = r.added?.length ? `<div class="m3-boost">체크한 항목만으로는 목표 미달${bs ? ` (길이 균일도 ${fmtJudge(bs.Ulen)} · 폭 균일도 ${fmtJudge(bs.Uwid)}${bs.reason ? ` — ${esc(bs.reason)}` : ''})` : ''} → 보완 자동 추가: <b>${r.added.map(esc).join(' · ')}</b></div>` : '';
   const twoRow = best.rows === 2 && cur.rows !== 2 ? '<div class="m3-warn">2열 배치 = LED PCB 를 새로 설계해야 함</div>' : '';
   const effDrop = Number.isFinite(cur.eff) && Number.isFinite(best.eff) && best.eff - cur.eff <= -0.02 ? `<div class="m3-warn">광 효율 ${((cur.eff - best.eff) * 100).toFixed(1)}%p 감소 — 같은 LED 광속이면 그만큼 어두워짐</div>` : '';
   const clash = r.clash > 0 ? `<div class="m3-clash" role="alert">이 안은 LED 몸체가 부품과 겹침(${r.clash}개) — 조립 불가라 적용하지 않음</div>` : '';
@@ -228,8 +228,8 @@ export function appliedHtml(applied) {
 // el 에 카드를 그리고 이벤트를 h 로 넘긴다. state = { avail, sel, running, result, names, canRevert, noLine, milkyPart }
 // 실행 중 카드 구조가 같으면 진행 막대·문구만 바꿈(갱신마다 innerHTML 을 다시 만들지 않게)
 // '현재안 유지'인데 시험한 후보가 있으면(차이가 노이즈 수준·더 나쁨) [후보로 바꾸기] — 후보 값을 함께 보임. [적용] = 추천안이 있을 때만, 이때는 숨김(같은 뜻의 단추 둘로 헷갈림, 2026-11-02)
-const altBtn = (r) => (r.unchanged && r.alt ? `<button type="button" data-ad="applyAlt" title="추천은 지금 설계 유지 — 그래도 찾은 후보로 바꾸려면 누름">후보로 바꾸기${r.alt.milky != null ? ` (Milky ${(+r.alt.milky).toFixed(2)})` : ''} · ${f2(r.alt.Ulen)}/${f2(r.alt.Uwid)}</button>` : '');
-const altNote = (r) => (r.unchanged && r.alt ? `<div class="m3-rlim">찾은 후보 길이 ${f2(r.alt.Ulen)} · 폭 ${f2(r.alt.Uwid)} (지금 ${f2(r.cur?.Ulen)} · ${f2(r.cur?.Uwid)}) — 지금보다 뚜렷이 낫지 않아 지금 설계 유지를 추천</div>` : '');
+const altBtn = (r) => (r.unchanged && r.alt ? `<button type="button" data-ad="applyAlt" title="추천은 지금 설계 유지 — 그래도 찾은 후보로 바꾸려면 누름">후보로 바꾸기${r.alt.milky != null ? ` (Milky ${(+r.alt.milky).toFixed(2)})` : ''} · ${fmtJudge(r.alt.Ulen)}/${fmtJudge(r.alt.Uwid)}</button>` : '');
+const altNote = (r) => (r.unchanged && r.alt ? `<div class="m3-rlim">찾은 후보 길이 ${fmtJudge(r.alt.Ulen)} · 폭 ${fmtJudge(r.alt.Uwid)} (지금 ${fmtJudge(r.cur?.Ulen)} · ${fmtJudge(r.cur?.Uwid)}) — 지금보다 뚜렷이 낫지 않아 지금 설계 유지를 추천</div>` : '');
 const applyBtn = (r, clashTitle) => (r.unchanged ? '' : `<button type="button" data-ad="apply"${r.clash > 0 ? ` disabled title="${clashTitle}"` : ''}>적용</button>`);
 // Milky 조정 표(2026-10-29) — 마지막 ① Milky 단계 기록(뒤에서부터 연속 'milky' 단계, ② 기준 'ledsRef' 제외)의 Milky 별 길이 균일도·폭 균일도·광 효율.
 // 같은 Milky 는 나중(정밀) 값 · 믿는(trusted) 행만 · Milky 오름차순. Milky 가 마지막 단계라 최종안의 다른 인자 그대로의 추정 — 순수
@@ -250,7 +250,7 @@ export function milkyTableHtml(rows, chosen, tg = {}) {
   rows = rows.filter((r) => pick.has(r));
   const pm = (v, t) => (Number.isFinite(v) && Number.isFinite(t) ? (v + 1e-9 >= t ? ' <b class="ok">✓</b>' : ' <b class="bad">✕</b>') : '');
   const tr = (r) => { const sel = Math.abs(r.milky - chosen) < 0.005;
-    return `<tr${sel ? ' class="sel"' : ''}><td>${r.milky.toFixed(2)}${sel ? ' <span class="mut">최적</span>' : ''}</td><td>${f2(r.Ulen)}${pm(r.Ulen, tg.len)}</td><td>${f2(r.Uwid)}${pm(r.Uwid, tg.wid)}</td><td>${Number.isFinite(r.eff) ? `${(r.eff * 100).toFixed(1)}%` : '–'}</td><td>${sel ? '' : `<button type="button" data-ad="applyMilky" data-v="${r.milky}">적용</button>`}</td></tr>`; };
+    return `<tr${sel ? ' class="sel"' : ''}><td>${r.milky.toFixed(2)}${sel ? ' <span class="mut">최적</span>' : ''}</td><td>${fmtJudge(r.Ulen)}${pm(r.Ulen, tg.len)}</td><td>${fmtJudge(r.Uwid)}${pm(r.Uwid, tg.wid)}</td><td>${Number.isFinite(r.eff) ? `${(r.eff * 100).toFixed(1)}%` : '–'}</td><td>${sel ? '' : `<button type="button" data-ad="applyMilky" data-v="${r.milky}">적용</button>`}</td></tr>`; };
   return `<details class="m3-mtab"><summary>Milky 조정 <span class="mut">— 낮추면 광 효율↑ · 균일도↓ (다른 인자는 최적안 그대로의 추정)</span></summary>
     <table class="m3-cmp m3-cmp-s"><tr><th>Milky</th><th>길이 균일도</th><th>폭 균일도</th><th>광 효율</th><th></th></tr>${rows.map(tr).join('')}</table></details>`;
 }
@@ -268,6 +268,8 @@ export function loweredText(l, unchanged = false) {
   const f = (+l.from).toFixed(2);
   return unchanged ? `Milky ${f} 은 최적화에 쓰지 않아 ${l.to} 로 낮춰 찾았지만 지금 설계보다 낫지 않음${l.rough ? ' (현재 값은 대략값)' : ''}` : `Milky ${f} → ${l.to} 로 낮춰 최적화함 (Milky ${l.to} 초과는 최적화에 쓰지 않음${l.rough ? ' · 현재 값은 대략값' : ''})`;
 }
+// 최종 판정의 누적 결과를 화면 계산에 넘겨도 되는가(순수) — 칸 수가 같을 때만
+export const seedFits = (seed, G) => !!seed?.batches?.length && !!G && seed.batches[0].acc?.length === G.ns * G.nw;
 // 형상만 돌려 미달일 때 다음 항목 안내(2026-11-05) — 체크하지 않은 항목은 자동으로 돌리지 않음
 export function shapeMissText(r) {
   const s = r.stages;

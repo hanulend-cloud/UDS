@@ -1,3 +1,4 @@
+import { fmtJudge } from '../../engine/mech3d/tally.js';
 import { judgeStats, uVerdict } from '../../engine/mech3d/tally.js';
 // 아래 칸 대시보드 — ① 기구 최적화 진행(6 항목 타일) ② 시뮬레이션 진행현황(수렴 그래프).
 // 최적화: app.js 의 기구 최적화 io 가 progress(stage, frac, text) · evals(stage, [{label, Ulen, Uwid, ok, why}]) 를 부른다.
@@ -40,13 +41,13 @@ export function factorBoardHtml(S, nw = {}, cfg = null) {
     const ev = (t?.evals ?? []).filter((e) => e.ok !== false && Number.isFinite(e.Ulen)); let b = null;
     for (const e of ev) if (!b || scoreOf(e, tl, tw) > scoreOf(b, tl, tw)) b = e;
     const [chipC, chipT] = t && t.status !== 'off' ? { wait: ['st-wait', '대기'], run: ['st-run', `진행 ${Math.round(t.frac * 100)}%`], done: ['st-done', '✓ 완료'] }[t.status] : on ? ['st-on', '켜짐'] : ['st-off', '꺼짐'];
-    const txt = `지금 ${nowTxt}${b ? ` → ${b.label} (${f2(b.Ulen)}/${f2(b.Uwid)})` : ''}`;
+    const txt = `지금 ${nowTxt}${b ? ` → ${b.label} (${fmtJudge(b.Ulen)}/${fmtJudge(b.Uwid)})` : ''}`;
     const box = c?.box ? `<label class="fb-sw" title="${esc(c.why || '최적화에 사용')}">${c.box}</label>` : '<span class="fb-sw"></span>';
-    return `<div class="fb-card${on ? '' : ' fb-off'}" style="--fb:${FB_COL[k]}" title="${esc(txt)}">${head(box, chipC, chipT)}<div class="fb-in"><div class="fb-val"><span class="mut">지금</span> ${esc(nowTxt)}${b ? ` → <b>${esc(b.label)}</b> <span class="mut">(${f2(b.Ulen)}/${f2(b.Uwid)})</span>` : ''}</div>${c?.opt ? `<div class="fb-opt">${c.opt}</div>` : ''}</div></div>`;
+    return `<div class="fb-card${on ? '' : ' fb-off'}" style="--fb:${FB_COL[k]}" title="${esc(txt)}">${head(box, chipC, chipT)}<div class="fb-in"><div class="fb-val"><span class="mut">지금</span> ${esc(nowTxt)}${b ? ` → <b>${esc(b.label)}</b> <span class="mut">(${fmtJudge(b.Ulen)}/${fmtJudge(b.Uwid)})</span>` : ''}</div>${c?.opt ? `<div class="fb-opt">${c.opt}</div>` : ''}</div></div>`;
   };
   // 그래프는 오른쪽 모니터로(2026-10-30) — 여기는 입력(체크·옵션)과 상태만
   const nowOf = { position: nw.leds ?? '–', housing: nw.housing ?? '–', shape: nw.shape ?? '원래 형상', milky: Number.isFinite(nw.milky) ? `Milky ${f2(nw.milky)}` : '확산 부품 없음' };
-  return `<div class="od-h">설계 인자 <span class="mut">체크 = 이번에 최적화 · 🔒 = 적용해서 고정</span> <span class="mut">${Number.isFinite(nw.Ulen) ? `지금 ${f2(nw.Ulen)}/${f2(nw.Uwid)}` : ''}</span></div>
+  return `<div class="od-h">설계 인자 <span class="mut">체크 = 이번에 최적화 · 🔒 = 적용해서 고정</span> <span class="mut">${Number.isFinite(nw.Ulen) ? `지금 ${fmtJudge(nw.Ulen)}/${fmtJudge(nw.Uwid)}` : ''}</span></div>
     ${STAGES.map(([k, name]) => row(k, name, nowOf[k])).join('')}
     <div class="mut fb-hint">한 항목씩: 체크 → ▶ 실행 → [적용] = 🔒 고정 → 다음 항목 체크 → ▶ 실행</div>`;
 }
@@ -63,7 +64,7 @@ export function factorChartSvg(S, nw = {}, W = 240, H = 100) {
     bands += `<rect x="${xa.toFixed(1)}" y="${y0}" width="${Math.max(1, xb - xa).toFixed(1)}" height="${y1 - y0}" fill="${FB_COL[seq[s0].k] ?? '#888'}" opacity=".13"/>${xb - xa > 30 ? `<text class="od-ax" x="${((xa + xb) / 2).toFixed(1)}" y="${y0 - 3}" text-anchor="middle">${esc(name)}</text>` : ''}`;
     s0 = i;
   }
-  const hits = Array.from({ length: Math.min(30, n) }, (_, q, m = Math.min(30, n)) => { const i = Math.round((q * (n - 1)) / Math.max(1, m - 1)), e = seq[i], bw = (x1 - x0) / m; return `<rect class="od-hit" x="${(x0 + q * bw).toFixed(1)}" y="${y0}" width="${bw.toFixed(1)}" height="${y1 - y0}"><title>후보 ${i + 1} · ${esc(e.label ?? '')} · 길이 ${okE(e) ? f2(e.Ulen) : '–'} · 폭 ${okE(e) ? f2(e.Uwid) : '–'}${run[i] ? ` · 지금까지 최고 ${esc(run[i].label ?? '')}` : ''}</title></rect>`; }).join('');
+  const hits = Array.from({ length: Math.min(30, n) }, (_, q, m = Math.min(30, n)) => { const i = Math.round((q * (n - 1)) / Math.max(1, m - 1)), e = seq[i], bw = (x1 - x0) / m; return `<rect class="od-hit" x="${(x0 + q * bw).toFixed(1)}" y="${y0}" width="${bw.toFixed(1)}" height="${y1 - y0}"><title>후보 ${i + 1} · ${esc(e.label ?? '')} · 길이 ${okE(e) ? fmtJudge(e.Ulen) : '–'} · 폭 ${okE(e) ? fmtJudge(e.Uwid) : '–'}${run[i] ? ` · 지금까지 최고 ${esc(run[i].label ?? '')}` : ''}</title></rect>`; }).join('');
   const panel = (key, t, v0, title, s, d) => {
     const vals = [...seq.filter(okE).map((e) => e[key]), t, v0].filter(Number.isFinite), lo = Math.max(0, Math.floor((Math.min(...vals) - 0.02) * 20) / 20), hi = Math.min(1, Math.ceil((Math.max(...vals) + 0.01) * 20) / 20), Y = (v) => y0 + (1 - (Math.min(hi, Math.max(lo, v)) - lo) / (hi - lo || 1)) * (y1 - y0);
     const dots = seq.map((e, i) => (okE(e) && Number.isFinite(e[key]) ? `<circle class="od-cand ${d}" cx="${X(i).toFixed(1)}" cy="${Y(e[key]).toFixed(1)}" r="1.8"/>` : '')).join('');
@@ -83,8 +84,8 @@ export function beforeAfterHtml(k, b0, best, tl, tw, n = 0) {
   const row = (name, a, b, extra = '') => `<tr><th>${name}</th><td>${a}</td><td class="${a !== b ? 'chg' : ''}">${b}${extra}</td></tr>`;
   return `<table class="od-ba"><tr><th></th><th>전</th><th>후</th></tr>
     ${row('사양', esc(SPEC_NOW[k]?.(b0) ?? '–'), esc(best.label))}
-    ${row('길이 균일도', f2(b0.Ulen), f2(best.Ulen), pass(best.Ulen, tl))}
-    ${row('폭 균일도', f2(b0.Uwid), f2(best.Uwid), pass(best.Uwid, tw))}</table><div class="mut od-tx">후보 ${n}개 중 최고 · 적용은 위 [적용]</div>`;
+    ${row('길이 균일도', fmtJudge(b0.Ulen), fmtJudge(best.Ulen), pass(best.Ulen, tl))}
+    ${row('폭 균일도', fmtJudge(b0.Uwid), fmtJudge(best.Uwid), pass(best.Uwid, tw))}</table><div class="mut od-tx">후보 ${n}개 중 최고 · 적용은 위 [적용]</div>`;
 }
 // 오른쪽 모니터(순수, 2026-10-30) — 진행 줄(계산 순서 · 고정/완료/진행/대기) · 지표 3개(지금까지 최고, 시작 대비) · 그래프 자리(.od-plot) · 기록(최고 갱신만)
 // S = createOptDash 상태, sec = 걸린 초. 그래프는 자리 크기로 factorChartSvg 가 나중에 그림

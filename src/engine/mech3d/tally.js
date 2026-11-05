@@ -27,7 +27,8 @@ export function judgeStats(s, obs) {
   return { len, wid, all: len === 'bad' || wid === 'bad' ? 'bad' : len === 'near' || wid === 'near' ? 'near' : 'ok' };
 }
 // 균일도 표시 — 미달인데 반올림하면 목표와 같아 보일 때만 세 자리(0.795 ✕)
-export const fmtJudge = (v, t) => (!Number.isFinite(v) ? '–' : v < t && +v.toFixed(2) >= t ? v.toFixed(3) : v.toFixed(2));
+// 균일도 표시 = 내림(판정과 엇갈리지 않게, results-panel.fmtU 와 같음) — 카드는 반올림, 화면은 내림이라 같은 0.7886 이 0.79 와 0.78 로 달랐음(2026-11-05)
+export const fmtJudge = (v) => (!Number.isFinite(v) ? '–' : (Math.floor(v * 100 + 1e-9) / 100).toFixed(2));
 export const GRID_QUALITY = { low: { cell: 1.5 }, mid: { cell: 1 }, high: { cell: 0.5 } };
 export function autoCells(L, width, quality) {
   const c = (GRID_QUALITY[quality] ?? GRID_QUALITY.low).cell;

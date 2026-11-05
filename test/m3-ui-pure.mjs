@@ -606,6 +606,9 @@ done();
   const r1 = flowState({ state: 'running', stats: { relNoise: 0.02 } }, st(0.58, 0.64), M), r2 = flowState({ state: 'done' }, st(0.58, 0.64), M), r3 = flowState({ state: 'done' }, st(0.85, 0.9), M), r4 = flowState({ state: 'done' }, st(0.58, 0.64), M, { running: true });
   console.log(r1.sim.text === '계산 중 25% · 58% / 64%' && r1.opt.text === '시뮬레이션 뒤' && r2.sim.cls === 'bad' && r2.sim.done && r2.opt.cls === 'need' && r3.sim.cls === 'ok' && r3.opt.done && r4.opt.text === '진행 중' && flowState(null, null, M).sim.text === '–'
     ? 'PASS 흐름 4 광분포 시뮬레이션 · 5 기구 최적화 상태' : (process.exitCode = 1, `FAIL 흐름 ${JSON.stringify([r1, r2, r3, r4])}`)); }
+{ const { seedFits } = await import('../src/ui/m3/autodesign-panel.js');
+  const G0 = { ns: 4, nw: 2 }, sd = (n) => ({ batches: [{ acc: new Float64Array(n) }] });
+  ok(seedFits(sd(8), G0) && !seedFits(sd(6), G0) && !seedFits(null, G0) && !seedFits(sd(8), null) && !seedFits({ batches: [] }, G0), '판정 값을 화면으로: 칸 수가 같을 때만'); }
 { const { resultLineHtml, limitText } = await import('../src/ui/m3/autodesign-panel.js');
   // 결과 카드: 판정 한 단어 · 비교표 = 바뀐 사양 + 길이 균일도·폭 균일도·광 효율(안 바뀐 LED 줄 없음) · 한계 한 줄 · [자세히]
   const r = { unchanged: false, feasible: false, reason: '목표 미달 (균일도 최고 … · 한계: 길이 방향 — 끝단이 가장 어두움 · ④ 케이스)', targets: { len: 0.8, wid: 0.8 },
