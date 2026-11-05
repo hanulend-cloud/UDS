@@ -595,7 +595,7 @@ done();
   const stages = { milky: { status: 'done', frac: 1, text: '', evals: [{ label: 'Milky 1.5', Ulen: 0.76, Uwid: 0.84 }, { label: 'Milky 1.0', Ulen: 0.7, Uwid: 0.8 }] } };
   const tiles = new Proxy(stages, { get: (o, k) => o[k] ?? { status: 'off', frac: 0, text: '', evals: [] } });
   const mx = optMatrixHtml({ tiles, tgLen: 0.8, tgWid: 0.8, final: { Ulen: 0.81, Uwid: 0.85 } });
-  if (!mx.includes('최종 판정') || !mx.includes('Milky 1.5') || !mx.includes('0.81') || !mx.includes('<th>폭 최고</th>') || mx.includes('Milky 1.0')) throw new Error(`최적화 현황 표: ${mx}`);
+  if (!mx.includes('최종 판정') || !mx.includes('Milky 1.5') || !mx.includes('0.81') || !mx.includes('<th>폭</th>') || mx.includes('Milky 1.0')) throw new Error(`최적화 현황 표: ${mx}`);
   const tp = topPaths({ ':0>1': 3, ':1': 1 }, 2, 3, [0]);
   if (tp.length !== 1 || tp[0].parts.join() !== '1' || tp[0].share !== 1) throw new Error(`빛 계산 제외 부품은 광경로에서 뺌: ${JSON.stringify(tp)}`); }
 { const { flowState } = await import('../src/ui/m3/command-bar.js'); const t = flowState({ state: 'done' }, { Ulen: 0.795, Uwid: 0.83 }, { observe: { targetLen: 0.8, targetWid: 0.8 } }).sim.text;
@@ -621,7 +621,14 @@ done();
 { // 최적화 현황 표: 후보 값은 대략값이라고 알림
   const { optMatrixHtml, STAGES } = await import('../src/ui/m3/opt-dash.js');
   const h = optMatrixHtml({ tgLen: 0.8, tgWid: 0.8, tiles: Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', evals: [] }])), final: {} });
-  ok(/적은 광선/.test(h) && /최종 판정/.test(h), '현황 표에 후보 값 설명'); }
+  ok(/적은 광선/.test(h) && /최종 판정/.test(h) && !/서로 다른 후보/.test(h) && !/길이 최고/.test(h), '현황 표: 한 후보의 값 · 후보 값 설명');
+  const { monitorHtml } = await import('../src/ui/m3/opt-dash.js');
+  const tl = Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', evals: [] }])), SS = { tgLen: 0.8, tgWid: 0.8, seq: [], before: {}, tiles: tl };
+  ok(monitorHtml(SS, 1).includes('od-plot') && !monitorHtml(SS, 1, { chart: false }).includes('od-plot') && monitorHtml(SS, 1, { chart: false }).includes('om-mx'), '그래프를 따로 그리면 오른쪽 칸에서 빠짐');
+  const SF = { ...SS, final: { Ulen: 0.7886, Uwid: 0.7052, label: 'x' } }, mh = monitorHtml(SF, 1);
+  ok(mh.includes('0.78') && !mh.includes('0.79') && mh.includes('0.70') && !mh.includes('0.71'), '최종 값 = 결과 카드와 같은 내림 표시(표·문장·지표)');
+  const { chartHtml } = await import('../src/ui/m3/opt-dash.js');
+  ok(chartHtml().includes('od-plot') && chartHtml().includes('od-legend'), '왼쪽 그래프 칸'); }
 { const { seedFits } = await import('../src/ui/m3/autodesign-panel.js');
   const G0 = { ns: 4, nw: 2 }, sd = (n) => ({ batches: [{ acc: new Float64Array(n) }] });
   ok(seedFits(sd(8), G0) && !seedFits(sd(6), G0) && !seedFits(null, G0) && !seedFits(sd(8), null) && !seedFits({ batches: [] }, G0), '판정 값을 화면으로: 칸 수가 같을 때만'); }

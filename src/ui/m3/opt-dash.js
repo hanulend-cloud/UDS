@@ -72,7 +72,7 @@ export function factorChartSvg(S, nw = {}, W = 240, H = 100) {
     const mark = Number.isFinite(last) ? `<circle class="od-dot ${d}" cx="${x1}" cy="${Y(last).toFixed(1)}" r="3.5"/>` : '';
     const tg = Number.isFinite(t) ? `<line class="od-tg" x1="${x0}" x2="${x1}" y1="${Y(t).toFixed(1)}" y2="${Y(t).toFixed(1)}"/><text class="od-ax" x="${x0 - 3}" y="${(Y(t) + 3).toFixed(1)}" text-anchor="end">${f2(t)}</text>` : '';
     const ok = Number.isFinite(last) && Number.isFinite(t) ? (last + 1e-9 >= t ? '<span class="od-ok">✓</span>' : '<span class="od-bad">✕</span>') : '';
-    return `<div><div class="od-simt"><b>${title}</b> 최고 ${f2(last)}${ok} · 목표 ${f2(t)}${Number.isFinite(v0) && cw >= 260 ? ` · 시작 ${f2(v0)}` : ''}</div><svg class="od-sim" width="${cw}" height="${ch}" viewBox="0 0 ${cw} ${ch}">${bands}${tg}<text class="od-ax" x="${x0 - 3}" y="${y0 + 7}" text-anchor="end">${hi.toFixed(2)}</text><text class="od-ax" x="${x0 - 3}" y="${y1}" text-anchor="end">${lo.toFixed(2)}</text><line class="od-ax-l" x1="${x0}" x2="${x1}" y1="${y1}" y2="${y1}"/><text class="od-ax" x="${x0}" y="${ch - 2}">후보 1</text><text class="od-ax" x="${x1}" y="${ch - 2}" text-anchor="end">${n}개</text>${dots}${line ? `<polyline class="${s}" points="${line}"/>` : ''}${mark}${hits}</svg></div>`;
+    return `<div><div class="od-simt"><b>${title}</b> 최고 ${fmtJudge(last)}${ok} · 목표 ${f2(t)}${Number.isFinite(v0) && cw >= 260 ? ` · 시작 ${fmtJudge(v0)}` : ''}</div><svg class="od-sim" width="${cw}" height="${ch}" viewBox="0 0 ${cw} ${ch}">${bands}${tg}<text class="od-ax" x="${x0 - 3}" y="${y0 + 7}" text-anchor="end">${hi.toFixed(2)}</text><text class="od-ax" x="${x0 - 3}" y="${y1}" text-anchor="end">${lo.toFixed(2)}</text><line class="od-ax-l" x1="${x0}" x2="${x1}" y1="${y1}" y2="${y1}"/><text class="od-ax" x="${x0}" y="${ch - 2}">후보 1</text><text class="od-ax" x="${x1}" y="${ch - 2}" text-anchor="end">${n}개</text>${dots}${line ? `<polyline class="${s}" points="${line}"/>` : ''}${mark}${hits}</svg></div>`;
   };
   return `<div class="od-sim2${one ? ' one' : ''}">${panel('Ulen', tl, nw.Ulen, '길이 균일도', 'od-s1', 'od-d1')}${panel('Uwid', tw, nw.Uwid, '폭 균일도', 'od-s2', 'od-d2')}</div>`;
 }
@@ -89,7 +89,10 @@ export function beforeAfterHtml(k, b0, best, tl, tw, n = 0) {
 }
 // 오른쪽 모니터(순수, 2026-10-30) — 진행 줄(계산 순서 · 고정/완료/진행/대기) · 지표 3개(지금까지 최고, 시작 대비) · 그래프 자리(.od-plot) · 기록(최고 갱신만)
 // S = createOptDash 상태, sec = 걸린 초. 그래프는 자리 크기로 factorChartSvg 가 나중에 그림
-export function monitorHtml(S, sec = 0) {
+export const chartHtml = () => `<div class="od-legend">위로 갈수록 고름 · 연한 점 = 시험한 후보 · 굵은 선 = 지금까지 고른 최고안 · 빨간 점선 = 목표 · 색 띠 = 그때 시험한 항목</div>
+    <div class="od-plot"></div>`;
+// chart = false → 그래프는 따로(창 왼쪽 아래 칸, createOptDash h.chart)
+export function monitorHtml(S, sec = 0, { chart = true } = {}) {
   const tl = S.tgLen, tw = S.tgWid, ok = (e) => e.ok !== false && Number.isFinite(e.Ulen);
   let best = null; for (const e of S.seq ?? []) if (ok(e) && (!best || scoreOf(e, tl, tw) > scoreOf(best, tl, tw))) best = e;
   const busy = S.ended == null && !S.stopped;
@@ -107,13 +110,13 @@ export function monitorHtml(S, sec = 0) {
   const kpi = (label, tg, v, v0) => {
     const pass = Number.isFinite(v) && Number.isFinite(tg) ? (v + 1e-9 >= tg ? 'ok' : 'bad') : '';
     const d = Number.isFinite(v) && Number.isFinite(v0) ? v - v0 : NaN;
-    return `<div class="om-k"><div class="mut">${label}${Number.isFinite(tg) ? ` · 목표 ${f2(tg)}` : ''}</div><b class="om-v ${pass}">${f2(v)}</b><div class="mut">시작 ${f2(v0)}${Number.isFinite(d) && Math.abs(d) >= 0.005 ? ` → ${d > 0 ? '▲' : '▼'}${f2(Math.abs(d))}` : ''}</div></div>`;
+    return `<div class="om-k"><div class="mut">${label}${Number.isFinite(tg) ? ` · 목표 ${f2(tg)}` : ''}</div><b class="om-v ${pass}">${fmtJudge(v)}</b><div class="mut">시작 ${fmtJudge(v0)}${Number.isFinite(d) && Math.abs(d) >= 0.005 ? ` → ${d > 0 ? '▲' : '▼'}${f2(Math.abs(d))}` : ''}</div></div>`;
   };
   const effB = S.effBest, eff0 = b0.eff;
   const effK = `<div class="om-k"><div class="mut">광 효율</div><b class="om-v">${Number.isFinite(effB) ? `${(effB * 100).toFixed(1)}%` : Number.isFinite(eff0) ? `${(eff0 * 100).toFixed(1)}%` : '–'}</b><div class="mut">${Number.isFinite(effB) && Number.isFinite(eff0) ? `시작 ${(eff0 * 100).toFixed(1)}%` : Number.isFinite(eff0) ? '시작값 · 최적안은 끝나면' : ''}</div></div>`;
   const mmss = (t) => `${String((t / 60) | 0).padStart(2, '0')}:${String(t % 60 | 0).padStart(2, '0')}`;
   const nEval = (S.seq ?? []).length;
-  const fin = S.final, cur = fin ?? best, J = fin ? judgeStats(fin, { targetLen: tl, targetWid: tw }) : {}, uTxt = (l, v, t, j) => `${l} <b>${f2(v)}</b>${Number.isFinite(v) && Number.isFinite(t) ? ` (목표 ${f2(t)} ${j === 'near' ? '<span class="od-near">근처</span>' : v + 1e-9 >= t ? '<span class="od-ok">통과</span>' : '<span class="od-bad">미달</span>'})` : ''}`;
+  const fin = S.final, cur = fin ?? best, J = fin ? judgeStats(fin, { targetLen: tl, targetWid: tw }) : {}, uTxt = (l, v, t, j) => `${l} <b>${fmtJudge(v)}</b>${Number.isFinite(v) && Number.isFinite(t) ? ` (목표 ${f2(t)} ${j === 'near' ? '<span class="od-near">근처</span>' : v + 1e-9 >= t ? '<span class="od-ok">통과</span>' : '<span class="od-bad">미달</span>'})` : ''}`;
   const uLine = cur ? `${uTxt('길이 균일도', cur.Ulen, tl, J.len)}, ${uTxt('폭 균일도', cur.Uwid, tw, J.wid)}` : '';
   const doing = S.note || (S.cur ? S.tiles[S.cur].text : '') || '준비하는 중';
   const say = busy ? `<p><b>지금 하는 일</b> ${esc(doing)}</p>${uLine ? `<p><b>지금까지 가장 좋은 안</b> ${uLine}</p>` : ''}`
@@ -124,13 +127,12 @@ export function monitorHtml(S, sec = 0) {
     <div class="om-steps">${steps.join('<i class="om-ar">→</i>')}</div>
     <div class="om-say">${say}</div>
     <div class="om-kpi">${kpi(fin ? '길이 균일도 최종' : '길이 균일도', tl, cur?.Ulen ?? b0.Ulen, b0.Ulen)}${kpi(fin ? '폭 균일도 최종' : '폭 균일도', tw, cur?.Uwid ?? b0.Uwid, b0.Uwid)}${effK}</div>
-    <div class="od-legend">위로 갈수록 고름 · 연한 점 = 시험한 후보 · 굵은 선 = 지금까지 고른 최고안 · 빨간 점선 = 목표 · 색 띠 = 그때 시험한 항목</div>
-    <div class="od-plot"></div>
+    ${chart ? chartHtml() : ''}
     ${optMatrixHtml(S)}`;
 }
 // 최적화 현황 표(순수, 2026-11-03) — 항목 × (상태 · 시험 후보 · 그 항목 최고 길이·폭 · 최고안). 마지막 줄 = 최종 판정(최종 화질)
 export function optMatrixHtml(S) {
-  const tl = S.tgLen, tw = S.tgWid, cell = (v, t) => (Number.isFinite(v) ? `<b class="${Number.isFinite(t) ? (v + 1e-9 >= t ? 'od-ok' : 'od-bad') : ''}">${f2(v)}</b>` : '<span class="mut">–</span>');
+  const tl = S.tgLen, tw = S.tgWid, cell = (v, t) => (Number.isFinite(v) ? `<b class="${Number.isFinite(t) ? (v + 1e-9 >= t ? 'od-ok' : 'od-bad') : ''}">${fmtJudge(v)}</b>` : '<span class="mut">–</span>');
   const row = (name, st, n, e, cls = '') => `<tr class="${cls}"><th>${name}</th><td>${st}</td><td>${n}</td><td>${cell(e?.Ulen, tl)}</td><td>${cell(e?.Uwid, tw)}</td><td class="om-mx-l">${esc(e?.label ?? '')}</td></tr>`;
   const rows = STAGES.flatMap(([k, name]) => {
     const t = S.tiles[k], locked = S.locked?.[k] && t.status === 'off';
@@ -140,7 +142,7 @@ export function optMatrixHtml(S) {
     return [row(name, st, t.evals.length || '–', e)];
   });
   const stF = S.final ? '완료' : S.stopped ? '중지' : '대기';
-  return `<div class="om-mx"><div class="mut om-lh">최적화 현황</div><table class="om-mx-t"><tr><th>항목</th><th>상태</th><th>시험 후보</th><th>길이 최고</th><th>폭 최고</th><th>최고안</th></tr>${rows.join('')}${row('최종 판정', stF, '–', S.final, 'om-mx-f')}</table><div class="mut od-tx">항목 줄 = 적은 광선으로 빠르게 비교한 대략값(길이·폭 최고는 서로 다른 후보일 수 있음) · 최종 판정 = 고른 한 안을 많은 광선으로 잰 확정값</div></div>`;
+  return `<div class="om-mx"><div class="mut om-lh">최적화 현황</div><table class="om-mx-t"><tr><th>항목</th><th>상태</th><th>시험 후보</th><th>길이</th><th>폭</th><th>최고안</th></tr>${rows.join('')}${row('최종 판정', stF, '–', S.final, 'om-mx-f')}</table><div class="mut od-tx">항목 줄 = 가장 좋았던 후보 하나의 값. 적은 광선으로 빠르게 비교해 낮게 나옴 · 최종 판정 = 고른 안을 많은 광선으로 다시 잰 확정값</div></div>`;
 }
 // 후보의 점수(목표 대비 여유 — 둘 다 있으면 작은 쪽)
 const scoreOf = (e, tl, tw) => (e.ok === false || !Number.isFinite(e.Ulen) ? -Infinity : Math.min(e.Ulen - tl, Number.isFinite(e.Uwid) && Number.isFinite(tw) ? e.Uwid - tw : Infinity));
@@ -178,12 +180,13 @@ export function createOptDash(el, h = {}) {
   if (h.board && typeof ResizeObserver !== 'undefined') { let w0 = 0, h0 = 0; new ResizeObserver(() => { const b = h.board; if (b.clientWidth === w0 && b.clientHeight === h0) return; w0 = b.clientWidth; h0 = b.clientHeight; renderBoard(); }).observe(h.board); }   // 칸 크기가 바뀌면 그래프를 그 크기로 다시
   // 오른쪽 모니터 — 진행 줄 · 지표 · 그래프(자리 크기로) · 기록. 끝나도 그대로 남김(결과 카드는 위 #m3-auto)
   function render() {
-    if (!S) { el.innerHTML = ''; return; }   // 실행 전 = 비움(항목 켜기는 왼쪽 설계 인자 체크)
-    el.innerHTML = monitorHtml(S, ((S.pauseAt ?? performance.now()) - S.t0) / 1000);
-    const p = el.querySelector('.od-plot');
+    if (!S) { el.innerHTML = ''; if (h.chart) h.chart.innerHTML = ''; return; }   // 실행 전 = 비움(항목 켜기는 왼쪽 설계 인자 체크)
+    el.innerHTML = monitorHtml(S, ((S.pauseAt ?? performance.now()) - S.t0) / 1000, { chart: !h.chart });
+    if (h.chart) h.chart.innerHTML = chartHtml();
+    const p = (h.chart ?? el).querySelector('.od-plot');
     if (p && p.clientWidth > 40 && p.clientHeight > 30) p.innerHTML = factorChartSvg(S, { ...(S.before ?? {}), tgLen: S.tgLen, tgWid: S.tgWid }, p.clientWidth, p.clientHeight);
   }
-  if (typeof ResizeObserver !== 'undefined') { let w0 = 0; new ResizeObserver(() => { if (el.clientWidth !== w0) { w0 = el.clientWidth; draw(); } }).observe(el); }
+  if (typeof ResizeObserver !== 'undefined') { let w0 = 0; new ResizeObserver(() => { if (el.clientWidth !== w0) { w0 = el.clientWidth; draw(); } }).observe(el); if (h.chart) { let cw = 0, ch = 0; new ResizeObserver(() => { const b = h.chart; if (b.clientWidth !== cw || b.clientHeight !== ch) { cw = b.clientWidth; ch = b.clientHeight; draw(); } }).observe(h.chart); } }
   if (typeof setInterval !== 'undefined') setInterval(() => { if (S && S.ended == null && !S.stopped && el.isConnected && el.offsetParent) draw(); }, 1000);   // 걸린 시간 갱신
   render(); renderBoard();
   function stop() { if (S) { S.stopped = true; S.pauseAt = null; draw(); } }
