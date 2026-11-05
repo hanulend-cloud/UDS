@@ -37,6 +37,6 @@ const memStore = () => { let v = null; return { get: async () => v, put: async (
   ok(await P.saveAs() && dl[1] === '내 파일.json' && P.state().name === '내 파일.json' && !P.state().hasFile, '파일 API 없음 = 다운로드 · 이름');
   P.opened('x.json'); ok(P.state().name === 'x.json', '파일 입력으로 연 이름'); }
 { const clk = () => '12:00:00';
-  ok(projectFileLabel({ name: null, hasFile: false, browserAt: 1 }, clk).status === '브라우저에만 저장됨 12:00:00' && projectFileLabel({ name: null, hasFile: false }, clk).name === '이름 없는 프로젝트', '파일 없음 표시');
+  ok(projectFileLabel({ name: null, hasFile: false, browserAt: 1 }, clk).status === '파일로 저장 안 됨 — 창을 닫으면 사라짐' && projectFileLabel({ name: null, hasFile: false }, clk).name === '이름 없는 프로젝트', '파일 없음 표시');
   ok(projectFileLabel({ name: 'a', hasFile: true, perm: 'granted', savedAt: 1 }, clk).status === '자동 저장됨 12:00:00', '자동 저장 시각'); }
 process.exitCode = fail ? 1 : 0;

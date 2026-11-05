@@ -111,5 +111,5 @@ export function projectFileLabel(S, clock = (t) => new Date(t).toTimeString().sl
   if (S.err) return { name, status: '파일 저장 실패 — 브라우저에는 저장됨', title: S.err, kind: 'warn', action: S.hasFile ? 'regrant' : 'saveAs', actionText: '다시 저장' };
   if (S.hasFile && S.perm !== 'granted') return { name, status: '파일 저장 멈춤 · 브라우저에만 저장 중', kind: 'warn', action: 'regrant', actionText: '파일 저장 다시 켜기' };
   if (S.hasFile) return { name, status: S.savedAt ? `자동 저장됨 ${clock(S.savedAt)}` : '자동 저장 켜짐', kind: 'ok', action: null };
-  return { name, status: S.browserAt ? `브라우저에만 저장됨 ${clock(S.browserAt)}` : '브라우저에만 저장', kind: 'none', action: 'saveAs', actionText: '파일로 저장' };
+  return { name, status: '파일로 저장 안 됨 — 창을 닫으면 사라짐', kind: 'none', action: 'saveAs', actionText: '파일로 저장' };
 }

@@ -1,5 +1,6 @@
 // UI 배선 + 실시간 재계산 — 프로젝트.md §3 출력6
 import { showStepLoad } from './ui/step-load-overlay.js';
+import { isFreshStart } from './ui/fresh-start.js';
 import { LOAD_LABEL, stepTimingText } from './engine/shape/step-load-plan.js';
 import { bundleJson, parseMaterialFile, loadClear, saveClear, clearImport } from './model/material-io.js';
 import { isAdmin, setAdmin } from './model/admin.js';
@@ -834,7 +835,7 @@ function setupProjectFile() {
     e.preventDefault(); m3app.flush();
     if (e.shiftKey) projFile.saveAs(); else projFile.save();
   });
-  projFile.restore();
+  if (freshStart) projFile.clear(); else projFile.restore();   // 새로 시작이면 지난 파일에 이어 쓰지 않음(핸들도 지움)
 }
 
 function mount() {
@@ -903,6 +904,8 @@ function migrate(s) {
 // 탭 동시 편집 잠금(src/ui/tab-lock.js): 이미 다른 탭이 열려 있으면 이 탭은 읽기 전용(저장 안 함, 화면 조작·계산은 됨).
 // [이 탭에서 편집하기] → take 알림(다른 탭은 읽기 전용, 예약된 디바운스 저장도 무시됨) → 세션 플래그를 남기고
 // 새로고침해 최신 저장값을 다시 읽은 뒤 편집 탭으로 시작한다(그 사이 연 탭도 시작 시 take 로 읽기 전용).
+// 프로그램을 새로 열면 브라우저에 남은 프로젝트를 불러오지 않음 — 새로고침만 이어서(2026-11-05)
+const freshStart = isFreshStart(sessionStorage, performance.getEntriesByType('navigation')[0]?.type);
 const TAKE_FLAG = 'uds.tab.take';
 let takeOnStart = false;
 try { takeOnStart = sessionStorage.getItem(TAKE_FLAG) === '1'; sessionStorage.removeItem(TAKE_FLAG); } catch {}
@@ -941,8 +944,9 @@ await initL2(browserLoader());
   try { user = JSON.parse(localStorage.getItem(REFL_KEY) || '[]'); } catch { user = []; }
   reflectDb = createReflectDb(base, user, (list) => tabLock.write(REFL_KEY, () => { try { localStorage.setItem(REFL_KEY, JSON.stringify(list)); } catch {} }));
 }
-spec = load() || structuredClone(DEFAULT_SPEC);
+spec = (freshStart ? null : load()) || structuredClone(DEFAULT_SPEC);
 migrate(spec);
+if (freshStart) persist();   // 지난 프로젝트를 저장값에서도 지움 — 안 그러면 새로고침 때 되살아남(다른 탭이 편집 중이면 저장하지 않음)
 if (spec.mode === 'mech3d') m3app.warmWorkers({ dbLists, l2Raw });   // 3D 계산 Worker 를 먼저 띄움(몸체·기구 복원과 겹치게)
 // 불러온 L3 몸체 복원(IndexedDB) — 없으면 평판으로 되돌림
 if (spec.body.shape.source === 'step' && !(await loadBodyIDB({ flipZ: spec.body.shape.flipZ, rot: spec.body.shape.rot }))) {

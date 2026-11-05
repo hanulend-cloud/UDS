@@ -643,6 +643,13 @@ done();
 { // 평판(초기 검토) 화면은 어디서도 열 수 없음(2026-11-05)
   const { readFileSync } = await import('node:fs'), html = readFileSync(new URL('../index.html', import.meta.url), 'utf8'), main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
   ok(!/초기 검토|btn-flat-mode/.test(html) && !/mode-flat|export-flat|spec\.mode = 'flat'/.test(main), '시작 화면·메뉴에 평판 화면 없음'); }
+{ // 새로 열면 새로 시작, 새로고침은 이어서(2026-11-05)
+  const { isFreshStart } = await import('../src/ui/fresh-start.js'), mem = () => { const m = new Map(); return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v) }; }, S = mem();
+  ok(isFreshStart(S, 'navigate') === true, '새 탭 = 새로 시작');
+  ok(isFreshStart(S, 'reload') === false && isFreshStart(S, 'navigate') === false, '같은 탭에서 새로고침·다시 이동 = 이어서');
+  ok(isFreshStart(mem(), 'navigate') === true, '탭을 닫고 다시 열면 새로 시작');
+  const bad = { getItem() { throw new Error('x'); }, setItem() { throw new Error('x'); } };
+  ok(isFreshStart(bad, 'reload') === false && isFreshStart(bad, 'navigate') === true, '저장소를 못 써도 새로고침은 이어서'); }
 { const { seedFits } = await import('../src/ui/m3/autodesign-panel.js');
   const G0 = { ns: 4, nw: 2 }, sd = (n) => ({ batches: [{ acc: new Float64Array(n) }] });
   ok(seedFits(sd(8), G0) && !seedFits(sd(6), G0) && !seedFits(null, G0) && !seedFits(sd(8), null) && !seedFits({ batches: [] }, G0), '판정 값을 화면으로: 칸 수가 같을 때만'); }
