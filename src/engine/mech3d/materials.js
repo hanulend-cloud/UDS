@@ -118,7 +118,6 @@ const numberPcb = (parts) => {   // 한 장 = PCB · 여러 장 = PCB 1, PCB 2 �
 };
 // ids = PCB 인 부품 번호 — 그 밖의 PCB 는 원래대로. 이미 PCB 인 부품은 고친 반사율을 유지
 export function syncPcb(parts, ids) { const S = new Set(ids); return numberPcb(parts.map((p, i) => (S.has(i) ? markPcb(p) : unmarkPcb(p)))); }
-export function setPcb(parts, i, on) { return numberPcb(parts.map((p, k) => (k !== i ? p : on ? markPcb(p) : unmarkPcb(p)))); }
 
 // 반사 소재·특수 처리 표시(spec P4 §2.3d)는 면 처리가 기본값으로 돌아가므로 해제
 export function setPartMaterial(part, kind) {

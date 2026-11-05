@@ -177,12 +177,6 @@ export function untraceHtml(p) {
   if (p.role === 'light') return '<div class="m3-card m3-untrace on"><b>광원으로 사용 중</b> <span class="mut">이 부품은 광원 그룹으로 옮겨져 계산함 — 해제는 광원 노드에서</span></div>';
   return `<div class="m3-card m3-untrace${p.untrace ? ' on' : ''}"><div class="m3-sub">빛 계산</div><label class="m3-sw"><input type="checkbox" data-m3-untrace${p.untrace ? ' checked' : ''}> 빛 계산에서 제외 <span class="mut">(삭제 아님 — 빛이 이 부품을 그냥 지나감)</span></label></div>`;
 }
-// PCB 부품 스위치(순수, 2026-11-04) — 자동 인식이 틀리면 여기서 고침. 광원으로 옮긴 부품은 없음
-export function pcbCardHtml(p) {
-  if (p.role === 'light') return '';
-  const on = p.role === 'pcb', R = p.finish?.R;
-  return `<div class="m3-card m3-untrace${on ? ' pcb' : ''}"><div class="m3-sub">PCB</div><label class="m3-sw"><input type="checkbox" data-m3-pcb${on ? ' checked' : ''}> PCB 부품 <span class="mut">${on ? `반사율 ${R != null ? pct(R) : '-'}% 면으로 계산 · 끄면 원래 소재로 · 기구 최적화에서 면을 바꾸지 않음` : '켜면 확산 반사 30% 면으로 계산(부품은 그대로)'}</span></label></div>`;
-}
 function partEditor(p, sel, dbList) {
   const face = sel.face, cat = sel.catalog ?? DEFAULT_FINISH_CATALOG, lim = finishLimit(p, cat), opaque = p.material.kind === 'opaque', tab = PART_TAB;
   // 면 처리(상세): 불투명 + 반사 소재 지정 → 종류는 소재가 정함 · 미지정 → 종류만 · 투과 부품 → 종류·반사율
@@ -196,7 +190,7 @@ function partEditor(p, sel, dbList) {
     <button type="button" role="tab" data-m3-tab="detail" aria-selected="${tab === 'detail'}">상세 <span class="m3-tab-s">${esc(dSum || '위치 · 크기 · 접촉면')}</span></button></div>`;
   const warn = `${overlapWarnHtml(sel.clearance)}${sel.xfMsg ? `<div class="m3-warn" role="status">${esc(sel.xfMsg)}</div>` : ''}`;
   const body = tab === 'basic'
-    ? `${pcbCardHtml(p)}<div class="m3-card">${basicMaterialHtml(p, dbList, cat, sel)}</div>
+    ? `<div class="m3-card">${basicMaterialHtml(p, dbList, cat, sel)}</div>
       <div class="m3-card"><div class="m3-sub">표면 상태 <span class="mut">${face != null ? `면 #${face} 선택` : nOver ? `면 ${nOver}개 따로 지정` : ''}</span></div>${partFin}${faceRow}<div class="mut m3-note">3D 뷰에서 면을 클릭하면 그 면만 다르게 지정할 수 있습니다</div></div>${untraceHtml(p)}`
     : `<div class="m3-card"><div class="m3-sub">위치 · 크기 <span class="mut">mm · ${esc(xfSummaryText(p, sel.xfInfo))}</span></div>${xformEditor(p, sel.xfInfo, sel.lock)}${ledDistHtml(sel.clearance)}</div>
       ${secHtml('contact', '접촉면 (이 부품)', '', contactsForPartHtml(sel.contacts ?? [], sel.part, sel.names ?? []))}`;
@@ -293,7 +287,6 @@ export function renderPartProps(el, m, sel0, dbList, h) {
   el.querySelectorAll('[data-m3-tab]').forEach((b) => { b.onclick = () => { if (PART_TAB !== b.dataset.m3Tab) { PART_TAB = b.dataset.m3Tab; renderPartProps(el, m, sel0, dbList, h); } }; });
   el.querySelectorAll('details[data-m3-sec]').forEach((d) => d.addEventListener('toggle', () => SEC_OPEN.set(d.dataset.m3Sec, d.open)));
   el.querySelector('[data-m3-untrace]')?.addEventListener('change', (e) => h.onUntrace?.(i, e.target.checked));
-  el.querySelector('[data-m3-pcb]')?.addEventListener('change', (e) => h.onPcb?.(i, e.target.checked));
   const pk = el.querySelector('[data-m3-pick]');
   if (pk) pk.onchange = () => { if (pk.value) h.onMatPick?.(i, pk.value); };
   el.querySelectorAll('[data-m3-mat]').forEach((x) => {

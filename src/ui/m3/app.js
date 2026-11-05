@@ -12,7 +12,7 @@ import { createHistory } from './history.js';
 import { mountSplit } from './pane-split.js';
 import { findLeds, supportPart, emitterFaceAway, autoLedGroup, autoStepLeds, findPcbParts } from '../../engine/mech3d/led-detect.js';
 import { loadClear, saveClear, clearExportJson, clearImport, parseMaterialFile } from '../../model/material-io.js';
-import { setPartMaterial, setPartMaterialParam, syncPcb, setPcb, CLEAR_BASE, applyClearEntry, clearEntryFromForm, editClearEntry, syncClearParts } from '../../engine/mech3d/materials.js';
+import { setPartMaterial, setPartMaterialParam, syncPcb, CLEAR_BASE, applyClearEntry, clearEntryFromForm, editClearEntry, syncClearParts } from '../../engine/mech3d/materials.js';
 import { lineFromData, lightData, obsDirection } from '../../engine/mech3d/line.js';
 import { tallyGeometry, tallyStats, autoCells } from '../../engine/mech3d/tally.js';
 import { isUntraced } from '../../engine/mech3d/scene3d.js';
@@ -1337,7 +1337,7 @@ function mechLightFromPick(s, auto = false) {
   const parts = leds.map((i) => { const p = rt.parts[i], r = rt.raw.parts[i] ?? {}; return { positions: p.positions.slice(), triangles: p.triangles.slice(), faceIds: p.faceIds.slice(), faceCount: r.faceCount, volume: r.volume }; });
   // 발광면 = 받침 부품(PCB) 반대쪽 — 옆면·아랫면을 눌러도 부품(확산판) 쪽으로 빛이 나가게. 받침 = 클릭 LED 에 가장 가까운 기구 부품
   const sup = supportPart(rt.parts, rt.parts[s.part], new Set(leds)), face = emitterFaceAway(parts[leds.indexOf(s.part)], s.face, sup >= 0 ? rt.parts[sup] : null);
-  // LED 받침 판 = PCB 부품(부품은 그대로, 확산 반사 30% 면). 못 찾으면 이유만 안내 — 틀리면 부품 속성의 [PCB 부품] 스위치로
+  // LED 받침 판 = PCB 부품(부품은 그대로, 확산 반사 30% 면). 못 찾으면 이유만 안내
   const pf = findPcbParts(rt.parts, leds, { skip: obsP }), pcbTxt = pf.pcbs.length ? ` · PCB ${pf.pcbs.length}개 인식(부품 유지, 반사율 30% 면)` : pf.rejected.length ? ` · PCB 못 찾음: ${M.parts[pf.rejected[0].part]?.name ?? '받침 부품'} ${pf.rejected[0].why}` : ' · PCB 못 찾음';
   A.pcbNote = pcbTxt;
   const name = `${String(M.name ?? '3D 도면').replace(/\.(stp|step)$/i, '')} · 도면 광원 ${leds.length}개`;
@@ -1452,7 +1452,6 @@ function propHandlers() {
   return {
     onKind: (i, k) => part(i, (p) => setPartMaterial(p, k)),
     onUntrace: (i, on) => part(i, (p) => ({ ...p, untrace: on || undefined })),   // 추적 제외 — 'material' 태그로 다시 계산·점검
-    onPcb: (i, on) => st.update('material', (m) => { m.parts = setPcb(m.parts, i, on); }),   // PCB 부품 켜기·끄기(이름 번호가 같이 바뀜)
     onMat: (i, key, v) => part(i, (p) => {
       let q = setPartMaterialParam(p, key, v);
       // DB 소재 선택: Milky 칸을 그 소재의 피팅 μs' 에 해당하는 값으로(Milky = 농도 — 이후 사용자가 조절)

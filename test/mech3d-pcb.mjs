@@ -1,11 +1,11 @@
 // 도면 PCB 자동 인식·PCB 면 처리: node test/mech3d-pcb.mjs
 import { findPcbParts, autoLedGroup } from '../src/engine/mech3d/led-detect.js';
-import { defaultPart, setPartMaterial, syncPcb, setPcb, resolveFinish, PCB_FINISH } from '../src/engine/mech3d/materials.js';
+import { defaultPart, setPartMaterial, syncPcb, resolveFinish, PCB_FINISH } from '../src/engine/mech3d/materials.js';
 import { transformMesh } from '../src/engine/mech3d/xform.js';
 import { boxMesh, ok, done } from './mech3d-util.mjs';
 import { stageAvailability } from '../src/ui/m3/autodesign-panel.js';
 import { partBadge } from '../src/ui/m3/feature-tree.js';
-import { pcbCardHtml } from '../src/ui/mech3d-panel.js';
+import { renderPartProps } from '../src/ui/mech3d-panel.js';
 import { ledPanelHtml, setLpTab } from '../src/ui/mech3d-light-panel.js';
 import { defaultLight, defaultObserve, defaultChecks, migrateMech3d, SOLDER_R } from '../src/engine/mech3d/defs.js';
 import { treeNodes } from '../src/ui/m3/feature-tree.js';
@@ -64,16 +64,17 @@ const base = () => { const c = setPartMaterial(defaultPart(1, '커버', 1), 'cle
   ok(syncPcb(Q, [0])[0].finish.R === 0.45, '다시 찾아도 사용자가 고친 반사율 유지'); }
 { const o = base(), f = { kind: 'black', R: 0.05 }; o[0].faceFinish = { 3: f }; o[0].reflMaterial = 'x';
   const m = syncPcb(o, [0])[0]; ok(!Object.keys(m.faceFinish).length && m.reflMaterial === undefined, '면별 처리·반사 소재를 비움(PCB 면 하나로)');
-  const u = setPcb([m, o[1], o[2]], 0, false)[0]; ok(u.faceFinish[3]?.kind === 'black' && u.reflMaterial === 'x' && u.name === '기판A', '해제 = 소재·면 처리·이름 복원'); }
-{ const c = setPcb(base(), 1, true)[1]; ok(c.role === 'pcb' && c.material.kind === 'opaque' && setPcb([c], 0, false)[0].material.kind === 'clear', '수동 지정·해제(투명 부품도 복원)'); }
-{ const Q = JSON.parse(JSON.stringify(syncPcb(base(), [0]))); ok(setPcb(Q, 0, false)[0].name === '기판A', '저장·복원 후에도 해제 가능'); }
+  const u = syncPcb([m, o[1], o[2]], [])[0]; ok(u.faceFinish[3]?.kind === 'black' && u.reflMaterial === 'x' && u.name === '기판A', '해제 = 소재·면 처리·이름 복원'); }
+{ const c = syncPcb(base(), [1])[1]; ok(c.role === 'pcb' && c.material.kind === 'opaque' && syncPcb([c], [])[0].material.kind === 'clear', '지정·해제(투명 부품도 복원)'); }
+{ const Q = JSON.parse(JSON.stringify(syncPcb(base(), [0]))); ok(syncPcb(Q, [])[0].name === '기판A', '저장·복원 후에도 해제 가능'); }
 
 // --- 화면 ---
 { const Q = syncPcb(base(), [0]);
   ok(partBadge(Q[0]) === 'PCB 면 30%', `트리 배지: ${partBadge(Q[0])}`);
   const a = stageAvailability({ parts: Q, light: { kind: 'manual', manual: {} } }, { non25: [0, 0, 0] });
   ok(!a.housing.parts.includes(0) && a.housing.parts.includes(2), '④ 케이스 면 후보에서 PCB 제외');
-  ok(pcbCardHtml(Q[0]).includes('checked') && pcbCardHtml(Q[0]).includes('30%') && !pcbCardHtml(base()[0]).includes('checked') && pcbCardHtml({ role: 'light' }) === '', 'PCB 스위치 카드'); }
+  const src = (await import('node:fs')).readFileSync(new URL('../src/ui/mech3d-panel.js', import.meta.url), 'utf8');
+  ok(!/data-m3-pcb|PCB 부품/.test(src), '부품 속성에 PCB 부품 메뉴 없음'); }
 { const ms = { name: 'x', parts: [], contacts: [], observe: defaultObserve(), checks: defaultChecks(), light: { ...defaultLight(), kind: 'step', step: { name: 'd', offset: [0, 0, 0], rot: [0, 0, 0], leds: [0], excluded: [], pcb: -1, emitters: [{ part: 0, pos: [0, 0, 0], axis: [0, 0, 1] }], fromMech: [0] } } };
   setLpTab('leds', 'detail');
   ok(!/data-lp-solder/.test(ledPanelHtml(ms, { node: 'leds' })), '도면 광원 = PCB 색 칸 없음(PCB 는 부품 소재로)'); setLpTab('leds', 'basic'); }
