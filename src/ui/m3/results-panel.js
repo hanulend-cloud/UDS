@@ -439,7 +439,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
   el.innerHTML = `
     <div class="m3-res-h">시뮬레이션 결과</div>
     <div class="m3-msg" data-r="msg" hidden></div>
-    <div class="m3-blk"><div class="m3-t"><b class="m3-tt">2D 광량 분포 <i class="m3-info" data-r="mapsub" tabindex="0">ⓘ</i></b><span><select data-r="quality" title="2D 분포·1D 프로파일 칸 크기(정사각) — 저 1.5 mm(빠름) · 중 1.0 mm(광선 ≈2배) · 고 0.5 mm(광선 ≈4배) · 짧거나 좁은 면은 그 방향만 더 잘게" aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>  <button type="button" class="m3-zoom" data-zoom="map" title="큰 창으로 보기" aria-label="2D 광량 분포 확대">⤢</button></span></div>
+    <div class="m3-blk"><div class="m3-t"><b class="m3-tt">2D 광량 분포 <i class="m3-info" data-r="mapsub" tabindex="0">ⓘ</i></b><span><label class="m3-map-eq" title="가로세로를 같은 축척으로 — 끄면 좁은 폭을 늘려 보여 줌"><input type="checkbox" data-r="mapEq"> 실제 비율</label> <select data-r="quality" title="2D 분포·1D 프로파일 칸 크기(정사각) — 저 1.5 mm(빠름) · 중 1.0 mm(광선 ≈2배) · 고 0.5 mm(광선 ≈4배) · 짧거나 좁은 면은 그 방향만 더 잘게" aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>  <button type="button" class="m3-zoom" data-zoom="map" title="큰 창으로 보기" aria-label="2D 광량 분포 확대">⤢</button></span></div>
       <div class="m3-withm"><canvas class="m3-g" data-r="map" width="600" height="200"></canvas>
         <div class="m3-m"><div class="l">평균 광량</div><div class="v" data-r="avg">–</div><div class="s" data-r="avgs"></div>${gaugeHtml('avgg')}
           <div class="l" style="margin-top:6px">광 효율</div><div class="v sm" data-r="eff">–</div><div class="s">관측면 원뿔 안 / LED 총 방출</div><button type="button" class="m3-leak" data-r="leak" hidden title="누르면 3D 에서 가장 많이 새는 면을 강조"></button></div></div></div>
@@ -450,6 +450,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
       <div class="m3-withm"><canvas class="m3-g" data-r="wprof" width="600" height="120"></canvas>
         <div class="m3-m"><div class="l">폭 균일도</div><div class="v" data-r="uw">–</div>${gaugeHtml('uwg')}<div class="s" data-r="uwj"></div></div></div></div>`;
   const q = (k) => el.querySelector(`[data-r="${k}"]`);
+  let mapEq = false; try { mapEq = localStorage.getItem('uds.m3.mapEq') === '1'; } catch {}   // 메인 2D 실제 비율 — 이 브라우저에 기억
   const RATIO = { map: 2.6, prof: 2.6, wprof: 3.2 };   // 눈금·색 막대·읽기가 들어가도록 높게
   wireHover(q('prof')); wireHover(q('wprof')); wireMapHover(q('map'));
   q('prof')._onMenu = (e, cv) => plotMenu('prof')(e, cv); q('wprof')._onMenu = (e, cv) => plotMenu('wprof')(e, cv);
@@ -516,9 +517,11 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
   const paint = (kind, cv, hover = null) => {
     const v = VIEW[kind], dpr = dprNow();
     if (!v) { clearCanvas(cv); return; }
-    if (kind === 'map') drawMap(cv, v, dpr, hover, cv === big?.cvs.map ? big.equal : false);
+    if (kind === 'map') drawMap(cv, v, dpr, hover, cv === big?.cvs.map ? big.equal : mapEq);
     else drawPlot(cv, v.curves, v.tg, v.opt, dpr, hover);
   };
+  q('mapEq').checked = mapEq;
+  q('mapEq').onchange = (e) => { mapEq = e.target.checked; try { localStorage.setItem('uds.m3.mapEq', mapEq ? '1' : '0'); } catch {} paint('map', q('map')); };
   const paintBig = () => {
     if (!big) return;
     for (const k of KINDS) {

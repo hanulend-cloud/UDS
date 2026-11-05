@@ -77,6 +77,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   let xray = false, dim = null;
   const fatMats = new Set();   // 굵은 선 재질 — 창 크기가 바뀌면 resolution 갱신
   let pathGroup = null, pathItems = [], obsUi = null;   // 광경로 그룹 · 화면 크기 맞춤 항목 · 관측면 표시(render 가 쓰므로 위에 선언)
+  let looks = [];   // 부품별 색·투명도(없으면 종류 기본값)
   let meshes = [], partsRef = [], kinds = [], sel = null, obsSet = new Set(), overlay = null, obsMesh = null, markers = null, coneMeshes = [];
 
   function resize() {
@@ -96,7 +97,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
 
   function colorize(i) {
     const m = meshes[i], p = partsRef[i], col = m.geometry.getAttribute('color');
-    const base = new THREE.Color(KIND_COLOR[kinds[i]]);
+    const base = new THREE.Color(looks[i]?.color ?? KIND_COLOR[kinds[i]]), op0 = looks[i]?.opacity ?? KIND_OPACITY[kinds[i]];
     const partCol = sel?.part === i ? (kinds[i] === 'led' ? LED_SEL : base.clone().lerp(SEL_TINT, 0.6)) : base;
     const T = p.triangles;
     for (let t = 0; t < T.length / 3; t++) {
@@ -105,7 +106,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
       for (let j = 0; j < 3; j++) col.setXYZ(T[t * 3 + j], c.r, c.g, c.b);
     }
     col.needsUpdate = true;
-    let op = ghost?.(i) ? Math.min(0.15, KIND_OPACITY[kinds[i]]) : KIND_OPACITY[kinds[i]];   // 투시: LED 선택 중 기구물 반투명
+    let op = ghost?.(i) ? Math.min(0.15, op0) : op0;   // 투시: LED 선택 중 기구물 반투명
     if (xray) op = kinds[i] === 'led' ? 0.55 : Math.min(op, 0.16);
     if (dim?.(i)) op = Math.min(op, 0.12);   // 추적 제외 부품: 아주 흐리게(남아 있지만 빛 계산엔 없음)   // 투시 보기: 전체 반투명 — 속 구조·광경로를 봄
     if (sel?.part === i && !ghost?.(i)) op = Math.max(op, xray ? 0.45 : 0.7);   // 선택 부품: 투명 소재여도 잘 보이게
@@ -162,9 +163,9 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   }
 
   // parts: 런타임 scene.parts, kindsOf: 부품별 소재 종류 배열, keepCamera: 카메라를 다시 맞추지 않음(LED 위치 보정 등)
-  function setParts(parts, kindsOf, { keepCamera = false } = {}) {
+  function setParts(parts, kindsOf, { keepCamera = false, looks: lookOf = [] } = {}) {
     for (const m of meshes) { scene.remove(m); m.geometry.dispose(); m.material.dispose(); }
-    partsRef = parts; kinds = kindsOf.slice();
+    partsRef = parts; kinds = kindsOf.slice(); looks = lookOf;
     meshes = parts.map((p, i) => {
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.BufferAttribute(p.positions, 3));
@@ -188,9 +189,9 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   }
 
   // 바뀐 부품만 재착색
-  function setKinds(kindsOf) {
-    const old = kinds; kinds = kindsOf.slice();
-    meshes.forEach((_, i) => { if (old[i] !== kinds[i]) colorize(i); }); render();
+  function setKinds(kindsOf, lookOf = []) {
+    const old = kinds, oldL = looks; kinds = kindsOf.slice(); looks = lookOf;
+    meshes.forEach((_, i) => { if (old[i] !== kinds[i] || oldL[i]?.color !== looks[i]?.color || oldL[i]?.opacity !== looks[i]?.opacity) colorize(i); }); render();
   }
   // LED 빛 원뿔(spec m3-cad-ui §4a) — 꼭짓점 = 발광점, 축 = 발광 방향, 반각 = 배광/2(그림은 80° 까지), 길이 len(축 방향).
   // 원뿔 여럿을 기하 하나로 합친다(LED ~120개도 메쉬 1개). 삼각형 k·CONE_SEG… = 원뿔 k → userData.nums[k] = LED 번호(클릭용)

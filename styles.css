@@ -1116,3 +1116,5 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 .sc-ok { color: #2e8b57; font-weight: 600; }
 .sc-bad { color: #b4552d; }
 .sc-rec { color: #3a7bd5; }
+
+.m3-map-eq { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; white-space: nowrap; }

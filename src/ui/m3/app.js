@@ -50,6 +50,7 @@ import { candidateGrid } from '../../engine/mech3d/basis.js';
 import { ledAtS, clampRowGap, rowGapOptions } from '../../engine/mech3d/placement.js';
 import { virtualEmittersAt, stepRefEmitter } from '../../engine/mech3d/virtual-leds.js';
 import { rw4 } from '../../engine/mech3d/layout-solver.js';
+import { partLook } from './part-look.js';
 import { caseKey, caseCand, caseFp, mergeCaseRows } from './shape-cases.js';
 import { heightsFor, deformPart, refinedFor, minThickness, pathFromLine, swOnPath, ledEll, lineVarH, splineInput, partFrame, bumpCenters, fieldThickness, clampField, fieldRoom, lensCandidates, swingCandidates } from '../../engine/mech3d/shape-opt.js';
 import { interferenceKeys, newInterference, travelDistance } from '../../engine/mech3d/clearance.js';
@@ -2015,13 +2016,14 @@ function renderView() {
   const lay = stp ? L.stepLayout(pv?.M ?? M, S.line) : null, lp = lay?.parts ?? null;   // 원래/가상 배치(캐시 객체) — 미리보기면 최적안 배치(몸체 = 화살표)
   const ledSet = new Set(lay?.leds ?? []), exSet = new Set(lay?.excluded ?? []);   // 제외된 LED 는 회색(불투명) — 발광 화살표도 빠짐
   const kinds = [...M.parts.map((p) => p.material.kind), ...(lp ?? []).map((_, i) => (i === lay.pcb ? 'pcb' : ledSet.has(i) && !exSet.has(i) ? 'led' : 'opaque'))];
+  const looks = M.parts.map(partLook);
   const meshKey = [pv ?? cur, lp];   // 기구·LED 메쉬(위치 보정 포함 — 캐시 객체)가 바뀌면 다시 그림. 카메라는 기구가 바뀔 때만 맞춤
   if (!A.meshShown || A.meshShown.some((x, i) => x !== meshKey[i])) {
     // 도면 원본을 따로 기억 — meshShown 은 최적화 시작·취소·적용·되돌리기에도 비워져서, 그것과 비교하면 그때마다 숨긴 부품이 풀리고 카메라가 돌아갔음(2026-11-05)
     const { keepCamera, reset } = viewKeep(A.rawShown, cur.raw); A.rawShown = cur.raw;
     if (reset) { S.hidden = []; S.hideLeds = false; S.hiddenLeds = []; S.hidePcb = false; }   // 다른 기구를 불러오면 보기 상태 초기화
-    A.meshShown = meshKey; v.setParts([...(pv ?? cur).parts, ...(lp ?? [])], kinds, { keepCamera });
-  } else v.setKinds(kinds);
+    A.meshShown = meshKey; v.setParts([...(pv ?? cur).parts, ...(lp ?? [])], kinds, { keepCamera, looks });
+  } else v.setKinds(kinds, looks);
   const hid = new Set(S.hidden), nMech = M.parts.length;
   const hidL = new Set(S.hiddenLeds ?? []), hidLP = new Set([...hidL].map((n) => lay?.leds[n]));   // 한 개씩 숨긴 LED → 그 몸체 메쉬 · 빛 원뿔 · 화살표(PCB 는 그대로)
   v.setHidden((i) => (i < nMech ? hid.has(i) || M.parts[i]?.role === 'light' : S.hideLeds || hidLP.has(i - nMech) || (!!S.hidePcb && i - nMech === lay?.pcb)));   // 도면 광원 원본은 숨김(광원 그룹이 대신 보임)
