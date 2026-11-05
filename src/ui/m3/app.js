@@ -12,7 +12,7 @@ import { createHistory } from './history.js';
 import { mountSplit } from './pane-split.js';
 import { findLeds, supportPart, emitterFaceAway, autoLedGroup, autoStepLeds, findPcbParts } from '../../engine/mech3d/led-detect.js';
 import { loadClear, saveClear, clearExportJson, clearImport, parseMaterialFile } from '../../model/material-io.js';
-import { setPartMaterial, setPartMaterialParam, syncPcb, CLEAR_BASE, applyClearEntry, clearEntryFromForm, editClearEntry, syncClearParts } from '../../engine/mech3d/materials.js';
+import { setPartMaterial, setPartMaterialParam, syncPcb, setPcbR, pcbPickPlan, pcbNames, clampPcbPct, CLEAR_BASE, applyClearEntry, clearEntryFromForm, editClearEntry, syncClearParts } from '../../engine/mech3d/materials.js';
 import { lineFromData, lightData, obsDirection } from '../../engine/mech3d/line.js';
 import { tallyGeometry, tallyStats, autoCells } from '../../engine/mech3d/tally.js';
 import { isUntraced } from '../../engine/mech3d/scene3d.js';
@@ -1438,6 +1438,15 @@ function onPick(s) {
     return;
   }
   if (pick === 'mled' && s && s.part != null) { if (s.part >= nMech) { say('기구 도면 부품(LED)을 클릭하세요'); return; } mechLightFromPick(s); return; }
+  if (pick === 'mpcb' && s && s.part != null) {   // PCB 수동 선택 — 끝내기 전까지 계속 클릭(다시 클릭 = 해제)
+    const a = pcbPickPlan(M, s.part, nMech);
+    if (a.err) { say(a.err); return; }
+    st.update('light', (m, x) => {
+      if (a.ids) m.parts = syncPcb(m.parts, a.ids); else m.light.step.pcb = a.stepPcb;
+      const ns = pcbNames(m); x.status = ns.length ? `PCB: ${ns.join(', ')}` : 'PCB 없음 — LED 받침 판을 고르세요'; x.node = 'light';
+    });
+    return;
+  }
   if (pick === 'pcb' && s && s.part < nMech) { st.update('light', (m, x) => { m.light.manual.pcb = { kind: 'face', part: s.part, face: s.face }; x.pick = null; }); return; }
   st.update('session', (_, x) => { x.sel = s && s.part < nMech ? s : null; x.ledSel = null; if (x.sel) x.node = `part:${x.sel.part}`; });   // LED STEP 부품은 소재 편집 대상이 아님
 }
@@ -1451,6 +1460,7 @@ function propHandlers() {
   const part = (i, fn) => st.update('material', (m) => { m.parts[i] = fn(m.parts[i]); });
   return {
     onKind: (i, k) => part(i, (p) => setPartMaterial(p, k)),
+    onPartPcbR: (i, v) => { const R = clampPcbPct(v); if (R != null) part(i, (p) => setPcbR(p, R)); else st.update('session', () => {}); },
     onUntrace: (i, on) => part(i, (p) => ({ ...p, untrace: on || undefined })),   // 추적 제외 — 'material' 태그로 다시 계산·점검
     onMat: (i, key, v) => part(i, (p) => {
       let q = setPartMaterialParam(p, key, v);
@@ -1595,7 +1605,7 @@ function propHandlers() {
       else Lm[key] = key === 'count' ? Math.max(1, Math.round(v)) : v;
       if (['count', 'pitch', 'rows', 'rowGap'].includes(key)) delete Lm.positions;   // 손으로 고치면 Solver 위치 목록은 버림
     }),
-    onSolder: (v) => st.update('light', (m) => { m.light.solder = v; }),
+    onPcbR: (v) => { const R = clampPcbPct(v); if (R != null) st.update('light', (m) => { m.light.pcbR = R; }); else st.update('session', () => {}); },   // 빈칸·숫자 아님 = 원래 값으로 다시 그림
     onLedSpec: (key, v) => st.update(key === 'fluxLm' ? 'target' : 'light', (m) => { m.light.spec[key] = v; }),   // 광속은 휘도 환산만 — 재계산 없음
     // LED 선택·속성(spec §4a)
     onLedSel: (n) => st.update('session', (_, x) => { x.ledSel = n; if (n != null) { x.node = 'leds'; x.sel = null; } }),
@@ -1862,6 +1872,7 @@ function renderAll(tag = 'all') {
     onTreeAct: (k) => {   // 우클릭 메뉴: 새 그룹(선택한 부품들) · 그룹에서 빼기 · 그룹 해제 · 광원 지정
       if (k === 'ledAuto') { propHandlers().onMechAuto(); return; }
       if (k === 'ledClick') { propHandlers().onLightKind('click'); return; }
+      if (k === 'pcbClick') { st.update('session', (_, x) => { x.node = 'light'; x.pick = 'mpcb'; }); return; }
       if (k === 'ledFace' || k === 'ledOut') { st.update('session', (_, x) => { x.node = 'light'; x.pick = k === 'ledFace' ? 'led' : 'ledx'; }); return; }
       if (k === 'ledClear') { mechLightClear(); return; }
       if (k === 'ledShowAll') { st.update('view', (_, x) => { x.hiddenLeds = []; x.hideLeds = false; }); return; }

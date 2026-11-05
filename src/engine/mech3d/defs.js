@@ -1,11 +1,11 @@
 import { isAdjustWellFormed } from './led-adjust.js';
 // 3D 기구 광원·관측 지정 기본값 — spec 2026-10-14 §4·§5 (P3 계획 "데이터 모델"), 2026-10-15 m3-cad-ui(광속·목표·점검 기준).
-export const SOLDER_R = { '백색': 0.8, '녹색': 0.3, '흑색': 0.05 };
+const SOLDER_R = { '백색': 0.8, '녹색': 0.3, '흑색': 0.05 };
 export const LED_BODY_FINISH = { kind: 'whiteDiffuse', R: 0.8 };   // 백색 실리콘 패키지
 
 export function defaultLight() {
   return {
-    kind: 'none', solder: '녹색', pcbRev: 1,   // PCB 면 기본 = 반사율 30%(도면 PCB 와 같게, 2026-11-05)
+    kind: 'none', pcbR: 0.3,   // PCB 면 반사율(0~1) — LED STEP·직접 배치 PCB. 기본 30%(도면 PCB 와 같게), 숫자로 입력(2026-11-05)
     spec: { model: 'lambertian', beam: 120, sizeX: 2, sizeY: 2, fluxLm: 0 },   // fluxLm: LED 1개 광속(lm), 0 = 상대값
     step: null,
     manual: { pcb: { kind: 'depth', depth: 10 }, count: 10, pitch: 0, side: 'direct', rows: 1, rowGap: 0 },   // rows 1|2, rowGap = 열 간격 ±δ mm
@@ -23,8 +23,9 @@ export function migrateMech3d(m) {
   m.light ??= defaultLight();
   m.observe ??= defaultObserve();
   m.light.spec ??= defaultLight().spec;
-  // PCB 면 30% 로 통일(2026-11-05, 사용자 확정) — 예전 기본값(백색 80%·없음)만, 직접 고른 흑색과 통일 뒤 고른 값은 그대로
-  if (m.light.pcbRev !== 1) { if (m.light.solder == null || m.light.solder === '백색') m.light.solder = '녹색'; m.light.pcbRev = 1; }
+  // PCB 색(백색 80 · 녹색 30 · 흑색 5) → 반사율 숫자(2026-11-05). 30% 통일(사용자 확정): 예전 기본값 백색·없음 → 30%, 직접 고른 흑색과 통일 뒤(pcbRev 1) 고른 값은 그대로
+  if (!Number.isFinite(m.light.pcbR)) m.light.pcbR = m.light.pcbRev !== 1 && (m.light.solder == null || m.light.solder === '백색') ? 0.3 : SOLDER_R[m.light.solder] ?? 0.3;
+  delete m.light.solder; delete m.light.pcbRev;
   const f = Number(m.light.spec.fluxLm);
   m.light.spec.fluxLm = Number.isFinite(f) && f > 0 ? f : 0;
   m.observe.targetLum ??= null;

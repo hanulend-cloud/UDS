@@ -684,6 +684,7 @@ header:has(.mb-drop) { z-index: 80; }   /* 메뉴를 펼치면 떠 있는 창 �
 .m3-untrace { padding: 6px 8px; }
 .m3-untrace.on { border-left: 3px solid #f0a020; }
 .m3-untrace.pcb { border-left: 3px solid #2e9e5b; }
+.m3-pcbwarn { color: #c8321f; font-weight: 600; }
 .m3-untrace .m3-sw { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; cursor: pointer; width: auto; min-width: 0; font-weight: 600; }
 .m3-untrace .m3-sw .mut { font-weight: 400; flex-basis: 100%; }
 

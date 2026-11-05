@@ -3,7 +3,7 @@ import { transformMesh, eulerMatrix, applyPoint, scaleMoveMesh, isIdentityXform 
 import { setMech3dMesh, getMech3d, applyPartXforms, applyPartMods, redetectContacts, clearMech3d } from '../src/engine/mech3d/runtime.js';
 import { bounds } from '../src/engine/mech3d/mesh.js';
 import { xformFromInput, xformEditor } from '../src/ui/mech3d-panel.js';
-import { defaultLight, defaultObserve, migrateMech3d, SOLDER_R } from '../src/engine/mech3d/defs.js';
+import { defaultLight, defaultObserve, migrateMech3d } from '../src/engine/mech3d/defs.js';
 import { meshVolume } from '../src/engine/mech3d/mesh.js';
 import { boxMesh, mergeMeshes, ok, done } from './mech3d-util.mjs';
 
@@ -14,7 +14,7 @@ const m = boxMesh(0, 0, 0, 2, 3, 4), t = transformMesh(m, [5, 0, 0], [30, 45, 60
 ok(Math.abs(meshVolume(t.positions, t.triangles) - 24) < 1e-4 && t.faceIds === m.faceIds, '강체 변환: 부피·면 번호 보존');
 ok(transformMesh(m, [0, 0, 0], [0, 0, 0]).positions === m.positions, '항등 변환은 원본 재사용');
 const L = defaultLight(), O = defaultObserve();
-ok(L.kind === 'none' && L.solder === '녹색' && L.manual.count === 10 && SOLDER_R['녹색'] === 0.3, '광원 기본값');
+ok(L.kind === 'none' && L.pcbR === 0.3 && L.manual.count === 10, '광원 기본값');
 ok(O.faces.length === 0 && O.cone === 90 && O.cell == null && O.cellS == null && O.cellW == null && O.edgeExcl === 0.5 && O.targetLen === 0.8, '관측 기본값');
 const old = { name: 'x', parts: [], contacts: [] };
 ok(migrateMech3d(old).light.kind === 'none' && old.observe.faces.length === 0, '마이그레이션: 빠진 필드 채움');

@@ -1,25 +1,25 @@
 // 도면 PCB 자동 인식·PCB 면 처리: node test/mech3d-pcb.mjs
 import { findPcbParts, autoLedGroup } from '../src/engine/mech3d/led-detect.js';
-import { defaultPart, setPartMaterial, syncPcb, resolveFinish, PCB_FINISH } from '../src/engine/mech3d/materials.js';
+import { defaultPart, setPartMaterial, syncPcb, resolveFinish, PCB_FINISH, setPcbR, pcbPickPlan, pcbNames, clampPcbPct } from '../src/engine/mech3d/materials.js';
 import { transformMesh } from '../src/engine/mech3d/xform.js';
 import { boxMesh, ok, done } from './mech3d-util.mjs';
 import { stageAvailability } from '../src/ui/m3/autodesign-panel.js';
 import { partBadge } from '../src/ui/m3/feature-tree.js';
-import { renderPartProps } from '../src/ui/mech3d-panel.js';
+import { pcbRCardHtml } from '../src/ui/mech3d-panel.js';
 import { ledPanelHtml, setLpTab } from '../src/ui/mech3d-light-panel.js';
-import { defaultLight, defaultObserve, defaultChecks, migrateMech3d, SOLDER_R } from '../src/engine/mech3d/defs.js';
-import { treeNodes } from '../src/ui/m3/feature-tree.js';
+import { defaultLight, defaultObserve, defaultChecks, migrateMech3d } from '../src/engine/mech3d/defs.js';
+import { treeNodes, lightCtxItems } from '../src/ui/m3/feature-tree.js';
 import { stepPcbHtml } from '../src/ui/mech3d-light-panel.js';
 
 const led = boxMesh(-1, -1, 0, 2, 2, 1), at = (x, z = 0) => transformMesh(led, [x, 0, z], [0, 0, 0]);
 const pcb = boxMesh(-40, -5, -1, 80, 10, 1), cover = boxMesh(-40, -5, 6, 80, 10, 3);
 
 // --- LED STEP 파일 안의 PCB(2026-11-05, 기본 예제) — 부품 목록에 PCB 로 · 반사율 30% ---
-{ ok(defaultLight().solder === '녹색' && SOLDER_R[defaultLight().solder] === 0.3, '새 프로젝트 PCB 면 기본 30%');
-  const mig = (solder, extra = {}) => { const m = { light: { kind: 'step', solder, ...extra }, observe: {} }; migrateMech3d(m); return m.light.solder; };
-  ok(mig('백색') === '녹색' && mig(undefined) === '녹색', '저장된 백색 80% → 30% 로 통일');
-  ok(mig('흑색') === '흑색', '직접 고른 흑색은 그대로');
-  ok(mig('백색', { pcbRev: 1 }) === '백색', '통일 뒤 사용자가 고른 백색은 그대로');
+{ ok(defaultLight().pcbR === 0.3, '새 프로젝트 PCB 면 기본 30%');
+  const mig = (solder, extra = {}) => { const m = { light: { kind: 'step', solder, ...extra }, observe: {} }; migrateMech3d(m); return m.light; };
+  ok(mig('백색').pcbR === 0.3 && mig(undefined).pcbR === 0.3 && mig('녹색').pcbR === 0.3, '저장된 백색 80%(예전 기본)·녹색 → 30%');
+  ok(mig('흑색').pcbR === 0.05 && mig('백색', { pcbRev: 1 }).pcbR === 0.8, '직접 고른 값(흑색·통일 뒤 백색)은 그대로');
+  ok(mig(undefined, { pcbR: 0.42 }).pcbR === 0.42 && mig('백색').solder === undefined, '입력한 값 유지 · 예전 칸은 지움');
   const light = (o) => ({ ...defaultLight(), kind: 'step', step: { name: 'a.stp', leds: [1, 2], excluded: [], pcb: 0, emitters: [], ...o } });
   const M = { parts: [defaultPart(0, '부품 1', 5)], observe: defaultObserve(), groups: [], light: light({}) };
   const N = treeNodes(M, { node: 'steppcb', line: null }), n = N.find((x) => x.id === 'steppcb');
@@ -29,9 +29,9 @@ const pcb = boxMesh(-40, -5, -1, 80, 10, 1), cover = boxMesh(-40, -5, 6, 80, 10,
   ok(!treeNodes({ ...M, light: light({ pcb: -1 }) }, {}).some((x) => x.id === 'steppcb'), 'PCB 를 못 찾은 LED STEP → 노드 없음');
   ok(!treeNodes({ ...M, light: light({ fromMech: [1, 2] }) }, {}).some((x) => x.id === 'steppcb'), '도면 광원 → 노드 없음(PCB 가 기구 부품)');
   ok(!treeNodes({ ...M, light: defaultLight() }, {}).some((x) => x.id === 'steppcb'), '광원 없음 → 노드 없음');
-  ok(treeNodes({ ...M, light: { ...light({}), solder: '백색' } }, {}).find((x) => x.id === 'steppcb').badge.includes('80%'), '배지 = 지금 반사율');
+  ok(treeNodes({ ...M, light: { ...light({}), pcbR: 0.42 } }, {}).find((x) => x.id === 'steppcb').badge.includes('42%'), '배지 = 지금 반사율');
   const h = stepPcbHtml(M);
-  ok(/data-lp-solder/.test(h) && /녹색 30%/.test(h) && /백색 80%/.test(h) && /흑색 5%/.test(h) && /value="녹색" selected/.test(h), 'PCB 속성 = 반사율 선택');
+  ok(/type="number"[^>]*data-lp-pcbr/.test(h) && /value="30"/.test(h) && !/<select/.test(h), 'PCB 속성 = 반사율 숫자 입력');
 }
 
 // --- 찾기 ---
@@ -74,7 +74,25 @@ const base = () => { const c = setPartMaterial(defaultPart(1, '커버', 1), 'cle
   const a = stageAvailability({ parts: Q, light: { kind: 'manual', manual: {} } }, { non25: [0, 0, 0] });
   ok(!a.housing.parts.includes(0) && a.housing.parts.includes(2), '④ 케이스 면 후보에서 PCB 제외');
   const src = (await import('node:fs')).readFileSync(new URL('../src/ui/mech3d-panel.js', import.meta.url), 'utf8');
-  ok(!/data-m3-pcb|PCB 부품/.test(src), '부품 속성에 PCB 부품 메뉴 없음'); }
+  ok(!/data-m3-pcb\b|PCB 부품/.test(src), '부품 속성에 PCB 켜기·끄기 메뉴 없음'); }
+// --- 반사율 입력 · 수동 선택(2026-11-05) ---
+{ ok(clampPcbPct(42) === 0.42 && clampPcbPct(150) === 1 && clampPcbPct(-3) === 0 && clampPcbPct(0) === 0 && clampPcbPct(NaN) === null && clampPcbPct('') === null, '반사율 입력: % → 0~1, 빈칸·숫자 아님 = 무시');
+  const Q = syncPcb(base(), [0]), p = setPcbR(Q[0], 0.42);
+  ok(p.finish.R === 0.42 && p.finish.kind === 'whiteDiffuse' && p.role === 'pcb' && resolveFinish(p, 3).R === 0.42 && syncPcb([p], [])[0].name === '기판A', '도면 PCB 반사율 입력 · 해제하면 원래대로');
+  const h = pcbRCardHtml(p);
+  ok(/type="number"[^>]*data-m3-pcbr/.test(h) && /value="42"/.test(h) && pcbRCardHtml(base()[0]) === '' && pcbRCardHtml({ role: 'light' }) === '', 'PCB 부품에만 반사율 칸');
+  const mk = (parts, step) => ({ parts, observe: { faces: [{ part: 1, face: 0 }] }, light: { kind: 'step', pcbR: 0.3, step } });
+  const P = [{ name: '판' }, { name: '관측' }, { name: 'L', role: 'light' }, { name: 'PCB', role: 'pcb' }];
+  ok(pcbPickPlan(mk(P, { fromMech: [2], leds: [] }), 0, 4).ids.join() === '0,3', '다른 부품 클릭 = PCB 추가');
+  ok(pcbPickPlan(mk(P, { fromMech: [2], leds: [] }), 3, 4).ids.length === 0, 'PCB 다시 클릭 = 해제');
+  ok(/LED/.test(pcbPickPlan(mk(P, { fromMech: [2], leds: [] }), 2, 4).err) && /관측/.test(pcbPickPlan(mk(P, { fromMech: [2], leds: [] }), 1, 4).err), 'LED·관측면 부품은 PCB 가 못 됨');
+  const st = { leds: [1, 2], pcb: 0 };
+  ok(pcbPickPlan(mk(P, st), 4 + 3, 4).stepPcb === 3 && pcbPickPlan(mk(P, st), 4 + 0, 4).stepPcb === -1 && /LED/.test(pcbPickPlan(mk(P, st), 4 + 1, 4).err), 'LED STEP 부품 클릭 = 그 파일의 PCB 바꾸기·해제 · LED 는 안 됨');
+  ok(/기구 도면/.test(pcbPickPlan(mk(P, { ...st, virtual: { count: 2 } }), 4, 4).err) && /기구 도면/.test(pcbPickPlan(mk(P, { fromMech: [2], leds: [] }), 5, 4).err), '편집한 배치·도면 광원의 LED 몸체 = 도면 부품을 클릭하라고 안내');
+  ok(pcbNames(mk(P, st)).join() === 'PCB,LED STEP PCB' && pcbNames(mk([{ name: 'a' }], { fromMech: [0], leds: [], pcb: -1 })).length === 0, 'PCB 이름 목록');
+  const pan = (ui, step) => ledPanelHtml({ parts: [{ name: 'a' }], observe: defaultObserve(), light: { ...defaultLight(), kind: 'step', step: { name: 'x', offset: [0, 0, 0], rot: [0, 0, 0], leds: [], excluded: [], emitters: [], pcb: -1, ...step } } }, { pickOnly: true, ...ui });
+  ok(/data-lp-pick="mpcb"/.test(pan({}, {})) && /PCB 없음/.test(pan({}, {})) && !/PCB 없음/.test(pan({}, { pcb: 0 })), 'LED 지정 카드 = PCB 수동 선택 · 없으면 경고');
+  ok(lightCtxItems({ light: { kind: 'step', step: {} } }, {}, 'light').some((x) => x.k === 'pcbClick') && !lightCtxItems({ light: { kind: 'none' } }, {}, 'light').some((x) => x.k === 'pcbClick'), '광원 우클릭 메뉴에도'); }
 { const ms = { name: 'x', parts: [], contacts: [], observe: defaultObserve(), checks: defaultChecks(), light: { ...defaultLight(), kind: 'step', step: { name: 'd', offset: [0, 0, 0], rot: [0, 0, 0], leds: [0], excluded: [], pcb: -1, emitters: [{ part: 0, pos: [0, 0, 0], axis: [0, 0, 1] }], fromMech: [0] } } };
   setLpTab('leds', 'detail');
   ok(!/data-lp-solder/.test(ledPanelHtml(ms, { node: 'leds' })), '도면 광원 = PCB 색 칸 없음(PCB 는 부품 소재로)'); setLpTab('leds', 'basic'); }

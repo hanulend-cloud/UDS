@@ -112,6 +112,29 @@ function unmarkPcb(p) {
   for (const k of PCB_KEYS) delete q[k];
   return { ...q, ...pcbOrig };
 }
+// 반사율 입력(%) → 0~1. 빈칸·숫자 아님 = null(무시)
+export const clampPcbPct = (v) => { const n = typeof v === 'string' && !v.trim() ? NaN : Number(v); return Number.isFinite(n) ? Math.min(1, Math.max(0, n / 100)) : null; };
+export const setPcbR = (p, R) => ({ ...p, finish: { ...PCB_FINISH, R } });
+// PCB 수동 선택(3D 클릭, 2026-11-05) — 클릭 부품 번호(도면 부품 < nMech ≤ LED STEP 부품) → { ids: 도면 PCB 번호 } | { stepPcb: LED STEP PCB 번호(-1 = 해제) } | { err }. 다시 클릭 = 해제, 여러 장 가능
+export function pcbPickPlan(M, part, nMech) {
+  const st = M.light.step;
+  if (part >= nMech) {
+    if (M.light.kind !== 'step' || !st || st.fromMech || st.virtual) return { err: '기구 도면 부품을 클릭하세요' };
+    const i = part - nMech;
+    if (st.leds?.includes(i)) return { err: 'LED 는 PCB 가 될 수 없음 — PCB 를 클릭하세요' };
+    return { stepPcb: i === st.pcb ? -1 : i };
+  }
+  if (M.parts[part]?.role === 'light') return { err: 'LED 는 PCB 가 될 수 없음 — PCB 를 클릭하세요' };
+  if (M.observe?.faces?.some((f) => f.part === part)) return { err: '관측면 부품은 PCB 가 될 수 없음' };
+  const ids = M.parts.map((p, i) => (p.role === 'pcb' ? i : -1)).filter((i) => i >= 0), k = ids.indexOf(part);
+  if (k >= 0) ids.splice(k, 1); else ids.push(part);
+  return { ids: ids.sort((a, b) => a - b) };
+}
+// 지금 PCB 이름들(도면 부품 + LED STEP 파일의 PCB)
+export function pcbNames(M) {
+  const st = M.light?.kind === 'step' ? M.light.step : null;
+  return [...(M.parts ?? []).filter((p) => p.role === 'pcb').map((p) => p.name), ...(st && !st.fromMech && st.pcb >= 0 ? ['LED STEP PCB'] : [])];
+}
 const numberPcb = (parts) => {   // 한 장 = PCB · 여러 장 = PCB 1, PCB 2 … (사용자가 바꾼 이름은 그대로)
   const n = parts.filter((p) => p.role === 'pcb').length; let k = 0;
   return parts.map((p) => { if (p.role !== 'pcb') return p; k++; return p.pcbOrig?.name !== p.name && !/^PCB( \d+)?$/.test(p.name) ? p : { ...p, name: n > 1 ? `PCB ${k}` : 'PCB' }; });
