@@ -2,6 +2,8 @@
 // 결과는 한 번에 읽기(readStepParts)와 같아야 함: 같은 정렬(부피 내림차순, 같으면 루트·순번), 같은 간격 규칙(qualityPlan), 같은 재사용 규칙.
 // 작업자 사이에는 OpenCASCADE 형상을 넘길 수 없으므로 숫자(부피·대각선)와 메시만 오감. 순수(OC 는 인자) — Node 시험에서 차례로 돌려 같은지 봄
 import { meshSolid, diagOf, volumeOf, faceCountOf, meshDiag, BIG_SMALL, PREVIEW, qualityPlan } from './step-import.js';
+const r6 = (v) => Math.round(v * 1e6) / 1e6;   // 같은 위치를 같게(부동소수 노이즈 제거)
+function centerOf(oc, s) { const p = new oc.GProp_GProps_1(); oc.BRepGProp.VolumeProperties_1(s, p, false, false, false); const c = p.CentreOfMass(), out = [r6(c.X()), r6(c.Y()), r6(c.Z())]; p.delete(); return out; }
 
 const sameQ = (a, b) => a.linDefl === b.linDefl && a.angDefl === b.angDefl;   // 작업자 사이 복사로 객체 동일성이 사라지므로 값으로 비교
 
@@ -23,7 +25,7 @@ export function splitTransfer(oc, text, k, K, { profile, onParsed = null, onRoot
       let j = 0;
       for (const ex = new oc.TopExp_Explorer_2(shape, oc.TopAbs_ShapeEnum.TopAbs_SOLID, oc.TopAbs_ShapeEnum.TopAbs_SHAPE); ex.More(); ex.Next()) {
         const s = oc.TopoDS.Solid_1(ex.Current());
-        const it = { root: i, j: j++, s, v: volumeOf(oc, s), diag: diagOf(oc, s), pre: profile.preview ? meshSolid(oc, s, PRE.linDefl, PRE.angDefl) : null };
+        const it = { root: i, j: j++, s, v: volumeOf(oc, s), diag: diagOf(oc, s), c: centerOf(oc, s), pre: profile.preview ? meshSolid(oc, s, PRE.linDefl, PRE.angDefl) : null };
         items.push(it); got.push(it);
       }
     }
@@ -33,8 +35,10 @@ export function splitTransfer(oc, text, k, K, { profile, onParsed = null, onRoot
 }
 
 // 합치는 쪽: 모든 작업자의 { h(작업자), x(그 작업자 안 번호), root, j, v, diag } → 한 번에 읽기와 같은 순서 + 그 순서의 간격 규칙
-export function planSplit(list, profile, opts = {}) {
-  const order = [...list].sort((a, b) => b.v - a.v || a.root - b.root || a.j - b.j);
+// byCenter = 잘라 읽기(조각마다 루트 번호가 다름) — 부피가 같으면 위치(x·y·z)로 순서를 정해 조각 나누기와 무관하게
+const cmpC = (a, b) => (a.c && b.c ? a.c[0] - b.c[0] || a.c[1] - b.c[1] || a.c[2] - b.c[2] : 0);
+export function planSplit(list, profile, opts = {}, byCenter = false) {
+  const order = [...list].sort((a, b) => b.v - a.v || (byCenter ? cmpC(a, b) : 0) || a.root - b.root || a.j - b.j);
   const qs = qualityPlan(order.map((o) => o.diag), profile, opts);
   return { order, qs };
 }

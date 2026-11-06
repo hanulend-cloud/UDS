@@ -5,6 +5,7 @@ import { loadOc } from '../shape/oc-loader.js';
 import { readStepParts, stepProfile, BIG_MESH, mergeMeshes } from '../shape/step-import.js';
 import { splitTransfer, planSplit, splitRough, splitFine } from '../shape/step-split.js';
 import { stepRootEstimate, stepRootProfile } from '../shape/step-roots.js';
+import { cutStep } from '../shape/step-cut.js';
 import { prepScene, prepTransfer } from './scene-prep.js';
 
 const meshBufs = (m) => [m.positions.buffer, m.triangles.buffer, m.faceIds.buffer];
@@ -19,10 +20,10 @@ async function helper(ev) {
       onParsed: (n) => self.postMessage({ h: 'parsed', n }),
       onRoot: (i, n, ms, got) => {
         const pv = profile.preview && got.length ? mergeMeshes(got.map((it) => it.pre)) : null;
-        self.postMessage({ h: 'root', i, ms, solids: got.map((it) => ({ root: it.root, j: it.j, v: it.v, diag: it.diag })), preview: pv }, pv ? meshBufs(pv) : []);
+        self.postMessage({ h: 'root', i, ms, solids: got.map((it) => ({ root: it.root, j: it.j, v: it.v, diag: it.diag, c: it.c })), preview: pv }, pv ? meshBufs(pv) : []);
       } });
     H = { oc, r, profile };
-    self.postMessage({ h: 'transferred', solids: r.items.map((it, x) => ({ x, root: it.root, j: it.j, v: it.v, diag: it.diag })) });
+    self.postMessage({ h: 'transferred', solids: r.items.map((it, x) => ({ x, root: it.root, j: it.j, v: it.v, diag: it.diag, c: it.c })) });
     return;
   }
   if (d.qs) {   // 간격(값 복사) — 거친 메시는 최종에도 쓰일 수 있으므로 복사로, 최종 메시는 넘김
@@ -34,18 +35,17 @@ async function helper(ev) {
   }
 }
 
-// 나눠 읽기 쓸 작업자 수 — 솔리드가 여럿이고 코어·메모리가 넉넉할 때만(작업자마다 파일 전체를 해석해 90 MB 에 약 0.5 GB)
-// 루트가 하나(조립품 하나로 묶임)면 나눌 수 없어 중복 해석·메모리만 늘어남 → 한 번에 읽기(2026-11-06)
-export function splitWorkers(text, profile, nav = self.navigator ?? {}, roots = stepRootEstimate(text)) {
-  if (!profile.preview || roots === 1) return 1;
-  const nSolid = (text.match(/MANIFOLD_SOLID_BREP|BREP_WITH_VOIDS|FACETED_BREP/g) ?? []).length;
-  let K = Math.min(4, Math.max(1, (nav.hardwareConcurrency ?? 4) - 2), nSolid, roots > 1 ? roots : Infinity);
-  if ((nav.deviceMemory ?? 8) < 8) K = Math.min(K, 2);
+// 잘라 읽기 작업자 수(2026-11-06) — STEP 글자를 부품 단위 조각으로 잘라(step-cut) 작업자마다 자기 조각만 해석·변환. 중복 해석이 없어 메모리도 조각 크기만큼
+export function splitWorkers(profile, nav = self.navigator ?? {}) {
+  if (!profile.preview) return 1;
+  let K = Math.min(6, Math.max(1, (nav.hardwareConcurrency ?? 4) - 2));
+  if ((nav.deviceMemory ?? 8) < 8) K = Math.min(K, 3);
   return Math.max(1, K);
 }
 
 // ---- 합치는 쪽 ----
-function splitLoad(text, profile, K, early, go, post) {
+function splitLoad(pieces, profile, early, go, post) {
+  const K = pieces.length;
   return new Promise((resolve, reject) => {
     const ws = Array.from({ length: K }, () => new Worker(new URL('./mech3d-worker.js', import.meta.url), { type: 'module' }));
     const kill = () => ws.forEach((w) => w.terminate());
@@ -57,7 +57,7 @@ function splitLoad(text, profile, K, early, go, post) {
       w.onmessage = (m) => {
         const d = m.data;
         if (d.error) { kill(); reject(new Error(d.error)); return; }
-        if (d.h === 'parsed') { n = d.n; if (++parsed === K) go('transfer'); return; }
+        if (d.h === 'parsed') { n += d.n; if (++parsed === K) go('transfer'); return; }   // 조각마다 루트 수
         if (d.h === 'root') {
           roots++; if (d.ms > slow.ms) slow = { root: d.i, ms: d.ms };
           if (d.preview) pv.push(d.preview);
@@ -69,7 +69,7 @@ function splitLoad(text, profile, K, early, go, post) {
           if (++tr < K) return;
           flush(true);
           if (!solids.length) { kill(); reject(new Error('STEP 에 솔리드가 없음(면·와이어만 있는 파일)')); return; }
-          ({ order } = planSplit(solids, profile)); const { qs } = planSplit(solids, profile);
+          const plan = planSplit(solids, profile, {}, true); order = plan.order; const { qs } = plan;
           qOf = ws.map(() => []); order.forEach((o, i) => { qOf[o.h][o.x] = qs[i]; }); total = order.length;
           go(profile.preview ? 'preview' : 'mesh');
           ws.forEach((w2, h2) => w2.postMessage({ qs: qOf[h2] }));
@@ -86,7 +86,7 @@ function splitLoad(text, profile, K, early, go, post) {
           if (++fineN === K) resolve({ parts: order.map((o) => ({ ...fine[o.h][o.x], volume: o.v })), slow, roots: n });
         }
       };
-      w.postMessage({ helper: { k: h, K }, text, profile });
+      w.postMessage({ helper: { k: 0, K: 1 }, text: pieces[h], profile });   // 조각 하나 = 그 작업자 몫 전부
     });
   });
 }
@@ -100,18 +100,20 @@ self.onmessage = async (ev) => {
       return;
     }
     // 진행 알림(2026-11-05) { key, frac, text } · 미리보기 { preview } · 끝에 단계별 시간 timing
-    const tm = {}, text = ev.data.text, baseProfile = stepProfile(ev.data.bytes ?? text.length), rootsEst = stepRootEstimate(text), profile = stepRootProfile(baseProfile, rootsEst);
+    const tm = {}, text = ev.data.text, baseProfile = stepProfile(ev.data.bytes ?? text.length), rootsEst = stepRootEstimate(text);
     let cur = 'oc', t0 = performance.now();
     const go = (k) => { const n = performance.now(); tm[cur] = n - t0; t0 = n; cur = k; self.postMessage({ key: k }); };
     const post = (msg, tr = []) => self.postMessage(msg, tr);
-    const K = splitWorkers(text, profile, self.navigator ?? {}, rootsEst);
-    let parts = null, info = { workers: 1, roots: rootsEst || null, previewSkipped: baseProfile.preview && !profile.preview };
-    if (K >= 2) {   // 나눠 읽기 — 실패하면(중첩 Worker 미지원·메모리 등) 한 번에 읽기로
-      go('read');
-      try { const r = await splitLoad(text, profile, K, !!ev.data.early, go, post); parts = r.parts; info = { workers: K, slow: r.slow, roots: r.roots }; }   // 실제 루트 수(해석 뒤)
+    // 잘라 읽기(조각마다 변환이 끝나는 대로 미리보기) · 자를 수 없어 한 번에 읽을 때만 루트 하나 = 미리보기 건너뜀(stepRootProfile — 변환이 끝나야 보이므로 메시를 두 번 만들 이유 없음)
+    const K = ev.data.noSplit ? 1 : splitWorkers(baseProfile, self.navigator ?? {});
+    let profile = baseProfile, parts = null, info = { workers: 1, roots: rootsEst || null, noSplit: !!ev.data.noSplit };
+    const pieces = K >= 2 ? (() => { go('read'); self.postMessage({ key: 'read', text: '부품 단위로 자르는 중' }); try { return cutStep(text, K); } catch (e) { console.warn('[불러오기] 자르기 실패', e); return null; } })() : null;
+    if (pieces?.length >= 2) {   // 잘라 읽기 — 실패하면(중첩 Worker 미지원·메모리 등) 한 번에 읽기로
+      try { const r = await splitLoad(pieces, profile, !!ev.data.early, go, post); parts = r.parts; info = { workers: pieces.length, cut: true, slow: r.slow, roots: rootsEst || r.roots }; }
       catch (e) { console.warn('[불러오기] 나눠 읽기 실패 — 한 번에 읽기로', e); self.postMessage({ key: 'read', text: '나눠 읽기 실패 — 한 번에 읽는 중' }); }
     }
     if (!parts) {
+      profile = stepRootProfile(baseProfile, rootsEst); info.previewSkipped = baseProfile.preview && !profile.preview;
       self.postMessage({ key: 'oc' });
       const oc = await loadOc();
       parts = readStepParts(oc, text, { profile, onStage: go,

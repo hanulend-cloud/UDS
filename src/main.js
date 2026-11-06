@@ -134,7 +134,7 @@ function buildForm() {
   $('#btn-sample-project').onclick = () => loadSampleProject();
   $('#file-mech3d-start').onchange = (e) => { const f = e.target.files?.[0]; if (f && /\.json$/i.test(f.name)) { importJson(e); return; } if (f) importMech3d(f); e.target.value = ''; };   // 시작 화면 = 프로젝트·STEP 모두
   $('#file-materials').onchange = (e) => { const f = e.target.files?.[0]; if (f) importMaterials(f); e.target.value = ''; };
-  $('#file-mech3d').onchange = (e) => { const f = e.target.files?.[0]; if (f) importMech3d(f); e.target.value = ''; };
+  $('#file-mech3d').onchange = (e) => { const f = e.target.files?.[0], noSplit = nextNoSplit; nextNoSplit = false; if (f) importMech3d(f, null, { noSplit }); e.target.value = ''; };
   $('#file-led').onchange = (e) => { const f = e.target.files?.[0]; if (f) m3app.importLed(f); e.target.value = ''; };
   $('#file-import').onchange = importJson;
 }
@@ -267,6 +267,7 @@ function setupMenubar() {
       { id: 'save-as', label: '다른 이름으로 저장…', key: 'Ctrl+Shift+S' },
       '-',
       { id: 'import-mech', label: '3D 기구 STEP 불러오기…' },
+      { id: 'import-mech-whole', label: '3D 기구 STEP 나누지 않고 읽기(느림)…' },
       { id: 'import-led', label: 'LED STEP 불러오기…', enabled: m3 },
       { id: 'export-mech', label: '3D 기구 STEP 내보내기 (수정 반영)', enabled: m3 },
       '-',
@@ -315,6 +316,7 @@ function setupMenubar() {
     if (id === 'mat-export') return exportMaterials();
     if (id === 'mat-import') return $('#file-materials').click();
     if (id === 'import-mech') return $('#file-mech3d').click();
+    if (id === 'import-mech-whole') { nextNoSplit = true; return $('#file-mech3d').click(); }   // 잘라 읽은 모양이 이상할 때 — 저장본도 새로 만듦
     if (id === 'import-led') return $('#file-led').click();
     if (id === 'reset') { if (confirm('모든 설정을 기본값으로 되돌릴까요? (불러온 기구·LED 설정도 지워짐)')) resetAll(); return; }
     if (id === 'mat-db') return m3app.openMaterialDb();
@@ -391,9 +393,10 @@ async function loadSampleProject(ask = true) {
 }
 // 기구 STEP 불러오기(평판·3D 모드 공통) — spec.mech3d 를 새로 만들고 3D 모드로
 // 오래 걸린 불러오기 안내(2026-11-06) — 형상 변환이 2분을 넘고 나눠 읽지 못했으면 CAD 에서 줄이는 방법을 알려 줌
-const slowTip = (tm, info) => ((tm?.transfer ?? 0) > 120000 && !(info?.workers > 1)
-  ? ` · 빨리 열려면 CAD 에서 ${info?.roots === 1 ? '조립품을 부품별로 나눠(최상위 부품 여러 개) ' : ''}빛과 무관한 부품(나사·보스·브래킷 등)을 빼고 내보내세요. 같은 파일은 다음부터 저장본으로 바로 열림` : '');
-function importMech3d(file, onDone = null) {
+const slowTip = (tm, info) => ((tm?.transfer ?? 0) > 120000 && !info?.cut
+  ? ' · 빨리 열려면 CAD 에서 빛과 무관한 부품(나사·보스·브래킷 등)을 빼고 내보내세요(부품이 하나로 합쳐진 파일은 나눠 읽을 수 없음). 같은 파일은 다음부터 저장본으로 바로 열림' : '');
+let nextNoSplit = false;
+function importMech3d(file, onDone = null, { noSplit = false } = {}) {
   const say = (t) => { if (m3app.isMounted()) m3app.setStatus(t); else $('#timing').textContent = t; };
   say(`${file.name} 읽는 중…`);
   // 2 MB 이상 = 불러오기 화면(진행률·경과 시간·취소·저해상도 미리보기). 작은 파일은 금방 끝나 깜빡이기만 함
@@ -401,7 +404,7 @@ function importMech3d(file, onDone = null) {
   if (file.size >= 2e6) ov = showStepLoad(file, { onCancel: () => { w?.terminate(); say('불러오기 취소'); } });
   (async () => {
     // 변환 결과 저장(2026-11-06) — 같은 파일(이름·크기·수정 시각)이면 파일을 읽기 전에 저장본으로(충돌 검사 구조까지 저장 — 작업자 없이 바로)
-    const ck = stepCacheKey(file), hit = cacheWorthy(file) ? await stepCacheGet(ck) : null, text = hit?.prep ? null : await file.text();
+    const ck = stepCacheKey(file), hit = cacheWorthy(file) && !noSplit ? await stepCacheGet(ck) : null, text = hit?.prep ? null : await file.text();
     w = new Worker(new URL('./engine/mech3d/mech3d-worker.js', import.meta.url), { type: 'module' });
     // 거친 메시로 먼저 열기(2026-11-06): 새 도면(복원할 저장 설정 없음)일 때만 — 복원은 부품 크기 비교가 거친 메시로 틀릴 수 있어 정밀 메시를 기다림
     const pend0 = spec.mech3dPending ?? (spec.mech3d && !getMech3d() ? spec.mech3d : null), early = !!ov && !pend0 && !hit;
@@ -426,7 +429,7 @@ function importMech3d(file, onDone = null) {
       w.terminate();
       if (m.data.error) { ov?.close(); if (opened) m3app.setRefining(false); say(`불러오기 실패: ${m.data.error}${opened ? ' — 지금 화면은 거친 메시라 계산하지 않음. 다시 불러오세요' : ''}`); return; }
       const info = m.data.info ?? {};
-      const after = () => `${m.data.relaxed ? ` · 큰 파일이라 메시 간격을 ${m.data.relaxed.linDefl} mm 로 넓힘(곡면 값이 조금 달라질 수 있음)` : ''}${info.cached ? ` · 저장해 둔 변환 결과로 엶${m.data.timing ? `(처음 불러올 때 ${stepTimingText(m.data.timing)})` : ''}` : `${ov ? ` · 걸린 시간: ${stepTimingText(m.data.timing)}` : ''}${info.workers > 1 ? ` · 작업자 ${info.workers}개로 나눠 읽음` : ''}${info.roots ? ` · STEP 부품(루트) ${info.roots}개` : ''}${info.slow?.ms > 5000 ? ` · 가장 오래 걸린 부품 변환 ${stepTimingText({ transfer: info.slow.ms }).replace('형상 변환 ', '')}` : ''}${slowTip(m.data.timing, info)}`}`;
+      const after = () => `${m.data.relaxed ? ` · 큰 파일이라 메시 간격을 ${m.data.relaxed.linDefl} mm 로 넓힘(곡면 값이 조금 달라질 수 있음)` : ''}${info.cached ? ` · 저장해 둔 변환 결과로 엶${m.data.timing ? `(처음 불러올 때 ${stepTimingText(m.data.timing)})` : ''}` : `${ov ? ` · 걸린 시간: ${stepTimingText(m.data.timing)}` : ''}${info.cut ? ` · 부품 단위 ${info.workers}조각으로 나눠 읽음(모양이 이상하면 파일 › 3D 기구 STEP 나누지 않고 읽기)` : info.noSplit ? ' · 나누지 않고 읽음' : ''}${info.roots ? ` · STEP 부품(루트) ${info.roots}개` : ''}${info.slow?.ms > 5000 ? ` · 가장 오래 걸린 부품 변환 ${stepTimingText({ transfer: info.slow.ms }).replace('형상 변환 ', '')}` : ''}${slowTip(m.data.timing, info)}`}`;
       // 다음에 같은 파일을 바로 열 수 있게 저장(큰 파일만) — 화면 준비와 따로
       const keep = () => { if (!info.cached && cacheWorthy(file) && m.data.prep?.bvh) stepCachePut(ck, { prep: m.data.prep, relaxed: m.data.relaxed ?? null, timing: m.data.timing ?? null, info }).catch(() => {}); };
       const tris = () => Math.round(m.data.parts.reduce((s, p) => s + p.triangles.length / 3, 0) / 1e4);
@@ -471,7 +474,7 @@ function importMech3d(file, onDone = null) {
     };
     w.onerror = (e) => { w.terminate(); ov?.close(); say(`불러오기 실패: ${e.message ?? e}`); };
     if (hit?.prep) w.onmessage({ data: { parts: hit.prep.parts, prep: hit.prep, relaxed: hit.relaxed, timing: hit.timing, info: { ...(hit.info ?? {}), cached: true } } });   // 작업자 없이
-    else w.postMessage({ text, bytes: file.size, early });
+    else w.postMessage({ text, bytes: file.size, early, noSplit });
   })().catch((e) => { ov?.close(); say(`불러오기 실패: ${e.message ?? e}`); });
 }
 
