@@ -1,7 +1,7 @@
 // STEP 불러오기 — 형상 몸체 spec 2026-10-10 §3.1 (G0) + 3D 기구 spec 2026-10-14 §3.1. oc = 초기화된 opencascade.js(브라우저 Worker·Node 공용).
 // readStepMesh: 체적 최대 솔리드 1개(L3 몸체·높이맵용). readStepParts: 모든 솔리드를 부품별 메쉬로(3D 기구 모드).
 
-function volumeOf(oc, shape) {
+export function volumeOf(oc, shape) {
   const props = new oc.GProp_GProps_1();
   oc.BRepGProp.VolumeProperties_1(shape, props, false, false, false);
   const v = props.Mass(); props.delete();
@@ -39,7 +39,7 @@ function readSolids(oc, text, onStage, onRoot = null) {
 
 // 솔리드 → 삼각 메쉬(위치 변환·면 방향 반영). faceIds = 삼각형별 B-rep 면 번호(TopExp 순서, 삼각화 없는 면도 번호 소비).
 // linDefl: 메시 현 오차(mm) — 곡면 표본화 정확도. angDefl: 각도 오차(rad).
-function meshSolid(oc, shape, linDefl, angDefl) {
+export function meshSolid(oc, shape, linDefl, angDefl) {
   new oc.BRepMesh_IncrementalMesh_2(shape, linDefl, false, angDefl, false).delete?.();
   const pos = [], tri = [], fid = [];
   let f = 0;
@@ -72,7 +72,7 @@ export function readStepMesh(oc, text, { linDefl = 0.01, angDefl = 0.1 } = {}) {
 }
 
 // 솔리드 외곽 대각선(mm)
-function diagOf(oc, shape) {
+export function diagOf(oc, shape) {
   const b = new oc.Bnd_Box_1(); oc.BRepBndLib.Add(shape, b, true);
   const lo = b.CornerMin(), hi = b.CornerMax(), d = Math.hypot(hi.X() - lo.X(), hi.Y() - lo.Y(), hi.Z() - lo.Z()); b.delete();
   return d;
@@ -84,10 +84,10 @@ function diagOf(oc, shape) {
 // big = 메시 완화(판정 값이 조금 달라질 수 있음 — 화면에 알림). onStage('read'|'transfer'|'preview'|'mesh') · onPart(i, n) = 진행 알림
 export const stepProfile = (bytes) => ({ preview: bytes >= 10e6, big: bytes >= 30e6 });
 export const BIG_MESH = { linDefl: 0.05, angDefl: 0.2 };
-const BIG_SMALL = { linDefl: 0.2, angDefl: 0.6 }, PREVIEW = { linDefl: 1, angDefl: 0.6 };
-function faceCountOf(oc, s) { let n = 0; for (const ex = new oc.TopExp_Explorer_2(s, oc.TopAbs_ShapeEnum.TopAbs_FACE, oc.TopAbs_ShapeEnum.TopAbs_SHAPE); ex.More(); ex.Next()) n++; return n; }
-function meshDiag(m) { const P = m.positions, lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]; for (let i = 0; i < P.length; i += 3) for (let a = 0; a < 3; a++) { if (P[i + a] < lo[a]) lo[a] = P[i + a]; if (P[i + a] > hi[a]) hi[a] = P[i + a]; } return Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]); }
-function mergeMeshes(list) {
+export const BIG_SMALL = { linDefl: 0.2, angDefl: 0.6 }, PREVIEW = { linDefl: 1, angDefl: 0.6 };
+export function faceCountOf(oc, s) { let n = 0; for (const ex = new oc.TopExp_Explorer_2(s, oc.TopAbs_ShapeEnum.TopAbs_FACE, oc.TopAbs_ShapeEnum.TopAbs_SHAPE); ex.More(); ex.Next()) n++; return n; }
+export function meshDiag(m) { const P = m.positions, lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]; for (let i = 0; i < P.length; i += 3) for (let a = 0; a < 3; a++) { if (P[i + a] < lo[a]) lo[a] = P[i + a]; if (P[i + a] > hi[a]) hi[a] = P[i + a]; } return Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]); }
+export function mergeMeshes(list) {
   const nP = list.reduce((s, m) => s + m.positions.length, 0), nT = list.reduce((s, m) => s + m.triangles.length, 0);
   const positions = new Float32Array(nP), triangles = new Uint32Array(nT), faceIds = new Uint32Array(nT / 3);
   let p = 0, t = 0;
@@ -95,6 +95,11 @@ function mergeMeshes(list) {
   return { positions, triangles, faceIds, faceCount: 1 };
 }
 // onTransfer(i, n) = 루트 i/n 변환 끝 · onPreview(묶음, i, n, 'transfer') = 변환된 부품의 거친 모양 · onCoarse(부품별 거친 메시) = 거친 메시로 먼저 화면을 열 때
+// 부품별 메시 간격(솔리드 대각선 목록 → 간격 객체 목록) — 한 번에 읽기와 나눠 읽기(step-split)가 같은 규칙을 쓰게
+export function qualityPlan(diag, profile, { linDefl = 0.01, angDefl = 0.1, coarse = { linDefl: 0.03, angDefl: 0.35 }, smallDiag = 20, smallMin = 8 } = {}) {
+  const big = Math.max(...diag), small = diag.map((d) => d <= smallDiag && d <= big * 0.2), useCoarse = small.filter(Boolean).length >= smallMin, fine = { linDefl, angDefl };
+  return diag.map((_, i) => (useCoarse && small[i] ? (profile.big ? BIG_SMALL : coarse) : profile.big ? BIG_MESH : fine));
+}
 export function readStepParts(oc, text, { linDefl = 0.01, angDefl = 0.1, coarse = { linDefl: 0.03, angDefl: 0.35 }, smallDiag = 20, smallMin = 8, profile = stepProfile(text.length), onStage = null, onPreview = null, onPart = null, onTransfer = null, onCoarse = null } = {}) {
   let batch = [], tB = Date.now(), sent = false;
   const pre = [];   // 변환 중 만든 거친 메시(변환 순서) — 뒤에서 다시 만들지 않음
@@ -106,9 +111,7 @@ export function readStepParts(oc, text, { linDefl = 0.01, angDefl = 0.1, coarse 
     if (batch.length && (i === n || Date.now() - tB > 500)) { onPreview(mergeMeshes(batch), i, n, 'transfer'); batch = []; tB = Date.now(); sent = true; }
   };
   const { rd, solids } = readSolids(oc, text, onStage, onRoot);
-  const diag = solids.map(({ s }) => diagOf(oc, s)), big = Math.max(...diag);
-  const small = diag.map((d) => d <= smallDiag && d <= big * 0.2), nSmall = small.filter(Boolean).length, useCoarse = nSmall >= smallMin;
-  const qOf = (i) => (useCoarse && small[i] ? (profile.big ? BIG_SMALL : coarse) : profile.big ? BIG_MESH : { linDefl, angDefl });
+  const diag = solids.map(({ s }) => diagOf(oc, s)), plan = qualityPlan(diag, profile, { linDefl, angDefl, coarse, smallDiag, smallMin }), qOf = (i) => plan[i];
   const kept = new Array(solids.length);   // 큰 파일의 작은 부품 = 미리보기 메시가 곧 최종(다시 만들지 않음)
   if (profile.preview) {   // 부품별 거친 메시(변환 중에 이미 만든 면은 그대로 씀) — 먼저 화면을 열 때 씀. 변환 중 미리보기를 못 보냈으면 여기서
     onStage?.('preview');
