@@ -426,7 +426,7 @@ function importMech3d(file, onDone = null) {
         const nLed = restored ? null : m3app.autoMechLight();   // 새 기구: 반복되는 작은 부품(LED)을 광원으로 자동 지정
         m3app.setStatus(restored
           ? `복원함: 저장된 3D 설정 — ${file.name} · 부품 ${ms.parts.length}개 · 접촉면 ${ms.contacts.length}개${pend.name && pend.name !== file.name ? ` (저장 이름 ${pend.name})` : ''}${after()}`
-          : `불러옴: ${file.name} · 부품 ${m.data.parts.length}개 · 접촉면 ${ms.contacts.length}개${nLed ? ` · LED ${nLed}개 자동 인식(틀리면 광원에서 다시 지정)${m3app.pcbNote()}` : ''} — Milky 부품부터 지정하세요${after()}`);
+          : `불러옴: ${file.name} · 부품 ${m.data.parts.length}개 · 삼각형 ${Math.round(m.data.parts.reduce((s, p) => s + p.triangles.length / 3, 0) / 1e4)}만 개 · 접촉면 ${ms.contacts.length}개${nLed ? ` · LED ${nLed}개 자동 인식(틀리면 광원에서 다시 지정)${m3app.pcbNote()}` : ''} — Milky 부품부터 지정하세요${after()}`);
         ov?.close();
       } catch (e) { ov?.close(); say(`불러오기 실패: ${e.message ?? e}`); }
     };

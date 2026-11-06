@@ -27,8 +27,8 @@ export function showStepLoad(file, { onCancel }) {
     $('.sl-text').textContent = `${LOAD_LABEL[key] ?? ''}${note ? ` — ${note}` : ''}${estimated(key) ? ' (도면 안에서 멈춰 있는 단계라 진행률은 어림값)' : ''}`;
   };
   const tick = setInterval(paint, 500); paint();
-  const view = () => (viewP ??= import('./mech3d-view.js').then(({ createMech3dView }) => createMech3dView($('.sl-cv'), { onPick: () => {} })));
-  const clear = () => { viewP?.then((v) => { try { v.setParts([], [], { keepCamera: true }); } catch {} }); };
+  const view = () => (viewP ??= import('./mech3d-view.js').then(({ createMech3dView }) => createMech3dView($('.sl-cv'), { onPick: () => {}, onLost: () => {} })));
+  const clear = () => { const p = viewP; viewP = null; p?.then((v) => { try { v.dispose(); } catch {} }); const old = $('.sl-cv'), cv = old.cloneNode(false); old.replaceWith(cv); };   // 미리보기 3D 문맥을 닫고 다음 불러오기용 새 캔버스
   const close = () => { if (closed) return; closed = true; clearInterval(tick); el.hidden = true; clear(); };
   $('.sl-cancel').onclick = () => { close(); onCancel?.(); };
   return {

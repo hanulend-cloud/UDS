@@ -16,8 +16,10 @@ const SEL_TINT = new THREE.Color(0xffb020), FACE_COLOR = new THREE.Color(0xff5a3
 const VIEW_DIR = { top: [0, -1e-3, 1], front: [0, -1, 0], side: [1, 0, 0], iso: [0.7, -1.1, 0.9] };
 const SECTION_N = { x: [-1, 0, 0], y: [0, -1, 0], z: [0, 0, -1] };   // 단면: 좌표 ≤ pos 쪽만 남김
 
-export function createMech3dView(canvas, { onPick, onContext = null, gizmo = null }) {
+export function createMech3dView(canvas, { onPick, onContext = null, gizmo = null, onLost = null }) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  // 그래픽 메모리 부족 등으로 3D 문맥이 끊기면 화면이 빈 채로 남음 — 알려서 원인을 보이게(2026-11-06)
+  canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); onLost?.(); });
   renderer.setPixelRatio(window.devicePixelRatio || 1);
   renderer.localClippingEnabled = true;
   const scene = new THREE.Scene();
@@ -549,5 +551,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     onPick({ part, face: partsRef[part].faceIds[h.faceIndex], ray: rr, worldPerPixel: wpp });
   });
 
-  return { setTheme, theme: () => theme, setLightPaths, setXray, xray: () => xray, setDim, setParts, setKinds, setHidden, setSelection, setOverlay, setPickMode, render, setView, fit, fitAll, viewName: () => viewName, setSection, setObsSurface, setObsColors, setCheckMarkers };
+  // 다 쓴 보기(불러오기 미리보기)의 그래픽 메모리를 돌려줌 — 큰 도면에서 3D 문맥 두 개가 메모리를 나눠 쓰지 않게
+  function dispose() { for (const m of meshes) { scene.remove(m); m.geometry.dispose(); } meshes = []; for (const m of partMats.values()) m.dispose(); partMats.clear(); renderer.dispose(); renderer.forceContextLoss(); }
+  return { dispose, setTheme, theme: () => theme, setLightPaths, setXray, xray: () => xray, setDim, setParts, setKinds, setHidden, setSelection, setOverlay, setPickMode, render, setView, fit, fitAll, viewName: () => viewName, setSection, setObsSurface, setObsColors, setCheckMarkers };
 }

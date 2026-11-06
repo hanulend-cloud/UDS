@@ -13,7 +13,7 @@
   </script>
   <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }</script>
 </head>
-<body class="booting"><script>setTimeout(() => document.body.classList.remove("booting"), 10000);   /* 시작 중 오류가 나도 10초 뒤엔 보이게 */</script>
+<body class="booting"><script>setTimeout(() => document.body.classList.remove("booting"), 60000);   /* 시작 중 오류가 나도 60초 뒤엔 보이게 — 큰 도면 복원은 10초를 넘김(2026-11-06). 예전 평판 화면은 처음부터 숨김 */</script>
   <header>
     <div class="hd-left">
       <h1>Uniform Design Simulator <small id="gpu-badge" class="gpu-badge" hidden></small></h1>
@@ -46,14 +46,14 @@
   </div>
 
   <!-- 필수 입력 (타겟/LED/목표/몸체두께) -->
-  <div id="inputbar">
+  <div id="inputbar" hidden>
     <span class="zbadge req">필수</span>
     <form id="controls"></form>
   </div>
 
   <main>
     <!-- 좌: 설계변경 (판정 + L2~L5 조합) -->
-    <section id="design-wrap">
+    <section id="design-wrap" hidden>
       <div class="zone-hd design">설계변경</div>
       <div class="pane col" id="pane-verdict">
         <div id="verdict"></div>
@@ -66,7 +66,7 @@
     </section>
 
     <!-- 우: 결과 = 구조 모니터링(라이브) + 최종 구조(제작 도면) -->
-    <section id="results-wrap">
+    <section id="results-wrap" hidden>
       <div class="subzone live">
         <div class="zone-hd live">구조 모니터링 <span class="note">· 조정할 때마다 갱신</span></div>
         <div class="live-grid">

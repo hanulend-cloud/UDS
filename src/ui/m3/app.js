@@ -154,7 +154,8 @@ globalThis.__m3 = () => A;   // 브라우저 점검용: __m3().prog.snapshot(), 
 
 function getView() {
   viewP ??= import('../mech3d-view.js').then(({ createMech3dView }) => {
-    const v = createMech3dView($('#mech3d-canvas'), { onPick: (s) => { if (A) onPick(s); }, onContext: (c) => { if (A) onViewContext(c); }, gizmo: $('#m3-axes') });
+    const v = createMech3dView($('#mech3d-canvas'), { onPick: (s) => { if (A) onPick(s); }, onContext: (c) => { if (A) onViewContext(c); }, gizmo: $('#m3-axes'),
+      onLost: () => { const n = getMech3d()?.combined?.partOf?.length ?? 0; reportError('3D 화면', `3D 화면 끊김 — 그래픽 메모리 부족으로 보임(삼각형 ${Math.round(n / 1e4)}만 개)`); setStatus(`3D 화면이 끊겨 도면이 안 보임 — 그래픽 메모리 부족으로 보임(삼각형 ${Math.round(n / 1e4)}만 개). 다른 프로그램·탭을 닫고 새로고침하세요`); } });
     const el = $('#m3-views');
     el.innerHTML = VIEWS.map(([k, t]) => `<button data-view="${k}">${t}</button>`).join('') + '<button type="button" data-fit title="지금 보이는 도면 전체를 창에 맞춤 — 보는 방향은 그대로 (F)">⤢ 맞춤</button><button type="button" data-xray aria-pressed="false" title="전체 부품 반투명 — 속 구조를 봄">투시</button><button type="button" data-paths aria-pressed="false" title="광경로 화살표 켜기/끄기">광경로</button><button type="button" data-theme-toggle aria-pressed="false"></button>';
     el.querySelector('[data-fit]').onclick = () => v.fitAll();
@@ -2022,7 +2023,9 @@ function renderView() {
     // 도면 원본을 따로 기억 — meshShown 은 최적화 시작·취소·적용·되돌리기에도 비워져서, 그것과 비교하면 그때마다 숨긴 부품이 풀리고 카메라가 돌아갔음(2026-11-05)
     const { keepCamera, reset } = viewKeep(A.rawShown, cur.raw); A.rawShown = cur.raw;
     if (reset) { S.hidden = []; S.hideLeds = false; S.hiddenLeds = []; S.hidePcb = false; }   // 다른 기구를 불러오면 보기 상태 초기화
-    A.meshShown = meshKey; v.setParts([...(pv ?? cur).parts, ...(lp ?? [])], kinds, { keepCamera, looks });
+    A.meshShown = meshKey;
+    try { v.setParts([...(pv ?? cur).parts, ...(lp ?? [])], kinds, { keepCamera, looks }); }
+    catch (e) { console.error('[3D] 그리기 실패', e); setStatus(`3D 화면 그리기 실패: ${e.message ?? e}`); }   // 빈 화면으로 조용히 끝나지 않게(실패 = 오류 기록)
   } else v.setKinds(kinds, looks);
   const hid = new Set(S.hidden), nMech = M.parts.length;
   const hidL = new Set(S.hiddenLeds ?? []), hidLP = new Set([...hidL].map((n) => lay?.leds[n]));   // 한 개씩 숨긴 LED → 그 몸체 메쉬 · 빛 원뿔 · 화살표(PCB 는 그대로)
