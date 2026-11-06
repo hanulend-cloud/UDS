@@ -1495,6 +1495,14 @@ function mechLightClear() {
   });
 }
 // 3D 우클릭(2026-11-02) — 누른 부품을 고르고 보기 켜기/끄기 메뉴. 면 고르기 중에는 메뉴 없음
+// 고른 부품들(트리 Ctrl/Shift+클릭 · 3D Shift+클릭) → 새 그룹
+function groupSelected() {
+  const st = A.store, S = st.session;
+  const ps = [...new Set([...(S.multi ?? []), ...(S.node?.startsWith('part:') ? [S.node] : [])])].filter((x) => x.startsWith('part:')).map((x) => +x.slice(5));
+  if (!ps.length) return;
+  let gid = null; st.update('meta', (m) => { const r = makeGroup(m.groups, ps); m.groups = r.groups; gid = r.id; });
+  st.update('session', (_, x) => { x.multi = []; x.node = `group:${gid}`; x.sel = null; x.fold = { ...x.fold, [gid]: false, parts: false }; });
+}
 function onViewContext({ part, led, x, y }) {
   const st = A.store, M = st.mspec, nMech = getMech3d().parts.length;
   if (st.session.pick) return;
@@ -1506,7 +1514,8 @@ function onViewContext({ part, led, x, y }) {
   const ut = untraceItem(M, utIds);
   const items = viewCtxItems({ untrace: ut, part: mech, isLed, ledRank: rows.find((r) => r.n === ln)?.rank ?? null, selPart: sel, multi, hidden: S.hidden ?? [], hideLeds: !!S.hideLeds, hidePcb: !!S.hidePcb, hiddenLeds: S.hiddenLeds ?? [], names: M.parts.map((p) => p.name) });
   if (!items.length) return;
-  showCtxMenu(document, x, y, items, (k) => (k === 'untrace' ? setUntrace(ut) : st.update('view', (m, q) => {
+  if (mech != null && multi.length > 1 && multi.includes(mech)) items.unshift({ k: 'group', label: `선택한 부품 ${multi.length}개로 새 그룹` });
+  showCtxMenu(document, x, y, items, (k) => (k === 'group' ? groupSelected() : k === 'untrace' ? setUntrace(ut) : st.update('view', (m, q) => {
     const n = m.parts.length, tv = (id, only = false) => Object.assign(q, toggleVisibility(id, only, n, q.hidden, q.hideLeds));
     if (k === 'hide') tv(`part:${mech}`);
     else if (k === 'show') tv(`part:${sel}`);
@@ -1528,10 +1537,11 @@ function onPick(s) {
   if (s && s.part == null && pick !== 'led' && pick !== 'ledx') s = null;   // 선택 모드 빈 곳 클릭(광선만) — LED 모드에서만 씀
   if ((pick === 'led' || pick === 'ledx') && s && M.light.step?.virtual) { say('배치를 편집한 상태 — [STEP 원래대로] 뒤에 지정하세요'); return; }   // 클릭 번호 = 가상 부품
   if ((pick === 'led' || pick === 'ledx') && s && s.part != null && s.part < nMech) { say('LED STEP 부품(PCB·LED)을 클릭하세요 — 기구 부품은 이 모드에서 선택되지 않음'); return; }
-  if (pick === 'obs' && s && s.part < nMech) {
+  if (pick === 'obs' && s && s.part < nMech) {   // 클릭 = 이 면만 · Shift(Ctrl)+클릭 = 면 더하기/빼기(2026-11-06)
     st.update('observe', (m) => {
-      const k = m.observe.faces.findIndex((f) => f.part === s.part && f.face === s.face);
-      if (k >= 0) m.observe.faces.splice(k, 1); else m.observe.faces.push({ part: s.part, face: s.face });
+      const F = m.observe.faces, k = F.findIndex((f) => f.part === s.part && f.face === s.face);
+      if (s.add) { if (k >= 0) F.splice(k, 1); else F.push({ part: s.part, face: s.face }); }
+      else m.observe.faces = k >= 0 && F.length === 1 ? [] : [{ part: s.part, face: s.face }];
     });
     return;
   }
@@ -1567,7 +1577,18 @@ function onPick(s) {
     return;
   }
   if (pick === 'pcb' && s && s.part < nMech) { st.update('light', (m, x) => { m.light.manual.pcb = { kind: 'face', part: s.part, face: s.face }; x.pick = null; }); return; }
-  st.update('session', (_, x) => { x.sel = s && s.part < nMech ? s : null; x.ledSel = null; if (x.sel) x.node = `part:${x.sel.part}`; });   // LED STEP 부품은 소재 편집 대상이 아님
+  if (s?.add && s.part != null && s.part < nMech) {   // Shift(Ctrl)+클릭 = 부품 여러 개 고르기(그룹 만들기·함께 숨기기) — 다시 누르면 빠짐
+    st.update('session', (_, x) => {
+      const id = `part:${s.part}`, set = new Set(x.multi ?? []);
+      if (!set.size && x.node?.startsWith('part:')) set.add(x.node);
+      if (set.has(id)) set.delete(id); else set.add(id);
+      x.multi = [...set]; const last = x.multi[x.multi.length - 1] ?? null;
+      x.node = last ?? 'parts'; x.sel = last ? { part: +last.slice(5), face: last === id ? s.face : null } : null; x.ledSel = null;
+      x.status = x.multi.length > 1 ? `부품 ${x.multi.length}개 선택 — 우클릭 = 새 그룹·함께 숨기기 (Shift+클릭 = 더하기/빼기)` : x.status;
+    });
+    return;
+  }
+  st.update('session', (_, x) => { x.sel = s && s.part < nMech ? s : null; x.multi = []; x.ledSel = null; if (x.sel) x.node = `part:${x.sel.part}`; });   // LED STEP 부품은 소재 편집 대상이 아님
 }
 
 // 투명 소재 측정값(사용자 항목) — 브라우저 저장(uds.clear.v1), 모든 프로젝트 공용
@@ -2003,12 +2024,8 @@ function renderAll(tag = 'all') {
         st.update('meta', (m) => { m.groups = removeFromGroups(m.groups, ps); }); st.update('session', (_, x) => { x.multi = []; });
         return;
       }
-      if (k === 'group') {
-        const ps = [...new Set([...(S.multi ?? []), ...(S.node?.startsWith('part:') ? [S.node] : [])])].filter((x) => x.startsWith('part:')).map((x) => +x.slice(5));
-        if (!ps.length) return;
-        let gid = null; st.update('meta', (m) => { const r = makeGroup(m.groups, ps); m.groups = r.groups; gid = r.id; });
-        st.update('session', (_, x) => { x.multi = []; x.node = `group:${gid}`; x.sel = null; x.fold = { ...x.fold, [gid]: false, parts: false }; });
-      } else if (k === 'ungroup' && S.node?.startsWith('group:') && S.node !== 'group:_light') {
+      if (k === 'group') groupSelected();
+      else if (k === 'ungroup' && S.node?.startsWith('group:') && S.node !== 'group:_light') {
         const gid = S.node.slice(6); st.update('meta', (m) => { m.groups = ungroup(m.groups, gid); }); st.update('session', (_, x) => { x.node = 'parts'; });
       }
     },
@@ -2062,7 +2079,7 @@ function renderView() {
   const hk = `${!!S.hideLeds}|${S.hiddenLeds ?? ''}|${S.hidden ?? ''}`;
   if (A.ledsHid !== hk) { A.ledsHid = hk; renderMarkers(); }   // LED 켜기/끄기 → 방향 화살표도
   const LS = ledsNow(pv?.M ?? M, S.line), body = !pv && S.ledSel != null ? LS.list[S.ledSel]?.part ?? null : null;
-  v.setSelection(S.sel ?? (body != null && lp?.[body] ? { part: cur.parts.length + body, face: null } : null));   // 선택 LED 몸체 = 부품 선택처럼 강조
+  v.setSelection(S.sel ?? (body != null && lp?.[body] ? { part: cur.parts.length + body, face: null } : null), (S.multi ?? []).filter((q) => q.startsWith('part:')).map((q) => +q.slice(5)));   // 선택 LED 몸체 = 부품 선택처럼 강조
   const sp = (pv?.M ?? M).light.spec, half = sp.model === 'gaussian' ? sp.beam / 2 : 60, gaps = ledGaps(LS.em, pv?.M ?? M);
   // LED 를 끄면(트리 눈 단추) 지향각(빛 원뿔·방향 화살표)도 함께 숨김
   const cones = S.hideLeds ? [] : LS.em.map((e, i) => ({ pos: e.pos, axis: e.axis, half, len: Number.isFinite(gaps[i]) ? Math.min(4, 0.4 * gaps[i]) : 4, n: e.led ?? i })).filter((c) => !hidL.has(c.n));

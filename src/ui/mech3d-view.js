@@ -120,7 +120,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   function colorize(i) {
     const m = meshes[i], p = partsRef[i], col = m.geometry.getAttribute('color');
     const base = new THREE.Color(looks[i]?.color ?? KIND_COLOR[kinds[i]]), op0 = looks[i]?.opacity ?? KIND_OPACITY[kinds[i]];
-    const partCol = sel?.part === i ? (kinds[i] === 'led' ? LED_SEL : base.clone().lerp(SEL_TINT, 0.6)) : base;
+    const picked = sel?.part === i || multiSel.has(i), partCol = picked ? (kinds[i] === 'led' ? LED_SEL : base.clone().lerp(SEL_TINT, 0.6)) : base;
     const T = p.triangles;
     for (let t = 0; t < T.length / 3; t++) {
       const isSel = sel?.part === i && sel.face === p.faceIds[t];
@@ -131,7 +131,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     let op = ghost?.(i) ? Math.min(0.15, op0) : op0;   // 투시: LED 선택 중 기구물 반투명
     if (xray) op = kinds[i] === 'led' ? 0.55 : Math.min(op, 0.16);
     if (dim?.(i)) op = Math.min(op, 0.12);   // 추적 제외 부품: 아주 흐리게(남아 있지만 빛 계산엔 없음)   // 투시 보기: 전체 반투명 — 속 구조·광경로를 봄
-    if (sel?.part === i && !ghost?.(i)) op = Math.max(op, xray ? 0.45 : 0.7);   // 선택 부품: 투명 소재여도 잘 보이게
+    if (picked && !ghost?.(i)) op = Math.max(op, xray ? 0.45 : 0.7);   // 선택 부품: 투명 소재여도 잘 보이게
     m.material = partMat(op); m.renderOrder = m.material.transparent ? 1 : 0;
   }
 
@@ -431,9 +431,10 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     selOutline.renderOrder = 3;
     scene.add(selOutline);
   }
-  function setSelection(s) {
+  let multiSel = new Set();   // 함께 고른 부품(Shift+클릭) — 같은 색으로 강조
+  function setSelection(s, multi = []) {
     const prevPart = sel?.part;
-    sel = s;
+    sel = s; multiSel = new Set(multi);
     meshes.forEach((_, i) => colorize(i));
     if (prevPart !== sel?.part || !selOutline !== !sel) updateOutline();
     render();
@@ -558,9 +559,10 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     const H = canvas.clientHeight || 400;
     const wpp = camera.isOrthographicCamera ? (ortho.top - ortho.bottom) / ortho.zoom / H
       : (2 * (h ? h.distance : Math.max(camera.near, controls.target.clone().sub(ray.ray.origin).dot(ray.ray.direction))) * Math.tan((camera.fov * Math.PI) / 360)) / H;
-    if (!h) { onPick(pickable ? { part: null, face: null, ray: rr, worldPerPixel: wpp } : null); return; }
+    const add = e.shiftKey || e.ctrlKey || e.metaKey;   // Shift(Ctrl)+클릭 = 여러 개 고르기(끌면 화면 이동) — 2026-11-06
+    if (!h) { onPick(pickable ? { part: null, face: null, ray: rr, worldPerPixel: wpp, add } : null); return; }
     const part = h.object.userData.part;
-    onPick({ part, face: partsRef[part].faceIds[h.faceIndex], ray: rr, worldPerPixel: wpp });
+    onPick({ part, face: partsRef[part].faceIds[h.faceIndex], ray: rr, worldPerPixel: wpp, add });
   });
 
   // 다 쓴 보기(불러오기 미리보기)의 그래픽 메모리를 돌려줌 — 큰 도면에서 3D 문맥 두 개가 메모리를 나눠 쓰지 않게
