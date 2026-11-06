@@ -4,7 +4,7 @@
 import { loadOc } from '../shape/oc-loader.js';
 import { readStepParts, stepProfile, BIG_MESH, mergeMeshes } from '../shape/step-import.js';
 import { splitTransfer, planSplit, splitRough, splitFine } from '../shape/step-split.js';
-import { stepRootEstimate } from '../shape/step-roots.js';
+import { stepRootEstimate, stepRootProfile } from '../shape/step-roots.js';
 import { prepScene, prepTransfer } from './scene-prep.js';
 
 const meshBufs = (m) => [m.positions.buffer, m.triangles.buffer, m.faceIds.buffer];
@@ -100,12 +100,12 @@ self.onmessage = async (ev) => {
       return;
     }
     // 진행 알림(2026-11-05) { key, frac, text } · 미리보기 { preview } · 끝에 단계별 시간 timing
-    const tm = {}, text = ev.data.text, profile = stepProfile(ev.data.bytes ?? text.length);
+    const tm = {}, text = ev.data.text, baseProfile = stepProfile(ev.data.bytes ?? text.length), rootsEst = stepRootEstimate(text), profile = stepRootProfile(baseProfile, rootsEst);
     let cur = 'oc', t0 = performance.now();
     const go = (k) => { const n = performance.now(); tm[cur] = n - t0; t0 = n; cur = k; self.postMessage({ key: k }); };
     const post = (msg, tr = []) => self.postMessage(msg, tr);
-    const rootsEst = stepRootEstimate(text), K = splitWorkers(text, profile, self.navigator ?? {}, rootsEst);
-    let parts = null, info = { workers: 1, roots: rootsEst || null };
+    const K = splitWorkers(text, profile, self.navigator ?? {}, rootsEst);
+    let parts = null, info = { workers: 1, roots: rootsEst || null, previewSkipped: baseProfile.preview && !profile.preview };
     if (K >= 2) {   // 나눠 읽기 — 실패하면(중첩 Worker 미지원·메모리 등) 한 번에 읽기로
       go('read');
       try { const r = await splitLoad(text, profile, K, !!ev.data.early, go, post); parts = r.parts; info = { workers: K, slow: r.slow, roots: r.roots }; }   // 실제 루트 수(해석 뒤)

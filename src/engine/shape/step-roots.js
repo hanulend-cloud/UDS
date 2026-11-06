@@ -11,3 +11,9 @@ export function stepRootEstimate(text) {
   let n = 0; for (const id of pd) if (!child.has(id)) n++;
   return n;
 }
+
+// A single assembly root cannot show its coarse mesh until TransferRoot finishes.
+// Skip triangulating every part twice and build only the final mesh.
+export function stepRootProfile(profile, roots) {
+  return roots === 1 && profile?.preview ? { ...profile, preview: false } : profile;
+}
