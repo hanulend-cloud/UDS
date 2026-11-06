@@ -661,6 +661,12 @@ done();
   const { readFileSync } = await import('node:fs'), src = (f) => readFileSync(new URL(f, import.meta.url), 'utf8'), wk = src('../src/engine/mech3d/mech3d-worker.js');
   ok(/postMessage\(\{ key:/.test(wk) && !/postMessage\(\{ stage:/.test(wk), '작업자 진행 알림 = key');
   for (const f of ['../src/main.js', '../src/ui/m3/app.js']) { const t = src(f); ok(/new URL\('[^']*mech3d-worker\.js'/.test(t) && /if \(m\.data\.key\)/.test(t), `${f} 가 진행 알림을 먼저 거름`); } }
+{ // 관측면 클릭(2026-11-06): 고른 면 다시 클릭 = 해제 · 새 면 = 그 면만 · Shift = 더하기/빼기
+  const { obsFacesAfterClick: c } = await import('../src/ui/m3/feature-tree.js'), A = { part: 1, face: 5 }, B = { part: 0, face: 1 }, k = (F) => F.map((f) => `${f.part}.${f.face}`).join();
+  ok(k(c([], A, false)) === '1.5' && k(c([A], B, false)) === '0.1', '새 면 = 그 면만');
+  ok(k(c([A], A, false)) === '' && k(c([A, B], A, false)) === '0.1', '고른 면 다시 클릭 = 그 면만 해제(여러 개여도)');
+  ok(k(c([A], B, true)) === '1.5,0.1' && k(c([A, B], B, true)) === '1.5', 'Shift = 더하기/빼기');
+  const F0 = [A]; c(F0, B, true); ok(F0.length === 1, '원래 목록은 그대로(새 목록)'); }
 { const { seedFits } = await import('../src/ui/m3/autodesign-panel.js');
   const G0 = { ns: 4, nw: 2 }, sd = (n) => ({ batches: [{ acc: new Float64Array(n) }] });
   ok(seedFits(sd(8), G0) && !seedFits(sd(6), G0) && !seedFits(null, G0) && !seedFits(sd(8), null) && !seedFits({ batches: [] }, G0), '판정 값을 화면으로: 칸 수가 같을 때만'); }

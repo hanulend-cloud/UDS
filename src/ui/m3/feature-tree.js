@@ -76,6 +76,12 @@ export const ungroup = (groups = [], id) => groups.filter((g) => g.id !== id);
 // 고른 부품을 모든 그룹에서 뺌(빈 그룹은 지움)
 export const removeFromGroups = (groups = [], parts) => { const set = new Set(parts); return groups.map((g) => ({ ...g, parts: g.parts.filter((i) => !set.has(i)) })).filter((g) => g.parts.length); };
 // Shift+클릭 범위 선택(순수) — order = 화면에 보이는 부품 노드 순서, from(기준) ~ to 사이 전부
+// 관측면 클릭 → 새 면 목록(순수, 2026-11-06): 고른 면을 다시 클릭 = 그 면 해제 · 새 면 = 그 면만 · add(Shift·Ctrl) = 더하기/빼기
+export function obsFacesAfterClick(faces, f, add) {
+  const k = faces.findIndex((x) => x.part === f.part && x.face === f.face);
+  if (k >= 0) return faces.filter((_, i) => i !== k);
+  return add ? [...faces, { part: f.part, face: f.face }] : [{ part: f.part, face: f.face }];
+}
 export function rangeSelect(order, from, to) {
   const i = order.indexOf(from), j = order.indexOf(to);
   if (i < 0 || j < 0) return [to];

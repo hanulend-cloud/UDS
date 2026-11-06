@@ -24,7 +24,7 @@ import { createPool } from './pool.js';
 import * as L from './leds.js';
 import { buildObsOverlay, cellColors, extractFaces } from './colormap.js';
 import { mountCommandBar } from './command-bar.js';
-import { renderFeatureTree, toggleVisibility, viewKeep, togglePcb, makeGroup, ungroup, groupMembers, rangeSelect, removeFromGroups, viewCtxItems, showCtxMenu, toggleLed, ledFoldDefault, untraceItem } from './feature-tree.js';
+import { renderFeatureTree, toggleVisibility, viewKeep, togglePcb, makeGroup, ungroup, groupMembers, rangeSelect, obsFacesAfterClick, removeFromGroups, viewCtxItems, showCtxMenu, toggleLed, ledFoldDefault, untraceItem } from './feature-tree.js';
 import { mountSplitter, mountDockSplitter, mountFacSplitter } from './splitter.js';
 import { createOptDash, createSimDash, simPct } from './opt-dash.js';
 import { geomQuery, geomLimit, geomClash } from './geom-client.js';
@@ -1537,12 +1537,8 @@ function onPick(s) {
   if (s && s.part == null && pick !== 'led' && pick !== 'ledx') s = null;   // 선택 모드 빈 곳 클릭(광선만) — LED 모드에서만 씀
   if ((pick === 'led' || pick === 'ledx') && s && M.light.step?.virtual) { say('배치를 편집한 상태 — [STEP 원래대로] 뒤에 지정하세요'); return; }   // 클릭 번호 = 가상 부품
   if ((pick === 'led' || pick === 'ledx') && s && s.part != null && s.part < nMech) { say('LED STEP 부품(PCB·LED)을 클릭하세요 — 기구 부품은 이 모드에서 선택되지 않음'); return; }
-  if (pick === 'obs' && s && s.part < nMech) {   // 클릭 = 이 면만 · Shift(Ctrl)+클릭 = 면 더하기/빼기(2026-11-06)
-    st.update('observe', (m) => {
-      const F = m.observe.faces, k = F.findIndex((f) => f.part === s.part && f.face === s.face);
-      if (s.add) { if (k >= 0) F.splice(k, 1); else F.push({ part: s.part, face: s.face }); }
-      else m.observe.faces = k >= 0 && F.length === 1 ? [] : [{ part: s.part, face: s.face }];
-    });
+  if (pick === 'obs' && s && s.part < nMech) {   // 고른 면 다시 클릭 = 해제 · 새 면 클릭 = 이 면만 · Shift(Ctrl)+클릭 = 더하기(2026-11-06)
+    st.update('observe', (m) => { m.observe.faces = obsFacesAfterClick(m.observe.faces, { part: s.part, face: s.face }, !!s.add); });
     return;
   }
   if (pick === 'led' && s && M.light.step) {
@@ -1588,7 +1584,11 @@ function onPick(s) {
     });
     return;
   }
-  st.update('session', (_, x) => { x.sel = s && s.part < nMech ? s : null; x.multi = []; x.ledSel = null; if (x.sel) x.node = `part:${x.sel.part}`; });   // LED STEP 부품은 소재 편집 대상이 아님
+  st.update('session', (_, x) => {
+    const again = s && s.part < nMech && !(x.multi?.length > 1) && x.node === `part:${s.part}`;   // 고른 부품 다시 클릭 = 해제(2026-11-06)
+    x.sel = again ? null : s && s.part < nMech ? s : null; x.multi = []; x.ledSel = null;
+    if (x.sel) x.node = `part:${x.sel.part}`; else if (again) x.node = 'parts';
+  });   // LED STEP 부품은 소재 편집 대상이 아님
 }
 
 // 투명 소재 측정값(사용자 항목) — 브라우저 저장(uds.clear.v1), 모든 프로젝트 공용
