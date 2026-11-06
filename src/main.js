@@ -397,12 +397,41 @@ function importMech3d(file, onDone = null) {
   if (file.size >= 2e6) ov = showStepLoad(file, { onCancel: () => { w?.terminate(); say('불러오기 취소'); } });
   file.text().then((text) => {
     w = new Worker(new URL('./engine/mech3d/mech3d-worker.js', import.meta.url), { type: 'module' });
+    // 거친 메시로 먼저 열기(2026-11-06): 새 도면(복원할 저장 설정 없음)일 때만 — 복원은 부품 크기 비교가 거친 메시로 틀릴 수 있어 정밀 메시를 기다림
+    const pend0 = spec.mech3dPending ?? (spec.mech3d && !getMech3d() ? spec.mech3d : null), early = !!ov && !pend0;
+    let opened = false, lastSay = 0;
     w.onmessage = async (m) => {
       if (m.data.preview) { ov?.preview(m.data.preview); }
-      if (m.data.key) { ov?.stage(m.data.key, m.data.frac ?? 0, m.data.text ?? ''); if (!ov) say(`${LOAD_LABEL[m.data.key] ?? ''}${m.data.text ? ` — ${m.data.text}` : ''}`); return; }
+      if (m.data.coarse && early) {   // 거친 메시로 3D 화면을 엶 — 작업은 바로, 계산은 정밀 메시 뒤
+        try {
+          m3app.unmount(); m3app.setRefining(true);
+          setMech3dMesh(file.name, m.data.coarse.parts, m.data.coarse);
+          spec.mech3d = initialMech3dSpec(null); spec.mode = 'mech3d'; spec.mech3dPending = null;
+          applyMode(); opened = true; ov?.close();
+          say(`거친 메시로 먼저 열었음: ${file.name} · 부품 ${m.data.coarse.parts.length}개 — 정밀 메시를 만드는 중(계산·LED 자동 인식은 끝난 뒤). 소재·관측면 지정은 지금 해도 됩니다`);
+        } catch (e) { opened = false; m3app.setRefining(false); console.error('[불러오기] 거친 메시로 열기 실패', e); }
+        return;
+      }
+      if (m.data.key) {
+        if (opened) { if (Date.now() - lastSay > 1000) { lastSay = Date.now(); say(`정밀 메시를 만드는 중 — ${LOAD_LABEL[m.data.key] ?? ''}${m.data.text ? ` ${m.data.text}` : ''} · 소재·관측면 지정은 지금 해도 됩니다`); } return; }
+        ov?.stage(m.data.key, m.data.frac ?? 0, m.data.text ?? ''); if (!ov) say(`${LOAD_LABEL[m.data.key] ?? ''}${m.data.text ? ` — ${m.data.text}` : ''}`); return;
+      }
       w.terminate();
-      if (m.data.error) { ov?.close(); say(`불러오기 실패: ${m.data.error}`); return; }
+      if (m.data.error) { ov?.close(); if (opened) m3app.setRefining(false); say(`불러오기 실패: ${m.data.error}${opened ? ' — 지금 화면은 거친 메시라 계산하지 않음. 다시 불러오세요' : ''}`); return; }
       const after = () => `${m.data.relaxed ? ` · 큰 파일이라 메시 간격을 ${m.data.relaxed.linDefl} mm 로 넓힘(곡면 값이 조금 달라질 수 있음)` : ''}${ov ? ` · 걸린 시간: ${stepTimingText(m.data.timing)}` : ''}`;
+      const tris = () => Math.round(m.data.parts.reduce((s, p) => s + p.triangles.length / 3, 0) / 1e4);
+      if (opened) {   // 정밀 메시로 바꿔 끼움 — 그동안 지정한 소재·관측면·숨김은 그대로(면 번호가 같음)
+        try {
+          const M = spec.mech3d;
+          setMech3dMesh(file.name, m.data.parts, m.data.prep);
+          M.contacts = initialMech3dSpec(m.data.prep?.contacts ?? null).contacts;
+          if (applyPartMods(M.parts)) M.contacts = redetectContacts(M.contacts);
+          tabLock.write('mech3dIDB', () => saveMech3dIDB().catch(() => {}));
+          const nLed = m3app.meshRefined(); persist();
+          say(`정밀 메시로 바꿈: ${file.name} · 부품 ${m.data.parts.length}개 · 삼각형 ${tris()}만 개 · 접촉면 ${M.contacts.length}개${nLed ? ` · LED ${nLed}개 자동 인식(틀리면 광원에서 다시 지정)${m3app.pcbNote()}` : ''} — 계산을 시작합니다${after()}`);
+        } catch (e) { m3app.setRefining(false); say(`정밀 메시로 바꾸기 실패: ${e.message ?? e}`); }
+        return;
+      }
       ov?.stage('prep', 1, '화면 준비'); await new Promise((r) => setTimeout(r, 50));   // 아래 화면 준비 전에 100% 근처를 그릴 틈
       try {
         // 저장된 3D 설정(메쉬 없음 — 보관분, 또는 평판 모드로 나간 뒤 새로고침해 메쉬 미적재)이 있으면: 같은 기구 = 복원, 다르면 물어봄(취소 = 보관 유지·불러오기 중단)
@@ -426,12 +455,12 @@ function importMech3d(file, onDone = null) {
         const nLed = restored ? null : m3app.autoMechLight();   // 새 기구: 반복되는 작은 부품(LED)을 광원으로 자동 지정
         m3app.setStatus(restored
           ? `복원함: 저장된 3D 설정 — ${file.name} · 부품 ${ms.parts.length}개 · 접촉면 ${ms.contacts.length}개${pend.name && pend.name !== file.name ? ` (저장 이름 ${pend.name})` : ''}${after()}`
-          : `불러옴: ${file.name} · 부품 ${m.data.parts.length}개 · 삼각형 ${Math.round(m.data.parts.reduce((s, p) => s + p.triangles.length / 3, 0) / 1e4)}만 개 · 접촉면 ${ms.contacts.length}개${nLed ? ` · LED ${nLed}개 자동 인식(틀리면 광원에서 다시 지정)${m3app.pcbNote()}` : ''} — Milky 부품부터 지정하세요${after()}`);
+          : `불러옴: ${file.name} · 부품 ${m.data.parts.length}개 · 삼각형 ${tris()}만 개 · 접촉면 ${ms.contacts.length}개${nLed ? ` · LED ${nLed}개 자동 인식(틀리면 광원에서 다시 지정)${m3app.pcbNote()}` : ''} — Milky 부품부터 지정하세요${after()}`);
         ov?.close();
       } catch (e) { ov?.close(); say(`불러오기 실패: ${e.message ?? e}`); }
     };
     w.onerror = (e) => { w.terminate(); ov?.close(); say(`불러오기 실패: ${e.message ?? e}`); };
-    w.postMessage({ text, bytes: file.size });
+    w.postMessage({ text, bytes: file.size, early });
   }).catch((e) => { ov?.close(); say(`불러오기 실패: ${e.message ?? e}`); });
 }
 

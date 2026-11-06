@@ -379,7 +379,22 @@ function partMeshInfo(i) {
 }
 function makeJob() { return A ? jobFor(A.store.mspec, getMech3d().parts) : null; }
 // 기구 최적화 중이면 미룸 — 점진 계산이 공유 Worker 에 장면을 보내면 실행이 '장면이 바뀜' 으로 실패. 끝나면 adRun 이 다시 부름
+// 거친 메시로 먼저 연 동안(2026-11-06) — 판정 값이 거친 메시로 틀어지지 않게 계산·최적화를 막음. 정밀 메시가 오면 meshRefined
+let refining = false;
+export function setRefining(on) { refining = !!on; }
+export const isRefining = () => refining;
+// 반환 = 자동 인식한 LED 수(광원이 없을 때만 시도). 화면은 한 번만 다시 그림(LED 인식이 광원을 바꾸면 그 갱신이 곧 다시 그림)
+export function meshRefined() {
+  refining = false;
+  if (!A) return null;
+  A.rawShown = getMech3d()?.raw ?? A.rawShown;   // 같은 도면 — 카메라·숨김 유지
+  A.geom = null; A.clashAsk = null; L.resetLedCaches();
+  const n = A.store.mspec.light.kind === 'none' ? autoMechLight() : null;
+  if (!n) A.store.update('material');   // 계산 시작 · 점검 다시 · 화면 다시 그림
+  return n;
+}
 function restartCalc() {
+  if (refining) { A.store.session.status = '정밀 메시를 만드는 중 — 끝나면 계산을 시작합니다'; return; }
   if (A.ad?.running) { A.ad.deferred = true; return; }
   if (A.adSeedSealed) { A.adSeed = null; A.adSeedSealed = false; }   // 적용 뒤에 또 바뀜 = 그 판정 값은 이제 맞지 않음
   A.timing = { start: 0, first: null, noise5: null }; A.prog.restart(makeJob, () => { const s = A.adSeed; A.adSeed = null; A.adSeedSealed = false; return s; });
@@ -658,6 +673,7 @@ function renderAuto() {
 // 기구 최적화를 시작할 수 없는 이유 — 없으면 ''. 페이지를 연 직후 LED 도면을 읽기 전에 실행하면 'LED 가 없음' 으로 실패했음
 let adLedCache = null;
 function adBlock(M = A.store.mspec, line = A.store.session.line) {
+  if (refining) return '정밀 메시를 만드는 중 — 끝난 뒤 실행하세요';
   if (!line) return '관측 라인이 없음';
   if (M.light.kind === 'none') return 'LED 를 먼저 지정하세요 — ① LED 지정';
   if (M.light.kind === 'step' && M.light.step && !getLedMesh()) return 'LED 도면을 읽는 중';

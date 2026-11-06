@@ -45,4 +45,14 @@ const plain = readStepParts(oc, text);
   ok(r.every((p, i) => p.faceCount === plain[i].faceCount && p.faceIds.length === p.triangles.length / 3), '면 번호 유지');
   ok(r.every((p) => Math.abs(meshVolume(p.positions, p.triangles) / p.volume - 1) < 0.01), '부피 차 1% 안');
 }
+{ // 부품(루트) 단위 변환(2026-11-06) — 루트마다 실제 진행 · 변환되는 대로 거친 모양 · 거친 메시로 먼저 화면을 열 수 있게(onCoarse)
+  const tr = [], pv = [], co = [];
+  const r = readStepParts(oc, text, { profile: { preview: true, big: false }, onTransfer: (i, n) => tr.push([i, n]), onPreview: (m, i, n, phase) => pv.push(phase), onCoarse: (parts) => co.push(parts) });
+  ok(tr.length >= 1 && tr.at(-1)[0] === tr.at(-1)[1] && tr.every(([i], k) => i === k + 1), `루트별 진행 ${tr.map(([i, n]) => `${i}/${n}`).join(' ')}`);
+  ok(pv.length >= 1 && pv.every((x) => x === 'transfer'), `변환 중에 미리보기, 뒤에서 또 보내지 않음: ${pv.join(',')}`);
+  ok(co.length === 1 && co[0].length === r.length && co[0].every((c, i) => c.faceCount === r[i].faceCount && Math.abs(c.volume - r[i].volume) < 1e-9 && c.faceIds.length === c.triangles.length / 3), '거친 메시 = 부품 수·면 번호·부피가 최종과 같음');
+  ok(r.every((p, i) => p.triangles.length === plain[i].triangles.length), '최종 메시는 그대로');
+  const few = []; readStepParts(oc, text, { onTransfer: (i, n) => few.push(n), onCoarse: (x) => few.push('coarse') });
+  ok(!few.includes('coarse'), '작은 파일 = 거친 메시로 먼저 열지 않음');
+}
 done();

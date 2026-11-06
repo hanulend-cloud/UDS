@@ -15,8 +15,8 @@ export function showStepLoad(file, { onCancel }) {
   }
   const $ = (s) => el.querySelector(s), t0 = Date.now();
   el.hidden = false; $('.sl-name').textContent = file.name; $('.sl-empty').hidden = false;
-  let key = 'oc', frac = 0, since = Date.now(), note = '', list = [], closed = false, last = 0;
-  const estimated = (k) => k === 'read' || k === 'transfer';
+  let key = 'oc', frac = 0, since = Date.now(), note = '', list = [], closed = false, last = 0, realT = false;
+  const estimated = (k) => k === 'read' || (k === 'transfer' && !realT);   // 부품(루트)별 진행이 오면 변환도 실제 값
   const paint = () => {
     if (closed) return;
     const f = estimated(key) ? Math.min(0.95, (Date.now() - since) / 1000 / stageEstimateSec(key, file.size)) : frac, p = Math.floor(loadPct(key, f));
@@ -32,7 +32,7 @@ export function showStepLoad(file, { onCancel }) {
   const close = () => { if (closed) return; closed = true; clearInterval(tick); el.hidden = true; clear(); };
   $('.sl-cancel').onclick = () => { close(); onCancel?.(); };
   return {
-    stage(k, f = 0, text = '') { if (k !== key) since = Date.now(); key = k; frac = f; note = text; paint(); },
+    stage(k, f = 0, text = '') { if (k !== key) since = Date.now(); if (k === 'transfer' && f > 0) realT = true; key = k; frac = f; note = text; paint(); },
     async preview(mesh) {
       list.push(mesh); $('.sl-empty').hidden = true;
       const v = await view(); if (closed) return;

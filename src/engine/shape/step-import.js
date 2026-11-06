@@ -9,7 +9,7 @@ function volumeOf(oc, shape) {
 }
 
 // STEP 텍스트 → 솔리드 목록(부피 내림차순). 호출자가 rd.delete() 책임.
-function readSolids(oc, text, onStage) {
+function readSolids(oc, text, onStage, onRoot = null) {
   const path = '/uds-import.stp';
   oc.FS.writeFile(path, text);
   const rd = new oc.STEPControl_Reader_1();
@@ -18,12 +18,19 @@ function readSolids(oc, text, onStage) {
   try { oc.FS.unlink(path); } catch {}   // 큰 파일 — 해석 뒤 메모리 비움
   if (st !== oc.IFSelect_ReturnStatus.IFSelect_RetDone) { rd.delete(); throw new Error('STEP 읽기 실패(형식 오류 또는 지원하지 않는 파일)'); }
   onStage?.('transfer');
-  rd.TransferRoots(new oc.Message_ProgressRange_1());
+  // 루트(최상위 부품)마다 따로 변환(2026-11-06) — 결과·시간은 한 번에와 같고(27 MB 시험), 끝난 부품부터 보여 줄 수 있음.
+  // 루트가 하나(조립품 하나로 묶인 파일)면 나눌 수 없음 — 그때는 진행률이 어림값
+  const nRoot = rd.NbRootsForTransfer();
+  for (let i = 1; i <= nRoot; i++) {
+    const k0 = rd.NbShapes();
+    rd.TransferRoot(i, new oc.Message_ProgressRange_1());
+    onRoot?.(i, nRoot, rd.NbShapes() > k0 ? rd.Shape(rd.NbShapes()) : null);
+  }
   const root = rd.OneShape();
   const solids = [];
   for (const ex = new oc.TopExp_Explorer_2(root, oc.TopAbs_ShapeEnum.TopAbs_SOLID, oc.TopAbs_ShapeEnum.TopAbs_SHAPE); ex.More(); ex.Next()) {
     const s = oc.TopoDS.Solid_1(ex.Current());
-    solids.push({ s, v: volumeOf(oc, s) });
+    solids.push({ s, v: volumeOf(oc, s), k: solids.length });   // k = 변환 순서(정렬 전) — 변환 중 만든 거친 메시와 짝
   }
   if (!solids.length) { rd.delete(); throw new Error('STEP 에 솔리드가 없음(면·와이어만 있는 파일)'); }
   solids.sort((a, b) => b.v - a.v);
@@ -78,6 +85,8 @@ function diagOf(oc, shape) {
 export const stepProfile = (bytes) => ({ preview: bytes >= 10e6, big: bytes >= 30e6 });
 export const BIG_MESH = { linDefl: 0.05, angDefl: 0.2 };
 const BIG_SMALL = { linDefl: 0.2, angDefl: 0.6 }, PREVIEW = { linDefl: 1, angDefl: 0.6 };
+function faceCountOf(oc, s) { let n = 0; for (const ex = new oc.TopExp_Explorer_2(s, oc.TopAbs_ShapeEnum.TopAbs_FACE, oc.TopAbs_ShapeEnum.TopAbs_SHAPE); ex.More(); ex.Next()) n++; return n; }
+function meshDiag(m) { const P = m.positions, lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]; for (let i = 0; i < P.length; i += 3) for (let a = 0; a < 3; a++) { if (P[i + a] < lo[a]) lo[a] = P[i + a]; if (P[i + a] > hi[a]) hi[a] = P[i + a]; } return Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]); }
 function mergeMeshes(list) {
   const nP = list.reduce((s, m) => s + m.positions.length, 0), nT = list.reduce((s, m) => s + m.triangles.length, 0);
   const positions = new Float32Array(nP), triangles = new Uint32Array(nT), faceIds = new Uint32Array(nT / 3);
@@ -85,21 +94,34 @@ function mergeMeshes(list) {
   for (const m of list) { positions.set(m.positions, p); for (let i = 0; i < m.triangles.length; i++) triangles[t + i] = m.triangles[i] + p / 3; p += m.positions.length; t += m.triangles.length; }
   return { positions, triangles, faceIds, faceCount: 1 };
 }
-export function readStepParts(oc, text, { linDefl = 0.01, angDefl = 0.1, coarse = { linDefl: 0.03, angDefl: 0.35 }, smallDiag = 20, smallMin = 8, profile = stepProfile(text.length), onStage = null, onPreview = null, onPart = null } = {}) {
-  const { rd, solids } = readSolids(oc, text, onStage);
+// onTransfer(i, n) = 루트 i/n 변환 끝 · onPreview(묶음, i, n, 'transfer') = 변환된 부품의 거친 모양 · onCoarse(부품별 거친 메시) = 거친 메시로 먼저 화면을 열 때
+export function readStepParts(oc, text, { linDefl = 0.01, angDefl = 0.1, coarse = { linDefl: 0.03, angDefl: 0.35 }, smallDiag = 20, smallMin = 8, profile = stepProfile(text.length), onStage = null, onPreview = null, onPart = null, onTransfer = null, onCoarse = null } = {}) {
+  let batch = [], tB = Date.now(), sent = false;
+  const pre = [];   // 변환 중 만든 거친 메시(변환 순서) — 뒤에서 다시 만들지 않음
+  const PRE = profile.big ? BIG_SMALL : PREVIEW;   // 큰 파일 = 작은 부품의 최종 간격으로 만들어 그대로 최종에 씀(다시 안 만듦)
+  const onRoot = (i, n, shape) => {
+    onTransfer?.(i, n);
+    if (!profile.preview || !onPreview) return;
+    if (shape) for (const ex = new oc.TopExp_Explorer_2(shape, oc.TopAbs_ShapeEnum.TopAbs_SOLID, oc.TopAbs_ShapeEnum.TopAbs_SHAPE); ex.More(); ex.Next()) { const m = meshSolid(oc, oc.TopoDS.Solid_1(ex.Current()), PRE.linDefl, PRE.angDefl); pre.push(m); batch.push(m); }
+    if (batch.length && (i === n || Date.now() - tB > 500)) { onPreview(mergeMeshes(batch), i, n, 'transfer'); batch = []; tB = Date.now(); sent = true; }
+  };
+  const { rd, solids } = readSolids(oc, text, onStage, onRoot);
   const diag = solids.map(({ s }) => diagOf(oc, s)), big = Math.max(...diag);
   const small = diag.map((d) => d <= smallDiag && d <= big * 0.2), nSmall = small.filter(Boolean).length, useCoarse = nSmall >= smallMin;
   const qOf = (i) => (useCoarse && small[i] ? (profile.big ? BIG_SMALL : coarse) : profile.big ? BIG_MESH : { linDefl, angDefl });
   const kept = new Array(solids.length);   // 큰 파일의 작은 부품 = 미리보기 메시가 곧 최종(다시 만들지 않음)
-  if (profile.preview) {
+  if (profile.preview) {   // 부품별 거친 메시(변환 중에 이미 만든 면은 그대로 씀) — 먼저 화면을 열 때 씀. 변환 중 미리보기를 못 보냈으면 여기서
     onStage?.('preview');
-    let batch = [], t0 = Date.now();
-    solids.forEach(({ s }, i) => {
-      const q = qOf(i), final = q === BIG_SMALL, m = final ? meshSolid(oc, s, q.linDefl, q.angDefl) : meshSolid(oc, s, PREVIEW.linDefl, PREVIEW.angDefl);
+    let more = [], t0 = Date.now();
+    const same = pre.length === solids.length;   // 변환 순서와 솔리드 순서가 맞을 때만 재사용(면 수·크기도 확인)
+    const rough = solids.map(({ s, v, k }, i) => {
+      const q = qOf(i), final = q === BIG_SMALL, p = same && (!final || PRE === BIG_SMALL) ? pre[k] : null, ok = p && p.faceCount === faceCountOf(oc, s) && Math.abs(meshDiag(p) - diag[i]) <= 0.02 * diag[i] + 1.5;
+      const m = ok ? p : final ? meshSolid(oc, s, q.linDefl, q.angDefl) : meshSolid(oc, s, PREVIEW.linDefl, PREVIEW.angDefl);
       if (final) kept[i] = m;
-      batch.push(m);
-      if (i === solids.length - 1 || Date.now() - t0 > 500) { onPreview?.(mergeMeshes(batch), i + 1, solids.length); batch = []; t0 = Date.now(); }
+      if (!sent && onPreview) { more.push(m); if (i === solids.length - 1 || Date.now() - t0 > 500) { onPreview(mergeMeshes(more), i + 1, solids.length, 'preview'); more = []; t0 = Date.now(); } }
+      return { ...m, volume: v };
     });
+    onCoarse?.(rough);
   }
   onStage?.('mesh');
   const parts = solids.map(({ s, v }, i) => {
