@@ -62,7 +62,7 @@ import { validAdjust } from '../../engine/mech3d/led-adjust.js';
 import { beamSpec, ledOfHit, ledClashItems, dropStaleAdjust, setLedAdjust } from './led-select.js';
 
 const $ = (s) => document.querySelector(s);
-const VIEWS = [['top', '평면 (XY)'], ['front', '정면 (XZ)'], ['side', '측면 (YZ)'], ['iso', '등각']];
+const VIEWS = [['top', '평면 (XY)', 'bottom', '아래에서 본 평면 (−Z 쪽)'], ['front', '정면 (XZ)', 'back', '뒤에서 본 정면 (+Y 쪽)'], ['side', '측면 (YZ)', 'side2', '반대쪽 측면 (−X 쪽)'], ['iso', '등각']];   // 셋째·넷째 = 반대쪽 보기(2026-11-06)
 let A = null;       // 마운트 상태 { ctx, store, pool, prog, view, results, cmd, ... }
 let viewP = null;   // 3D 뷰는 한 번만 만든다(같은 캔버스에 WebGL 문맥을 다시 만들지 않음)
 // 계산 Worker 풀도 한 번만 — 3D↔평판 전환·다시 마운트에도 유지(Worker 시작·L2 표 적재 수 초 방지). resetWorkers() 로만 종료.
@@ -157,7 +157,7 @@ function getView() {
     const v = createMech3dView($('#mech3d-canvas'), { onPick: (s) => { if (A) onPick(s); }, onContext: (c) => { if (A) onViewContext(c); }, gizmo: $('#m3-axes'),
       onLost: () => { const n = getMech3d()?.combined?.partOf?.length ?? 0; reportError('3D 화면', `3D 화면 끊김 — 그래픽 메모리 부족으로 보임(삼각형 ${Math.round(n / 1e4)}만 개)`); setStatus(`3D 화면이 끊겨 도면이 안 보임 — 그래픽 메모리 부족으로 보임(삼각형 ${Math.round(n / 1e4)}만 개). 다른 프로그램·탭을 닫고 새로고침하세요`); } });
     const el = $('#m3-views');
-    el.innerHTML = VIEWS.map(([k, t]) => `<button data-view="${k}">${t}</button>`).join('') + '<button type="button" data-fit title="지금 보이는 도면 전체를 창에 맞춤 — 보는 방향은 그대로 (F)">⤢ 맞춤</button><button type="button" data-xray aria-pressed="false" title="전체 부품 반투명 — 속 구조를 봄">투시</button><button type="button" data-paths aria-pressed="false" title="광경로 화살표 켜기/끄기">광경로</button><button type="button" data-theme-toggle aria-pressed="false"></button>';
+    el.innerHTML = VIEWS.map(([k, t, r, rt]) => (r ? `<div class="m3-vrow"><button data-view="${k}">${t}</button><button data-view="${r}" class="m3-vrev" title="${rt}" aria-label="${rt}">반대</button></div>` : `<button data-view="${k}">${t}</button>`)).join('') + '<button type="button" data-fit title="지금 보이는 도면 전체를 창에 맞춤 — 보는 방향은 그대로 (F)">⤢ 맞춤</button><button type="button" data-xray aria-pressed="false" title="전체 부품 반투명 — 속 구조를 봄">투시</button><button type="button" data-paths aria-pressed="false" title="광경로 화살표 켜기/끄기">광경로</button><button type="button" data-theme-toggle aria-pressed="false"></button>';
     el.querySelector('[data-fit]').onclick = () => v.fitAll();
     el.querySelectorAll('[data-view]').forEach((b) => { b.onclick = () => { v.setView(b.dataset.view); A?.store.update('view', (_, s) => { s.view = b.dataset.view; }); }; });
     // 3D 배경 밝게/어둡게 — 보는 사람별 편의 설정(새로고침해도 유지)

@@ -3,7 +3,7 @@
 // 클릭(드래그 아님) → onPick({ part, face, ray:{o,d}, worldPerPixel }) 또는 onPick(null)(선택 모드에선 { part:null, face:null, ray }).
 // 회전·이동·확대는 OrbitControls(Z 위): 드래그 회전, 휠 확대, 우클릭·Shift 드래그 이동.
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
@@ -13,7 +13,7 @@ const KIND_OPACITY = { milky: 0.85, clear: 0.35, whiteTrans: 0.95, opaque: 1, pc
 const OBS_HI = 0x2ee6ff, LED_SEL = new THREE.Color(0xff7a1a), CONE_DARK = 0xffd84a, CONE_LIGHT = 0xc98a00, CONE_SEL = 0xff7a1a, CONE_SEG = 16, CONE_RAYS = 6;   // 빛 원뿔 = 노란 점선(흐리게), 선택 LED 몸체·원뿔 = 주황 점선
 const SEL_TINT = new THREE.Color(0xffb020), FACE_COLOR = new THREE.Color(0xff5a36), OBS_COLOR = new THREE.Color(0x29d3e0);
 // 보기 방향(카메라 쪽). 평면은 z 축과 아주 조금 어긋나게 — up(z) 을 바꾸지 않으려고(OrbitControls 회전축은 생성 때 up 으로 고정)
-const VIEW_DIR = { top: [0, -1e-3, 1], front: [0, -1, 0], side: [1, 0, 0], iso: [0.7, -1.1, 0.9] };
+const VIEW_DIR = { top: [0, -1e-3, 1], front: [0, -1, 0], side: [1, 0, 0], iso: [0.7, -1.1, 0.9], bottom: [0, -1e-3, -1], back: [0, 1, 0], side2: [-1, 0, 0] };   // bottom·back·side2 = 반대쪽(2026-11-06)
 const SECTION_N = { x: [-1, 0, 0], y: [0, -1, 0], z: [0, 0, -1] };   // 단면: 좌표 ≤ pos 쪽만 남김
 
 export function createMech3dView(canvas, { onPick, onContext = null, gizmo = null, onLost = null }) {
@@ -40,9 +40,20 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   const sun = new THREE.DirectionalLight(0xffffff, 0.8); sun.position.set(1, -1, 2); scene.add(sun);
   // 원점 축: x 빨강 · y 초록 · z 파랑. CAD 관례대로 원점에 두고(모델 구석으로 옮기지 않음) 길이만 모델 크기(r)에 맞춘다
   const axes = new THREE.AxesHelper(10); scene.add(axes);
-  const controls = new OrbitControls(camera, canvas);
-  controls.enableZoom = true;            // 휠 확대(OrbitControls 가 캔버스 wheel 을 직접 처리)
-  controls.screenSpacePanning = true;    // 우클릭·Shift 드래그 = 화면 평면 이동
+  // 자유 회전(2026-11-06): 위·아래 끝에서 멈추던 OrbitControls 대신 TrackballControls — 어느 방향으로든 계속 돎. 왼쪽 = 회전, 휠 = 확대, 우클릭·Shift 드래그 = 이동
+  const controls = new TrackballControls(camera, canvas);
+  controls.rotateSpeed = 2.5; controls.zoomSpeed = 1.2; controls.panSpeed = 0.8;
+  controls.staticMoving = true;          // 놓으면 바로 멈춤(관성 없음)
+  controls.keys = ['', '', ''];          // A·S·D 로 모드가 바뀌지 않게(앱 단축키와 겹침)
+  // Trackball 은 update() 를 프레임마다 불러야 움직임 — 누르는 동안(+휠 뒤 잠깐)만 돌림
+  let spin = 0, spinUntil = 0;
+  const tick = () => { controls.update(); if (spinUntil === Infinity || performance.now() < spinUntil) spin = requestAnimationFrame(tick); else spin = 0; };
+  const wake = (ms) => { spinUntil = ms === Infinity ? Infinity : Math.max(spinUntil === Infinity ? 0 : spinUntil, performance.now() + ms); if (!spin) spin = requestAnimationFrame(tick); };
+  controls.addEventListener('start', () => wake(Infinity));
+  controls.addEventListener('end', () => { spinUntil = 0; wake(300); });
+  canvas.addEventListener('wheel', () => wake(300), { passive: true });
+  // Shift + 왼쪽 드래그 = 이동(예전과 같게) — Trackball 보다 먼저 받도록 capture
+  canvas.addEventListener('pointerdown', (e) => { controls.mouseButtons.LEFT = e.shiftKey ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE; }, { capture: true });
   // 부품 재질은 투명도별로 공유(2026-11-06) — 부품마다 따로 만들면 큰 도면(부품 4500개)의 첫 그리기에서 재질 준비만 4.7초 걸려 화면이 멈췄음
   const partMats = new Map();
   const partMat = (op) => {
@@ -97,6 +108,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     renderer.setPixelRatio(dpr); if (gz) gz.r.setPixelRatio(dpr);
     const w = canvas.clientWidth, h = canvas.clientHeight || 400, a = w / h, half = orthoHalf / Math.min(1, a);
     renderer.setSize(w, h, false);
+    controls.handleResize();   // Trackball 은 화면 크기로 마우스 이동량을 잼
     for (const m of fatMats) m.resolution.set(w, h);   // 굵은 선(관측면 테두리) 두께 = 화면 px
     persp.aspect = a; persp.updateProjectionMatrix();
     ortho.left = -half * a; ortho.right = half * a; ortho.top = half; ortho.bottom = -half; ortho.updateProjectionMatrix();
@@ -133,7 +145,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     camera.position.copy(c).addScaledVector(d, dist);
     camera.near = Math.max(1e-3, r / 100); camera.far = dist + r * 100;
     if (camera.isOrthographicCamera) { orthoHalf = r * 1.1; camera.zoom = 1; }
-    controls.object = camera; controls.target.copy(c); camera.lookAt(c);
+    controls.object = camera; controls.target.copy(c); camera.up.set(0, 0, 1); camera.lookAt(c);   // 자유 회전으로 기울어진 위쪽을 Z 로 되돌림
     controls.minDistance = r * 0.02;
     fitDepth(); camera.updateProjectionMatrix();   // resize() 가 숨김으로 건너뛰어도 near/far·zoom 반영
     if (canvas.clientWidth === 0) pendingFit = true;   // 가로세로비를 모름 → 첫 표시 때 다시 맞춤
