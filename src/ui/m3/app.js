@@ -52,6 +52,7 @@ import { virtualEmittersAt, stepRefEmitter } from '../../engine/mech3d/virtual-l
 import { rw4 } from '../../engine/mech3d/layout-solver.js';
 import { LOAD_LABEL } from '../../engine/shape/step-load-plan.js';
 import { partLook } from './part-look.js';
+import { mapShape } from './map-shape.js';
 import { caseKey, caseCand, caseFp, mergeCaseRows } from './shape-cases.js';
 import { heightsFor, deformPart, refinedFor, minThickness, pathFromLine, swOnPath, ledEll, lineVarH, splineInput, partFrame, bumpCenters, fieldThickness, clampField, fieldRoom, lensCandidates, swingCandidates } from '../../engine/mech3d/shape-opt.js';
 import { interferenceKeys, newInterference, travelDistance } from '../../engine/mech3d/clearance.js';
@@ -393,6 +394,16 @@ export function meshRefined() {
   if (!n) A.store.update('material');   // 계산 시작 · 점검 다시 · 화면 다시 그림
   return n;
 }
+// 2D 광량 분포를 모양대로 그릴 칸 모서리 좌표(2026-11-06) — 라인·격자가 같으면 다시 안 만듦
+const shapeMemo = new WeakMap();
+function shapeFor(line, G) {
+  if (!line || !G || typeof line.fromSW !== 'function') return null;
+  const m = shapeMemo.get(G);
+  if (m?.line === line) return m.shape;
+  let shape = null; try { shape = mapShape(line, G); } catch (e) { console.warn('[2D] 모양 계산 실패', e); }
+  shapeMemo.set(G, { line, shape });
+  return shape;
+}
 function restartCalc() {
   if (refining) { A.store.session.status = '정밀 메시를 만드는 중 — 끝나면 계산을 시작합니다'; return; }
   if (A.ad?.running) { A.ad.deferred = true; return; }
@@ -418,7 +429,7 @@ function onCalc(snap) {
   if (T.start && snap.stats && T.first == null) T.first = (now - T.start) / 1000;
   if (T.start && snap.stats?.relNoise != null && snap.stats.relNoise <= 0.05 && T.noise5 == null) T.noise5 = (now - T.start) / 1000;
   updateLeakCheck(snap);
-  A.results.update({ snap, observe: M.observe, message: guidance(snap), leds: ledSW(M, S.line), ledsOrig: (() => { const c = ledChangeNow(M, S.line); return c?.changed ? c.orig : []; })(), leak: leakText(A.checks.leak, M.parts.map((p) => p.name)) });
+  A.results.update({ snap, observe: M.observe, message: guidance(snap), shape: shapeFor(S.line, snap?.G), leds: ledSW(M, S.line), ledsOrig: (() => { const c = ledChangeNow(M, S.line); return c?.changed ? c.orig : []; })(), leak: leakText(A.checks.leak, M.parts.map((p) => p.name)) });
   A.simDash?.sample(snap, snap.targetNoise ?? M.observe.targetNoise ?? 0.01, M.observe, M.parts.map((p) => p.name), M.parts.length, !!adState().running, M.parts.flatMap((p, i) => (isUntraced(p) ? [i] : [])));
   drawLightPaths();
   adDetectPath();

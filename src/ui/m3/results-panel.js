@@ -1,3 +1,4 @@
+import { shapeLayout } from './map-shape.js';
 import { mountSplit } from './pane-split.js';
 import { clampRect, fitRect, dragBy, raiseWin, mountResizers, COLLAPSED_W } from './monitor.js';
 import { simPct } from './opt-dash.js';
@@ -317,9 +318,50 @@ export function mapViewG(G) {
   VIEWG.set(G, v); return v;
 }
 function mapBox(cv, G, dpr, equal) { return mapLayout(mapViewG(G), cv.width, cv.height, dpr, equal); }
+// 색 막대(0~100%) — 펼친 띠·모양 그림 공용
+function colorBar(x, W, H, dpr) {
+  const cTop = MAP_PAD.t * dpr, PH = H - (MAP_PAD.t + MAP_PAD.b) * dpr, bx = W - (MAP_PAD.r - 12) * dpr, bw = 11 * dpr;
+  for (let i = 0; i < PH; i++) { const l = lutIndex(1 - i / PH) * 3; x.fillStyle = `rgb(${LUT[l]},${LUT[l + 1]},${LUT[l + 2]})`; x.fillRect(bx, cTop + i, bw, 1.5); }
+  x.strokeStyle = 'rgba(128,140,160,.7)'; x.strokeRect(bx, cTop, bw, PH);
+  x.fillStyle = '#8a93a6'; x.textAlign = 'left'; x.textBaseline = 'middle';
+  for (let p = 0; p <= 100; p += 20) x.fillText(`${p}%`, bx + bw + 4 * dpr, cTop + (1 - p / 100) * PH);
+}
+// 모양대로 그리기(2026-11-06): mode 'ring' = 링(두께 확대) · 'real' = 관측면 실제 모양(실제 비율). 칸 값은 그대로 — map-shape.js
+function drawShapeMap(cv, v, dpr, hover, mode) {
+  const { G, map } = v, x = cv.getContext('2d'), W = cv.width, H = cv.height, VG = mapViewG(G), rows = [VG.jA ?? 0, VG.jB ?? G.nw - 1];
+  const box = { x: 14 * dpr, y: MAP_PAD.t * dpr, w: W - (14 + MAP_PAD.r) * dpr, h: H - (MAP_PAD.t + 22) * dpr };
+  const Ly = shapeLayout(G, v.shape, box, rows, mode);
+  cv._mapv.at = (px, py) => Ly.at(px, py);
+  x.clearRect(0, 0, W, H);
+  let mx = 0, kMin = -1; for (let k = 0; k < map.length; k++) if (G.valid[k] && map[k] > mx) mx = map[k];
+  x.lineWidth = 0.8 * dpr; x.lineJoin = 'round';
+  for (let i = 0; i < G.ns; i++) for (let j = rows[0]; j <= rows[1]; j++) {
+    const k = i * G.nw + j;
+    if (!G.valid[k] || !(mx > 0)) continue;
+    if (kMin < 0 || map[k] < map[kMin]) kMin = k;
+    const l = lutIndex(map[k] / mx) * 3, c = `rgb(${LUT[l]},${LUT[l + 1]},${LUT[l + 2]})`, q = Ly.quad(i, j);
+    x.beginPath(); x.moveTo(q[0][0], q[0][1]); for (let a = 1; a < 4; a++) x.lineTo(q[a][0], q[a][1]); x.closePath();
+    x.fillStyle = c; x.fill(); x.strokeStyle = c; x.stroke();   // 같은 색 테두리 = 칸 사이 틈 없앰
+  }
+  colorBar(x, W, H, dpr);
+  x.font = `${10.5 * dpr}px sans-serif`; x.fillStyle = '#8a93a6'; x.textAlign = 'right'; x.textBaseline = 'bottom';
+  x.fillText(mode === 'ring' ? '링 · 두께 확대(시작점·방향은 실제와 같음) — [실제 비율] = 실제 모양' : `실제 모양 · 가로 ${Ly.info.mm[0].toFixed(1)} × 세로 ${Ly.info.mm[1].toFixed(1)} mm`, box.x + box.w, H - 3 * dpr);
+  if (mode === 'ring') { const [i0x, i0y] = Ly.toPx(0, G.w0 + (rows[0] + rows[1] + 1) / 2 * G.cell); x.beginPath(); x.arc(i0x, i0y, 3 * dpr, 0, 2 * Math.PI); x.fillStyle = '#ffffff'; x.fill(); x.textAlign = 'left'; x.textBaseline = 'middle'; x.fillStyle = '#8a93a6'; x.fillText('s 0', i0x + 6 * dpr, i0y); }
+  if (kMin >= 0) { const i = Math.floor(kMin / G.nw), j = kMin % G.nw, [cs, cw] = mapCellSW(G, i, j), [px, py] = Ly.toPx(cs, cw); x.beginPath(); x.arc(px, py, minDotR(box.w, box.h, dpr), 0, 2 * Math.PI); x.fillStyle = '#8a8f98'; x.fill(); x.strokeStyle = '#ffffff'; x.lineWidth = dpr; x.stroke(); }
+  if (v.pin) { const [px, py] = Ly.toPx(v.pin.s, v.pin.w); x.beginPath(); x.arc(px, py, 4 * dpr, 0, 2 * Math.PI); x.fillStyle = PIN_COLOR; x.fill(); x.strokeStyle = 'rgba(10,14,22,.9)'; x.lineWidth = 1.5 * dpr; x.stroke(); }
+  if (hover && mx > 0) {
+    const [i, j] = hover, k = i * G.nw + j, [cs, cw] = mapCellSW(G, i, j), val = G.valid[k] ? `${((map[k] / mx) * 100).toFixed(1)}%` : '관측면 밖', q = Ly.quad(i, j);
+    x.beginPath(); x.moveTo(q[0][0], q[0][1]); for (let a = 1; a < 4; a++) x.lineTo(q[a][0], q[a][1]); x.closePath(); x.strokeStyle = '#ffffff'; x.lineWidth = 1.5 * dpr; x.stroke();
+    const lbl = `s ${cs.toFixed(1)} · w ${cw.toFixed(1)} mm · ${val}`, tw = x.measureText(lbl).width;
+    x.fillStyle = 'rgba(20,26,38,.88)'; x.fillRect(box.x, box.y, tw + 8 * dpr, 16 * dpr);
+    x.fillStyle = '#e6ebf2'; x.textAlign = 'left'; x.textBaseline = 'top'; x.fillText(lbl, box.x + 4 * dpr, box.y + 2 * dpr);
+  }
+}
 export function drawMap(cv, v, dpr = 1, hover = null, equal = false) {
   cv._mapv = { v, dpr, equal };
   LUT ??= buildLut();
+  const mode = equal && v.shape ? 'real' : v.G.closed ? 'ring' : null;   // 링 = 링 모양(두께 확대) · 실제 비율 = 실제 모양(모양 정보가 있을 때)
+  if (mode) return drawShapeMap(cv, v, dpr, hover, mode);
   const { G, map } = v, x = cv.getContext('2d'), W = cv.width, H = cv.height, B = mapBox(cv, G, dpr, equal), { ox, oy, PW, rowH, pitch, K, segL, w0, w1, L, xy } = B;
   x.clearRect(0, 0, W, H);
   let mx = 0; for (let k = 0; k < map.length; k++) if (G.valid[k] && map[k] > mx) mx = map[k];
@@ -358,11 +400,7 @@ export function drawMap(cv, v, dpr = 1, hover = null, equal = false) {
   for (let w = Math.ceil(w0 / ws - 1e-9) * ws; w <= w1 + 1e-9; w += ws) { x.beginPath(); x.moveTo(ox - 3 * dpr, WY(w)); x.lineTo(ox, WY(w)); x.stroke(); x.fillText(`${+w.toFixed(1)}`, ox - 5 * dpr, WY(w)); }
   x.save(); x.translate(10 * dpr, oy + rowH / 2); x.rotate(-Math.PI / 2); x.textAlign = 'center'; x.fillText('w (mm)', 0, 0); x.restore();
   // 색 막대(0~100%) + 최저 위치
-  const cTop = MAP_PAD.t * dpr, PH = H - (MAP_PAD.t + MAP_PAD.b) * dpr, bx = W - (MAP_PAD.r - 12) * dpr, bw = 11 * dpr;
-  for (let i = 0; i < PH; i++) { const l = lutIndex(1 - i / PH) * 3; x.fillStyle = `rgb(${LUT[l]},${LUT[l + 1]},${LUT[l + 2]})`; x.fillRect(bx, cTop + i, bw, 1.5); }
-  x.strokeStyle = 'rgba(128,140,160,.7)'; x.strokeRect(bx, cTop, bw, PH);
-  x.fillStyle = '#8a93a6'; x.textAlign = 'left'; x.textBaseline = 'middle';
-  for (let p = 0; p <= 100; p += 20) x.fillText(`${p}%`, bx + bw + 4 * dpr, cTop + (1 - p / 100) * PH);
+  colorBar(x, W, H, dpr);
   if (kMin >= 0) {   // 최저 위치 = 회색 점만(글씨는 작은 그림을 가림, 2026-11-04) · 크기는 그림에 맞춤
     const i = Math.floor(kMin / G.nw), j = kMin % G.nw, [cs, cw] = mapCellSW(G, i, j), [px, py] = xy(cs, cw);
     x.beginPath(); x.arc(px, py, minDotR(PW, rowH, dpr), 0, 2 * Math.PI); x.fillStyle = '#8a8f98'; x.fill(); x.strokeStyle = '#ffffff'; x.lineWidth = dpr; x.stroke();
@@ -392,7 +430,9 @@ function wireMapHover(cv) {
   cv._mhover = true;
   const cell = (e) => {
     const M = cv._mapv; if (!M) return null;
-    const r = cv.getBoundingClientRect(), px = (e.clientX - r.left) * (cv.width / r.width), py = (e.clientY - r.top) * (cv.height / r.height), b = mapBox(cv, M.v.G, M.dpr, M.equal);
+    const r = cv.getBoundingClientRect(), px = (e.clientX - r.left) * (cv.width / r.width), py = (e.clientY - r.top) * (cv.height / r.height);
+    if (M.at) return M.at(px, py);   // 링·실제 모양 그림
+    const b = mapBox(cv, M.v.G, M.dpr, M.equal);
     const sw = b.at(px, py); if (!sw) return null;
     const G = M.v.G, i = Math.floor(sw[0] / G.ds), j = Math.floor((sw[1] - G.w0) / G.cell);
     return i >= 0 && i < G.ns && j >= 0 && j < G.nw ? [i, j] : null;
@@ -639,7 +679,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     const pi = pin ? Math.floor(pin.s / G.ds) : -1, pj = pin ? Math.floor((pin.w - G.w0) / G.cell) : -1;
     if (pin && !(pi >= 0 && pi < G.ns && pj >= 0 && pj < G.nw)) pin = null;
     const FG = fullG(G), mapF = st.mapAll ?? st.map, pp = pin ? pointProfiles(FG, mapF, pi, pj) : null, ring = G.closed ? '원주' : '길이', rad = G.closed ? '반경(폭)' : '폭';
-    VIEW.map = { G: FG, map: mapF, leds, pin, smooth: true };
+    VIEW.map = { G: FG, map: mapF, leds, pin, smooth: true, shape: args.shape ?? null };
     VIEW.prof = plotView([{ ys: Array.from(st.profile, (v) => v / pm), color: '#1f6fd1', name: '폭 평균', band: st.relNoise ?? 0 }, ...(pp ? [{ ys: Array.from(pp.along), color: PIN_COLOR, name: `지정 점 w=${pin.w.toFixed(1)}` }] : [])], observe.targetLen, { x0: 0, x1: G.L, xl: 's (mm)', leds: leds.map((p) => p.s), ledsOrig: (args.ledsOrig ?? []).map((p) => p.s) });
     q('psub').title = `${pin ? `폭 평균 + 지정 점(주황, ${ring} 방향) · 같은 점 다시 클릭 또는 바깥 클릭 = 해제` : '폭 평균 · 2D 클릭 = 그 점 기준 곡선 추가'} · 옅은 띠 = 계산 노이즈 범위 · 빨간 점선 = 목표 하한 · 곡선은 노이즈만 살짝 다듬어 그림(LED 리플 높이 유지) · 최저점·마우스 값·CSV·판정 = 원자료`;
     paint('map', q('map')); paint('prof', q('prof'));

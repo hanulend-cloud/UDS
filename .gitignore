@@ -10,3 +10,5 @@ scratchpad/
 .worktrees/
 .claude/worktrees/
 test/fixtures/bent-diffuser-40led.stp
+
+test/fixtures/ring-12led.stp
