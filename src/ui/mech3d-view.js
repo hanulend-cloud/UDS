@@ -41,6 +41,14 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   const controls = new OrbitControls(camera, canvas);
   controls.enableZoom = true;            // 휠 확대(OrbitControls 가 캔버스 wheel 을 직접 처리)
   controls.screenSpacePanning = true;    // 우클릭·Shift 드래그 = 화면 평면 이동
+  // 부품 재질은 투명도별로 공유(2026-11-06) — 부품마다 따로 만들면 큰 도면(부품 4500개)의 첫 그리기에서 재질 준비만 4.7초 걸려 화면이 멈췄음
+  const partMats = new Map();
+  const partMat = (op) => {
+    const k = Math.round(op * 1000);
+    let m = partMats.get(k);
+    if (!m) { m = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.6, clippingPlanes: clip, opacity: k / 1000, transparent: k < 1000, depthWrite: k >= 1000 }); partMats.set(k, m); }
+    return m;
+  };
   const clip = [];                       // 단면 평면(0 또는 1개) — 부품·덧그림 재질이 같은 배열을 공유
 
   // 회전 축 창(왼쪽 아래 작은 캔버스): 카메라 방향만 따라 도는 축 + X/Y/Z 글자
@@ -110,9 +118,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     if (xray) op = kinds[i] === 'led' ? 0.55 : Math.min(op, 0.16);
     if (dim?.(i)) op = Math.min(op, 0.12);   // 추적 제외 부품: 아주 흐리게(남아 있지만 빛 계산엔 없음)   // 투시 보기: 전체 반투명 — 속 구조·광경로를 봄
     if (sel?.part === i && !ghost?.(i)) op = Math.max(op, xray ? 0.45 : 0.7);   // 선택 부품: 투명 소재여도 잘 보이게
-    m.material.opacity = op;
-    m.material.transparent = op < 1;
-    m.material.depthWrite = !m.material.transparent; m.renderOrder = m.material.transparent ? 1 : 0;
+    m.material = partMat(op); m.renderOrder = m.material.transparent ? 1 : 0;
   }
 
   // 보기 전환: 등각 = 원근, 나머지 = 정투영. 모델 외곽 구(model)에 맞춘다
@@ -164,7 +170,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
 
   // parts: 런타임 scene.parts, kindsOf: 부품별 소재 종류 배열, keepCamera: 카메라를 다시 맞추지 않음(LED 위치 보정 등)
   function setParts(parts, kindsOf, { keepCamera = false, looks: lookOf = [] } = {}) {
-    for (const m of meshes) { scene.remove(m); m.geometry.dispose(); m.material.dispose(); }
+    for (const m of meshes) { scene.remove(m); m.geometry.dispose(); }   // 재질은 공유 — 버리지 않음
     partsRef = parts; kinds = kindsOf.slice(); looks = lookOf;
     meshes = parts.map((p, i) => {
       const g = new THREE.BufferGeometry();
@@ -172,7 +178,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
       g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(p.positions.length), 3));
       g.setIndex(new THREE.BufferAttribute(p.triangles, 1));
       g.computeVertexNormals();
-      const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.6, clippingPlanes: clip }));
+      const m = new THREE.Mesh(g, partMat(1));
       m.userData.part = i;
       m.visible = !hiddenFn?.(i);
       scene.add(m);

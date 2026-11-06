@@ -48,21 +48,32 @@ export function triBoxOverlap(c, h, a, b, d) {
 // ① LED–부품 간섭: 발광점(축 방향 lift 띄움)이 부품 안 / LED 몸체 외곽 상자(tol 만큼 줄임)가 부품 삼각형과 겹침 — 각각 1건
 // emitters: [{pos, axis}], bodies: [{led, lo:[3], hi:[3]}](LED STEP 의 LED 몸체 외곽, 월드 좌표)
 // mspec 가 있으면 투과 부품 안의 발광점(포팅 LED)은 'potted' 경고. exclude: 검사에서 뺄 부품 번호(LED STEP 의 PCB 등)
+// 부품 외곽 상자(2026-11-06) — 상자 밖의 점·몸체는 그 부품 안에 있거나 겹칠 수 없으므로 정밀 검사를 건너뜀(큰 도면: LED 수천 × 부품 수천)
+const partBoxes = new WeakMap();
+function partBox(part) {
+  let b = partBoxes.get(part);
+  if (!b) { const P = part.positions; b = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity]; for (let i = 0; i < P.length; i += 3) for (let a = 0; a < 3; a++) { if (P[i + a] < b[a]) b[a] = P[i + a]; if (P[i + a] > b[a + 3]) b[a + 3] = P[i + a]; } partBoxes.set(part, b); }
+  return b;
+}
+const EPS = 1e-6;
+const ptInBox = (b, q) => q[0] >= b[0] - EPS && q[1] >= b[1] - EPS && q[2] >= b[2] - EPS && q[0] <= b[3] + EPS && q[1] <= b[4] + EPS && q[2] <= b[5] + EPS;
+const boxesMeet = (b, lo, hi) => lo[0] <= b[3] + EPS && lo[1] <= b[4] + EPS && lo[2] <= b[5] + EPS && hi[0] >= b[0] - EPS && hi[1] >= b[1] - EPS && hi[2] >= b[2] - EPS;
 export function checkInterference({ rt, mspec = null, emitters = [], bodies = [], tol = 0.02, lift = 0.05, exclude = [] }) {
   const ex = new Set(exclude);
   if (mspec) mspec.parts.forEach((p, i) => { if (isUntraced(p)) ex.add(i); });   // 추적 제외 부품은 간섭 판단에서도 뺌
   if (!emitters.length && !bodies.length) return { status: 'na', count: 0, items: [] };
-  const items = [], cand = [];
+  const items = [], cand = [], live = [];
+  rt.parts.forEach((part, p) => { if (!ex.has(p)) live.push([p, part, partBox(part)]); });   // 검사할 부품만 한 번 추림
   emitters.forEach((e, i) => {
     const al = Math.hypot(...e.axis) || 1, q = e.pos.map((v, k) => v + (lift * e.axis[k]) / al);
-    rt.parts.forEach((part, p) => { if (!ex.has(p) && insidePart(part, q)) items.push({ led: i, part: p, kind: mspec && isTrans(mspec, p) ? 'potted' : 'inside', pos: e.pos }); });
+    for (const [p, part, bx] of live) if (ptInBox(bx, q) && insidePart(part, q)) items.push({ led: i, part: p, kind: mspec && isTrans(mspec, p) ? 'potted' : 'inside', pos: e.pos });
   });
   for (const b of bodies) {
     const lo = b.lo.map((v) => v + tol), hi = b.hi.map((v) => v - tol);
     if (lo.some((v, k) => v > hi[k])) continue;
     const c = lo.map((v, k) => (v + hi[k]) / 2), h = lo.map((v, k) => (hi[k] - v) / 2);
-    rt.parts.forEach((part, p) => {
-      if (ex.has(p)) return;
+    for (const [p, part, bx] of live) {
+      if (!boxesMeet(bx, lo, hi)) continue;   // 몸체 상자가 부품 상자와 안 만나면 겹침·파묻힘 모두 불가
       const P = part.positions, T = part.triangles;
       let hit = false;
       for (const t of queryBox(part.bvh, lo, hi, cand)) {
@@ -70,7 +81,7 @@ export function checkInterference({ rt, mspec = null, emitters = [], bodies = []
       }
       // 표면과 겹치지 않아도 몸체가 부품 솔리드에 완전히 파묻힌 경우(중심이 부품 안)
       if (!hit && insidePart(part, c)) items.push({ led: b.led, part: p, kind: 'body-inside', pos: c });
-    });
+    }
   }
   const bad = items.some((x) => x.kind !== 'potted');
   return { status: bad ? 'bad' : items.length ? 'warn' : 'ok', count: items.length, items };

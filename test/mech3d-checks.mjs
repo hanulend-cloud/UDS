@@ -100,4 +100,14 @@ const mk = (meshes, kinds) => ({ rt: buildSceneMesh('t', meshes), mspec: { parts
   ok(boxTravel({ rt, bodies: [side], d: [0, 0, 1], maxD: 3 }) === 3, '처음부터 겹친 부품은 이동을 막지 않음(새 겹침만)');
   ok(boxTravel({ rt, bodies: [], d: [0, 0, 1], maxD: 3 }) === 3, '몸체 없음 = 한도까지');
 }
+{   // 큰 도면 간섭 점검(2026-11-06): LED 2000개 · 부품 2000여 개 — 결과는 같고, 화면을 오래 붙잡지 않음(90 MB 시험 도면에서 1.9초 × 두 번)
+  const meshes = [boxMesh(-10, -10, -2, 2020, 40, 1)], em = [], bodies = [];
+  for (let k = 0; k < 2000; k++) { const x = k; meshes.push(boxMesh(x + 0.1, 0, 0, 0.8, 0.8, 0.5)); em.push({ pos: [x + 0.5, 0.4, 0.5], axis: [0, 0, 1] }); bodies.push({ led: k, lo: [x + 0.1, 0, 0], hi: [x + 0.9, 0.8, 0.5] }); }
+  meshes.push(boxMesh(500, -1, 0.2, 2, 3, 3));   // LED 500·501 쪽을 뚫는 리브 하나
+  for (let k = 0; k < 500; k++) meshes.push(boxMesh(k * 4, 10, 0, 1, 1, 1));   // LED 와 떨어진 나사·보스 같은 부품
+  const rt = buildSceneMesh('t', meshes), ex = Array.from({ length: 2000 }, (_, k) => k + 1);
+  const t = performance.now(), r = checkInterference({ rt, emitters: em, bodies, exclude: ex }), ms = performance.now() - t;
+  ok(r.items.length > 0 && r.items.every((x) => x.part === 2001) && new Set(r.items.map((x) => x.led)).size === 2, `리브와 겹친 LED 2개만: ${[...new Set(r.items.map((x) => x.led))].join(',')}`);
+  ok(ms < 150, `LED 2000개 · 부품 ${meshes.length}개 간섭 점검 ${Math.round(ms)} ms (< 0.15 s)`);
+}
 done();

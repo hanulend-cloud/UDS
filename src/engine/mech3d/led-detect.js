@@ -115,7 +115,8 @@ function closestOnTri(p, a, b, c) {
 const triBoxCache = new WeakMap();   // PCB 메쉬(불변 가정) → 삼각형별 AABB [minx,miny,minz,maxx,maxy,maxz]
 function towardLed(pcbMesh, p) { const { d2, q } = closestOnMesh(pcbMesh, p); return d2 > 1e-18 ? unit(sub(p, q)) : null; }
 // 메쉬 위 최근접점 q 와 거리² d2
-function closestOnMesh(pcbMesh, p) {
+// stop = 이 거리² 이하를 찾으면 바로 끝냄(닿았는지만 볼 때 — 큰 도면에서 삼각형 전부를 돌지 않게)
+function closestOnMesh(pcbMesh, p, stop = -1) {
   const P = pcbMesh.positions, T = pcbMesh.triangles, nT = T.length / 3;
   let B = triBoxCache.get(pcbMesh);
   if (!B) {
@@ -133,15 +134,30 @@ function closestOnMesh(pcbMesh, p) {
     if (dx * dx + dy * dy + dz * dz >= best2) continue;   // 이 삼각형은 현재 최선보다 멀 수밖에 없음
     const i0 = T[t * 3] * 3, i1 = T[t * 3 + 1] * 3, i2 = T[t * 3 + 2] * 3;
     const c = closestOnTri(p, [P[i0], P[i0 + 1], P[i0 + 2]], [P[i1], P[i1 + 1], P[i1 + 2]], [P[i2], P[i2 + 1], P[i2 + 2]]), d = sub(p, c), d2 = dot(d, d);
-    if (d2 < best2) { best2 = d2; q = c; }
+    if (d2 < best2) { best2 = d2; q = c; if (d2 <= stop) break; }
   }
   return { d2: best2, q };
 }
 // 도면 광원의 받침 부품: LED 몸체 중심에서 가장 가까운 부품 번호(skip 제외) — 보통 LED 가 올라앉은 PCB. 없으면 −1
+// 큰 도면(2026-11-06): 부품 상자까지 거리(최솟값)로 먼저 줄 세워, 상자가 지금 최선보다 먼 부품은 정확 계산을 건너뜀 — 답은 전수와 같음(동점 = 앞 번호)
+const boxCache = new WeakMap();
+function boxOf(m) {
+  let b = boxCache.get(m);
+  if (!b) { const P = m.positions; b = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity]; for (let i = 0; i < P.length; i += 3) for (let a = 0; a < 3; a++) { if (P[i + a] < b[a]) b[a] = P[i + a]; if (P[i + a] > b[a + 3]) b[a + 3] = P[i + a]; } boxCache.set(m, b); }
+  return b;
+}
+const boxD2 = (b, p) => { let s = 0; for (let a = 0; a < 3; a++) { const d = Math.max(b[a] - p[a], 0, p[a] - b[a + 3]); s += d * d; } return s; };
+const boxGap2 = (a, b) => { let s = 0; for (let k = 0; k < 3; k++) { const d = Math.max(a[k] - b[k + 3], 0, b[k] - a[k + 3]); s += d * d; } return s; };
 export function supportPart(parts, led, skip = new Set()) {
-  const c = meshStats(led).center;
+  const c = meshStats(led).center, order = [];
+  parts.forEach((m, i) => { if (m && !skip.has(i)) order.push([boxD2(boxOf(m), c), i]); });
+  order.sort((x, y) => x[0] - y[0] || x[1] - y[1]);
   let best = Infinity, k = -1;
-  parts.forEach((m, i) => { if (!m || skip.has(i)) return; const { d2 } = closestOnMesh(m, c); if (d2 < best) { best = d2; k = i; } });
+  for (const [lb, i] of order) {
+    if (lb > best) break;   // 이후 부품은 상자부터 더 멂
+    const { d2 } = closestOnMesh(parts[i], c);
+    if (d2 < best || (d2 === best && i < k)) { best = d2; k = i; }
+  }
   return k;
 }
 const INTO = -0.3, TIE = 0.1;
@@ -320,8 +336,9 @@ function rayHitsBox(o, d, { lo, hi }) {
 // LED 메쉬의 꼭짓점 중 하나라도 받침 메쉬 표면에서 tol 이내 = PCB 위에 올라가 있음.
 // tol = max(0.5 mm, LED 반경 × 0.3) — 실제 도면은 패드·솔더를 안 그려 LED 가 PCB 위에 조금 떠 있는 일이 흔함
 function touches(led, sup, tol = Math.max(0.5, 0.3 * meshStats(led).rmax)) {
-  const P = led.positions;
-  for (let k = 0; k < P.length; k += 3) if (closestOnMesh(sup, [P[k], P[k + 1], P[k + 2]]).d2 <= tol * tol) return true;
+  const P = led.positions, t2 = tol * tol, B = boxOf(sup);
+  if (boxGap2(boxOf(led), B) > t2) return false;   // 상자끼리 tol 보다 떨어져 있으면 닿을 수 없음
+  for (let k = 0; k < P.length; k += 3) { const p = [P[k], P[k + 1], P[k + 2]]; if (boxD2(B, p) <= t2 && closestOnMesh(sup, p, t2).d2 <= t2) return true; }
   return false;
 }
 // 반환 { leds, ref, face, support, rejected:[{ count, why }] } — rejected = 더 많은데 뺀 반복 부품 무리와 이유(사용자 안내용). 못 찾으면 null
