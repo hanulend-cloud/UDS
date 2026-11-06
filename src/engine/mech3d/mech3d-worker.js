@@ -4,6 +4,7 @@
 import { loadOc } from '../shape/oc-loader.js';
 import { readStepParts, stepProfile, BIG_MESH, mergeMeshes } from '../shape/step-import.js';
 import { splitTransfer, planSplit, splitRough, splitFine } from '../shape/step-split.js';
+import { stepRootEstimate } from '../shape/step-roots.js';
 import { prepScene, prepTransfer } from './scene-prep.js';
 
 const meshBufs = (m) => [m.positions.buffer, m.triangles.buffer, m.faceIds.buffer];
@@ -34,10 +35,11 @@ async function helper(ev) {
 }
 
 // 나눠 읽기 쓸 작업자 수 — 솔리드가 여럿이고 코어·메모리가 넉넉할 때만(작업자마다 파일 전체를 해석해 90 MB 에 약 0.5 GB)
-export function splitWorkers(text, profile, nav = self.navigator ?? {}) {
-  if (!profile.preview) return 1;
+// 루트가 하나(조립품 하나로 묶임)면 나눌 수 없어 중복 해석·메모리만 늘어남 → 한 번에 읽기(2026-11-06)
+export function splitWorkers(text, profile, nav = self.navigator ?? {}, roots = stepRootEstimate(text)) {
+  if (!profile.preview || roots === 1) return 1;
   const nSolid = (text.match(/MANIFOLD_SOLID_BREP|BREP_WITH_VOIDS|FACETED_BREP/g) ?? []).length;
-  let K = Math.min(4, Math.max(1, (nav.hardwareConcurrency ?? 4) - 2), nSolid);
+  let K = Math.min(4, Math.max(1, (nav.hardwareConcurrency ?? 4) - 2), nSolid, roots > 1 ? roots : Infinity);
   if ((nav.deviceMemory ?? 8) < 8) K = Math.min(K, 2);
   return Math.max(1, K);
 }
@@ -102,11 +104,11 @@ self.onmessage = async (ev) => {
     let cur = 'oc', t0 = performance.now();
     const go = (k) => { const n = performance.now(); tm[cur] = n - t0; t0 = n; cur = k; self.postMessage({ key: k }); };
     const post = (msg, tr = []) => self.postMessage(msg, tr);
-    const K = splitWorkers(text, profile);
-    let parts = null, info = { workers: 1 };
+    const rootsEst = stepRootEstimate(text), K = splitWorkers(text, profile, self.navigator ?? {}, rootsEst);
+    let parts = null, info = { workers: 1, roots: rootsEst || null };
     if (K >= 2) {   // 나눠 읽기 — 실패하면(중첩 Worker 미지원·메모리 등) 한 번에 읽기로
       go('read');
-      try { const r = await splitLoad(text, profile, K, !!ev.data.early, go, post); parts = r.parts; info = { workers: K, slow: r.slow, roots: r.roots }; }
+      try { const r = await splitLoad(text, profile, K, !!ev.data.early, go, post); parts = r.parts; info = { workers: K, slow: r.slow, roots: r.roots }; }   // 실제 루트 수(해석 뒤)
       catch (e) { console.warn('[불러오기] 나눠 읽기 실패 — 한 번에 읽기로', e); self.postMessage({ key: 'read', text: '나눠 읽기 실패 — 한 번에 읽는 중' }); }
     }
     if (!parts) {

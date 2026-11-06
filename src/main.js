@@ -390,21 +390,24 @@ async function loadSampleProject(ask = true) {
   } catch (e) { say(`예제 프로젝트 불러오기 실패: ${e instanceof TypeError ? NO_SERVER : e.message ?? e}`); }
 }
 // 기구 STEP 불러오기(평판·3D 모드 공통) — spec.mech3d 를 새로 만들고 3D 모드로
+// 오래 걸린 불러오기 안내(2026-11-06) — 형상 변환이 2분을 넘고 나눠 읽지 못했으면 CAD 에서 줄이는 방법을 알려 줌
+const slowTip = (tm, info) => ((tm?.transfer ?? 0) > 120000 && !(info?.workers > 1)
+  ? ` · 빨리 열려면 CAD 에서 ${info?.roots === 1 ? '조립품을 부품별로 나눠(최상위 부품 여러 개) ' : ''}빛과 무관한 부품(나사·보스·브래킷 등)을 빼고 내보내세요. 같은 파일은 다음부터 저장본으로 바로 열림` : '');
 function importMech3d(file, onDone = null) {
   const say = (t) => { if (m3app.isMounted()) m3app.setStatus(t); else $('#timing').textContent = t; };
   say(`${file.name} 읽는 중…`);
   // 2 MB 이상 = 불러오기 화면(진행률·경과 시간·취소·저해상도 미리보기). 작은 파일은 금방 끝나 깜빡이기만 함
   let w = null, ov = null;
   if (file.size >= 2e6) ov = showStepLoad(file, { onCancel: () => { w?.terminate(); say('불러오기 취소'); } });
-  file.text().then(async (text) => {
-    // 변환 결과 저장(2026-11-06) — 같은 파일(이름·크기·수정 시각)을 전에 불러왔으면 저장한 메시로 바로(작업자는 충돌 검사 구조만)
-    const ck = stepCacheKey(file), hit = cacheWorthy(file) ? await stepCacheGet(ck) : null;
+  (async () => {
+    // 변환 결과 저장(2026-11-06) — 같은 파일(이름·크기·수정 시각)이면 파일을 읽기 전에 저장본으로(충돌 검사 구조까지 저장 — 작업자 없이 바로)
+    const ck = stepCacheKey(file), hit = cacheWorthy(file) ? await stepCacheGet(ck) : null, text = hit?.prep ? null : await file.text();
     w = new Worker(new URL('./engine/mech3d/mech3d-worker.js', import.meta.url), { type: 'module' });
     // 거친 메시로 먼저 열기(2026-11-06): 새 도면(복원할 저장 설정 없음)일 때만 — 복원은 부품 크기 비교가 거친 메시로 틀릴 수 있어 정밀 메시를 기다림
     const pend0 = spec.mech3dPending ?? (spec.mech3d && !getMech3d() ? spec.mech3d : null), early = !!ov && !pend0 && !hit;
     let opened = false, lastSay = 0;
     w.onmessage = async (m0) => {
-      const m = hit && m0.data.prep && !m0.data.parts ? { data: { parts: m0.data.prep.parts, prep: { ...m0.data.prep, contacts: hit.contacts }, relaxed: hit.relaxed, timing: hit.timing, info: { ...(hit.info ?? {}), cached: true } } } : m0;
+      const m = m0;
       if (m.data.preview) { ov?.preview(m.data.preview); }
       if (m.data.coarse && early) {   // 거친 메시로 3D 화면을 엶 — 작업은 바로, 계산은 정밀 메시 뒤
         try {
@@ -423,9 +426,9 @@ function importMech3d(file, onDone = null) {
       w.terminate();
       if (m.data.error) { ov?.close(); if (opened) m3app.setRefining(false); say(`불러오기 실패: ${m.data.error}${opened ? ' — 지금 화면은 거친 메시라 계산하지 않음. 다시 불러오세요' : ''}`); return; }
       const info = m.data.info ?? {};
-      const after = () => `${m.data.relaxed ? ` · 큰 파일이라 메시 간격을 ${m.data.relaxed.linDefl} mm 로 넓힘(곡면 값이 조금 달라질 수 있음)` : ''}${info.cached ? ` · 저장해 둔 변환 결과로 엶${m.data.timing ? `(처음 불러올 때 ${stepTimingText(m.data.timing)})` : ''}` : `${ov ? ` · 걸린 시간: ${stepTimingText(m.data.timing)}` : ''}${info.workers > 1 ? ` · 작업자 ${info.workers}개로 나눠 읽음` : ''}${info.roots ? ` · STEP 부품(루트) ${info.roots}개` : ''}${info.slow?.ms > 5000 ? ` · 가장 오래 걸린 부품 변환 ${stepTimingText({ transfer: info.slow.ms }).replace('형상 변환 ', '')}` : ''}`}`;
+      const after = () => `${m.data.relaxed ? ` · 큰 파일이라 메시 간격을 ${m.data.relaxed.linDefl} mm 로 넓힘(곡면 값이 조금 달라질 수 있음)` : ''}${info.cached ? ` · 저장해 둔 변환 결과로 엶${m.data.timing ? `(처음 불러올 때 ${stepTimingText(m.data.timing)})` : ''}` : `${ov ? ` · 걸린 시간: ${stepTimingText(m.data.timing)}` : ''}${info.workers > 1 ? ` · 작업자 ${info.workers}개로 나눠 읽음` : ''}${info.roots ? ` · STEP 부품(루트) ${info.roots}개` : ''}${info.slow?.ms > 5000 ? ` · 가장 오래 걸린 부품 변환 ${stepTimingText({ transfer: info.slow.ms }).replace('형상 변환 ', '')}` : ''}${slowTip(m.data.timing, info)}`}`;
       // 다음에 같은 파일을 바로 열 수 있게 저장(큰 파일만) — 화면 준비와 따로
-      const keep = () => { if (!info.cached && cacheWorthy(file)) stepCachePut(ck, { parts: m.data.parts.map(({ positions, triangles, faceIds, faceCount, volume }) => ({ positions, triangles, faceIds, faceCount, volume })), contacts: m.data.prep?.contacts ?? [], relaxed: m.data.relaxed ?? null, timing: m.data.timing ?? null, info }).catch(() => {}); };
+      const keep = () => { if (!info.cached && cacheWorthy(file) && m.data.prep?.bvh) stepCachePut(ck, { prep: m.data.prep, relaxed: m.data.relaxed ?? null, timing: m.data.timing ?? null, info }).catch(() => {}); };
       const tris = () => Math.round(m.data.parts.reduce((s, p) => s + p.triangles.length / 3, 0) / 1e4);
       if (opened) {   // 정밀 메시로 바꿔 끼움 — 그동안 지정한 소재·관측면·숨김은 그대로(면 번호가 같음)
         try {
@@ -467,8 +470,9 @@ function importMech3d(file, onDone = null) {
       } catch (e) { ov?.close(); say(`불러오기 실패: ${e.message ?? e}`); }
     };
     w.onerror = (e) => { w.terminate(); ov?.close(); say(`불러오기 실패: ${e.message ?? e}`); };
-    if (hit) w.postMessage({ prep: hit.parts }); else w.postMessage({ text, bytes: file.size, early });
-  }).catch((e) => { ov?.close(); say(`불러오기 실패: ${e.message ?? e}`); });
+    if (hit?.prep) w.onmessage({ data: { parts: hit.prep.parts, prep: hit.prep, relaxed: hit.relaxed, timing: hit.timing, info: { ...(hit.info ?? {}), cached: true } } });   // 작업자 없이
+    else w.postMessage({ text, bytes: file.size, early });
+  })().catch((e) => { ov?.close(); say(`불러오기 실패: ${e.message ?? e}`); });
 }
 
 // 실측소재 선택 — 소재의 μs'·g·μa 를 쓰고, Milky 입력칸에는 그 소재의 Milky(파생값)를 보여 준다
