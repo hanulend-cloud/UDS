@@ -155,6 +155,18 @@ export function optMatrixHtml(S) {
   const stF = S.final ? '완료' : S.stopped ? '중지' : '대기';
   return `<div class="om-mx"><div class="mut om-lh">최적화 현황</div><table class="om-mx-t"><tr><th>항목</th><th>상태</th><th>시험 후보</th><th>길이</th><th>폭</th><th>최고안</th></tr>${rows.join('')}${row('최종 판정', stF, '–', S.final, 'om-mx-f')}</table><div class="mut od-tx">항목 줄 = 가장 좋았던 후보 하나의 값. 적은 광선으로 빠르게 비교해 낮게 나옴 · 최종 판정 = 고른 안을 많은 광선으로 다시 잰 확정값</div></div>`;
 }
+// 지난 최적화 후보 표(순수, 2026-11-07) — 균일도 순(목표 대비 여유가 큰 순, 같으면 효율). 값 = 최종 판정과 같은 정밀 재계산. [적용] = data-hpick(원래 번호)
+export function histTableHtml(list, tl, tw, busy) {
+  if (!list?.length) return '';
+  // 순위 = 표시값(내림) 기준 — 노이즈 수준 차이(0.418 vs 0.412)로 화면상 같은 값의 순서가 뒤집히지 않게. 같으면 두 균일도 합 → 효율
+  const fl = (v) => (Number.isFinite(v) ? Math.floor(v * 100 + 1e-9) / 100 : NaN);
+  const mg = (e) => Math.min(Number.isFinite(tl) ? fl(e.Ulen) - tl : Infinity, Number.isFinite(tw) && e.Uwid != null ? fl(e.Uwid) - tw : Infinity), sum = (e) => (fl(e.Ulen) || 0) + (fl(e.Uwid) || 0);
+  const cell = (v, t) => (Number.isFinite(v) ? `<b class="${Number.isFinite(t) ? (v + 1e-9 >= t ? 'od-ok' : 'od-bad') : ''}">${fmtJudge(v)}</b>` : '–');
+  const rows = list.map((e, i) => ({ e, i })).sort((a, b) => mg(b.e) - mg(a.e) || sum(b.e) - sum(a.e) || (b.e.eff || 0) - (a.e.eff || 0)).map(({ e, i }, n) =>
+    `<tr${e.applied ? ' class="om-h-on"' : ''}><td>${n + 1}</td><td class="om-mx-l">${esc(e.label)}${e.kind === 'final' ? '' : ' <span class="mut">(대안)</span>'}</td><td>${cell(e.Ulen, tl)}</td><td>${cell(e.Uwid, tw)}</td><td>${Number.isFinite(e.eff) ? `${(e.eff * 100).toFixed(1)}%` : '–'}</td><td class="mut">${esc(e.at ?? '')}</td>`
+    + `<td><button type="button" data-hpick="${i}"${busy ? ' disabled title="최적화가 끝난 뒤 고르세요"' : ''}>${e.applied ? '적용됨' : '적용'}</button></td></tr>`);
+  return `<div class="om-mx om-hist"><div class="mut om-lh">지난 최적화 후보 — 균일도 순 (값 = 정밀 재계산) · 원하는 사양을 골라 [적용]</div><table class="om-mx-t"><tr><th>#</th><th>사양</th><th>길이</th><th>폭</th><th>효율</th><th>시각</th><th></th></tr>${rows.join('')}</table></div>`;
+}
 // 후보의 점수(목표 대비 여유 — 둘 다 있으면 작은 쪽)
 const scoreOf = (e, tl, tw) => (e.ok === false || !Number.isFinite(e.Ulen) ? -Infinity : Math.min(e.Ulen - tl, Number.isFinite(e.Uwid) && Number.isFinite(tw) ? e.Uwid - tw : Infinity));
 
@@ -187,16 +199,21 @@ export function createOptDash(el, h = {}) {
   function finish(ok, text = '', effBest = NaN, final = null) { if (!S) return; S.effBest = effBest; S.final = final; S.endSec = (performance.now() - S.t0) / 1000; for (const [k] of STAGES) if (S.tiles[k].status === 'run') { S.tiles[k].status = 'done'; S.tiles[k].frac = 1; } S.note = text; S.ended = ok; draw(); }
   function draw() { if (raf) return; raf = setTimeout(() => { raf = 0; render(); renderBoard(); }, 40); }   // setTimeout: 화면이 숨겨져도(다른 탭) 갱신 — rAF 는 멈춤
   // 높이 조절 손잡이(.m3-fac-split)는 남기고 내용만 바꿈
-  function renderBoard() { if (!h.board) return; let c = h.board.querySelector('.fb-body'); if (!c) { c = document.createElement('div'); c.className = 'fb-body'; h.board.appendChild(c); } const nw = h.now?.() ?? {}; c.innerHTML = factorBoardHtml(S, nw, h.config); }
+  function renderBoard() { if (!h.board) return; let c = h.board.querySelector('.fb-body'); if (!c) { c = document.createElement('div'); c.className = 'fb-body'; h.board.appendChild(c); } const nw = h.now?.() ?? {}; { const html = factorBoardHtml(S, nw, h.config); if (c._html !== html) { c.innerHTML = html; c._html = html; } } }   // 같으면 그대로(깜빡임·체크 클릭 사라짐 방지)
   if (h.board && typeof ResizeObserver !== 'undefined') { let w0 = 0, h0 = 0; new ResizeObserver(() => { const b = h.board; if (b.clientWidth === w0 && b.clientHeight === h0) return; w0 = b.clientWidth; h0 = b.clientHeight; renderBoard(); }).observe(h.board); }   // 칸 크기가 바뀌면 그래프를 그 크기로 다시
   // 오른쪽 모니터 — 진행 줄 · 지표 · 그래프(자리 크기로) · 기록. 끝나도 그대로 남김(결과 카드는 위 #m3-auto)
+  // 지난 후보 표(2026-11-07) — 실행 결과 아래에 늘 붙임(실행 전에도 지난 후보가 있으면)
+  const histHtml = () => { const H = h.history?.(); return H?.list?.length ? histTableHtml(H.list, H.tgLen, H.tgWid, H.busy) : ''; };
+  el.addEventListener('click', (e) => { const b = e.target.closest('[data-hpick]'); if (b && !b.disabled) h.onPick?.(+b.dataset.hpick); });
   function render() {
-    if (!S) { el.innerHTML = ''; if (h.chart) h.chart.innerHTML = ''; return; }   // 실행 전 = 비움(항목 켜기는 왼쪽 설계 인자 체크)
-    el.innerHTML = monitorHtml(S, ((S.pauseAt ?? performance.now()) - S.t0) / 1000, { chart: !h.chart });
-    if (h.chart) h.chart.innerHTML = chartHtml();
+    // 바뀐 것만 갱신(2026-11-07) — 전에는 초당 3~4번 통째로 다시 만들고 그래프 칸을 비웠다가 그려 화면이 깜빡였음
+    const put = (node, html) => { if (node && node._html !== html) { node.innerHTML = html; node._html = html; } };
+    if (!S) { put(el, histHtml()); if (h.chart) put(h.chart, ''); return; }   // 실행 전 = 비움(항목 켜기는 왼쪽 설계 인자 체크) — 지난 후보만
+    put(el, monitorHtml(S, ((S.pauseAt ?? performance.now()) - S.t0) / 1000, { chart: !h.chart }) + histHtml());
+    if (h.chart) put(h.chart, chartHtml());   // 틀은 한 번 — 같은 글이면 그대로
     const p = (h.chart ?? el).querySelector('.od-plot');
-    if (p && h.chart) p.style.height = `${chartHeight(p.clientWidth)}px`;
-    if (p && p.clientWidth > 40 && p.clientHeight > 30) p.innerHTML = factorChartSvg(S, { ...(S.before ?? {}), tgLen: S.tgLen, tgWid: S.tgWid }, p.clientWidth, p.clientHeight);
+    if (p && h.chart) { const hh = `${chartHeight(p.clientWidth)}px`; if (p.style.height !== hh) p.style.height = hh; }
+    if (p && p.clientWidth > 40 && p.clientHeight > 30) put(p, factorChartSvg(S, { ...(S.before ?? {}), tgLen: S.tgLen, tgWid: S.tgWid }, p.clientWidth, p.clientHeight));
   }
   if (typeof ResizeObserver !== 'undefined') { let w0 = 0; new ResizeObserver(() => { if (el.clientWidth !== w0) { w0 = el.clientWidth; draw(); } }).observe(el); if (h.chart) { let cw = 0, ch = 0; new ResizeObserver(() => { const b = h.chart; if (b.clientWidth !== cw || b.clientHeight !== ch) { cw = b.clientWidth; ch = b.clientHeight; draw(); } }).observe(h.chart); } }
   if (typeof setInterval !== 'undefined') setInterval(() => { if (S && S.ended == null && !S.stopped && el.isConnected && el.offsetParent) draw(); }, 1000);   // 걸린 시간 갱신

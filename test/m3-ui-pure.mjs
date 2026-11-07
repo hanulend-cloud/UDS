@@ -813,3 +813,20 @@ done();
   okU(treeCtxItems(M1, { node: 'part:1', multi: [] }, 'part:1').some((x) => x.k === 'untrace' && x.ids.join() === '1'), '트리 부품 우클릭');
   okU(treeCtxItems(M1, { node: 'group:g', multi: [] }, 'group:g').find((x) => x.k === 'untrace').ids.join() === '0,1', '트리 그룹 우클릭 = 그룹 전체');
   okU(viewCtxItems({ part: 0, untrace: untraceItem(M1, [0]) }).map((x) => x.k).join() === 'hide,only,untrace', '3D 부품 우클릭'); }
+{ // 지난 최적화 후보(2026-11-07): 실행마다 정밀값이 있는 후보(최종안 + 재확인 대안, 겹침 제외)를 모아 균일도 순 표 · 고르면 적용
+  const { histFromRun, mergeHist } = await import('../src/ui/m3/autodesign-panel.js');
+  const { histTableHtml } = await import('../src/ui/m3/opt-dash.js');
+  const v = (Ulen, Uwid, eff = 0.4) => ({ stats: { Ulen, Uwid }, eff });
+  const d1 = { milky: 1, count: 29, rows: 2 }, d2 = { milky: 1, count: 30, rows: 2 }, d3 = { milky: 1, count: 28, rows: 2 };
+  const res = { best: d1, verified: v(0.72, 0.86), steps: [{ stage: 'ledsVerify', tried: [{ design: d3, verified: v(0.67, 0.86) }, { design: d1, verified: v(0.72, 0.86) }, { design: d2, verified: v(0.73, 0.85), clash: true }] }] };
+  const lab = (d) => `${d.rows}열 × ${d.count}`, r = { clash: 0 };
+  const h = histFromRun(res, r, '10:00', lab);
+  ok(h.length === 2 && h[0].kind === 'final' && h[0].label === '2열 × 29' && h.some((e) => e.label === '2열 × 28') && !h.some((e) => e.label === '2열 × 30') && h[0].r === r, `후보 모음: 최종 + 대안, 겹침·중복 제외 (${h.map((e) => e.label).join(', ')})`);
+  ok(histFromRun({ ...res, unchanged: true, steps: [] }, r, 't', lab).length === 0 && histFromRun(res, { clash: 2 }, 't', lab).every((e) => e.kind !== 'final'), '현재안 유지·겹친 최종안은 빼기');
+  const all = mergeHist(h, histFromRun({ best: { milky: 2 }, verified: v(0.81, 0.82) }, r, '10:05', () => 'Milky 2'));
+  ok(all.length === 3 && all[all.length - 1].label === 'Milky 2', '실행마다 이어 붙임');
+  const t = histTableHtml(all, 0.8, 0.8, false), i81 = t.indexOf('Milky 2'), i72 = t.indexOf('2열 × 29'), i67 = t.indexOf('2열 × 28');
+  ok(i81 > 0 && i81 < i72 && i72 < i67 && /data-hpick="2"/.test(t) && /균일도 순/.test(t) && /od-ok/.test(t), '균일도 순 표 · 통과 표시 · 적용 단추(원래 번호)');
+  { const tie = [{ label: 'A', Ulen: 0.789, Uwid: 0.418, eff: 0.3 }, { label: 'B', Ulen: 0.838, Uwid: 0.412, eff: 0.3 }], tt = histTableHtml(tie, 0.8, 0.8, false);
+    ok(tt.indexOf('>B') < tt.indexOf('>A'), '표시값(내림)이 같으면 다른 균일도가 높은 안이 위'); }
+  ok(/disabled/.test(histTableHtml(all, 0.8, 0.8, true)) && histTableHtml([], 0.8, 0.8, false) === '', '실행 중엔 적용 막음 · 후보 없으면 표 없음'); }

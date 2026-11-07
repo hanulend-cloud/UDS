@@ -784,7 +784,7 @@ body.booting::after { content: "불러오는 중…"; position: fixed; left: 50%
 .m3-rv { font-size: 15px; } .m3-rcard.ok .m3-rv { color: #1f9d55; } .m3-rcard.bad .m3-rv { color: #d64545; }
 .m3-cmp-s { width: 100%; font-size: 12.5px; }
 .m3-rlim { font-size: 12px; color: #6b5a1f; background: #fff8e6; border-radius: 6px; padding: 4px 8px; margin-top: 6px; }
-.m3-rhint { display: block; width: 100%; text-align: left; border: 1px solid #f0d88a; cursor: pointer; font: inherit; font-size: 12px; } .m3-rhint:hover { background: #fff1c9; }
+.m3-rhint { display: block; width: 100%; text-align: left; border: 1px solid #f0d88a !important; cursor: pointer; font: inherit; font-size: 12px; background: #fff8e6 !important; color: #6b5a1f !important; } .m3-rhint:hover { background: #fff1c9 !important; }   /* 다크 테마 단추 규칙이 덮어 남색으로 보이던 것 */
 .m3-rbtn { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
 .od-log > summary { cursor: pointer; font-size: 12.5px; padding: 4px 0; }
 .m3-mon .fb-plot { flex: none; height: 120px; }   /* 창 안(높이 auto)에서도 그래프가 보이게 */
@@ -1157,3 +1157,9 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 .ex-list span { color: #6b7385; font-size: 12px; }
 .ex-note { margin: 10px 0 0; color: #6b7385; font-size: 12px; }
 .ex-act { display: flex; justify-content: flex-end; margin-top: 8px; }
+/* 결과 카드 안내 한 줄 · 지난 후보 표(2026-11-07) */
+.m3-rflash { margin: 0 0 6px; padding: 6px 9px; border-radius: 6px; background: #fdecea; color: #8a1f12; font-size: 12px; border: 1px solid #f3b8ae; }
+.om-hist { margin-top: 10px; }
+.om-hist td button { padding: 1px 8px; font-size: 12px; }
+.om-hist tr.om-h-on td { background: #e9f6ee; }
+.m3-rbtn button.m3-off { opacity: .55; }   /* 겹침으로 적용 불가 — 누르면 이유 안내 */

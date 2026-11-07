@@ -231,7 +231,7 @@ export function appliedHtml(applied) {
 // '현재안 유지'인데 시험한 후보가 있으면(차이가 노이즈 수준·더 나쁨) [후보로 바꾸기] — 후보 값을 함께 보임. [적용] = 추천안이 있을 때만, 이때는 숨김(같은 뜻의 단추 둘로 헷갈림, 2026-11-02)
 const altBtn = (r) => (r.unchanged && r.alt ? `<button type="button" data-ad="applyAlt" title="추천은 지금 설계 유지 — 그래도 찾은 후보로 바꾸려면 누름">후보로 바꾸기${r.alt.milky != null ? ` (Milky ${(+r.alt.milky).toFixed(2)})` : ''} · ${fmtJudge(r.alt.Ulen)}/${fmtJudge(r.alt.Uwid)}</button>` : '');
 const altNote = (r) => (r.unchanged && r.alt ? `<div class="m3-rlim">찾은 후보 길이 ${fmtJudge(r.alt.Ulen)} · 폭 ${fmtJudge(r.alt.Uwid)} (지금 ${fmtJudge(r.cur?.Ulen)} · ${fmtJudge(r.cur?.Uwid)}) — 지금보다 뚜렷이 낫지 않아 지금 설계 유지를 추천</div>` : '');
-const applyBtn = (r, clashTitle) => (r.unchanged ? '' : `<button type="button" data-ad="apply"${r.clash > 0 ? ` disabled title="${clashTitle}"` : ''}>적용</button>`);
+const applyBtn = (r, clashTitle) => (r.unchanged ? '' : r.clash > 0 ? `<button type="button" class="m3-off" data-ad="applyBlocked" title="${clashTitle}">적용</button>` : `<button type="button" data-ad="apply">적용</button>`);
 // Milky 조정 표(2026-10-29) — 마지막 ① Milky 단계 기록(뒤에서부터 연속 'milky' 단계, ② 기준 'ledsRef' 제외)의 Milky 별 길이 균일도·폭 균일도·광 효율.
 // 같은 Milky 는 나중(정밀) 값 · 믿는(trusted) 행만 · Milky 오름차순. Milky 가 마지막 단계라 최종안의 다른 인자 그대로의 추정 — 순수
 export function milkyTable(steps = []) {
@@ -307,6 +307,26 @@ export function caseHintText(r) {
   const f = (v) => `${v >= 0 ? '+' : '−'}${(Math.floor(Math.abs(v) * 100 + 1e-9) / 100).toFixed(2)}`;
   return `💡 추천: 부품 속성에서 케이스 면을 '${h.text}'(으)로 바꾸면 길이 ${f(dl)} · 폭 ${f(dw)} 정도 오름 (빠른 계산 비교)`;
 }
+// 지난 최적화 후보(2026-11-07) — 한 번 실행에서 정밀 재계산 값이 있는 후보: 최종안(겹치지 않을 때) + 최종 판정에서 재확인한 대안(겹침 제외).
+// 엔트리 = { key, label, Ulen, Uwid, eff, leds, design, r(그 실행의 결과 — 적용할 때 바탕), at, kind }. 현재안 유지 실행은 새 후보 없음
+export function histFromRun(res, r, at, labelOf) {
+  if (!res || res.cancelled || !r || res.unchanged) return [];
+  const out = [], seen = new Set();
+  const add = (design, v, kind) => {
+    const s = v?.stats; if (!design || !s || s.empty || !Number.isFinite(s.Ulen)) return;
+    const k = JSON.stringify(design); if (seen.has(k)) return; seen.add(k);
+    out.push({ key: `${at}|${k}`, label: labelOf(design), Ulen: s.Ulen, Uwid: s.Uwid ?? null, eff: v.eff ?? NaN, leds: design.count != null ? design.count * (design.rows === 2 ? 2 : 1) : null, design, r, at, kind });
+  };
+  if (!(r.clash > 0)) add(res.best, res.verified, 'final');
+  for (const t of res.steps?.find((x) => x.stage === 'ledsVerify')?.tried ?? []) if (!t.clash) add(t.design, t.verified, 'alt');
+  return out;
+}
+// 실행마다 이어 붙임(같은 사양·같은 값은 한 번) — 오래된 것부터 버려 최대 max 개
+export function mergeHist(list, add, max = 60) {
+  const out = [...(list ?? [])];
+  for (const e of add) if (!out.some((x) => x.label === e.label && x.Ulen === e.Ulen && x.Uwid === e.Uwid)) out.push(e);
+  return out.slice(-max);
+}
 export function resultLineHtml(r) {
   const verdict = r.unchanged ? ['keep', '현재안 유지', r.caseCheck ? '고른 후보를 쓸 수 없음' : '더 나은 안 없음'] : r.targets?.judge?.all === 'near' ? ['near', '목표 근처', '통과·미달을 가를 수 없는 차이'] : r.feasible ? ['ok', '목표 통과', r.caseCheck ? '고른 후보' : '최적안을 찾음'] : ['bad', '목표 미달', r.caseCheck ? '고른 후보' : '가장 가까운 안'];
   const P = cmpParts(r), chg = P.design.filter((x) => x.includes('class="chg"'));   // 설계 항목 = 바뀐 것만, 목표 지표 = 늘
@@ -328,11 +348,20 @@ export function resultLineHtml(r) {
 // el 에 그리고 이벤트를 h 로 넘김. state = { avail, sel, running, result, resultOpen, … } — 결과가 있으면 한 줄 + (열림) 결과 창
 export function renderAutoPanel(el, state, h) {
   const r = state.result, full = r ? compareHtml({ ...r, canRevert: state.canRevert, ...(state.catalog ? { catalog: state.catalog } : {}) }) : '';
-  const html = r ? `${resultLineHtml(r)}${state.resultOpen ? `<div class="m3-rmodal" role="dialog" aria-modal="true" aria-label="기구 최적화 결과"><div class="m3-rmodal-in"><div class="m3-rmodal-hd"><b>기구 최적화 결과</b><span class="m3-ad-sp"></span><button type="button" data-ad="hide" title="결과는 남음">✕ 닫기</button></div>
-      <div class="m3-rverdict ${r.unchanged ? '' : r.targets?.judge?.all === 'near' ? 'near' : r.feasible ? 'ok' : 'bad'}">${r.unchanged ? `현재 설계보다 나은 안을 찾지 못함 — 현재안 유지${r.alt ? ' (찾은 후보가 뚜렷이 낫지 않음 — 원하면 [후보로 바꾸기])' : ''}` : r.targets?.judge?.all === 'near' ? '≈ 목표 근처 — 목표와의 차이가 노이즈보다 작음' : r.feasible ? '✓ 목표 통과' : '✕ 목표 미달 — 가장 가까운 안'}</div>${full}</div></div>` : ''}` : autoCardHtml(state);
+  const html = r ? `${state.flash ? `<div class="m3-rflash" role="alert">${esc(state.flash)}</div>` : ''}${resultLineHtml(r)}${state.resultOpen ? `<div class="m3-rmodal" role="dialog" aria-modal="true" aria-label="기구 최적화 결과"><div class="m3-rmodal-in"><div class="m3-rmodal-hd"><b>기구 최적화 결과</b><span class="m3-ad-sp"></span><button type="button" data-ad="hide" title="결과는 남음">✕ 닫기</button></div>
+      <div class="m3-rverdict ${r.unchanged ? '' : r.targets?.judge?.all === 'near' ? 'near' : r.feasible ? 'ok' : 'bad'}">${r.unchanged ? `현재 설계보다 나은 안을 찾지 못함 — 현재안 유지${r.alt ? ' (찾은 후보가 뚜렷이 낫지 않음 — 원하면 [후보로 바꾸기])' : ''}` : r.targets?.judge?.all === 'near' ? '≈ 목표 근처 — 목표와의 차이가 노이즈보다 작음' : r.feasible ? '✓ 목표 통과' : '✕ 목표 미달 — 가장 가까운 안'}</div>${full}</div></div>` : ''}` : `${state.flash ? `<div class="m3-rflash" role="alert">${esc(state.flash)}</div>` : ''}${autoCardHtml(state)}`;
   const tb = state.caseView ? shapeCasesHtml(state.caseView) : '';   // 형상 후보 표 — 결과가 있든 없든 아래에 붙임
-  const key = (r ? html : autoCardHtml(state)) + tb;
-  if (r && el._adKey === key) return;   // 결과가 그대로면 다시 만들지 않음 — 누르는 사이 단추가 바뀌면 클릭이 사라지고, 펼친 Milky 표도 닫힘
+  const key = html + tb;
+  // 단추를 누르는 동안(누름 ~ 뗌)은 다시 만들지 않음 — 그 사이 단추가 바뀌면 클릭이 사라져 '적용·이어서가 안 먹는' 것처럼 보였음(2026-11-07). 떼면 마지막 상태로 다시
+  el._adLast = [state, h];
+  if (!el._adGuard) {
+    el._adGuard = true;
+    el.addEventListener('pointerdown', () => { el._adDown = true; });
+    const up = () => { if (!el._adDown) return; el._adDown = false; if (el._adPend) { el._adPend = false; setTimeout(() => renderAutoPanel(el, ...el._adLast), 0); } };
+    window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+  }
+  if (el._adDown) { el._adPend = true; return; }
+  if (el._adKey === key) return;   // 내용이 그대로면(결과·설정 모두) 다시 만들지 않음 — 누르는 사이 단추가 바뀌면 클릭이 사라지고, 펼친 Milky 표도 닫힘
   const box0 = el.querySelector('.sc-box'), open0 = box0?.open, top0 = el.querySelector('.sc-wrap')?.scrollTop;   // 다시 그려도 표의 펼침·스크롤 유지
   el._adKey = key; el.innerHTML = html + tb;
   if (box0 && el.querySelector('.sc-box')) { el.querySelector('.sc-box').open = open0; el.querySelector('.sc-wrap').scrollTop = top0; }
