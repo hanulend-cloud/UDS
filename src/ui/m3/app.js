@@ -1189,6 +1189,7 @@ async function adRun(opt = {}) {
       A.optDash?.evals('final', [{ label: verifyLabel(d), Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty }]);
       return { stats: stt, eff: adEff(r), photons: r.photons, screen: scr, sig, raw: scr || lowQ ? r.kept : null };
     },
+    clash: stp ? (d) => designClash(d, ctx, M0, rt, line) : null,   // 최종 판정 LED 늘리기·줄이기에서 부품과 겹치는 안 건너뜀(2026-11-07)
     trace: (stage, list) => A.optDash?.evals(stage, list),   // 엔진이 직접 알리는 결과(② 배치 Solver 최선안·대안)
   };
   // ① 보완 계산 — ④ 를 안 쓸 때만: 기본 케이스 부품의 면 처리 한 단계 위(최고 등급이면 생략)

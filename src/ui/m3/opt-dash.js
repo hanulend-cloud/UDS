@@ -141,13 +141,15 @@ export function monitorHtml(S, sec = 0, { chart = true } = {}) {
 }
 // 최적화 현황 표(순수, 2026-11-03) — 항목 × (상태 · 시험 후보 · 그 항목 최고 길이·폭 · 최고안). 마지막 줄 = 최종 판정(최종 화질)
 export function optMatrixHtml(S) {
-  const tl = S.tgLen, tw = S.tgWid, cell = (v, t) => (Number.isFinite(v) ? `<b class="${Number.isFinite(t) ? (v + 1e-9 >= t ? 'od-ok' : 'od-bad') : ''}">${fmtJudge(v)}</b>` : '<span class="mut">–</span>');
-  const row = (name, st, n, e, cls = '') => `<tr class="${cls}"><th>${name}</th><td>${st}</td><td>${n}</td><td>${cell(e?.Ulen, tl)}</td><td>${cell(e?.Uwid, tw)}</td><td class="om-mx-l">${esc(e?.label ?? '')}</td></tr>`;
+  // est = 배치 Solver 추정(단일 LED 지도 합성, 실제 계산 아님 — 실제보다 크게 나올 수 있음): 흐리게 ≈ 로(2026-11-07)
+  const tl = S.tgLen, tw = S.tgWid, cell = (v, t, est) => (!Number.isFinite(v) ? '<span class="mut">–</span>' : est ? `<span class="mut" title="배치 추정값 — 실제 계산 아님">≈${fmtJudge(v)}</span>` : `<b class="${Number.isFinite(t) ? (v + 1e-9 >= t ? 'od-ok' : 'od-bad') : ''}">${fmtJudge(v)}</b>`);
+  const row = (name, st, n, e, cls = '') => `<tr class="${cls}"><th>${name}</th><td>${st}</td><td>${n}</td><td>${cell(e?.Ulen, tl, e?.est)}</td><td>${cell(e?.Uwid, tw, e?.est)}</td><td class="om-mx-l">${esc(e?.label ?? '')}${e?.est ? ' <span class="mut">(추정)</span>' : ''}</td></tr>`;
   const rows = STAGES.flatMap(([k, name]) => {
     const t = S.tiles[k], locked = S.locked?.[k] && t.status === 'off';
     if (t.status === 'off' && !locked) return [];
     const st = locked ? '고정' : t.status === 'run' ? `진행 ${Math.round(t.frac * 100)}%` : t.status === 'done' ? '완료' : '대기';
-    let e = null; for (const q of t.evals) if (q.ok !== false && (!e || scoreOf(q, tl, tw) > scoreOf(e, tl, tw))) e = q;
+    const real = t.evals.some((q) => q.ok !== false && !q.est);   // 실제 계산값이 있으면 그것 중 최고(추정은 빼고)
+    let e = null; for (const q of t.evals) if (q.ok !== false && (!real || !q.est) && (!e || scoreOf(q, tl, tw) > scoreOf(e, tl, tw))) e = q;
     return [row(name, st, t.evals.length || '–', e)];
   });
   const stF = S.final ? '완료' : S.stopped ? '중지' : '대기';
@@ -181,7 +183,7 @@ export function createOptDash(el, h = {}) {
     S.cur = k; t.status = 'run'; t.frac = Math.max(0, Math.min(1, frac ?? 0)); t.text = text ?? '';
     draw();
   }
-  function evals(stage, list) { if (!S) return; const k = tileOf(stage); if (!k) { S.verify = list[list.length - 1] ?? S.verify; draw(); return; } const t = S.tiles[k]; t.evals.push(...list); for (const e of list) { const q = { ...e, k }; S.seq.push(q); if (q.ok !== false && Number.isFinite(q.Ulen) && (!S.bestE || scoreOf(q, S.tgLen, S.tgWid) > scoreOf(S.bestE, S.tgLen, S.tgWid))) { S.bestE = q; S.log.push({ sec: (performance.now() - S.t0) / 1000, k, label: q.label, Ulen: q.Ulen, Uwid: q.Uwid }); } } if (t.status === 'off' || t.status === 'wait') t.status = 'run'; draw(); }
+  function evals(stage, list) { if (!S) return; const k = tileOf(stage); if (!k) { S.verify = list[list.length - 1] ?? S.verify; draw(); return; } const t = S.tiles[k]; t.evals.push(...list); for (const e of list) { const q = { ...e, k }; S.seq.push(q); if (q.ok !== false && !q.est && Number.isFinite(q.Ulen) && (!S.bestE || scoreOf(q, S.tgLen, S.tgWid) > scoreOf(S.bestE, S.tgLen, S.tgWid))) { S.bestE = q; S.log.push({ sec: (performance.now() - S.t0) / 1000, k, label: q.label, Ulen: q.Ulen, Uwid: q.Uwid }); } } if (t.status === 'off' || t.status === 'wait') t.status = 'run'; draw(); }
   function finish(ok, text = '', effBest = NaN, final = null) { if (!S) return; S.effBest = effBest; S.final = final; S.endSec = (performance.now() - S.t0) / 1000; for (const [k] of STAGES) if (S.tiles[k].status === 'run') { S.tiles[k].status = 'done'; S.tiles[k].frac = 1; } S.note = text; S.ended = ok; draw(); }
   function draw() { if (raf) return; raf = setTimeout(() => { raf = 0; render(); renderBoard(); }, 40); }   // setTimeout: 화면이 숨겨져도(다른 탭) 갱신 — rAF 는 멈춤
   // 높이 조절 손잡이(.m3-fac-split)는 남기고 내용만 바꿈

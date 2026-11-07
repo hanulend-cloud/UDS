@@ -545,4 +545,25 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   const bad = { ...io, evalShapes: async (d, cs) => cs.map((q) => ({ cand: q, ok: false, why: '간섭' })) };
   const rb = await runAutoDesign({ stages: { shape: true }, obs, current: cur, shapePart: 0, shapeCands: [c], fixedShape: true }, bad);
   ok(rb.unchanged && /간섭/.test(rb.shapeNote ?? ''), '지금은 간섭 = 적용 불가, 이유 표시'); }
+{ // 최종 판정 늘리기(2026-11-07): 2열을 고른 뒤 정밀 재계산이 미달이면 2열 그대로 개수를 늘림(전에는 1열로만 늘려 2열 안을 버림 — 링 예제에서 폭 0.75 에 막힘)
+  // · 부품과 겹치는 안(io.clash > 0)은 건너뜀(전에는 겹치는 안을 골라 '적용 불가' 카드)
+  const N = 8, one = () => new Float64Array(N).fill(1), G = { ns: N, nw: 1, ds: 1, cell: 1, w0: -0.5, L: N, closed: false, winS: 9, area: one(), valid: new Uint8Array(N).fill(1) };
+  const cand = [-1, 0, 1].flatMap((w) => [...Array(N).keys()].map((s) => ({ s, w }))), maps = cand.map(({ w }) => Float32Array.from({ length: N }, (_, i) => (w === 0 && i % 3 ? 0.2 : 1)));
+  const B = { cand, maps, emitted: 1, gaps: [1] }, line = { length: N, closed: false, width: 4 }, cv = { stats: st(0.5, 0.5), eff: 1 };
+  const run = async (U, clash = null) => {
+    const calls = [];
+    const io = { basis: async () => B, verify: async (d) => { calls.push(d); return { stats: U(d), eff: 1 }; }, progress() {}, cancelled: () => false, ...(clash ? { clash: async (d) => clash(d) } : {}) };
+    const r = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0.8 }, current: { milky: 3, count: 2, pitch: 0, rows: 1 }, currentVerified: cv, G, line, nMax: 12, ladderMs: 60000 }, io);
+    return { r, calls };
+  };
+  // 2열 열당 3개 이상 = 통과, 1열 = 폭 0.75 에 막힘, 2열 2개 = 길이 미달
+  const U = (d) => (d.rows === 2 ? st(d.count >= 3 ? 0.9 : 0.7, 0.85) : st(0.95, 0.75));
+  const a = await run(U);
+  ok(a.r.best.rows === 2 && a.r.best.count >= 3 && a.r.feasible && !a.calls.some((d) => d.rows === 1 && d.count > 2), `2열 유지해 늘림: ${a.r.best.rows}열 × ${a.r.best.count} · 1열 시험 ${a.calls.filter((d) => d.rows === 1).length}회`);
+  const b = await run(U, (d) => (d.rows === 2 && d.count === 3 ? 2 : 0));
+  ok(b.r.best.rows === 2 && b.r.best.count >= 4 && !b.calls.some((d) => d.rows === 2 && d.count === 3), `겹치는 안(2열×3) 건너뜀 → ${b.r.best.rows}열 × ${b.r.best.count}`);
+  // 처음 고른 배치(2열×1)가 겹치면 최종 선택에서 뺌 — 미달이어도 겹치지 않는 안 중 가장 가까운 것
+  const U2 = (d) => (d.rows === 2 ? st(d.count === 1 ? 0.79 : 0.7, 0.85) : st(0.95, 0.75));
+  const c = await run(U2, (d) => (d.rows === 2 && d.count === 1 ? 1 : 0));
+  ok(!(c.r.best.rows === 2 && c.r.best.count === 1), `처음 안이 겹치면 고르지 않음 → ${c.r.best.rows}열 × ${c.r.best.count}`); }
 done();

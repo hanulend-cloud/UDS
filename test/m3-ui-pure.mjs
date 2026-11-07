@@ -614,6 +614,12 @@ done();
   const tiles = new Proxy(stages, { get: (o, k) => o[k] ?? { status: 'off', frac: 0, text: '', evals: [] } });
   const mx = optMatrixHtml({ tiles, tgLen: 0.8, tgWid: 0.8, final: { Ulen: 0.81, Uwid: 0.85 } });
   if (!mx.includes('최종 판정') || !mx.includes('Milky 1.5') || !mx.includes('0.81') || !mx.includes('<th>폭</th>') || mx.includes('Milky 1.0')) throw new Error(`최적화 현황 표: ${mx}`);
+  { // ① 위치 줄: 배치 추정값(est)은 실제 계산값처럼 보이지 않게(2026-11-07 — 추정 0.82/0.87 이 실제로는 0.64/0.82)
+    const est = { label: '2열 × 28개', Ulen: 0.82, Uwid: 0.87, est: true }, real = { label: 'LED 높이 +0.00', Ulen: 0.64, Uwid: 0.82 };
+    const tl = (ev) => new Proxy({ position: { status: 'done', frac: 1, text: '', evals: ev } }, { get: (o, k) => o[k] ?? { status: 'off', frac: 0, text: '', evals: [] } });
+    const both = optMatrixHtml({ tiles: tl([est, real]), tgLen: 0.8, tgWid: 0.8 }), only = optMatrixHtml({ tiles: tl([est]), tgLen: 0.8, tgWid: 0.8 });
+    if (!both.includes('0.64') || both.includes('0.87') || !only.includes('≈0.82') || !only.includes('추정')) throw new Error(`추정값 표시: ${both} / ${only}`);
+    console.log('PASS ① 배치 추정값 = 실제값이 있으면 실제값, 없으면 ≈ 추정 표시'); }
   const tp = topPaths({ ':0>1': 3, ':1': 1 }, 2, 3, [0]);
   if (tp.length !== 1 || tp[0].parts.join() !== '1' || tp[0].share !== 1) throw new Error(`빛 계산 제외 부품은 광경로에서 뺌: ${JSON.stringify(tp)}`); }
 { const { flowState } = await import('../src/ui/m3/command-bar.js'); const t = flowState({ state: 'done' }, { Ulen: 0.795, Uwid: 0.83 }, { observe: { targetLen: 0.8, targetWid: 0.8 } }).sim.text;

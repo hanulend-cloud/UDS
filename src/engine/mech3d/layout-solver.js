@@ -146,7 +146,8 @@ function* solveLayoutSteps(args) {
     else if (found) spare.push(...atT);
   }
   const strip = ({ ss, ...r }) => r;
-  const atCount = (n) => { const r = RO.includes(1) ? drain(solveN(n, 1, 0)) : null; return r ? strip(r) : null; };
+  // 정한 개수(열당 n)의 최선 배치 — 최종 판정에서 개수를 늘리거나 줄일 때. 고른 안과 같은 열 수·열 간격으로(2026-11-07: 전에는 1열만 — 2열 안을 버리고 1열로 바뀜)
+  const atCount = (n, rows = 1, g = 0) => { const r = RO.includes(rows) ? drain(solveN(n, rows, rows === 1 ? 0 : g)) : null; return r ? strip(r) : null; };
   if (found) return { feasible: true, ...strip(found), reason: '', alts: [...pass, ...spare].slice(0, 2).map(strip), evals, atCount };
   // 폭이 어떤 개수로도 못 닿으면(limit 'wid') 폭을 빼고 다시 풂 — 여유(낮은 쪽)가 폭에 묶이면 길이를 못 맞추고, 안 오르는 폭 때문에 개수만 잔뜩 늘어남(2026-11-02)
   const best = (k) => Math.max(...miss.map((r) => r.stats[k] ?? Infinity)), limit = inner || !miss.length ? null : best('Uwid') < (obs.targetWid ?? -Infinity) + safety ? 'wid' : null;
