@@ -429,10 +429,10 @@ function importMech3d(file, onDone = null, { noSplit = false } = {}) {
       w.terminate();
       if (m.data.error) { ov?.close(); if (opened) m3app.setRefining(false); say(`불러오기 실패: ${m.data.error}${opened ? ' — 지금 화면은 거친 메시라 계산하지 않음. 다시 불러오세요' : ''}`); return; }
       const info = m.data.info ?? {};
-      const after = () => `${m.data.relaxed ? ` · 큰 파일이라 메시 간격을 ${m.data.relaxed.linDefl} mm 로 넓힘(곡면 값이 조금 달라질 수 있음)` : ''}${info.cached ? ` · 저장해 둔 변환 결과로 엶${m.data.timing ? `(처음 불러올 때 ${stepTimingText(m.data.timing)})` : ''}` : `${ov ? ` · 걸린 시간: ${stepTimingText(m.data.timing)}` : ''}${info.cut ? ` · 부품 단위 ${info.workers}조각으로 나눠 읽음(모양이 이상하면 파일 › 3D 기구 STEP 나누지 않고 읽기)` : info.noSplit ? ' · 나누지 않고 읽음' : ''}${info.roots ? ` · STEP 부품(루트) ${info.roots}개` : ''}${info.slow?.ms > 5000 ? ` · 가장 오래 걸린 부품 변환 ${stepTimingText({ transfer: info.slow.ms }).replace('형상 변환 ', '')}` : ''}${slowTip(m.data.timing, info)}`}`;
+      const after = () => `${m.data.relaxed ? ` · 큰 파일이라 메시 간격을 ${m.data.relaxed.linDefl} mm 로 넓힘(곡면 값이 조금 달라질 수 있음)` : ''}${info.cached ? ` · 저장해 둔 변환 결과로 엶${m.data.timing ? `(처음 불러올 때 ${stepTimingText(m.data.timing)})` : ''}` : `${ov ? ` · 걸린 시간: ${stepTimingText(m.data.timing)}` : ''}${info.cut ? ` · 부품 단위 ${info.workers}조각으로 나눠 읽음(모양이 이상하면 파일 › 3D 기구 STEP 나누지 않고 읽기)` : info.noSplit ? ' · 나누지 않고 읽음' : ''}${info.roots && cacheWorthy(file) ? ` · STEP 부품(루트) ${info.roots}개` : ''}${info.slow?.ms > 5000 ? ` · 가장 오래 걸린 부품 변환 ${stepTimingText({ transfer: info.slow.ms }).replace('형상 변환 ', '')}` : ''}${slowTip(m.data.timing, info)}`}`;
       // 다음에 같은 파일을 바로 열 수 있게 저장(큰 파일만) — 화면 준비와 따로
       const keep = () => { if (!info.cached && cacheWorthy(file) && m.data.prep?.bvh) stepCachePut(ck, { prep: m.data.prep, relaxed: m.data.relaxed ?? null, timing: m.data.timing ?? null, info }).catch(() => {}); };
-      const tris = () => Math.round(m.data.parts.reduce((s, p) => s + p.triangles.length / 3, 0) / 1e4);
+      const tris = () => { const n = m.data.parts.reduce((s, p) => s + p.triangles.length / 3, 0); return n >= 1e4 ? `${Math.round(n / 1e4)}만` : `${Math.max(1, Math.round(n / 1e3))}천`; };   // 작은 도면이 '0만' 으로 보이지 않게
       if (opened) {   // 정밀 메시로 바꿔 끼움 — 그동안 지정한 소재·관측면·숨김은 그대로(면 번호가 같음)
         try {
           const M = spec.mech3d;
@@ -441,7 +441,7 @@ function importMech3d(file, onDone = null, { noSplit = false } = {}) {
           if (applyPartMods(M.parts)) M.contacts = redetectContacts(M.contacts);
           tabLock.write('mech3dIDB', () => saveMech3dIDB().catch(() => {}));
           const nLed = m3app.meshRefined(); persist(); keep();
-          say(`정밀 메시로 바꿈: ${file.name} · 부품 ${m.data.parts.length}개 · 삼각형 ${tris()}만 개 · 접촉면 ${M.contacts.length}개${nLed ? ` · LED ${nLed}개 자동 인식(틀리면 광원에서 다시 지정)${m3app.pcbNote()}` : ''} — 계산을 시작합니다${after()}`);
+          say(`정밀 메시로 바꿈: ${file.name} · 부품 ${m.data.parts.length}개 · 삼각형 ${tris()} 개 · 접촉면 ${M.contacts.length}개${nLed ? ` · LED ${nLed}개 자동 인식(틀리면 광원에서 다시 지정)${m3app.pcbNote()}` : ''} — 계산을 시작합니다${after()}`);
         } catch (e) { m3app.setRefining(false); say(`정밀 메시로 바꾸기 실패: ${e.message ?? e}`); }
         return;
       }
@@ -468,7 +468,7 @@ function importMech3d(file, onDone = null, { noSplit = false } = {}) {
         const nLed = restored ? null : m3app.autoMechLight();   // 새 기구: 반복되는 작은 부품(LED)을 광원으로 자동 지정
         m3app.setStatus(restored
           ? `복원함: 저장된 3D 설정 — ${file.name} · 부품 ${ms.parts.length}개 · 접촉면 ${ms.contacts.length}개${pend.name && pend.name !== file.name ? ` (저장 이름 ${pend.name})` : ''}${after()}`
-          : `불러옴: ${file.name} · 부품 ${m.data.parts.length}개 · 삼각형 ${tris()}만 개 · 접촉면 ${ms.contacts.length}개${nLed ? ` · LED ${nLed}개 자동 인식(틀리면 광원에서 다시 지정)${m3app.pcbNote()}` : ''} — Milky 부품부터 지정하세요${after()}`);
+          : `불러옴: ${file.name} · 부품 ${m.data.parts.length}개 · 삼각형 ${tris()} 개 · 접촉면 ${ms.contacts.length}개${nLed ? ` · LED ${nLed}개 자동 인식(틀리면 광원에서 다시 지정)${m3app.pcbNote()}` : ''} — 다음: 왼쪽 부품 리스트에서 확산판·도광판의 소재(Milky·투명)를 정하고 ① LED 지정${after()}`);
         ov?.close();
       } catch (e) { ov?.close(); say(`불러오기 실패: ${e.message ?? e}`); }
     };

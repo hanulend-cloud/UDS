@@ -30,12 +30,12 @@ import { createOptDash, createSimDash, simPct } from './opt-dash.js';
 import { geomQuery, geomLimit, geomClash } from './geom-client.js';
 import { renderPropertyPanel } from './property-panel.js';
 import { optCtl, rerunAsk } from './run-ctl.js';
-import { judgeStats } from '../../engine/mech3d/tally.js';
+import { judgeStats, fmtJudge } from '../../engine/mech3d/tally.js';
 import { watchNumInputs } from './num-fit.js';
 import { meshInfo, clearDbHtml, clearAddFormHtml, reflAddFormHtml, wireMaterialDb, dbFormState } from '../mech3d-panel.js';
 import { isAdmin } from '../../model/admin.js';
 import { renderAdvanced } from '../l2-advanced.js';
-import { defaultRowGap, renderReflDb, setLpTab } from '../mech3d-light-panel.js';
+import { defaultRowGap, renderReflDb, setLpTab, refreshObsNow } from '../mech3d-light-panel.js';
 import { positionsFromLayout, addPosition, alignPositions } from '../../engine/mech3d/led-edit.js';
 import { createResultsPanel } from './results-panel.js';
 import { renderStatusBar, leakText } from './status-bar.js';
@@ -436,6 +436,7 @@ function onCalc(snap) {
   monitorSummary();
   paintObs(snap);
   A.cmd.update(S, M, snap.stats ?? null);
+  if (S.node === 'obs') refreshObsNow($('#m3-props'), M, snap.stats ?? null);   // ③ 목표 표 '지금' 칸
   renderStatus();
 }
 // 관측면 색지도: 격자가 바뀌면 덧그림 메쉬를 다시 만들고, 갱신마다 색만 바꾼다
@@ -698,7 +699,7 @@ function monitorSummary() {
   monitor.setDone(!A.ad?.running && (!!A.ad?.result || !!A.cmd?.flow?.()?.opt?.done));   // 창 제목 ✓ = 최적화를 끝냈거나 할 필요 없음
   const st0 = A.ad, av0 = adAvail(A.store.mspec), nSel = AD_ITEMS.filter(([, , ks]) => ks.some((k) => st0?.sel?.[k] && av0[k]?.ok)).length, block = adBlock();
   monitor.setCtl(optCtl({ running: !!st0?.running, paused: !!st0?.paused, canRun: !block && nSel > 0, hasResult: !!st0?.result, why: block || '펼쳐서 최적화할 항목을 체크하세요' }), adCtl);
-  const st = A.ad, M = A.store.mspec, cell = (t, v, g) => `<b class="${Number.isFinite(v) && Number.isFinite(g) ? (v + 1e-9 >= g ? 'ok' : 'bad') : ''}">${t} ${Number.isFinite(v) ? v.toFixed(2) : '–'}</b>`;
+  const st = A.ad, M = A.store.mspec, cell = (t, v, g) => `<b class="${Number.isFinite(v) && Number.isFinite(g) ? (v + 1e-9 >= g ? 'ok' : 'bad') : ''}">${t} ${fmtJudge(v)}</b>`;   // 판정 값 = 내림(결과 창과 같게)
   if (st?.running) { monitor.setSummary(`<b>${st.paused ? '일시정지' : '진행'} ${Math.round((st.running.frac ?? 0) * 100)}%</b>`); return; }
   const b = st?.result?.best, sn = A.prog?.snapshot(), s = sn?.stats, calc = ['running', 'pending', 'starting'].includes(sn?.state) ? `<b>계산 ${Math.round(simPct(s?.relNoise, sn.targetNoise))}%</b> ` : '';
   if (!b && (!s || s.empty || s.relNoise > 0.05)) { monitor.setSummary(`<b>실행 전</b> ${calc || '<span>계산 중</span>'}`); return; }   // 초반 값은 노이즈
@@ -1718,7 +1719,7 @@ function propHandlers() {
       if (k === 'mech' && autoLed()) return;   // 먼저 자동 선택 — 못 찾으면 LED 발광면 클릭 대기
       if (k !== 'mech' && k !== 'click' && A.store.mspec.light.step?.fromMech) mechLightClear();
       st.update('light', (m, x) => { if (k === 'mech' || k === 'click') {   // click = 수동: 자동 선택 없이 바로 클릭 대기
- x.pick = 'mled'; x.ledInfo = '3D 도면에서 LED 하나의 발광면(빛이 나오는 면)을 클릭하세요 — 같은 모양 부품을 모두 광원으로'; } else { m.light.kind = k; x.pick = null; } });
+ x.pick = 'mled'; x.ledInfo = '3D 도면에서 LED 하나의 발광면(빛이 나오는 면)을 클릭하세요 — 같은 모양 부품을 모두 광원으로'; } else { m.light.kind = k; x.pick = null; x.ledInfo = ''; } });   // 방식을 바꾸면 지난 안내(자동 선택 실패 등)는 지움
     },
     onMechLightClear: () => mechLightClear(),
     // [자동 선택] — 같은 모양이 반복되는 작은 부품(LED)을 찾아 광원으로(발광면 = PCB 반대쪽). 못 찾으면 LED 하나를 직접 클릭하게
@@ -1726,7 +1727,7 @@ function propHandlers() {
       A.autoWhy = '';
       const n = autoLed();
       if (!n) st.update('light', (m, x) => { const stp = m.light.kind === 'step' && !m.light.step?.fromMech && L.ledPartsNow(m) && !m.light.step.virtual;   // 클릭 대상 = 있는 LED — LED STEP 이면 그 LED, 아니면 도면 부품
-        x.pick = stp ? 'led' : 'mled'; x.node = 'light'; x.ledInfo = `자동 선택: LED 를 못 찾음${A.autoWhy ? `(${A.autoWhy})` : '(같은 모양 부품 2개 이상이 없음)'} — 3D ${stp ? '에서' : '도면에서'} LED 하나의 빛 나오는 면을 직접 클릭하세요`; });
+        x.pick = stp ? 'led' : 'mled'; x.node = 'light'; x.ledInfo = `자동 선택: LED 를 못 찾음${A.autoWhy ? `(${A.autoWhy})` : '(같은 모양 부품 2개 이상이 없음)'}${stp ? ' — 3D 에서' : ' — LED 가 따로 STEP 파일이면 [LED 수동 선택 ▸ 방식: LED STEP 불러오기], 기구 도면에 LED 가 있으면 3D 도면에서'} LED 하나의 빛 나오는 면을 직접 클릭하세요`; });
     },
     onLedFile: (f) => importLedStep(f),
     onPick: (mode) => st.update('session', (_, x) => { x.pick = mode; }),
@@ -1890,7 +1891,7 @@ function cmdHandlers() {
     onAuto: () => adSetOpen(!adState().open),
     // 흐름 4·5단계 단추 — 해당 칸을 보여 주고 잠깐 강조(모니터가 열려 있으면 그 안에서)
     onSim: () => A.results.toggleBig(),
-    onOpt: () => monitor?.toggle(),   // ⑤ 기구 최적화 창 열고 닫기(기본 화면에는 최적화 칸 없음)
+    onOpt: () => { if (!monitor) return; if (monitor.isOpen()) monitor.close(); else { monitor.open(); monitor.expand(); } },   // ⑤ 단추 = 내용이 보이게(지난번 접어 둔 상태로 열지 않음)   // ⑤ 기구 최적화 창 열고 닫기(기본 화면에는 최적화 칸 없음)
     adFlow: () => ({ running: !!A?.ad?.running, result: !!A?.ad?.result }),
   };
 }

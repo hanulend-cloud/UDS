@@ -607,7 +607,9 @@ done();
   const tp = topPaths({ ':0>1': 3, ':1': 1 }, 2, 3, [0]);
   if (tp.length !== 1 || tp[0].parts.join() !== '1' || tp[0].share !== 1) throw new Error(`빛 계산 제외 부품은 광경로에서 뺌: ${JSON.stringify(tp)}`); }
 { const { flowState } = await import('../src/ui/m3/command-bar.js'); const t = flowState({ state: 'done' }, { Ulen: 0.795, Uwid: 0.83 }, { observe: { targetLen: 0.8, targetWid: 0.8 } }).sim.text;
-  if (t !== '79.5% / 83% 목표 미달') throw new Error(`미달 표시 반올림: ${t}`); }
+  if (t !== '79% / 83% 목표 미달') throw new Error(`미달 표시 = 내림(결과 창과 같게): ${t}`);
+  const t2 = flowState({ state: 'done' }, { Ulen: 0.596, Uwid: 0.107 }, { observe: { targetLen: 0.8, targetWid: 0.8 } }).sim.text;
+  if (!/^59% \/ 10%/.test(t2)) throw new Error(`단계 막대도 내림(0.596 → 59%, 결과 창 0.59): ${t2}`); }
 { const { flowState } = await import('../src/ui/m3/command-bar.js');
   // 흐름 4 광분포 시뮬레이션 → 5 기구 최적화: 계산 중 % · 완료 통과/미달 · 미달이면 5 '필요' · 최적화 진행 중
   const M = { observe: { targetLen: 0.8, targetWid: 0.8, targetNoise: 0.01 } }, st = (a, b) => ({ Ulen: a, Uwid: b });

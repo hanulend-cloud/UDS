@@ -11,7 +11,7 @@ export function stepState(M) {
 // calc = 점진 계산 스냅숏, stats = 그 결과, ad = { running, result } (기구 최적화). 반환 { sim:{ text, cls, done }, opt:{ text, cls, done } }
 export function flowState(calc, stats, M, ad = {}) {
   const O = M.observe, st = calc?.state ?? 'idle', rn = calc?.stats?.relNoise ?? stats?.relNoise, tn = calc?.targetNoise ?? O.targetNoise ?? 0.01;
-  const has = !!stats && !stats.empty, pc = (v, t) => (!Number.isFinite(v) ? '–' : v < t && Math.round(v * 100) >= t * 100 ? `${(v * 100).toFixed(1)}%` : `${Math.round(v * 100)}%`);   // 미달인데 반올림하면 목표와 같아 보일 때만 소수 한 자리(79.5%)
+  const has = !!stats && !stats.empty, pc = (v) => (!Number.isFinite(v) ? '–' : `${Math.floor(v * 100 + 1e-9)}%`);   // 판정 값은 어디서나 내림(결과 창·목표 표와 같게, 2026-11-07)
   const J = has ? judgeStats(stats, O).all : '', pass = J === 'ok';
   const res = has ? `${pc(stats.Ulen, O.targetLen)} / ${pc(stats.Uwid, O.targetWid)}` : '';
   const running = st === 'running' || st === 'pending' || st === 'starting', done = st === 'done';
