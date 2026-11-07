@@ -131,7 +131,7 @@ function buildForm() {
     }
     form.appendChild(grp);
   }
-  $('#btn-sample-project').onclick = () => loadSampleProject();
+  $('#btn-sample-project').onclick = () => openSampleMenu();
   $('#file-mech3d-start').onchange = (e) => { const f = e.target.files?.[0]; if (f && /\.json$/i.test(f.name)) { importJson(e); return; } if (f) importMech3d(f); e.target.value = ''; };   // 시작 화면 = 프로젝트·STEP 모두
   $('#file-materials').onchange = (e) => { const f = e.target.files?.[0]; if (f) importMaterials(f); e.target.value = ''; };
   $('#file-mech3d').onchange = (e) => { const f = e.target.files?.[0], noSplit = nextNoSplit; nextNoSplit = false; if (f) importMech3d(f, null, { noSplit }); e.target.value = ''; };
@@ -226,12 +226,35 @@ async function newProject() {
   if (!confirm('지금 프로젝트를 닫고 빈 화면에서 새로 시작할까요?\n(파일로 저장하지 않은 작업은 사라집니다 — 먼저 [파일 › 다른 이름으로 저장] 권장)')) return;
   projFile?.clear(); m3app.unmount(); spec.mech3d = null; spec.mech3dPending = null; spec.mode = 'mech3d'; persist(); applyMode(); $('#m3-start-msg').textContent = '';   // 예제를 자동으로 열지 않음 — 시작 화면에서 고름(2026-11-05)
 }
-// 메뉴의 [예제 불러오기] — 지금 프로젝트를 닫으므로 확인 후. 예제를 못 받으면 지금 프로젝트를 닫지 않음
+// 메뉴·시작 화면의 [예제 불러오기…] — examples/index.json 목록에서 골라 엶(2026-11-07). 지금 프로젝트를 닫으므로 확인 후. 목록·예제를 못 받으면 지금 프로젝트를 닫지 않음
 async function openSampleMenu() {
-  if ((spec.mech3d || spec.mech3dPending) && !confirm('지금 프로젝트를 닫고 예제를 불러올까요?\n(파일로 저장하지 않은 작업은 사라집니다)')) return;
-  try { const r = await fetch('data/projects/v3.json', { cache: 'no-store' }); if (!r.ok) throw new Error(String(r.status)); }
-  catch { alert(`예제 프로젝트를 열 수 없습니다. 지금 프로젝트는 그대로 둡니다.\n${NO_SERVER}`); return; }
-  projFile?.clear(); m3app.unmount(); spec.mech3d = null; spec.mech3dPending = null; spec.mode = 'mech3d'; persist(); applyMode(); loadSampleProject(false);
+  let list;
+  try { const r = await fetch('examples/index.json', { cache: 'no-store' }); if (!r.ok) throw new Error(String(r.status)); list = await r.json(); }
+  catch { alert(`예제 목록을 열 수 없습니다. 지금 프로젝트는 그대로 둡니다.
+${NO_SERVER}`); return; }
+  const ex = await pickExample(list); if (!ex) return;
+  if ((spec.mech3d || spec.mech3dPending) && !confirm(`지금 프로젝트를 닫고 예제 '${ex.title}'를 불러올까요?
+(파일로 저장하지 않은 작업은 사라집니다)`)) return;
+  try { const r = await fetch(ex.project, { cache: 'no-store' }); if (!r.ok) throw new Error(String(r.status)); }
+  catch { alert(`예제를 열 수 없습니다. 지금 프로젝트는 그대로 둡니다.
+${NO_SERVER}`); return; }
+  projFile?.clear(); m3app.unmount(); spec.mech3d = null; spec.mech3dPending = null; spec.mode = 'mech3d'; persist(); applyMode(); loadSampleProject(false, ex.project);
+}
+// 예제 고르기 창 → 고른 항목 | null(닫음)
+function pickExample(list) {
+  return new Promise((resolve) => {
+    const d = document.createElement('dialog'); d.className = 'ex-pick'; d.setAttribute('aria-label', '예제 고르기');
+    const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+    d.innerHTML = `<h3>예제 불러오기</h3><div class="ex-list">${list.map((x, i) => `<button type="button" data-i="${i}"><b>${esc(x.title)}</b><span>${esc(x.about)}</span></button>`).join('')}</div>
+      <p class="ex-note">예제 파일은 프로그램 폴더의 examples 에 있습니다.</p><div class="ex-act"><button type="button" data-x>닫기</button></div>`;
+    // 닫으면 바로 지우고 답함 — close 이벤트에만 맡기면 창이 문서에 남아 다음 선택이 옛 창에 걸리는 일이 있었음
+    let done = false;
+    const finish = (out) => { if (done) return; done = true; if (d.open) d.close(); d.remove(); resolve(out); };
+    d.onclick = (e) => { if (e.target === d) { finish(null); return; } const b = e.target.closest('button'); if (b) finish(b.dataset.i != null ? list[+b.dataset.i] : null); };
+    d.onclose = () => finish(null);   // Esc
+    document.querySelectorAll('dialog.ex-pick').forEach((x) => x.remove());
+    document.body.appendChild(d); d.showModal();
+  });
 }
 const GUIDE = `사용 순서 (3D 기구 설계)
 1. 파일 › 3D 기구 STEP 불러오기 — 케이스·도광판·커버 등 모든 부품
@@ -261,7 +284,7 @@ function setupMenubar() {
   const menus = [
     { label: '파일', items: [
       { id: 'new', label: '새 프로젝트' },
-      { id: 'open-sample', label: '예제 불러오기' },
+      { id: 'open-sample', label: '예제 불러오기…' },
       { id: 'open-json', label: '프로젝트 열기…' },
       { id: 'save-json', label: '프로젝트 저장', key: 'Ctrl+S' },
       { id: 'save-as', label: '다른 이름으로 저장…', key: 'Ctrl+Shift+S' },
@@ -374,20 +397,20 @@ function shelveMech3d() { spec.mech3dPending = spec.mech3d; spec.mech3d = null; 
 // 기본 프로젝트 v3(data/projects/v3.json — 사용자가 정한 기준 화면): 평판 구조 + LED STEP 10개 1열.
 // 저장 설정을 보관분(mech3dPending)으로 두고 기구 STEP 을 불러오면 복원 경로를 그대로 탐 → 이어서 같은 이름 LED STEP = 저장된 기준 LED 로 재인식.
 // 3D 배경 테마는 사용자가 따로 고른 적이 없을 때만 v3 값으로. 프로젝트가 없는 첫 실행이면 자동으로 연다.
-async function loadSampleProject(ask = true) {
+async function loadSampleProject(ask = true, url = 'data/projects/v3.json') {
   const say = (t) => { $('#m3-start-msg').textContent = t; };
   if (ask && spec.mech3dPending && !confirm('보관 중인 3D 설정이 있습니다. 예제 프로젝트로 바꿀까요?')) return;
   try {
     say('예제 프로젝트 불러오는 중…');
     const get = async (url) => { const r = await fetch(url, { cache: 'no-store' }); if (!r.ok) throw new Error(`${url} ${r.status}`); return r; };
-    const P = await (await get('data/projects/v3.json')).json();
+    const P = await (await get(url)).json();
     try { if (P.theme && !localStorage.getItem('uds.m3.theme')) localStorage.setItem('uds.m3.theme', P.theme); } catch {}
     const file = async (url) => new File([await (await get(url)).text()], url.split('/').pop());
-    const mech = await file(P.mech), led = await file(P.led);
-    spec.mech3dPending = migrateMech3d(P.mech3d) ?? P.mech3d; spec.mech3d = null; spec.mode = 'mech3d';   // 예제도 저장 프로젝트처럼 옛 값 갱신(오차 목표 2% → 1% 등)
+    const mech = await file(P.mech), led = P.led ? await file(P.led) : null;   // 기구만 있는 예제(도면 안 LED) = LED STEP 없음
+    spec.mech3dPending = P.mech3d ? migrateMech3d(P.mech3d) ?? P.mech3d : null; spec.mech3d = null; spec.mode = 'mech3d';   // 예제도 저장 프로젝트처럼 옛 값 갱신(오차 목표 2% → 1% 등)
     importMech3d(mech, async () => {
       for (let i = 0; i < 200 && !m3app.isMounted(); i++) await new Promise((r) => setTimeout(r, 100));
-      m3app.importLed(led);
+      if (led) m3app.importLed(led);
     });
   } catch (e) { say(`예제 프로젝트 불러오기 실패: ${e instanceof TypeError ? NO_SERVER : e.message ?? e}`); }
 }

@@ -1,0 +1,8 @@
+{
+ "version": "examples-2026-11-07",
+ "about": "링 확산판 + 링 PCB + 도면 안 LED 12개 — 링 모양 2D 광분포 확인용 (소재·관측면은 직접 지정)",
+ "mech": "examples/ring-12led/ring-12led.stp",
+ "led": null,
+ "theme": "dark",
+ "mech3d": null
+}

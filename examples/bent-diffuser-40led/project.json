@@ -1,0 +1,8 @@
+{
+ "version": "examples-2026-11-07",
+ "about": "ㄱ자로 휜 긴 확산 부품(길이 400 mm) + 도면 안 LED 40개 — 큰 도면 불러오기·LED 자동 선택 확인용 (소재·관측면은 직접 지정)",
+ "mech": "examples/bent-diffuser-40led/bent-diffuser-40led.stp",
+ "led": null,
+ "theme": "dark",
+ "mech3d": null
+}

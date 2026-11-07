@@ -1147,3 +1147,13 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 .m3-vrow { display: flex; gap: 4px; }
 .m3-vrow > button:first-child { flex: 1; }
 .m3-views .m3-vrev { padding: 4px 6px; }
+/* 예제 고르기 창(2026-11-07) */
+.ex-pick { border: 1px solid #c9d2e0; border-radius: 10px; padding: 18px 20px; width: min(520px, calc(100vw - 32px)); box-shadow: 0 10px 34px rgba(16,24,40,.28); color: #20262f; }
+.ex-pick::backdrop { background: rgba(15,20,32,.35); }
+.ex-pick h3 { margin: 0 0 10px; font-size: 17px; }
+.ex-list { display: flex; flex-direction: column; gap: 8px; }
+.ex-list button { display: flex; flex-direction: column; gap: 3px; text-align: left; padding: 10px 12px; border: 1px solid #c9d2e0; border-radius: 8px; background: #fff; cursor: pointer; font: inherit; }
+.ex-list button:hover, .ex-list button:focus-visible { border-color: #1f6fd1; background: #f2f7fe; }
+.ex-list span { color: #6b7385; font-size: 12px; }
+.ex-note { margin: 10px 0 0; color: #6b7385; font-size: 12px; }
+.ex-act { display: flex; justify-content: flex-end; margin-top: 8px; }

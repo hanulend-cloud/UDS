@@ -1,0 +1,6 @@
+[
+ { "id": "flat-1row", "title": "평판 1열 (LED 10개)", "about": "기본 예제 — 하우징 + 확산판(Milky) + 도광 바(폭 4 mm) + LED 1열. 소재·관측면 지정됨", "project": "examples/flat-1row/project.json" },
+ { "id": "flat-2row", "title": "평판 2열 (LED 20개)", "about": "1열과 같은 하우징·확산판, 도광 바 폭 12 mm + LED 2열 — 1열과 폭 균일도 비교. 소재·관측면 지정됨", "project": "examples/flat-2row/project.json" },
+ { "id": "ring-12led", "title": "링 조명 (LED 12개)", "about": "링 확산판 — 링 모양 2D 광분포. 기구만(소재·관측면은 직접)", "project": "examples/ring-12led/project.json" },
+ { "id": "bent-diffuser-40led", "title": "휜 확산판 400 mm (LED 40개)", "about": "큰 도면 — 불러오기 속도·LED 자동 선택. 기구만(소재·관측면은 직접)", "project": "examples/bent-diffuser-40led/project.json" }
+]

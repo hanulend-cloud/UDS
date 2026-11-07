@@ -1,0 +1,368 @@
+{
+ "version": "examples-2026-11-07",
+ "about": "평판 1열 — 케이스 백색 85% · 확산판 Milky 2 · 도광 바 투명(폭 4 mm) · LED STEP 10개 1열 · 목표 0.80/0.80",
+ "mech": "examples/flat-1row/mech3d-sample.stp",
+ "led": "examples/flat-1row/mech3d-led-sample.stp",
+ "theme": "dark",
+ "mech3d": {
+  "name": "mech3d-sample.stp",
+  "parts": [
+   {
+    "id": 0,
+    "name": "부품 1",
+    "volume": 10240.000000000004,
+    "material": {
+     "kind": "opaque"
+    },
+    "finish": {
+     "kind": "whiteDiffuse",
+     "R": 0.85
+    },
+    "faceFinish": {},
+    "size": [
+     120,
+     20,
+     12
+    ]
+   },
+   {
+    "id": 1,
+    "name": "부품 2",
+    "volume": 3711.999999999999,
+    "material": {
+     "kind": "milky",
+     "dbId": "",
+     "milky": 2,
+     "resin": "PC"
+    },
+    "finish": {
+     "kind": "gloss"
+    },
+    "faceFinish": {},
+    "size": [
+     116,
+     16,
+     2
+    ]
+   },
+   {
+    "id": 2,
+    "name": "부품 3",
+    "volume": 2784,
+    "material": {
+     "kind": "clear",
+     "resin": "PC",
+     "T": 0.89,
+     "tRef": 2
+    },
+    "finish": {
+     "kind": "gloss"
+    },
+    "faceFinish": {},
+    "size": [
+     116,
+     4,
+     6
+    ]
+   }
+  ],
+  "contacts": [
+   {
+    "a": 0,
+    "faceA": 6,
+    "b": 1,
+    "faceB": 2,
+    "area": 232,
+    "mode": "contact"
+   },
+   {
+    "a": 0,
+    "faceA": 7,
+    "b": 1,
+    "faceB": 1,
+    "area": 32,
+    "mode": "contact"
+   },
+   {
+    "a": 0,
+    "faceA": 8,
+    "b": 1,
+    "faceB": 3,
+    "area": 232,
+    "mode": "contact"
+   },
+   {
+    "a": 0,
+    "faceA": 9,
+    "b": 1,
+    "faceB": 0,
+    "area": 32,
+    "mode": "contact"
+   },
+   {
+    "a": 0,
+    "faceA": 7,
+    "b": 2,
+    "faceB": 1,
+    "area": 24,
+    "mode": "contact"
+   },
+   {
+    "a": 0,
+    "faceA": 9,
+    "b": 2,
+    "faceB": 0,
+    "area": 24,
+    "mode": "contact"
+   },
+   {
+    "a": 1,
+    "faceA": 4,
+    "b": 2,
+    "faceB": 5,
+    "area": 464,
+    "mode": "contact"
+   }
+  ],
+  "light": {
+   "kind": "step",
+   "solder": "백색",
+   "spec": {
+    "model": "lambertian",
+    "beam": 120,
+    "sizeX": 2,
+    "sizeY": 2,
+    "fluxLm": 0
+   },
+   "step": {
+    "name": "mech3d-led-sample.stp",
+    "offset": [
+     0,
+     0,
+     0
+    ],
+    "rot": [
+     0,
+     0,
+     0
+    ],
+    "ref": {
+     "part": 7,
+     "face": 10
+    },
+    "leds": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10
+    ],
+    "excluded": [],
+    "pcb": 0,
+    "emitters": [
+     {
+      "part": 1,
+      "face": 10,
+      "pos": [
+       7.800000190734863,
+       10,
+       3.5
+      ],
+      "axis": [
+       0,
+       0,
+       1
+      ],
+      "xAxis": null,
+      "needsCheck": false
+     },
+     {
+      "part": 2,
+      "face": 10,
+      "pos": [
+       19.399999618530273,
+       10,
+       3.5
+      ],
+      "axis": [
+       0,
+       0,
+       1
+      ],
+      "xAxis": null,
+      "needsCheck": false
+     },
+     {
+      "part": 3,
+      "face": 10,
+      "pos": [
+       77.4000015258789,
+       10,
+       3.5
+      ],
+      "axis": [
+       0,
+       0,
+       1
+      ],
+      "xAxis": null,
+      "needsCheck": false
+     },
+     {
+      "part": 4,
+      "face": 10,
+      "pos": [
+       112.19999694824219,
+       10,
+       3.5
+      ],
+      "axis": [
+       0,
+       0,
+       1
+      ],
+      "xAxis": null,
+      "needsCheck": false
+     },
+     {
+      "part": 5,
+      "face": 10,
+      "pos": [
+       31,
+       10,
+       3.5
+      ],
+      "axis": [
+       0,
+       0,
+       1
+      ],
+      "xAxis": null,
+      "needsCheck": false
+     },
+     {
+      "part": 6,
+      "face": 10,
+      "pos": [
+       42.599998474121094,
+       10,
+       3.5
+      ],
+      "axis": [
+       0,
+       0,
+       1
+      ],
+      "xAxis": null,
+      "needsCheck": false
+     },
+     {
+      "part": 7,
+      "face": 10,
+      "pos": [
+       54.20000076293945,
+       10,
+       3.5
+      ],
+      "axis": [
+       0,
+       0,
+       1
+      ],
+      "xAxis": null,
+      "needsCheck": false
+     },
+     {
+      "part": 8,
+      "face": 10,
+      "pos": [
+       65.80000305175781,
+       10,
+       3.5
+      ],
+      "axis": [
+       0,
+       0,
+       1
+      ],
+      "xAxis": null,
+      "needsCheck": false
+     },
+     {
+      "part": 9,
+      "face": 10,
+      "pos": [
+       89,
+       10,
+       3.5
+      ],
+      "axis": [
+       0,
+       0,
+       1
+      ],
+      "xAxis": null,
+      "needsCheck": false
+     },
+     {
+      "part": 10,
+      "face": 10,
+      "pos": [
+       100.5999984741211,
+       10,
+       3.5
+      ],
+      "axis": [
+       0,
+       0,
+       1
+      ],
+      "xAxis": null,
+      "needsCheck": false
+     }
+    ],
+    "virtual": null
+   },
+   "manual": {
+    "pcb": {
+     "kind": "depth",
+     "depth": 10
+    },
+    "count": 10,
+    "pitch": 0,
+    "side": "direct",
+    "rows": 1,
+    "rowGap": 0
+   }
+  },
+  "observe": {
+   "faces": [
+    {
+     "part": 1,
+     "face": 5
+    }
+   ],
+   "dir": null,
+   "cone": 90,
+   "cell": null,
+   "cellS": null,
+   "cellW": null,
+   "winS": null,
+   "edgeExcl": 0.5,
+   "targetLen": 0.8,
+   "targetWid": 0.8,
+   "targetLum": null,
+   "targetNoise": 0.01
+  },
+  "checks": {
+   "minWall": 0.8,
+   "minReach": 0.5,
+   "maxLeak": 0.2
+  }
+ }
+}

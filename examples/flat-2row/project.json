@@ -1,0 +1,218 @@
+{
+ "version": "examples-2026-11-07",
+ "about": "평판 2열 — 1열 예제와 같은 하우징·확산판, 도광 바만 폭 12 mm · LED STEP 2열×10개(y 7·13 mm) · 케이스 백색 85% · 확산판 Milky 2 · 목표 0.80/0.80",
+ "mech": "examples/flat-2row/mech3d-sample-2row.stp",
+ "led": "examples/flat-2row/mech3d-led-sample-2row.stp",
+ "theme": "dark",
+ "mech3d": {
+  "name": "mech3d-sample-2row.stp",
+  "parts": [
+   {
+    "id": 0,
+    "name": "부품 1",
+    "volume": 10240.000000000004,
+    "material": {
+     "kind": "opaque"
+    },
+    "finish": {
+     "kind": "whiteDiffuse",
+     "R": 0.85
+    },
+    "faceFinish": {},
+    "size": [
+     120,
+     20,
+     12
+    ]
+   },
+   {
+    "id": 1,
+    "name": "부품 2",
+    "volume": 8352,
+    "material": {
+     "kind": "clear",
+     "resin": "PC",
+     "T": 0.89,
+     "tRef": 2
+    },
+    "finish": {
+     "kind": "gloss"
+    },
+    "faceFinish": {},
+    "size": [
+     116,
+     12,
+     6
+    ]
+   },
+   {
+    "id": 2,
+    "name": "부품 3",
+    "volume": 3711.999999999999,
+    "material": {
+     "kind": "milky",
+     "dbId": "",
+     "milky": 2,
+     "resin": "PC"
+    },
+    "finish": {
+     "kind": "gloss"
+    },
+    "faceFinish": {},
+    "size": [
+     116,
+     16,
+     2
+    ]
+   }
+  ],
+  "contacts": [
+   {
+    "a": 0,
+    "faceA": 7,
+    "b": 1,
+    "faceB": 1,
+    "area": 72,
+    "mode": "contact"
+   },
+   {
+    "a": 0,
+    "faceA": 9,
+    "b": 1,
+    "faceB": 0,
+    "area": 72,
+    "mode": "contact"
+   },
+   {
+    "a": 0,
+    "faceA": 6,
+    "b": 2,
+    "faceB": 2,
+    "area": 231.99999999999994,
+    "mode": "contact"
+   },
+   {
+    "a": 0,
+    "faceA": 7,
+    "b": 2,
+    "faceB": 1,
+    "area": 32,
+    "mode": "contact"
+   },
+   {
+    "a": 0,
+    "faceA": 8,
+    "b": 2,
+    "faceB": 3,
+    "area": 232.00000000000006,
+    "mode": "contact"
+   },
+   {
+    "a": 0,
+    "faceA": 9,
+    "b": 2,
+    "faceB": 0,
+    "area": 32,
+    "mode": "contact"
+   },
+   {
+    "a": 1,
+    "faceA": 5,
+    "b": 2,
+    "faceB": 4,
+    "area": 1392,
+    "mode": "contact"
+   }
+  ],
+  "light": {
+   "kind": "step",
+   "pcbR": 0.3,
+   "spec": {
+    "model": "lambertian",
+    "beam": 120,
+    "sizeX": 2,
+    "sizeY": 2,
+    "fluxLm": 0
+   },
+   "step": {
+    "name": "mech3d-led-sample-2row.stp",
+    "offset": [
+     0,
+     0,
+     0
+    ],
+    "rot": [
+     0,
+     0,
+     0
+    ],
+    "ref": {
+     "part": 1,
+     "face": 10
+    },
+    "leds": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20
+    ],
+    "excluded": [],
+    "pcb": 0,
+    "emitters": []
+   },
+   "manual": {
+    "pcb": {
+     "kind": "depth",
+     "depth": 10
+    },
+    "count": 10,
+    "pitch": 0,
+    "side": "direct",
+    "rows": 1,
+    "rowGap": 0
+   }
+  },
+  "observe": {
+   "faces": [
+    {
+     "part": 2,
+     "face": 5
+    }
+   ],
+   "dir": null,
+   "cone": 90,
+   "cell": null,
+   "cellS": null,
+   "cellW": null,
+   "quality": "low",
+   "winS": null,
+   "edgeExcl": 0.5,
+   "targetLen": 0.8,
+   "targetWid": 0.8,
+   "targetLum": null,
+   "targetNoise": 0.01,
+   "noiseRev": 1
+  },
+  "checks": {
+   "minWall": 0.8,
+   "minReach": 0.5,
+   "maxLeak": 0.2
+  }
+ }
+}
