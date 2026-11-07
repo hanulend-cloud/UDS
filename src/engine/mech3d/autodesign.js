@@ -667,13 +667,15 @@ export async function runAutoDesign(cfg, io) {
       peek = await peekAbove(d, p, sCap, io);
       if (stop()) return { cancelled: true };
       if (cfg.housingProbe && io.evalVariants && !stop()) {   // 보완 계산: 최고점 Milky 에서 케이스 면 한 단계 위 한 번
-        io.progress?.('milky', 0.95, '보완 계산 (케이스 면 한 단계 위)');
-        const [h] = await io.evalVariants(d, [{ finish: cfg.housingProbe }], 3e5, 6000);
+        io.progress?.('milky', 0.95, '케이스 면 추천 계산');
+        // 지금 케이스 면(cur)과 추천 면을 같은 계산에서 나란히 — 다른 계산의 값과 비교하면 노이즈로 오름폭이 실행마다 크게 달라짐(2026-11-07)
+        const { cur, ...probe } = cfg.housingProbe;
+        const res2 = await io.evalVariants(d, cur ? [{ finish: cur }, { finish: probe }] : [{ finish: probe }], 6e5, 9000), h = res2[res2.length - 1], b0 = cur ? res2[0] : null;
         if (stop()) return { cancelled: true };
-        if (h?.ok) {
-          hint = { finish: cfg.housingProbe, Ulen: h.stats.Ulen, Uwid: h.stats.Uwid };
+        if (h?.ok && (!cur || b0?.ok)) {
+          // 케이스 면 추천(2026-11-07) — ④ 최적화는 없앴으므로 사유에 섞지 않고 따로(결과 카드의 💡 추천 줄). base = 같은 Milky 의 지금 값
           const ft = cfg.finishText ?? ((f) => `${f.kind}${f.R != null ? ` ${Math.round(f.R * 100)}%` : ''}`);
-          reason += ` · 케이스 ${ft(cfg.housingProbe)} 와 함께 쓰면 ${uText(hint)}`;
+          hint = { finish: probe, text: ft(probe), Ulen: h.stats.Ulen, Uwid: h.stats.Uwid, base: b0 ? { Ulen: b0.stats.Ulen, Uwid: b0.stats.Uwid } : { Ulen: p.Ulen, Uwid: p.Uwid ?? null } };
         }
       }
     }

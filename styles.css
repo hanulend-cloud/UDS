@@ -784,6 +784,7 @@ body.booting::after { content: "불러오는 중…"; position: fixed; left: 50%
 .m3-rv { font-size: 15px; } .m3-rcard.ok .m3-rv { color: #1f9d55; } .m3-rcard.bad .m3-rv { color: #d64545; }
 .m3-cmp-s { width: 100%; font-size: 12.5px; }
 .m3-rlim { font-size: 12px; color: #6b5a1f; background: #fff8e6; border-radius: 6px; padding: 4px 8px; margin-top: 6px; }
+.m3-rhint { display: block; width: 100%; text-align: left; border: 1px solid #f0d88a; cursor: pointer; font: inherit; font-size: 12px; } .m3-rhint:hover { background: #fff1c9; }
 .m3-rbtn { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
 .od-log > summary { cursor: pointer; font-size: 12.5px; padding: 4px 0; }
 .m3-mon .fb-plot { flex: none; height: 120px; }   /* 창 안(높이 auto)에서도 그래프가 보이게 */
@@ -1067,7 +1068,7 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 .fb-card .od-chip.st-done, .fb-card .od-chip.st-lock { background: #d6f2e1; color: #17693f; }
 
 /* 기구 최적화 창(2026-11-05): 설계 인자 3개를 맨 위 한 줄로 — 아래 진행 현황이 넓게 보이게. 그 아래 왼쪽 실행·결과 | 오른쪽 진행 */
-.m3-mon-body { display: grid; position: relative; grid-template-columns: min(var(--m3-mon-l, 42%), calc(100% - 320px)) minmax(0, 1fr); grid-template-rows: max-content max-content minmax(0, 1fr); overflow: auto; }
+.m3-mon-body { display: grid; position: relative; grid-template-columns: min(var(--m3-mon-l, 42%), calc(100% - 320px)) minmax(0, 1fr); grid-template-rows: max-content max-content minmax(230px, 1fr); overflow: auto; }
 .m3-mon-body > #m3-factor { display: contents; }
 .m3-mon-body > .m3-psplit { display: none; }
 .m3-mon-body > #m3-dock { grid-column: 2; grid-row: 2 / 4; width: auto !important; min-width: 0; min-height: 0; overflow: auto; }

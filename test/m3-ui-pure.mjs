@@ -116,6 +116,11 @@ ok(judgeText(0.8004, 0.8009).cls === 'ok' && judgeText(0.7999, 0.8).cls === 'bad
     const noClear = stageAvailability({ ...M3, parts: [pm('opaque'), pm('milky')] }, { non25: [0, 0] }).shape;
     ok(noClear.ok && noClear.parts.join() === '1' && noClear.rec == null, '투명 부품이 없으면 확산 부품 그대로'); }
   { const { resultLineHtml, peekText, loweredText } = await import('../src/ui/m3/autodesign-panel.js');
+    { const { caseHintText } = await import('../src/ui/m3/autodesign-panel.js');
+      const h = (Ulen, Uwid) => ({ finish: { part: 0 }, text: '백색 90%', Ulen, Uwid, base: { Ulen: 0.8, Uwid: 0.45 } });
+      ok(/추천: 부품 속성에서 케이스 면을 '백색 90%'.*길이 \+0\.01 · 폭 \+0\.07 정도 오름/.test(caseHintText({ hint: h(0.81, 0.52) })), `케이스 면 추천: ${caseHintText({ hint: h(0.81, 0.52) })}`);
+      ok(caseHintText({ hint: h(0.805, 0.455) }) === '' && caseHintText({ hint: h(0.75, 0.6) }) === '' && caseHintText({}) === '', '뚜렷이 나아질 때만(하나라도 크게 나빠지면 안 띄움)');
+      ok(/data-ad="casePart" data-v="0"/.test(resultLineHtml({ best: { Ulen: 0.8, Uwid: 0.45 }, cur: {}, targets: {}, stages: { milky: true }, hint: h(0.81, 0.52) })), '추천 줄 = 누르면 케이스 부품으로'); }
     { const { retuneMilky } = await import('../src/ui/m3/autodesign-panel.js');
       ok(retuneMilky({ leds: true }, { milky: {} }, true) && retuneMilky({ shape: true }, { milky: {} }, true) && !retuneMilky({ leds: true }, {}, true) && !retuneMilky({ milky: true, leds: true }, { milky: {} }, true) && !retuneMilky({ housing: true }, { milky: {} }, true) && !retuneMilky({ leds: true }, { milky: {} }, false), '고정된 Milky 는 위치·높이·형상을 바꿀 때 다시 맞춤');
       const b1 = { best: { Ulen: 0.85, Uwid: 0.4 }, cur: { Ulen: 0.6, Uwid: 0.3 }, targets: { len: 0.8, wid: 0.7 }, feasible: false, stages: { leds: true } };
@@ -678,6 +683,7 @@ done();
   const G0 = { ns: 4, nw: 2 }, sd = (n) => ({ batches: [{ acc: new Float64Array(n) }] });
   ok(seedFits(sd(8), G0) && !seedFits(sd(6), G0) && !seedFits(null, G0) && !seedFits(sd(8), null) && !seedFits({ batches: [] }, G0), '판정 값을 화면으로: 칸 수가 같을 때만'); }
 { const { resultLineHtml, limitText } = await import('../src/ui/m3/autodesign-panel.js');
+  { const a = limitText('균일도 최고 … 미달 · 한계: 폭 방향 — 폭 가장자리가 가장 어두움(가장자리 감쇠)'), b = limitText('현재안 유지 (… · 한계: 폭 방향 확산 부족(LED 개수로는 안 오름))'), c = limitText('현재안 유지 (한계: 길이 방향 — 끝단이 가장 어두움)'); if (a !== '폭 방향 — 폭 가장자리가 가장 어두움(가장자리 감쇠)' || b !== '폭 방향 확산 부족(LED 개수로는 안 오름)' || c !== '길이 방향 — 끝단이 가장 어두움') { process.exitCode = 1; console.log('FAIL 한계 문구 괄호', a, '/', b, '/', c); } else console.log('PASS 한계 문구 괄호 짝'); }
   // 결과 카드: 판정 한 단어 · 비교표 = 바뀐 사양 + 길이 균일도·폭 균일도·광 효율(안 바뀐 LED 줄 없음) · 한계 한 줄 · [자세히]
   const r = { unchanged: false, feasible: false, reason: '목표 미달 (균일도 최고 … · 한계: 길이 방향 — 끝단이 가장 어두움 · ④ 케이스)', targets: { len: 0.8, wid: 0.8 },
     cur: { count: 40, pitch: 10, milky: 1.43, Ulen: 0.61, Uwid: 0.6, eff: 0.107 }, best: { count: 40, pitch: 10, milky: 1.8, Ulen: 0.66, Uwid: 0.62, eff: 0.1 } };

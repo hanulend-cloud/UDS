@@ -94,5 +94,5 @@ export function createMonitor({ host, items, onChange = () => {} }) {
   // 접었을 때 보일 현재 결과(글 1~2개) — html
   const setSummary = (html) => { const q = el.querySelector('[data-mon-sum]'); if (q && q._h !== html) { q._h = html; q.innerHTML = html; } };
   const setRunCtl = (c, fn) => setCtl(el.querySelector('[data-mon-ctl]'), c, fn);   // 접은 창의 실행·일시정지·중지
-  return { open, close, expand: () => { if (st.min) setMin(false); }, toggle: () => (st.open ? close() : open()), isOpen: () => st.open, el, setSummary, setCtl: setRunCtl, setDone: (d) => setStepMark(el.querySelector('[data-mon-step]'), 5, d) };
+  return { open, close, expand: () => { if (st.min) setMin(false); }, collapse: () => { if (!st.min) setMin(true); }, toggle: () => (st.open ? close() : open()), isOpen: () => st.open, el, setSummary, setCtl: setRunCtl, setDone: (d) => setStepMark(el.querySelector('[data-mon-step]'), 5, d) };
 }

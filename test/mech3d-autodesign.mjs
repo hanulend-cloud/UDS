@@ -56,14 +56,14 @@ const peakRows = (ms, top, { len = 0.5, wid = 0.5, Uw = () => 0.9 } = {}) => ms.
   ok(!r.feasible && Math.abs(r.best.milky - 4) < 0.1 && /가장자리 감쇠/.test(r.reason) && /길이/.test(r.reason) && /Milky 4에서도/.test(r.reason), `미달 → 최고점 Milky ${r.best.milky}: ${r.reason}`);
   ok(bases.length <= 8 && Math.max(...bases) < 9 && precise.length <= 2, `최고점 뒤 조기 중단: 거친 ${bases.length}개(${bases.join(' ')}) · 정밀 ${precise.length}개`); }
 { // 단봉형·미달(폭이 막고 최저 위치가 가운데) → 'LED 리플' · ④ 보완 계산(housingProbe) 결과를 사유·hint 에
-  const probe = { part: 1, kind: 'whiteDiffuse', R: 0.9 }, calls = [];
+  const probe = { part: 1, kind: 'whiteDiffuse', R: 0.9, cur: { part: 1, kind: 'gloss' } }, calls = [];
   const io = { milkyRows: async (d, ms) => peakRows(ms, 0.9, { wid: 0.5, len: 0.02, Uw: (m) => 0.55 - 0.01 * (m - 4) ** 2 }),
-    evalVariants: async (d, cs, N) => { calls.push({ milky: d.milky, cs, N }); return cs.map((c) => ({ cand: c, ok: true, stats: st(0.93, 0.62), eff: 0.4 })); },
+    evalVariants: async (d, cs, N) => { calls.push({ milky: d.milky, cs, N }); return cs.map((c) => ({ cand: c, ok: true, stats: c.finish.R === 0.9 ? st(0.93, 0.62) : st(0.88, 0.53), eff: 0.4 })); },
     verify: async (d) => ({ stats: st(0.9, 0.55 - 0.01 * ((d.milky ?? 1) - 4) ** 2), eff: 1 }), progress() {}, cancelled: () => false };
   const r = await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 1 }, housingProbe: probe, finishText: (f) => `백색 ${Math.round(f.R * 100)}%` }, io);
   ok(!r.feasible && /LED 리플/.test(r.reason) && /폭/.test(r.reason) && !/가장자리 감쇠/.test(r.reason), `폭 한계 · 리플: ${r.reason}`);
-  ok(calls.length === 1 && calls[0].cs[0].finish === probe && calls[0].N === 3e5 && Math.abs(calls[0].milky - r.best.milky) < 1e-9 && r.hint?.Ulen === 0.93 && r.hint?.Uwid === 0.62 && r.hint.finish === probe
-    && /케이스 백색 90% 를 함께 쓰면 나아짐/.test(r.reason) && !/④/.test(r.reason) && !/와 함께 쓰면 길이 균일도/.test(r.reason), `보완 계산 1회 → ${r.reason}`); }
+  ok(calls.length === 1 && calls[0].cs.length === 2 && calls[0].cs[1].finish.R === 0.9 && !('cur' in calls[0].cs[1].finish) && calls[0].cs[0].finish === probe.cur && calls[0].N === 6e5 && Math.abs(calls[0].milky - r.best.milky) < 1e-9 && r.hint?.Ulen === 0.93 && r.hint?.Uwid === 0.62 && r.hint.finish.R === 0.9
+    && !/케이스/.test(r.reason) && r.hint.text === '백색 90%' && r.hint.base.Uwid === 0.53 && r.hint.base.Ulen === 0.88, `케이스 면 추천 = 사유와 따로(hint.text·base) → ${r.reason} / ${JSON.stringify(r.hint)}`); }
 { // 최적화 = Milky 5 까지(2026-11-05). 5 초과는 참고 계산만 — 단계 기록(Milky 표)·추천에 안 들어감
   const seen = [], U = (m) => 0.5 + 0.02 * m;
   const io = { milkyRows: async (d, ms) => { seen.push(...ms); return rowsOf(ms, U); }, verify: async (d) => ({ stats: st(U(d.milky ?? 1), 0.9), eff: 1 }), progress() {}, cancelled: () => false };

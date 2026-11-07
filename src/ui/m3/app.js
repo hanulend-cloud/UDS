@@ -678,7 +678,7 @@ function renderAuto() {
   A.optDash?.refresh();
   renderAutoPanel(el, { caseView: adCaseView(), avail, sel, running: st.running && { ...st.running, paused: !!st.paused }, result: st.result, resultOpen: !!st.resultOpen, names: M.parts.map((p) => p.name), canRevert: !!st.undo, applied: st.undo ? st.applied ?? null : null, noLine: !A.store.session.line, noLed: A.store.session.line ? adBlock() : '', milkyPart: mp, housingMat: hm ? { name: hm.name, max: hm.max } : null, catalog: reflCat() }, {
     onSel: (k, v) => adSel(k, v),
-    onAction: (k, v) => ({ caseSort: () => adCaseSort(v), casePick: () => adCasePick(v), caseRun: adCaseRun, shapeDeep: adShapeDeep, continue: adContinue, applyMilky: () => adApplyMilky(+v), close: () => monitor?.close(), apply: adApply, applyAlt: adApplyAlt, cancel: adCancel, revert: adRevert, step: adStep, view: () => { st.resultOpen = true; renderAuto(); }, hide: () => { st.resultOpen = false; renderAuto(); } })[k]?.(),
+    onAction: (k, v) => ({ caseSort: () => adCaseSort(v), casePick: () => adCasePick(v), caseRun: adCaseRun, casePart: () => { const i = +v; if (!Number.isInteger(i)) return; A.store.update('session', (_, x) => { x.multi = []; x.node = `part:${i}`; x.sel = { part: i, face: null }; x.ledSel = null; x.status = `케이스 부품 ${i + 1} — 속성에서 면 처리를 바꾸세요(추천 값은 결과 카드)`; }); monitor?.collapse?.(); }, shapeDeep: adShapeDeep, continue: adContinue, applyMilky: () => adApplyMilky(+v), close: () => monitor?.close(), apply: adApply, applyAlt: adApplyAlt, cancel: adCancel, revert: adRevert, step: adStep, view: () => { st.resultOpen = true; renderAuto(); }, hide: () => { st.resultOpen = false; renderAuto(); } })[k]?.(),
   });
 }
 // 접은 창에 보일 현재 결과 — 실행 중 = 진행률, 결과 있음 = 후보 값, 그 밖 = 지금 값(길이·폭 균일도)
@@ -1195,7 +1195,7 @@ async function adRun(opt = {}) {
   let housingProbe = null;
   if (stages.milky && !stages.housing && avail.housing?.ok) {
     const k = defaultHousingPart(M0, adInfo().boxes), nf = avail.housing.parts.includes(k) ? nextFinish(M0.parts[k].finish, finCands(k).filter((f) => !f.current)) : null;   // 소재 상한 안(특수 허용 시 특수 포함) — 없으면 안내 생략
-    if (nf) housingProbe = { part: k, kind: nf.kind, R: nf.R, ...(nf.coating ? { coating: nf.coating } : {}) };
+    if (nf) housingProbe = { part: k, kind: nf.kind, R: nf.R, ...(nf.coating ? { coating: nf.coating } : {}), cur: { part: k, ...M0.parts[k].finish, ...(M0.parts[k].coating ? { coating: M0.parts[k].coating } : {}) } };   // cur = 지금 면(같은 계산에서 비교)
   }
   let res = null;
   try {

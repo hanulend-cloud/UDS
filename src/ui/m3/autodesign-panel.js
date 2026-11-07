@@ -286,11 +286,27 @@ export function shapeDeepBtn(r) {
     ? '<button type="button" data-ad="shapeDeep" title="후보를 넓게 다시 탐색 — 약 3분">형상 정밀 탐색 ▸ (가능성 있음 · 약 3분)</button>'
     : '<button type="button" data-ad="shapeDeep" title="후보를 넓게 다시 탐색 — 약 3분">그래도 정밀 탐색 ▸ (약 3분)</button>';
 }
-export const limitText = (reason) => { const m = /한계:\s*([^·)]+)/.exec(String(reason ?? '')); return m ? m[1].trim() : ''; };
+// 한계 문구 = '한계:' 뒤 '·' 전까지. 괄호는 짝이 맞게 — 안쪽 '(가장자리 감쇠)' 는 살리고, 사유 전체를 감싼 바깥 ')' 는 뺌(전에는 ')' 에서 끊겨 닫는 괄호가 빠졌음)
+export const limitText = (reason) => {
+  const m = /한계:\s*([^·]+)/.exec(String(reason ?? '')); if (!m) return '';
+  let t = m[1].trim(); const n = (c) => t.split(c).length - 1;
+  while (t.endsWith(')') && n(')') > n('(')) t = t.slice(0, -1).trimEnd();
+  return t;
+};
 // 고정된 Milky 다시 맞춤(2026-11-07) — 위치·높이·형상이 바뀌면 전에 맞춘 Milky 가 더는 최적이 아님. 이번에 Milky 를 안 돌리고 그것들을 돌릴 때 Milky 도 함께
 export function retuneMilky(stages, locked, milkyOk) { return !!(milkyOk && locked?.milky && !stages.milky && (stages.leds || stages.height || stages.shape)); }
 // 폭 미달 + '1열만' = 2열 배치를 시도하라는 안내(2026-11-07) — 위치를 돌렸을 때만
 export function oneRowHint(r) { const w = r.best?.Uwid, t = r.targets?.wid; return r.oneRow && r.stages?.leds && Number.isFinite(w) && t != null && w < t ? `💡 폭 균일도 미달 — 설계 인자에서 '1열만(재료비↓)'을 끄면 2열 배치도 찾아 봅니다(LED 개수·재료비 늘 수 있음)` : ''; }
+// 케이스 면 추천(2026-11-07) — ④ 최적화는 없앴지만 하우징 면 처리를 한 단계 올리면 나아지는지는 알려 줌(설계 값은 안 바꿈, 바꾸는 건 사용자가 부품 속성에서).
+// 뚜렷이 나아질 때만(길이·폭 중 하나 +0.02 이상, 어느 쪽도 0.01 넘게 나빠지지 않음). 표시값은 내림
+export function caseHintText(r) {
+  const h = r.hint, b = h?.base; if (!h || !b || !h.text) return '';
+  const d = (k) => (Number.isFinite(h[k]) && Number.isFinite(b[k]) ? h[k] - b[k] : 0), dl = d('Ulen'), dw = d('Uwid');
+  if (Math.max(dl, dw) < 0.02 || Math.min(dl, dw) < -0.01) return '';
+  // 차이로 표시 — 추천 계산은 빠른 계산이라 절대값이 카드의 최종 판정값과 달라 보임(같은 조건끼리 비교한 오름폭만 의미 있음)
+  const f = (v) => `${v >= 0 ? '+' : '−'}${(Math.floor(Math.abs(v) * 100 + 1e-9) / 100).toFixed(2)}`;
+  return `💡 추천: 부품 속성에서 케이스 면을 '${h.text}'(으)로 바꾸면 길이 ${f(dl)} · 폭 ${f(dw)} 정도 오름 (빠른 계산 비교)`;
+}
 export function resultLineHtml(r) {
   const verdict = r.unchanged ? ['keep', '현재안 유지', r.caseCheck ? '고른 후보를 쓸 수 없음' : '더 나은 안 없음'] : r.targets?.judge?.all === 'near' ? ['near', '목표 근처', '통과·미달을 가를 수 없는 차이'] : r.feasible ? ['ok', '목표 통과', r.caseCheck ? '고른 후보' : '최적안을 찾음'] : ['bad', '목표 미달', r.caseCheck ? '고른 후보' : '가장 가까운 안'];
   const P = cmpParts(r), chg = P.design.filter((x) => x.includes('class="chg"'));   // 설계 항목 = 바뀐 것만, 목표 지표 = 늘
@@ -299,6 +315,7 @@ export function resultLineHtml(r) {
   return `<div class="m3-rcard ${verdict[0]}"><div class="m3-rcard-hd"><b class="m3-rv">${verdict[1]}</b><span class="mut">${verdict[2]}</span></div>
     <table class="m3-cmp m3-cmp-s"><tr><th></th><th>현재</th><th>최적화 후</th></tr>${rows}</table>${clash}
     ${lim ? `<div class="m3-rlim">💡 한계: ${esc(lim)}</div>` : ''}
+    ${caseHintText(r) ? `<button type="button" class="m3-rlim m3-rhint" data-ad="casePart" data-v="${r.hint.finish.part}" title="케이스 부품 속성 열기 — 면 처리는 직접 바꿈">${esc(caseHintText(r))} ▸</button>` : ''}
     ${oneRowHint(r) ? `<div class="m3-rlim">${esc(oneRowHint(r))}</div>` : ''}
     ${r.milkyRetuned ? `<div class="m3-rlim">💡 고정했던 Milky 도 위치·형상에 맞춰 다시 맞춤</div>` : ''}
     ${r.shapeNote ? `<div class="m3-rlim">💡 형상 그대로: ${esc(r.shapeNote)}</div>` : ''}

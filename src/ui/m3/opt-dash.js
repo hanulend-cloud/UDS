@@ -310,6 +310,7 @@ export function createSimDash(el, { onCtl = null } = {}) {
     }
     const set = (k, html) => { const n = el.querySelector(`[data-s="${k}"]`); if (n && n.innerHTML !== html) n.innerHTML = html; };
     set('st', busy ? '기구 최적화 중 — 일시정지(끝나면 이어서)' : esc(sTxt));
+    { const n = el.querySelector('[data-s="st"]'); if (n) n.title = n.textContent; }   // 좁은 칸에서 … 로 잘려도 전체 문구를 볼 수 있게
     setStepMark(el.querySelector('[data-s="step"]'), 4, state === 'done');
     setCtl(el.querySelector('[data-sim-ctl]'), simCtl({ state, stopped }, busy), (k) => onCtl?.(k));
     set('pct', `${pct.toFixed(0)}%`); el.querySelector('[data-s="bar"]').style.width = `${pct.toFixed(0)}%`;
@@ -322,7 +323,7 @@ export function createSimDash(el, { onCtl = null } = {}) {
     }
     // 접힌 줄에는 주 광경로 한 줄 요약, 펼치면 광경로 목록
     set('sum', P.length ? `광경로 <span class="mut">${(P[0].share * 100).toFixed(0)}% ${esc(pathText(P[0], names))}</span>` : '광경로');
-    set('paths', P.length ? `<div class="od-paths">${P.map((p) => `<div class="od-path"><span class="od-pbar"><i style="width:${(p.share * 100).toFixed(0)}%"></i></span><b>${(p.share * 100).toFixed(0)}%</b> ${esc(pathText(p, names))}</div>`).join('')}</div>` : '');
+    set('paths', P.length ? `<div class="od-paths">${P.map((p) => `<div class="od-path" title="${esc(pathText(p, names))}"><span class="od-pbar"><i style="width:${(p.share * 100).toFixed(0)}%"></i></span><b>${(p.share * 100).toFixed(0)}%</b> ${esc(pathText(p, names))}</div>`).join('')}</div>` : '');
   }
   render();
   if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => draw()).observe(el);   // 칸 크기가 바뀌면 그래프를 그 크기로
