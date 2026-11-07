@@ -287,6 +287,10 @@ export function shapeDeepBtn(r) {
     : '<button type="button" data-ad="shapeDeep" title="후보를 넓게 다시 탐색 — 약 3분">그래도 정밀 탐색 ▸ (약 3분)</button>';
 }
 export const limitText = (reason) => { const m = /한계:\s*([^·)]+)/.exec(String(reason ?? '')); return m ? m[1].trim() : ''; };
+// 고정된 Milky 다시 맞춤(2026-11-07) — 위치·높이·형상이 바뀌면 전에 맞춘 Milky 가 더는 최적이 아님. 이번에 Milky 를 안 돌리고 그것들을 돌릴 때 Milky 도 함께
+export function retuneMilky(stages, locked, milkyOk) { return !!(milkyOk && locked?.milky && !stages.milky && (stages.leds || stages.height || stages.shape)); }
+// 폭 미달 + '1열만' = 2열 배치를 시도하라는 안내(2026-11-07) — 위치를 돌렸을 때만
+export function oneRowHint(r) { const w = r.best?.Uwid, t = r.targets?.wid; return r.oneRow && r.stages?.leds && Number.isFinite(w) && t != null && w < t ? `💡 폭 균일도 미달 — 설계 인자에서 '1열만(재료비↓)'을 끄면 2열 배치도 찾아 봅니다(LED 개수·재료비 늘 수 있음)` : ''; }
 export function resultLineHtml(r) {
   const verdict = r.unchanged ? ['keep', '현재안 유지', r.caseCheck ? '고른 후보를 쓸 수 없음' : '더 나은 안 없음'] : r.targets?.judge?.all === 'near' ? ['near', '목표 근처', '통과·미달을 가를 수 없는 차이'] : r.feasible ? ['ok', '목표 통과', r.caseCheck ? '고른 후보' : '최적안을 찾음'] : ['bad', '목표 미달', r.caseCheck ? '고른 후보' : '가장 가까운 안'];
   const P = cmpParts(r), chg = P.design.filter((x) => x.includes('class="chg"'));   // 설계 항목 = 바뀐 것만, 목표 지표 = 늘
@@ -295,6 +299,8 @@ export function resultLineHtml(r) {
   return `<div class="m3-rcard ${verdict[0]}"><div class="m3-rcard-hd"><b class="m3-rv">${verdict[1]}</b><span class="mut">${verdict[2]}</span></div>
     <table class="m3-cmp m3-cmp-s"><tr><th></th><th>현재</th><th>최적화 후</th></tr>${rows}</table>${clash}
     ${lim ? `<div class="m3-rlim">💡 한계: ${esc(lim)}</div>` : ''}
+    ${oneRowHint(r) ? `<div class="m3-rlim">${esc(oneRowHint(r))}</div>` : ''}
+    ${r.milkyRetuned ? `<div class="m3-rlim">💡 고정했던 Milky 도 위치·형상에 맞춰 다시 맞춤</div>` : ''}
     ${r.shapeNote ? `<div class="m3-rlim">💡 형상 그대로: ${esc(r.shapeNote)}</div>` : ''}
     ${shapeMissText(r) ? `<div class="m3-rlim">${esc(shapeMissText(r))}</div>` : ''}
     ${r.lowered ? `<div class="m3-rlim">${esc(loweredText(r.lowered, r.unchanged))}</div>` : ''}

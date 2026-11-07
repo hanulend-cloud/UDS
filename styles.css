@@ -673,6 +673,7 @@ header:has(.mb-drop) { z-index: 80; }   /* 메뉴를 펼치면 떠 있는 창 �
 .m3-rverdict { font-size: 18px; font-weight: 700; padding: 8px 10px; border-radius: 6px; margin-bottom: 8px; background: var(--m3-accbg); }
 .m3-rverdict.ok { color: var(--m3-ok); } .m3-rverdict.bad { color: var(--m3-bad); }
 #mech3d-wrap .near, #mech3d-wrap .od-near { color: var(--m3-warn); font-weight: 600; } #mech3d-wrap .om-say .od-near { color: #a15c07; } .m3-gauge .f.near { background: var(--m3-warn); }
+#mech3d-wrap .v.busy { color: var(--m3-mut, #8a94a3); font-weight: 400; opacity: .75; } .m3-gauge .f.busy { background: #9aa7b8; }
 .m3-rmodal-in .m3-cmp { font-size: 13.5px; } .m3-rmodal-in .m3-cmp th, .m3-rmodal-in .m3-cmp td { padding: 5px 8px; }
 .m3-rmodal-in .m3-cmp td.chg { font-size: 14px; }
 .m3-ad-bar .ok { color: var(--m3-ok); font-weight: 600; } .m3-ad-bar .bad { color: var(--m3-bad); font-weight: 600; }

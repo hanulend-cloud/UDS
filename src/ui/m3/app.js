@@ -40,7 +40,7 @@ import { positionsFromLayout, addPosition, alignPositions } from '../../engine/m
 import { createResultsPanel } from './results-panel.js';
 import { renderStatusBar, leakText } from './status-bar.js';
 import { createAdRunner, resumable } from './autodesign-run.js';
-import { renderAutoPanel, seedFits, milkyTable, stageAvailability, clampCap, overallFrac, etaText, reusableCurrent, defaultHousingPart, applyDz, applyFinish, capDefault, nextFinish, finishText, shapeText, tileConfigHtml, AD_ITEMS } from './autodesign-panel.js';
+import { renderAutoPanel, seedFits, milkyTable, stageAvailability, clampCap, overallFrac, etaText, reusableCurrent, defaultHousingPart, applyDz, applyFinish, capDefault, nextFinish, finishText, shapeText, tileConfigHtml, AD_ITEMS, retuneMilky } from './autodesign-panel.js';
 import { ledHeightRange, heightCandidates, catalogOf, finishCandidatesFor, setReflMaterial, partFinishEdit } from '../../engine/mech3d/housing-led.js';
 import { migrateFinishCatalog, reflectPatch, copyAsUser, entryFromForm, addSamples, parsePercents, uniqueReflId } from '../../model/reflect-db.js';
 import { intersectRay } from '../../engine/mech3d/bvh.js';
@@ -1038,6 +1038,9 @@ async function adRun(opt = {}) {
   const M0 = adClone(A.store.mspec), line = S.line, rt = getMech3d();   // 실행 격리 — 편집은 실행을 중지시킴(onChange)
   const avail = adAvail(M0), stages = opt.stages ?? { milky: st.sel.milky && avail.milky.ok, leds: st.sel.leds && avail.leds.ok, shape: st.sel.shape && avail.shape.ok && avail.shape.parts.includes(st.sel.shapePart),
     height: st.sel.height && avail.height.ok, housing: st.sel.housing && avail.housing.ok && avail.housing.parts.includes(st.sel.housingPart) };
+  // 고정된 Milky 다시 맞춤(2026-11-07) — 위치·높이·형상을 바꾸면 전에 맞춘 Milky 가 더는 최적이 아님. 고정을 풀고(다시 체크) 이번 실행에 넣음 — 알림
+  const milkyRetuned = !opt.shapeDeep && !opt.caseCheck && retuneMilky(stages, st.locked, avail.milky.ok);
+  if (milkyRetuned) { stages.milky = true; delete st.locked.milky; st.sel.milky = true; dashReset(stages); setStatus('고정했던 Milky 도 위치·형상에 맞춰 다시 맞춤'); }
   st.milkyPart = adMilkyPart(M0, avail);
   const hpSel = avail.housing?.parts?.includes(st.sel.housingPart) ? st.sel.housingPart : defaultHousingPart(M0, adInfo().boxes);   // 보완으로 ④ 를 더했으면 기본 케이스 부품
   // 최적화 판정 격자 = 늘 저화질(2026-11-02) — 고화질 칸(0.5 mm)으로 짧게 평가하면 노이즈가 '불균일' 로 보여 값이 크게 낮게 나오고(실측 길이 균일도 0.65 vs 정밀 0.76)
@@ -1213,7 +1216,7 @@ async function adRun(opt = {}) {
     const smI = sp >= 0 && M0.parts[sp]?.shapeMod ? sp : M0.parts.findIndex((p) => p.shapeMod), sm = smI >= 0 ? M0.parts[smI].shapeMod : null;   // 비교표 '현재' 열 — 이미 적용된 형상(표시만)
     st.resultOpen = false;   // 끝나면 결과 카드(요약)만 — 자세한 결과 창은 [자세히]
     st.result = { seed: res.verified?.raw ?? null, shapeLimited: !!res.steps?.find((x) => x.stage === 'shapeField')?.limited, milkyRows: stages.milky ? milkyTable(res.steps ?? []) : null, targets: { len: obs.targetLen, wid: obs.targetWid, judge: judgeStats(res.verified?.stats, A.store.mspec.observe) }, design: res.best, feasible: res.feasible, reason: res.reason, shapeSwing: quickShape && !opt.shapeDeep && !opt.caseCheck, caseCheck: !!opt.caseCheck, shapeNote: res.shapeNote ?? null, hint: res.hint ?? null, peek: res.peek ?? null, lowered: res.milkyLowered ?? null, shape: res.best.shape ?? null, screen: res.steps?.find((x) => x.stage === 'shapeScreen')?.gains ?? null, stepLeds: nStep, unchanged: !!res.unchanged, ctx, stages,
-      added: opt.added ?? [], base: opt.base ?? null, clash: clashN,
+      added: opt.added ?? [], base: opt.base ?? null, clash: clashN, milkyRetuned, oneRow: !!st.sel.oneRow,
       finish: stages.housing ? (() => { const c = { ...M0.parts[hp].finish, ...(M0.parts[hp].coating ? { coating: M0.parts[hp].coating } : {}) }; return { cur: c, best: res.best.finish ?? c }; })() : null, height: stages.height && hInfo ? { dz: res.best.dz ?? 0, gap: hInfo.gap } : null,
       cur: { ...cur, shape: sm ? { dt: sm.dt, h: sm.h, R: sm.R, e: sm.e ?? 0, c: sm.c ?? 0, kF: sm.kF ?? null } : null, Ulen: C?.stats?.Ulen, Uwid: C?.stats?.Uwid, eff: C?.eff ?? NaN, profile: C?.stats?.profile ?? null },
       best: { ...res.best, ...(stp ? { stepOrig: !res.best.stepVirt } : {}), Ulen: res.verified.stats.Ulen, Uwid: res.verified.stats.Uwid, eff: res.verified.eff, profile: res.verified.stats.profile ?? null } };
@@ -1727,7 +1730,7 @@ function propHandlers() {
       A.autoWhy = '';
       const n = autoLed();
       if (!n) st.update('light', (m, x) => { const stp = m.light.kind === 'step' && !m.light.step?.fromMech && L.ledPartsNow(m) && !m.light.step.virtual;   // 클릭 대상 = 있는 LED — LED STEP 이면 그 LED, 아니면 도면 부품
-        x.pick = stp ? 'led' : 'mled'; x.node = 'light'; x.ledInfo = `자동 선택: LED 를 못 찾음${A.autoWhy ? `(${A.autoWhy})` : '(같은 모양 부품 2개 이상이 없음)'}${stp ? ' — 3D 에서' : ' — LED 가 따로 STEP 파일이면 [LED 수동 선택 ▸ 방식: LED STEP 불러오기], 기구 도면에 LED 가 있으면 3D 도면에서'} LED 하나의 빛 나오는 면을 직접 클릭하세요`; });
+        x.pick = stp ? 'led' : 'mled'; x.node = 'light'; x.ledInfo = `자동 선택: LED 를 못 찾음${A.autoWhy ? `(${A.autoWhy})` : '(같은 모양 부품 2개 이상이 없음)'}${stp ? ' — 3D 에서' : ' — LED 가 따로 STEP 파일이면 [LED STEP 불러오기], 기구 도면에 LED 가 있으면 3D 도면에서'} LED 하나의 빛 나오는 면을 직접 클릭하세요`; });
     },
     onLedFile: (f) => importLedStep(f),
     onPick: (mode) => st.update('session', (_, x) => { x.pick = mode; }),
@@ -1852,6 +1855,7 @@ function importLedStep(file) {
       st.update('light', (M, x) => {
         // 같은 이름의 LED STEP 을 다시 불러옴(저장소 비워짐 등) — 저장된 기준 LED·위치 보정·제외·가상 배치로 재인식
         const old = M.light.step;
+        M.light.kind = 'step';   // 첫 화면 [LED STEP 불러오기] 로 바로 불러와도 방식이 LED STEP 으로(2026-11-07)
         if (old?.ref && old.name === file.name) {
           M.light.step = { ...old, leds: [], pcb: -1, emitters: [] };
           try { L.applyStepRecognition(M, x, M.light.step, old.ref); x.ledInfo = `저장된 LED 지정 복원 — ${x.ledInfo}`; x.pick = null; x.node = 'light'; return; }

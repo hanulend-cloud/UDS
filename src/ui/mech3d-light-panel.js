@@ -78,6 +78,7 @@ function ledPickCardHtml(m, ui, ready = true) {
   const open = MANUAL_OPEN || ui.pick === 'mled' || ui.pick === 'led' || ui.pick === 'ledx' || L.kind === 'manual' || (L.kind === 'step' && !fromMech);   // 직접 지정 중이면 늘 펼침
   return `<div class="m3-card m3-ledpick"><div class="m3-sub"><i class="m3-fl">1</i> LED 지정</div>
     <div class="m3-row"><button type="button" class="${L.kind === 'none' || !ready ? 'm3-primary' : ''}" data-lp-mauto title="같은 모양 부품 2개 이상 · PCB 위에 올라간 것 = LED, 발광면 = PCB 반대쪽. 도면 부품에 없으면 LED STEP 파일에서 찾음">LED 자동 선택</button> <span class="mut">도면·LED STEP 에서 LED 를 찾음</span></div>
+    ${stepHtml ? '' : `<div class="m3-row"><label class="shape-btn">LED STEP 불러오기<input type="file" accept=".stp,.step" hidden data-lp-file></label> <span class="mut">LED 가 따로 STEP 파일이면</span></div>`}
     <div class="m3-row"><button type="button" data-lp-manual aria-expanded="${open}">LED 수동 선택 ${open ? '▴' : '▾'}</button> <span class="mut">방식을 골라 직접 지정</span></div>
     ${open ? `<div class="m3-ledman"><div class="m3-row"><label>방식</label><select data-lp-kind aria-label="광원 지정 방식"><option value="click" ${fromMech || ui.pick === 'mled' ? 'selected' : ''}>3D 도면에서 지정</option><option value="step" ${L.kind === 'step' && !fromMech && ui.pick !== 'mled' ? 'selected' : ''}>LED STEP 불러오기</option><option value="manual" ${sel(L.kind, 'manual')}>관측 라인 따라 직접 배치</option><option value="none" ${L.kind === 'none' && ui.pick !== 'mled' ? 'selected' : ''}>지정 안 함</option></select></div>
     ${mechHtml}${stepHtml}${manHtml}${recogHtml(m, ui)}</div>` : ''}</div>`;

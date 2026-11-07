@@ -116,6 +116,10 @@ ok(judgeText(0.8004, 0.8009).cls === 'ok' && judgeText(0.7999, 0.8).cls === 'bad
     const noClear = stageAvailability({ ...M3, parts: [pm('opaque'), pm('milky')] }, { non25: [0, 0] }).shape;
     ok(noClear.ok && noClear.parts.join() === '1' && noClear.rec == null, '투명 부품이 없으면 확산 부품 그대로'); }
   { const { resultLineHtml, peekText, loweredText } = await import('../src/ui/m3/autodesign-panel.js');
+    { const { retuneMilky } = await import('../src/ui/m3/autodesign-panel.js');
+      ok(retuneMilky({ leds: true }, { milky: {} }, true) && retuneMilky({ shape: true }, { milky: {} }, true) && !retuneMilky({ leds: true }, {}, true) && !retuneMilky({ milky: true, leds: true }, { milky: {} }, true) && !retuneMilky({ housing: true }, { milky: {} }, true) && !retuneMilky({ leds: true }, { milky: {} }, false), '고정된 Milky 는 위치·높이·형상을 바꿀 때 다시 맞춤');
+      const b1 = { best: { Ulen: 0.85, Uwid: 0.4 }, cur: { Ulen: 0.6, Uwid: 0.3 }, targets: { len: 0.8, wid: 0.7 }, feasible: false, stages: { leds: true } };
+      ok(/2열/.test(resultLineHtml({ ...b1, oneRow: true })) && !/2열 배치를 시도/.test(resultLineHtml({ ...b1, oneRow: false })) && !/2열 배치를 시도/.test(resultLineHtml({ ...b1, oneRow: true, best: { ...b1.best, Uwid: 0.75 } })) && !/2열 배치를 시도/.test(resultLineHtml({ ...b1, oneRow: true, stages: { milky: true } })), '폭 미달 + 1열만 = 2열 안내'); }
     { const b = { best: { Ulen: 0.7, Uwid: 0.7 }, cur: { Ulen: 0.6, Uwid: 0.6 }, reason: 'x', targets: {} };
       const miss = resultLineHtml({ ...b, feasible: false, stages: { shape: true } }), all = resultLineHtml({ ...b, feasible: false, stages: { shape: true, milky: true, leds: true } }), pass = resultLineHtml({ ...b, feasible: true, stages: { shape: true } }), other = resultLineHtml({ ...b, feasible: false, stages: { milky: true } });
       ok(resultLineHtml({ ...b, feasible: false, unchanged: true, stages: { shape: true }, shapeNote: '후보 11개가 모두 탈락' }).includes('후보 11개가 모두 탈락'), '형상이 안 바뀐 이유가 결과 카드에 보임');
@@ -441,6 +445,7 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   const f = flowState({ state: 'done' }, { Ulen: 0.802, seLen: 0.004, Uwid: 0.84, seWid: 0.004 }, { observe: O });
   ok(f.sim.cls === 'near' && f.sim.text.includes('목표 근처') && f.opt.text.includes('목표 근처'), `상단 표시: ${f.sim.text} / ${f.opt.text}`);
   const j = judgeText(0.802, 0.8, 0.004); ok(j.cls === 'near' && j.text.includes('근처') && j.text.includes('±0.008'), `결과 판: ${j.text}`);
+ok(judgeText(0.3, 0.8, null, 0.2).cls === 'busy' && /판정 보류/.test(judgeText(0.3, 0.8, null, 0.2).text) && judgeText(0.85, 0.8, null, 0.01).cls === 'ok', '계산 초반(노이즈 큼) = 빨간 미달 대신 판정 보류');
 }
 { // 전체 판정이 근처면 설명 문장도 근처로(엔진 사유의 '미달'이 남지 않게) · 하나라도 미달이면 그대로
   const { STAGES, monitorHtml } = await import('../src/ui/m3/opt-dash.js');

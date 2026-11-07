@@ -18,6 +18,7 @@ const finiteMax = (a) => { let m = -Infinity; for (const v of a) if (Number.isFi
 // 판정도 표시된(내림) 값끼리 비교한다 — 화면에 0.80 / 목표 0.80 인데 "미달"이 뜨는 일이 없게
 export function judgeText(v, tg, se = null, relNoise = null) {
   if (!Number.isFinite(v)) return { cls: '', text: `목표 ${fmtU(tg)}` };
+  if (relNoise > 0.05) return { cls: 'busy', text: `목표 ${fmtU(tg)} · 노이즈 큼 — 판정 보류(계산 중)` };   // 계산 초반(광선 수천 개) 값은 크게 흔들림 — 빨간 미달로 보이지 않게(2026-11-07)
   if (uVerdict(v, tg, se, relNoise) === 'near') return { cls: 'near', text: `목표 ${fmtU(tg)} · 근처 (오차 ±${uBand(v, se, relNoise).toFixed(3)})` };
   const vi = fl100(v), ti = fl100(tg), ok = vi >= ti;
   return { cls: ok ? 'ok' : 'bad', text: `목표 ${fmtU(tg)} · ${ok ? '합격' : `미달 −${(Math.max(1, ti - vi) / 100).toFixed(2)}`}` };
@@ -653,6 +654,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     q(key).textContent = fmtU(v); q(key).className = `v ${j.cls}`; q(`${key}j`).textContent = j.text;
     fill(q(`${key}g`), Number.isFinite(v) ? v * 100 : 0, j.cls === 'ok', tg * 100);
     q(`${key}g`).querySelector('.f').classList.toggle('near', j.cls === 'near');
+    q(`${key}g`).querySelector('.f').classList.toggle('busy', j.cls === 'busy');
   };
   function clear(message) {
     VIEW.map = VIEW.prof = VIEW.wprof = null; if (big) for (const k of KINDS) clearCanvas(big.cvs[k]);
