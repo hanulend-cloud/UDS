@@ -976,7 +976,7 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 #mech3d-wrap .m3-tabs + .m3-edit { border: 1.5px solid var(--m3-acc); border-radius: 0 0 8px 8px; padding: 6px; }
 #mech3d-wrap .m3-tabs:has([role=tab]:last-child[aria-selected=true]) + .m3-edit { background: var(--m3-accbg); }
 #mech3d-wrap .m3-edit .m3-card { background: var(--m3-panel, #fff); }
-#mech3d-wrap .m3-tabs .m3-tab-s { display: block; font-size: 10px; font-weight: 400; overflow: hidden; text-overflow: ellipsis; }
+#mech3d-wrap .m3-tabs .m3-tab-s { display: block; font-size: 10px; font-weight: 400; white-space: normal; line-height: 1.2; }   /* 좁은 속성 칸에서 부제가 … 로 잘리던 것 — 줄바꿈 */
 #mech3d-wrap .m3-tabs [role=tab][aria-selected=true] .m3-tab-s { color: #fff; opacity: .9; }
 /* 속성 카드 양식: 굵은 제목 + 밑줄, 줄 = [이름표 | 입력] */
 .m3-props .m3-card > .m3-sub:first-child { font-size: 12.5px; font-weight: 700; opacity: 1; padding-bottom: 3px; margin-bottom: 4px; border-bottom: 1px solid var(--m3-line); }
