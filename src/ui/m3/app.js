@@ -1040,6 +1040,7 @@ async function adRun(opt = {}) {
     height: st.sel.height && avail.height.ok, housing: st.sel.housing && avail.housing.ok && avail.housing.parts.includes(st.sel.housingPart) };
   // 고정된 Milky 다시 맞춤(2026-11-07) — 위치·높이·형상을 바꾸면 전에 맞춘 Milky 가 더는 최적이 아님. 고정을 풀고(다시 체크) 이번 실행에 넣음 — 알림
   const milkyRetuned = !opt.shapeDeep && !opt.caseCheck && retuneMilky(stages, st.locked, avail.milky.ok);
+  if (!milkyRetuned && /^고정했던 Milky/.test(S.status ?? '')) setStatus('');   // 지난 실행의 다시 맞춤 문구가 이번 실행에 남지 않게
   if (milkyRetuned) { stages.milky = true; delete st.locked.milky; st.sel.milky = true; dashReset(stages); setStatus('고정했던 Milky 도 위치·형상에 맞춰 다시 맞춤'); }
   st.milkyPart = adMilkyPart(M0, avail);
   const hpSel = avail.housing?.parts?.includes(st.sel.housingPart) ? st.sel.housingPart : defaultHousingPart(M0, adInfo().boxes);   // 보완으로 ④ 를 더했으면 기본 케이스 부품
