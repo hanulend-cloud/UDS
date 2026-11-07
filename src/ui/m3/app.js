@@ -15,7 +15,7 @@ import { loadClear, saveClear, clearExportJson, clearImport, parseMaterialFile }
 import { setPartMaterial, setPartMaterialParam, syncPcb, setPcbOff, pcbAllOff, setPcbR, pcbPickPlan, pcbNames, clampPcbPct, CLEAR_BASE, applyClearEntry, clearEntryFromForm, editClearEntry, syncClearParts } from '../../engine/mech3d/materials.js';
 import { lineFromData, lightData, obsDirection } from '../../engine/mech3d/line.js';
 import { tallyGeometry, tallyStats, autoCells } from '../../engine/mech3d/tally.js';
-import { isUntraced } from '../../engine/mech3d/scene3d.js';
+import { isUntraced, tracedParts } from '../../engine/mech3d/scene3d.js';
 import { bounds } from '../../engine/mech3d/mesh.js';
 import { runGeomChecks, checkInterference, boxTravel, checkLeak } from '../../engine/mech3d/checks.js';
 import { createStore, PHYSICS, GEOM_CHECK, PERSIST_TAGS } from './store.js';
@@ -589,8 +589,8 @@ function clearanceOf(i) {
 }
 
 // ---- 기구 최적화(P4) ----
-// sel.oneRow = ② 1열만(재료비 — 2026-10-30 기본 켬) · open = 늘 true(접기 없음 — 기구 최적화 칸은 ⑤ 창 안에만 있고 창을 닫으면 숨김, 2026-10-29)
-function adState() { return (A.ad ??= { open: true, sel: { milky: true, leds: false, shape: false, shapePart: -1, milkyMax: null, height: false, housing: false, housingPart: -1, housingSpecial: false, boost: false, oneRow: true }, running: null, result: null, undo: null, milkyPart: null, runner: null, info: null, stepBusy: false, stepWorker: null, locked: {}, lastLock: null }); }   // locked = 적용해서 고정한 항목(position·housing·shape·milky)
+// sel.oneRow = ② 1열만(재료비 — 기본 끔 2026-11-07: 1열·2열 모두 찾음, 켜면 1열만) · open = 늘 true(접기 없음 — 기구 최적화 칸은 ⑤ 창 안에만 있고 창을 닫으면 숨김, 2026-10-29)
+function adState() { return (A.ad ??= { open: true, sel: { milky: true, leds: false, shape: false, shapePart: -1, milkyMax: null, height: false, housing: false, housingPart: -1, housingSpecial: false, boost: false, oneRow: false }, running: null, result: null, undo: null, milkyPart: null, runner: null, info: null, stepBusy: false, stepWorker: null, locked: {}, lastLock: null }); }   // locked = 적용해서 고정한 항목(position·housing·shape·milky)
 function adInfo() {   // 부품별 비 2.5D 비율(부품 윗면 기준 — partFrame) — 라인이 있을 때만. (기구·라인) 별 캐시(높이맵 계산이 무거움)
   const st = adState(), S = A.store.session, rt = getMech3d();
   if (!st.info || st.info.rt !== rt || st.info.line !== S.line) st.info = { rt, line: S.line, non25: S.line && rt ? rt.parts.map((p) => heightsFor(p, partFrame(p, S.line.frame), 0.5).non25) : [], boxes: rt ? rt.parts.map((p) => bounds(p.positions)) : [] };   // boxes = ④ 기본 대상용 외곽
@@ -785,7 +785,7 @@ async function designClash(d, ctx, M0, rt, line) {
   if (M0.light.kind !== 'step') return 0;
   try {
     const tick = pacer();   // LED 마다 화면에 양보(40 개면 3.3 초 걸림)
-    const cnt = async (M, mech) => { const lay = L.stepLayout(M, line); let n = 0; for (const k of lay?.leds ?? []) { await tick(); if (lay.parts[k] && interferenceKeys(lay.parts[k], mech, [], []).size > 0) n++; } await tick(); return Math.max(boxClashN(M, line, rt), n); };
+    const cnt = async (M, mech) => { const lay = L.stepLayout(M, line); let n = 0; for (const k of lay?.leds ?? []) { await tick(); if (lay.parts[k] && interferenceKeys(lay.parts[k], tracedParts(mech, M.parts), [], []).size > 0) n++; } await tick(); return Math.max(boxClashN(M, line, rt), n); };
     const { M, parts } = designScene(d, ctx);
     return Math.max(0, await cnt(M, parts) - await cnt(M0, rt.parts));
   } catch { return 0; }
@@ -804,7 +804,7 @@ async function lateralCandidates(M0, line, rt, ctx) {
   const half = ledHalfWidth(M0, line) * 0.9, down = (p) => { const h = intersectRay(rt.bvh, p[0], p[1], p[2], -n[0], -n[1], -n[2], 1e-6, Infinity, -1, -1, mask); return h ? h.t : Infinity; };
   const t0 = down(ref.pos), cs = [0];
   const clashN = (c) => { const { M, parts } = designScene({ ...ctx.cur, positions: ss.map((s) => ({ s, w: c })), count: ss.length, rows: 1, rowGap: 0, stepVirt: true }, ctx); const lay = L.stepLayout(M, line);
-    return { lay, n: Math.max(boxClashN(M, line, rt), (lay?.leds ?? []).filter((k) => lay.parts[k] && C_interf(lay.parts[k], mech)).length) }; };
+    return { lay, n: Math.max(boxClashN(M, line, rt), (lay?.leds ?? []).filter((k) => lay.parts[k] && C_interf(lay.parts[k], tracedParts(mech, M.parts))).length) }; };
   let base = 0; try { base = clashN(0).n; } catch { return null; }
   const tick = pacer();
   for (let c = -16; c <= 16; c++) {   // 1 mm 간격(2026-11-03) — 비교는 엔진이 2 mm 로 훑고 ±1 mm

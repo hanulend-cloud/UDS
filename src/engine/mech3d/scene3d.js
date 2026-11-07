@@ -4,6 +4,8 @@ import { resolveFinish } from './materials.js';
 
 // 빛 계산에서 빠지는 부품: 사용자가 추적 제외(untrace) · 도면에서 광원으로 옮김(role 'light')
 export const isUntraced = (p) => !!(p?.untrace || p?.role === 'light');
+// 간섭 상대 부품 — 광원 부품(도면 LED 를 광원으로 옮긴 것)·추적 제외 부품은 null(번호는 그대로). 새 LED 배치가 원래 LED 자리와 닿아 간섭으로 잡히던 것(2026-11-07)
+export const tracedParts = (parts, specParts) => parts.map((m, i) => (isUntraced(specParts?.[i]) ? null : m));
 
 export function buildTraceScene(rt, mspec, ctx) {
   if (!rt || mspec.parts.length !== rt.parts.length) throw new Error('3D 기구: 부품 지정과 메쉬의 부품 수가 다름');

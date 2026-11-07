@@ -1,6 +1,7 @@
 // 부품 간격·간섭·제한: node test/mech3d-clearance.mjs
 import { closestOnTri, meshGap, meshPenetration, partClearance, interferenceKeys, limitXform, axisLimits, travelDistance, newInterference } from '../src/engine/mech3d/clearance.js';
 import { boxMesh, ok, done } from './mech3d-util.mjs';
+import { tracedParts } from '../src/engine/mech3d/scene3d.js';
 
 const near = (a, b, e = 1e-6) => Math.abs(a - b) < e;
 { const q = closestOnTri([0.2, 0.2, 5], [0, 0, 0], [1, 0, 0], [0, 1, 0]), r = closestOnTri([2, 2, 0], [0, 0, 0], [1, 0, 0], [0, 1, 0]);
@@ -54,4 +55,9 @@ const A = boxMesh(0, 0, 0, 10, 10, 2);
   const deeper = boxMesh(-1, 0, 0, 1.6, 10, 2);   // 벽 겹침 0.2 → 0.6
   ok(newInterference(cand, [deeper], [], before) === 'p:0' && newInterference(cand, [boxMesh(-1, 0, 0, 1.23, 10, 2)], [], before) === null, '기존보다 0.05 mm 넘게 깊어짐 = 간섭, 이내 = 아님');
 }
+{ // 간섭 상대에서 광원 부품(도면 LED 를 광원으로 옮긴 것)·추적 제외 부품은 뺌(2026-11-07) — 새 LED 배치가 원래 LED 자리와 닿아 간섭으로 잡혔음(링 예제)
+  const led = boxMesh(0, 0, 0, 1, 1, 1), oldLed = boxMesh(0.5, 0, 0, 1, 1, 1), wall = boxMesh(0.8, 0, 0, 1.2, 1, 1);
+  const spec = [{ role: 'light' }, {}];
+  ok(interferenceKeys(led, [oldLed, wall]).size === 2 && interferenceKeys(led, tracedParts([oldLed, wall], spec)).size === 1 && interferenceKeys(led, tracedParts([oldLed, wall], [{ untrace: true }, {}])).has('p:1'),
+    'tracedParts: 광원·추적 제외 부품은 간섭 상대에서 빠짐(번호 유지)'); }
 done();
