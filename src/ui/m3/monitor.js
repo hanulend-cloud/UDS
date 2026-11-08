@@ -55,7 +55,7 @@ export function mountResizers(el, { rect, apply, ok = () => true, end = () => {}
   }
 }
 // host = 창을 붙일 곳(#mech3d-wrap — CSS 변수 상속), items = 창에 담을 칸들(차례대로), onChange(open) = 단추 표시 갱신
-export function createMonitor({ host, items, onChange = () => {} }) {
+export function createMonitor({ host, items, onChange = () => {}, onTab = () => {} }) {
   const sv = load(), old = sv.lay !== LAY;
   let st = { open: false, min: false, ...DEF_RECT, ...(old ? { open: sv.open, min: sv.min } : sv) };
   const persist = () => save({ lay: LAY, open: st.open, min: st.min, x: st.x, y: st.y, w: st.w, h: st.h });
@@ -63,7 +63,7 @@ export function createMonitor({ host, items, onChange = () => {} }) {
   const place = () => { const r = clampRect(st.min ? { ...st, w: COLLAPSED_W } : st, innerWidth, innerHeight); st.x = r.x; st.y = r.y; if (!st.min) { st.w = r.w; st.h = r.h; } el.style.left = `${r.x}px`; el.style.top = `${r.y}px`; el.style.width = `${r.w}px`; el.style.height = st.min ? 'auto' : `${r.h}px`; };
   const kick = () => window.dispatchEvent(new Event('resize'));   // 담은 칸의 그래프·캔버스 크기 다시
   el.className = 'm3-mon'; el.hidden = true; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', '기구 최적화');
-  el.innerHTML = `<div class="m3-mon-hd" title="끌어서 옮기기 · ④ 광분포 결과가 목표 미달이면 여기서 후보를 찾아 최종 판정 → [적용]"><b><i class="m3-fl" data-mon-step>5</i>기구 최적화</b><span class="m3-mon-sum" data-mon-sum></span><span class="m3-mon-sp"></span><span class="m3-ctl" data-mon-ctl></span><button type="button" data-mon-min></button><button type="button" data-mon-close title="창 닫기(진행 중인 최적화는 계속)">✕ 닫기</button></div><div class="m3-mon-body"></div>`;
+  el.innerHTML = `<div class="m3-mon-hd" title="끌어서 옮기기 · ④ 광분포 결과가 목표 미달이면 여기서 후보를 찾아 최종 판정 → [적용]"><b><i class="m3-fl" data-mon-step>5</i>기구 최적화</b><span class="m3-mon-tabs" role="tablist" data-mon-tabs><button type="button" role="tab" data-mon-tab="set">설정</button><button type="button" role="tab" data-mon-tab="run">진행</button><button type="button" role="tab" data-mon-tab="result">결과</button></span><span class="m3-mon-sum" data-mon-sum></span><span class="m3-mon-sp"></span><span class="m3-ctl" data-mon-ctl></span><button type="button" data-mon-min></button><button type="button" data-mon-close title="창 닫기(진행 중인 최적화는 계속)">✕ 닫기</button></div><div class="m3-mon-body"></div>`;
   const body = el.querySelector('.m3-mon-body');
   for (const it of items.filter(Boolean)) body.appendChild(it);   // 기본 화면에서 빼서 창 안으로(닫아도 여기 그대로)
   host.appendChild(el);
@@ -73,6 +73,12 @@ export function createMonitor({ host, items, onChange = () => {} }) {
   el.addEventListener('pointerdown', () => raiseWin(el), true);
   el.querySelector('[data-mon-min]').onclick = () => setMin(!st.min);
   el.querySelector('[data-mon-close]').onclick = () => close();
+  el.querySelectorAll('[data-mon-tab]').forEach((b) => { b.onclick = () => { if (!b.disabled) onTab(b.dataset.monTab); }; });
+  // 화면 = 설정(설계 인자 고르기) · 진행(진행률·그래프) · 결과(판정·변화·적용). ok = 고를 수 있는 탭
+  function setMode(mode, ok = {}) {
+    if (el.dataset.mode !== mode) { el.dataset.mode = mode; kick(); }
+    el.querySelectorAll('[data-mon-tab]').forEach((b) => { const k = b.dataset.monTab, on = k === mode; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); b.disabled = !on && ok[k] === false; });
+  }
   function setMin(v) {
     st.min = v; persist();
     el.classList.toggle('min', v);
@@ -94,5 +100,5 @@ export function createMonitor({ host, items, onChange = () => {} }) {
   // 접었을 때 보일 현재 결과(글 1~2개) — html
   const setSummary = (html) => { const q = el.querySelector('[data-mon-sum]'); if (q && q._h !== html) { q._h = html; q.innerHTML = html; } };
   const setRunCtl = (c, fn) => setCtl(el.querySelector('[data-mon-ctl]'), c, fn);   // 접은 창의 실행·일시정지·중지
-  return { open, close, expand: () => { if (st.min) setMin(false); }, collapse: () => { if (!st.min) setMin(true); }, toggle: () => (st.open ? close() : open()), isOpen: () => st.open, el, setSummary, setCtl: setRunCtl, setDone: (d) => setStepMark(el.querySelector('[data-mon-step]'), 5, d) };
+  return { setMode, open, close, expand: () => { if (st.min) setMin(false); }, collapse: () => { if (!st.min) setMin(true); }, toggle: () => (st.open ? close() : open()), isOpen: () => st.open, el, setSummary, setCtl: setRunCtl, setDone: (d) => setStepMark(el.querySelector('[data-mon-step]'), 5, d) };
 }

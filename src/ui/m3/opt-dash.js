@@ -163,7 +163,7 @@ function stageBest(t, tl, tw) {
   return e;
 }
 // 지난 최적화 후보 표(순수, 2026-11-07) — 균일도 순(목표 대비 여유가 큰 순, 같으면 효율). 값 = 최종 판정과 같은 정밀 재계산. [적용] = data-hpick(원래 번호)
-export function histTableHtml(list, tl, tw, busy) {
+export function histTableHtml(list, tl, tw, busy, { pick = 'h' } = {}) {
   if (!list?.length) return '';
   // 순위 = 표시값(내림) 기준 — 노이즈 수준 차이(0.418 vs 0.412)로 화면상 같은 값의 순서가 뒤집히지 않게. 같으면 두 균일도 합 → 효율
   const fl = (v) => (Number.isFinite(v) ? Math.floor(v * 100 + 1e-9) / 100 : NaN);
@@ -171,7 +171,7 @@ export function histTableHtml(list, tl, tw, busy) {
   const cell = (v, t) => (Number.isFinite(v) ? `<b class="${Number.isFinite(t) ? (v + 1e-9 >= t ? 'od-ok' : 'od-bad') : ''}">${fmtJudge(v)}</b>` : '–');
   const rows = list.map((e, i) => ({ e, i })).sort((a, b) => mg(b.e) - mg(a.e) || sum(b.e) - sum(a.e) || (b.e.eff || 0) - (a.e.eff || 0)).map(({ e, i }, n) =>
     `<tr${e.applied ? ' class="om-h-on"' : ''}><td>${n + 1}</td><td class="om-mx-l">${esc(e.label)}${e.kind === 'final' ? '' : ' <span class="mut">(대안)</span>'}</td><td>${cell(e.Ulen, tl)}</td><td>${cell(e.Uwid, tw)}</td><td>${Number.isFinite(e.eff) ? `${(e.eff * 100).toFixed(1)}%` : '–'}</td><td class="mut">${esc(e.at ?? '')}</td>`
-    + `<td><button type="button" data-hpick="${i}"${busy ? ' disabled title="최적화가 끝난 뒤 고르세요"' : ''}>${e.applied ? '적용됨' : '적용'}</button></td></tr>`);
+    + `<td><button type="button" ${pick === 'ad' ? `data-ad="hpick" data-v="${i}"` : `data-hpick="${i}"`}${busy ? ' disabled title="최적화가 끝난 뒤 고르세요"' : ''}>${e.applied ? '적용됨' : '적용'}</button></td></tr>`);
   return `<div class="om-mx om-hist"><div class="om-lh" title="값 = 정밀 재계산 · 원하는 사양을 골라 [적용]"><b>지난 후보</b> <span class="mut">균일도 순 · ${list.length}개</span></div><div class="om-hist-sc"><table class="om-mx-t"><tr><th>#</th><th>사양</th><th>길이</th><th>폭</th><th>효율</th><th>시각</th><th></th></tr>${rows.join('')}</table></div></div>`;
 }
 // 후보의 점수(목표 대비 여유 — 둘 다 있으면 작은 쪽)
@@ -236,7 +236,10 @@ export function createOptDash(el, h = {}) {
   // 고르기만 바뀜(실행 전) — 다시 그림. 실행 결과가 남아 있으면 그대로 두고 스위치만 갱신
   function refresh() { draw(); }
   function clear() { S = null; draw(); }
-  return { reset, addStages, progress, evals, finish, stop, setPaused, refresh, clear };
+  // 단계별 최고(실제 계산값) — 결과 화면의 항목별 효과
+  function stageBests() { if (!S) return null; const o = {}; for (const [k] of STAGES) { const t = S.tiles[k]; if (t.status !== 'off') { const e = stageBest(t, S.tgLen, S.tgWid); if (e && !e.est) o[k] = { Ulen: e.Ulen, Uwid: e.Uwid }; } } return o; }
+  const hasRun = () => !!S;
+  return { stageBests, hasRun, reset, addStages, progress, evals, finish, stop, setPaused, refresh, clear };
 }
 
 // 광경로 순위(순수) — paths = { 'R:2>1': 가중 합 } → [{ parts:[번호], refl, share }] 비중 큰 순(기구 부품만, 같은 경로 합침)

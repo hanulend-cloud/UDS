@@ -830,3 +830,17 @@ done();
   { const tie = [{ label: 'A', Ulen: 0.789, Uwid: 0.418, eff: 0.3 }, { label: 'B', Ulen: 0.838, Uwid: 0.412, eff: 0.3 }], tt = histTableHtml(tie, 0.8, 0.8, false);
     ok(tt.indexOf('>B') < tt.indexOf('>A'), '표시값(내림)이 같으면 다른 균일도가 높은 안이 위'); }
   ok(/disabled/.test(histTableHtml(all, 0.8, 0.8, true)) && histTableHtml([], 0.8, 0.8, false) === '', '실행 중엔 적용 막음 · 후보 없으면 표 없음'); }
+{ // 결과 화면(2026-11-08): 판정 한 줄 · 변화 카드 3개(이전 → 이후, 막대) · 무엇을 바꿔서 얼마나(항목별 효과 ≈) · 단추 · 접힌 상세
+  const { resultViewHtml, stageEffects } = await import('../src/ui/m3/autodesign-panel.js');
+  const r = { feasible: false, reason: '목표 미달 · 한계: 폭 방향 — 폭 가장자리가 가장 어두움', targets: { len: 0.8, wid: 0.8 }, stages: { shape: true, milky: true },
+    cur: { milky: 2, Ulen: 0.65, Uwid: 0.62, eff: 0.433 }, best: { milky: 3.6, Ulen: 0.75, Uwid: 0.77, eff: 0.549 }, shape: { dt: 2, h: 0, R: 0.9 } };
+  const eff = stageEffects({ shape: { Ulen: 0.7, Uwid: 0.74 }, milky: { Ulen: 0.72, Uwid: 0.75 } }, r.cur, r.best);
+  ok(Math.abs(eff.shape.dl + eff.milky.dl - 0.1) < 1e-9 && Math.abs(eff.shape.dw + eff.milky.dw - 0.15) < 1e-9 && eff.shape.dl > eff.milky.dl, `항목 효과 합 = 전체 변화(배분): ${JSON.stringify(eff)}`);
+  const h = resultViewHtml(r, { effects: eff, hist: [{ label: 'Milky 3.6', Ulen: 0.75, Uwid: 0.77, eff: 0.5 }] });
+  ok(h.includes('목표 미달') && (h.match(/rs-card/g) ?? []).length >= 3 && h.includes('0.65') && h.includes('0.75') && h.includes('▲0.10'), '판정 · 카드(이전 → 이후 ▲)');
+  ok(h.includes('② 형상') && h.includes('③ Milky') && h.includes('3.60') && /≈\s*\+0\.\d\d/.test(h), '바뀐 항목 · 효과 ≈');
+  ok(h.includes('data-ad="apply"') && h.includes('data-ad="hpick" data-v="0"') && h.includes('다른 후보') && h.includes('data-ad="chart"'), '적용 · 다른 후보(접힘) · 그래프');
+  ok((h.match(/한계/g) ?? []).length === 1, '한계 한 번만');
+  const a = resultViewHtml(null, { applied: { ...r, at: '13:57' } });
+  ok(a.includes('적용됨') && a.includes('13:57') && a.includes('data-ad="revert"') && !a.includes('data-ad="apply"'), '적용 뒤: 적용됨 · 되돌리기');
+  ok(/≈\s*\+0\.\d\d/.test(resultViewHtml(null, { applied: { ...r, at: '13:57' }, effects: eff })), '적용 뒤에도 항목별 효과'); }

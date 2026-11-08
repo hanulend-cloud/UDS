@@ -40,7 +40,7 @@ import { positionsFromLayout, addPosition, alignPositions } from '../../engine/m
 import { createResultsPanel } from './results-panel.js';
 import { renderStatusBar, leakText } from './status-bar.js';
 import { createAdRunner, resumable } from './autodesign-run.js';
-import { renderAutoPanel, seedFits, milkyTable, stageAvailability, clampCap, overallFrac, etaText, reusableCurrent, defaultHousingPart, applyDz, applyFinish, capDefault, nextFinish, finishText, shapeText, tileConfigHtml, AD_ITEMS, retuneMilky, histFromRun, mergeHist } from './autodesign-panel.js';
+import { renderAutoPanel, seedFits, milkyTable, stageAvailability, clampCap, overallFrac, etaText, reusableCurrent, defaultHousingPart, applyDz, applyFinish, capDefault, nextFinish, finishText, shapeText, tileConfigHtml, AD_ITEMS, retuneMilky, histFromRun, mergeHist, stageEffects } from './autodesign-panel.js';
 import { ledHeightRange, heightCandidates, catalogOf, finishCandidatesFor, setReflMaterial, partFinishEdit } from '../../engine/mech3d/housing-led.js';
 import { migrateFinishCatalog, reflectPatch, copyAsUser, entryFromForm, addSamples, parsePercents, uniqueReflId } from '../../model/reflect-db.js';
 import { intersectRay } from '../../engine/mech3d/bvh.js';
@@ -184,7 +184,7 @@ export async function mount(ctx) {
   mountSplitter(document.querySelector('.m3-main'));   // 좌·우 창 폭 끌어서 조절(한 번만 붙음)
   mountDockSplitter(document.querySelector('#m3-dock'), document.querySelector('#mech3d-wrap'));   // 아래 칸 높이 조절
   // ⑤ 기구 최적화 창(떠 있는 창) — 설계 인자 현황·기구 최적화 칸을 기본 화면에서 빼서 담음. 여닫기 = 명령줄 [5 기구 최적화]
-  monitor ??= createMonitor({ host: $('#mech3d-wrap'), items: [$('#m3-factor'), $('#m3-dock')], onChange: (on) => { const b = document.querySelector('#m3-cmd [data-c="opt"]'); if (b) { b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); } if (on && A && !adState().open) adSetOpen(true); if (A) { renderMarkers(); adDetectPath(); } } });
+  monitor ??= createMonitor({ host: $('#mech3d-wrap'), items: [$('#m3-factor'), $('#m3-dock')], onTab: (m) => { if (!A) return; adState().view = m; renderAuto(); }, onChange: (on) => { const b = document.querySelector('#m3-cmd [data-c="opt"]'); if (b) { b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); } if (on && A && !adState().open) adSetOpen(true); if (A) { renderMarkers(); adDetectPath(); } } });
   // 기구 최적화 창 안: 왼쪽 설계 인자 ↔ 오른쪽 실행·진행 폭 조절(가운데 세로 경계선 끌기, 보는 사람별)
   // 실행 줄·결과 카드(#m3-auto) = 왼쪽 설계 인자 바로 아래(2026-10-30) — 고르고 → 실행 → 결과를 한 칸에서, 오른쪽은 진행 모니터만
   if ($('#m3-auto') && $('#m3-auto').parentElement !== $('#m3-factor')) $('#m3-factor')?.appendChild($('#m3-auto'));
@@ -591,7 +591,7 @@ function clearanceOf(i) {
 
 // ---- 기구 최적화(P4) ----
 // sel.oneRow = ② 1열만(재료비 — 기본 끔 2026-11-07: 1열·2열 모두 찾음, 켜면 1열만) · open = 늘 true(접기 없음 — 기구 최적화 칸은 ⑤ 창 안에만 있고 창을 닫으면 숨김, 2026-10-29)
-function adState() { return (A.ad ??= { open: true, sel: { milky: true, leds: false, shape: false, shapePart: -1, milkyMax: null, height: false, housing: false, housingPart: -1, housingSpecial: false, boost: false, oneRow: false }, running: null, result: null, undo: null, milkyPart: null, runner: null, info: null, stepBusy: false, stepWorker: null, locked: {}, lastLock: null, hist: [], flash: '' }); }   // hist = 지난 최적화 후보(지난 후보 표) · flash = 결과 카드 안내 한 줄 · locked = 적용해서 고정한 항목(position·housing·shape·milky)
+function adState() { return (A.ad ??= { open: true, sel: { milky: true, leds: false, shape: false, shapePart: -1, milkyMax: null, height: false, housing: false, housingPart: -1, housingSpecial: false, boost: false, oneRow: false }, running: null, result: null, undo: null, milkyPart: null, runner: null, info: null, stepBusy: false, stepWorker: null, locked: {}, lastLock: null, hist: [], flash: '', view: 'set', showChart: false }); }   // view = 창 화면(설정·진행·결과)   // hist = 지난 최적화 후보(지난 후보 표) · flash = 결과 카드 안내 한 줄 · locked = 적용해서 고정한 항목(position·housing·shape·milky)
 function adInfo() {   // 부품별 비 2.5D 비율(부품 윗면 기준 — partFrame) — 라인이 있을 때만. (기구·라인) 별 캐시(높이맵 계산이 무거움)
   const st = adState(), S = A.store.session, rt = getMech3d();
   if (!st.info || st.info.rt !== rt || st.info.line !== S.line) st.info = { rt, line: S.line, non25: S.line && rt ? rt.parts.map((p) => heightsFor(p, partFrame(p, S.line.frame), 0.5).non25) : [], boxes: rt ? rt.parts.map((p) => bounds(p.positions)) : [] };   // boxes = ④ 기본 대상용 외곽
@@ -678,9 +678,15 @@ function renderAuto() {
     return;
   }
   A.optDash?.refresh();
-  renderAutoPanel(el, { flash: st.flash, caseView: adCaseView(), avail, sel, running: st.running && { ...st.running, paused: !!st.paused }, result: st.result, resultOpen: !!st.resultOpen, names: M.parts.map((p) => p.name), canRevert: !!st.undo, applied: st.undo ? st.applied ?? null : null, noLine: !A.store.session.line, noLed: A.store.session.line ? adBlock() : '', milkyPart: mp, housingMat: hm ? { name: hm.name, max: hm.max } : null, catalog: reflCat() }, {
+  // 창 화면(2026-11-08): 설정 · 진행 · 결과 — 실행하면 진행, 끝나면 결과로 넘어감. 탭으로 오갈 수 있음
+  const hasRes = !!(st.result || (st.undo && st.applied) || st.hist?.length), hasRun = !!st.running || !!A.optDash?.hasRun?.();
+  let mode = st.view ?? 'set'; if (mode === 'result' && !hasRes) mode = 'set'; if (mode === 'run' && !hasRun) mode = 'set';
+  monitor?.setMode?.(mode, { set: true, run: hasRun, result: hasRes });
+  monitor?.el?.classList.toggle('show-chart', !!st.showChart);
+  const effects = (st.result ?? (st.undo ? st.applied : null))?.effects ?? null;   // 항목별 효과 — 실행이 끝날 때 결과에 붙임(적용 뒤에도 남음)
+  renderAutoPanel(el, { mode, effects, hist: st.hist, flash: st.flash, caseView: adCaseView(), avail, sel, running: st.running && { ...st.running, paused: !!st.paused }, result: st.result, resultOpen: !!st.resultOpen, names: M.parts.map((p) => p.name), canRevert: !!st.undo, applied: st.undo ? st.applied ?? null : null, noLine: !A.store.session.line, noLed: A.store.session.line ? adBlock() : '', milkyPart: mp, housingMat: hm ? { name: hm.name, max: hm.max } : null, catalog: reflCat() }, {
     onSel: (k, v) => adSel(k, v),
-    onAction: (k, v) => ({ caseSort: () => adCaseSort(v), casePick: () => adCasePick(v), caseRun: adCaseRun, applyBlocked: () => { st.flash = `LED 몸체가 부품과 ${st.result?.clash ?? ''}개 겹쳐 적용할 수 없음 — 다른 후보(오른쪽 '지난 최적화 후보' 표)를 고르거나 [취소] 후 LED 배치·개수를 바꿔 다시 실행하세요`; renderAuto(); }, casePart: () => { const i = +v; if (!Number.isInteger(i)) return; A.store.update('session', (_, x) => { x.multi = []; x.node = `part:${i}`; x.sel = { part: i, face: null }; x.ledSel = null; x.status = `케이스 부품 ${i + 1} — 속성에서 면 처리를 바꾸세요(추천 값은 결과 카드)`; }); monitor?.collapse?.(); }, shapeDeep: adShapeDeep, continue: adContinue, applyMilky: () => adApplyMilky(+v), close: () => monitor?.close(), apply: adApply, applyAlt: adApplyAlt, cancel: adCancel, revert: adRevert, step: adStep, view: () => { st.resultOpen = true; renderAuto(); }, hide: () => { st.resultOpen = false; renderAuto(); } })[k]?.(),
+    onAction: (k, v) => ({ caseSort: () => adCaseSort(v), casePick: () => adCasePick(v), caseRun: adCaseRun, applyBlocked: () => { st.flash = `LED 몸체가 부품과 ${st.result?.clash ?? ''}개 겹쳐 적용할 수 없음 — 다른 후보(오른쪽 '지난 최적화 후보' 표)를 고르거나 [취소] 후 LED 배치·개수를 바꿔 다시 실행하세요`; renderAuto(); }, casePart: () => { const i = +v; if (!Number.isInteger(i)) return; A.store.update('session', (_, x) => { x.multi = []; x.node = `part:${i}`; x.sel = { part: i, face: null }; x.ledSel = null; x.status = `케이스 부품 ${i + 1} — 속성에서 면 처리를 바꾸세요(추천 값은 결과 카드)`; }); monitor?.collapse?.(); }, shapeDeep: adShapeDeep, continue: adContinue, applyMilky: () => adApplyMilky(+v), hpick: () => adPickHist(+v), chart: () => { st.showChart = !st.showChart; renderAuto(); }, close: () => monitor?.close(), apply: adApply, applyAlt: adApplyAlt, cancel: adCancel, revert: adRevert, step: adStep, view: () => { st.resultOpen = true; renderAuto(); }, hide: () => { st.resultOpen = false; renderAuto(); } })[k]?.(),
   });
 }
 // 접은 창에 보일 현재 결과 — 실행 중 = 진행률, 결과 있음 = 후보 값, 그 밖 = 지금 값(길이·폭 균일도)
@@ -1060,7 +1066,7 @@ async function adRun(opt = {}) {
   const snap0 = A.prog.snapshot(), ps = snap0.state, currentVerified = reusableCurrent(snap0, G), curS = lowQ ? null : reusableCurrent(snap0, Gs), currentScreen = curS ? { ...curS, sharp: true } : null;   // 수렴한 점진 결과 = 현재안(verify 생략)
   st.userPaused = ps === 'paused'; st.deferred = ['paused', 'running', 'pending', 'starting'].includes(ps);
   if (ps === 'pending') A.prog.cancel(); else A.prog.pause();
-  st.running = { frac: 0, text: '준비' }; st.result = null; st.caseSel = null; st.casePv = null; A.meshShown = null; renderView(); renderAuto();
+  st.running = { frac: 0, text: '준비' }; st.view = 'run'; st.result = null; st.caseSel = null; st.casePv = null; A.meshShown = null; renderView(); renderAuto();
   let hInfo = null; if (stages.height) { try { hInfo = await adHeightInfo(M0, line, rt); } catch { stages.height = false; } if (A !== a) return null; }   // 범위 계산 실패 = ⑤ 생략. 실행 중 표시(running) 뒤에 해야 양보하는 동안 두 번 실행되지 않음
   // LED STEP: 현재 = 가상이면 그 개수·피치, 아니면 현재 발광점 수·0(stepOrig = 원래 위치) · stepVirt = 설계가 가상 배치인가(② 가 STEP 에서 돌면 엔진이 true)
   const stp = M0.light.kind === 'step', sv0 = stp ? M0.light.step?.virtual ?? null : null, sv = sv0 && !sv0.positions ? sv0 : null;   // STEP 에서 편집한 배치(positions) = 원래 배치처럼 '현재 그대로'
@@ -1219,6 +1225,7 @@ async function adRun(opt = {}) {
   globalThis.__adLast = res;   // 진단용(콘솔에서 단계별 결과 확인)
   st.running = null; st.runner = null; st.paused = false;
   if (res && !res.cancelled && !R.stopped) {
+    st.view = 'result';
     const C = res.current;   // 현재안 = 최종안과 같은 추정기
     let nStep = null; if (M0.light.kind === 'step') { try { nStep = L.currentEmitters(M0, line).length; } catch { nStep = 0; } }
     const smI = sp >= 0 && M0.parts[sp]?.shapeMod ? sp : M0.parts.findIndex((p) => p.shapeMod), sm = smI >= 0 ? M0.parts[smI].shapeMod : null;   // 비교표 '현재' 열 — 이미 적용된 형상(표시만)
@@ -1234,7 +1241,8 @@ async function adRun(opt = {}) {
   }
   // Worker 에 기구 최적화 장면이 올라가 있음 — 진행 중이던 계산·실행 중 편집은 다시 시작, 끝난 계산은 그대로.
   // restart 는 일시정지 상태를 이어가므로(wantPaused) 사용자가 멈춘 게 아니면 resume(대기 중 resume = 일시정지 요청 해제)
-  if (res && !res.cancelled && !R.stopped && st.result) { const tm = new Date(); st.hist = mergeHist(st.hist, histFromRun(res, { ...st.result }, `${tm.getHours()}:${String(tm.getMinutes()).padStart(2, '0')}`, verifyLabel)); }   // 지난 후보 표
+  if (res && !res.cancelled && !R.stopped && st.result) { const tm = new Date(); if (st.result && !st.result.effects) st.result.effects = stageEffects(A.optDash?.stageBests?.(), st.result.cur, st.result.best);   // 항목별 효과(단계 최고값 → 전체 변화에 배분)
+    st.hist = mergeHist(st.hist, histFromRun(res, { ...st.result }, `${tm.getHours()}:${String(tm.getMinutes()).padStart(2, '0')}`, verifyLabel)); }   // 지난 후보 표
   if (st.deferred) { st.deferred = false; restartCalc(); if (st.userPaused) A.prog.pause(); else A.prog.resume(); }
   A.meshShown = null; renderView(); renderAuto();
   if (res && !res.cancelled && !R.stopped && st.result) A.optDash?.finish(!!res.feasible, res.feasible ? '' : res.reason ?? '', st.result?.best?.eff, res.verified?.stats ?? null);
@@ -1297,7 +1305,7 @@ function adResultPreview() {
   if (!r.preview) { const { M, parts } = designScene(r.design, r.ctx); r.preview = { M, parts, raw: r.ctx.rt.raw }; }
   return r.preview;
 }
-function adCancel() { const st = adState(); st.result = null; A.meshShown = null; renderView(); renderAuto(); }
+function adCancel() { const st = adState(); st.result = null; st.view = 'set'; A.meshShown = null; renderView(); renderAuto(); }
 // 적용 = 바뀐 항목만 씀(① Milky 값이 다르면 · ② 를 돌렸고 개수·피치가 다르면(LED STEP = step.virtual) · ③ 형상). 되돌리기용으로 그 항목의 전체 복사본을 남김
 function adApply() {
   const st = adState(), r = st.result, d = r?.design;
@@ -1382,7 +1390,7 @@ function adApplyAlt() {
 function adPickHist(i) {
   const st = adState(), e = st.hist?.[i];
   if (!e || st.running) return;
-  st.result = { ...e.r, preview: null, seed: e.kind === 'final' ? e.r.seed ?? null : null, design: e.design, unchanged: false, clash: 0, best: { ...e.r.best, ...e.design, Ulen: e.Ulen, Uwid: e.Uwid, eff: e.eff } };
+  st.result = { ...e.r, picked: true, effects: null, preview: null, seed: e.kind === 'final' ? e.r.seed ?? null : null, design: e.design, unchanged: false, clash: 0, best: { ...e.r.best, ...e.design, Ulen: e.Ulen, Uwid: e.Uwid, eff: e.eff } };
   adApply();
   for (const x of st.hist) x.applied = x === e;
   setStatus(`지난 후보 적용: ${e.label} — 길이 ${fmtJudge(e.Ulen)} · 폭 ${fmtJudge(e.Uwid)}`);
@@ -1398,7 +1406,7 @@ function adUnlock(k) {
 function adRevert() {
   const st = adState(), u = st.undo;
   if (!u) return;
-  st.undo = null; st.result = null; A.meshShown = null;
+  st.undo = null; st.result = null; st.view = 'set'; A.meshShown = null;
   for (const k of st.lastLock ?? []) { delete st.locked?.[k]; adSel(k, true); }   // 되돌리면 그 항목 고정도 풀고 다시 체크
   st.lastLock = null;
   if (u.milky) A.store.update('material', (m) => { m.parts[u.milky[0]] = { ...m.parts[u.milky[0]], material: adClone(u.milky[1]) }; });

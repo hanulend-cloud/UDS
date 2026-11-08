@@ -1,5 +1,6 @@
 // 기구 최적화 카드 — spec P4 §3. 체크 5개(①~⑤) · ③·④ 대상 부품 · [실행]/[중지] · 진행 · 현재|최적 비교 · [적용][취소][되돌리기][STEP]
 import { fmtJudge } from '../../engine/mech3d/tally.js';
+import { histTableHtml } from './opt-dash.js';
 import { shapeCasesHtml } from './shape-cases.js';
 import { stepRefEmitter } from '../../engine/mech3d/virtual-leds.js';   // 가상 배치 기준 LED(엔진과 같은 규칙)
 import { setPartFinish } from '../../engine/mech3d/materials.js';
@@ -147,7 +148,7 @@ export function autoCardHtml({ avail, sel, running, canRevert = false, noLine = 
   const on = AD_ITEMS.filter(([, , ks]) => ks.some((k) => sel[k] && avail[k]?.ok)).map(([, l]) => l);
   if (running) return '';   // 실행 단추·진행은 창 오른쪽 위
   const why = noLine ? '관측 라인이 없음' : noLed;
-  return `<div class="m3-ad-bar"><span class="m3-ad-on">${why ? `<span class="warn">${esc(why)}</span> ` : ''}${on.length ? `켠 항목 <b>${on.join(' ')}</b>` : '<span class="mut">위 설계 인자에서 최적화할 항목을 체크하세요</span>'}</span>${canRevert ? '<span class="m3-ad-sp"></span><button type="button" data-ad="revert" title="마지막 적용 전 값으로">↶ 되돌리기</button>' : ''}</div>${appliedHtml(applied)}`;
+  return `<div class="m3-ad-bar"><span class="m3-ad-on">${why ? `<span class="warn">${esc(why)}</span> ` : ''}${on.length ? `켠 항목 <b>${on.join(' ')}</b> <span class="mut">→ 위 ▶ 실행</span>` : '<span class="mut">위 설계 인자에서 최적화할 항목을 체크하세요</span>'}</span>${canRevert ? '<span class="m3-ad-sp"></span><button type="button" data-ad="revert" title="마지막 적용 전 값으로">↶ 되돌리기</button>' : ''}</div>${appliedHtml(applied)}`;
 }
 // 형상 문구 — 0 인 항 생략. e = 끝단 두께, c = 폭 가장자리 두께(+ 가장자리 두껍게 · − 얇게), h < 0 = 돌출
 const sg = (v) => `${v >= 0 ? '+' : '−'}${f2(Math.abs(v))}`, nz = (v) => Number.isFinite(v) && Math.abs(v) >= 5e-5;
@@ -183,7 +184,8 @@ const ledTotal = (x) => (x?.positions?.length ? x.positions.length : Number.isFi
 const passMark = (v, t, j) => (Number.isFinite(v) && Number.isFinite(t) ? (j === 'near' ? ' <b class="near" title="목표와의 차이가 노이즈보다 작음">≈</b>' : v + 1e-9 >= t ? ' <b class="ok">✓</b>' : ' <b class="bad">✕</b>') : '');
 // targets = { len, wid } — 균일도 줄에 목표·통과(✓/✕)
 function cmpParts({ cur, best, shape, stepLeds = null, finish = null, height = null, catalog = DEFAULT_FINISH_CATALOG, targets: tg = null }) {
-  const tr = (label, a, b, d = '') => `<tr><th>${label}</th><td>${a}</td><td class="${a !== b ? 'chg' : ''}">${b}${d}</td></tr>`;
+  const items = [];   // 설계 항목(결과 화면의 '무엇을 바꿨나' 표) — k = 단계(position·shape·milky·housing)
+  const tr = (label, a, b, d = '', k = null) => { if (k) items.push({ k, label, a, b, d }); return `<tr><th>${label}</th><td>${a}</td><td class="${a !== b ? 'chg' : ''}">${b}${d}</td></tr>`; };
   const lay = (x) => `${x.rows === 2 ? '2열 × ' : ''}${x.count}개 ${x.pitch > 0 ? `피치 ${x.pitch}` : '균등'}${x.rows === 2 ? ` (열 간격 ±${(x.rowGap ?? 0).toFixed(1)} mm)` : ''}`;   // 2열 = 열당 개수(spec P4 §2.2b)
   const led = (x) => (x.layoutText ? x.layoutText : stepLeds == null ? lay(x) : x.stepOrig === false ? `${lay(x)}` : `LED STEP 현재 ${x.count ?? stepLeds}개`);   // layoutText = ② 배치 Solver 문구(같은 피치/끝 압축/자유 배치) · STEP: stepOrig = 원래 STEP 위치
   const curShape = cur.shape ? `적용된 형상 · ${shapeText(cur.shape)}` : '원본';
@@ -195,13 +197,13 @@ function cmpParts({ cur, best, shape, stepLeds = null, finish = null, height = n
     tr('광 효율', `${f2(cur.eff * 100)}%`, `${f2(best.eff * 100)}%`, dl(cur.eff, best.eff, 100, '%p')),
   ];
   const design = [
-    tr('LED', led(cur), led(best), tot),
-    tr('Milky', f2(cur.milky), f2(best.milky), dl(cur.milky, best.milky)),
-    shape || cur.shape ? tr('형상', curShape, shape ? shapeText(shape) : curShape) : '',
-    finish ? tr('케이스 면', finishText(finish.cur, catalog), finishText(finish.best ?? finish.cur, catalog)) : '',
-    height ? (() => { const now = Number.isFinite(height.gap) ? `현재 (커버까지 ${height.gap.toFixed(1)} mm)` : '현재'; return tr('LED 높이', now, nz(height.dz) ? `${sg(height.dz)} mm${Number.isFinite(height.gap) ? ` (커버까지 ${(height.gap - height.dz).toFixed(1)} mm)` : ''}` : now); })() : '',
-  ].filter(Boolean);
-  return { metric, design };
+    tr('LED', led(cur), led(best), tot, 'position'),
+    tr('Milky', f2(cur.milky), f2(best.milky), dl(cur.milky, best.milky), 'milky'),
+    tr('형상', curShape, shape ? shapeText(shape) : curShape, '', 'shape'),
+    finish ? tr('케이스 면', finishText(finish.cur, catalog), finishText(finish.best ?? finish.cur, catalog), '', 'housing') : '',
+    height ? (() => { const now = Number.isFinite(height.gap) ? `현재 (커버까지 ${height.gap.toFixed(1)} mm)` : '현재'; return tr('LED 높이', now, nz(height.dz) ? `${sg(height.dz)} mm${Number.isFinite(height.gap) ? ` (커버까지 ${(height.gap - height.dz).toFixed(1)} mm)` : ''}` : now, '', 'position'); })() : '',
+  ].filter((x, i) => x && !(i === 2 && !shape && !cur.shape));   // 형상 줄 = 형상을 바꿨거나 이미 적용된 형상이 있을 때만(비교표)
+  return { metric, design, items };
 }
 // 비교표 구역 머리(목표 지표 | 설계 최적화 항목) — 표 안에서 두 묶음을 나눔(2026-10-30)
 export const secRow = (t, n = 3) => `<tr class="m3-sec"><td colspan="${n}">${t}</td></tr>`;
@@ -334,6 +336,64 @@ export function mergeHist(list, add, max = 60) {
   for (const e of add) if (!out.some((x) => x.label === e.label && x.Ulen === e.Ulen && x.Uwid === e.Uwid)) out.push(e);
   return out.slice(-max);
 }
+// ---- 결과 화면(2026-11-08): 설정 · 진행 · 결과 중 '결과' ----
+// 항목별 효과 — 단계 최고값(빠른 계산)의 차이를 전체 변화(정밀값 cur → best)에 맞춰 배분. 하나만 바뀌었으면 = 전체 변화
+export function stageEffects(bests, cur, best, order = ['position', 'shape', 'milky']) {
+  if (!bests || !cur || !best) return null;
+  const ks = order.filter((k) => bests[k] && Number.isFinite(bests[k].Ulen));
+  if (!ks.length) return null;
+  const out = {};
+  for (const ax of ['Ulen', 'Uwid']) {
+    const tot = best[ax] - cur[ax];
+    if (!Number.isFinite(tot)) continue;
+    let prev = cur[ax]; const raw = ks.map((k) => { const v = bests[k][ax], d = Number.isFinite(v) && Number.isFinite(prev) ? v - prev : 0; if (Number.isFinite(v)) prev = v; return d; });
+    const pos = raw.map((d) => Math.max(0, d)), S = pos.reduce((a, b) => a + b, 0);
+    ks.forEach((k, i) => { (out[k] ??= {})[ax === 'Ulen' ? 'dl' : 'dw'] = S > 1e-9 ? (tot * pos[i]) / S : tot / ks.length; });
+  }
+  return out;
+}
+const verdictOf = (r) => (r.unchanged ? ['keep', '현재안 유지', r.caseCheck ? '고른 후보를 쓸 수 없음' : '더 나은 안 없음'] : r.targets?.judge?.all === 'near' ? ['near', '≈ 목표 근처', '통과·미달을 가를 수 없는 차이'] : r.feasible ? ['ok', '✓ 목표 통과', r.caseCheck ? '고른 후보' : '최적안을 찾음'] : ['bad', '✕ 목표 미달', r.caseCheck ? '고른 후보' : '가장 가까운 안']);
+// 변화 카드 — 이전 → 이후 ▲증가 · 막대(회색 = 이전, 파랑 = 오른 만큼, 빨강 선 = 목표)
+function changeCard(label, a, b, t, pct = false) {
+  const fa = pct ? (v) => (Number.isFinite(v) ? `${(v * 100).toFixed(1)}%` : '–') : (v) => fmtJudge(v);
+  const d = Number.isFinite(a) && Number.isFinite(b) ? (pct ? (b - a) * 100 : +fmtJudge(b) - +fmtJudge(a)) : NaN;
+  const dTxt = Number.isFinite(d) && Math.abs(d) >= (pct ? 0.05 : 0.005) ? `<span class="rs-d ${d > 0 ? 'up' : 'dn'}">${d > 0 ? '▲' : '▼'}${Math.abs(d).toFixed(pct ? 1 : 2)}${pct ? '%p' : ''}</span>` : '';
+  const cls = !pct && Number.isFinite(t) && Number.isFinite(b) ? (b + 1e-9 >= t ? 'ok' : 'bad') : '';
+  const W = (v) => `${Math.round(Math.max(0, Math.min(1, v)) * 1000) / 10}%`;
+  const bar = !pct && Number.isFinite(a) && Number.isFinite(b) ? `<div class="rs-bar"><i class="rs-b0" style="width:${W(Math.min(a, b))}"></i><i class="rs-b1 ${b < a ? 'dn' : ''}" style="left:${W(Math.min(a, b))};width:${W(Math.abs(b - a))}"></i>${Number.isFinite(t) ? `<i class="rs-tg" style="left:${W(t)}" title="목표 ${f2(t)}"></i>` : ''}</div>` : '';
+  return `<div class="rs-card"><div class="mut">${label}${!pct && Number.isFinite(t) ? ` · 목표 ${f2(t)}` : ''}</div><div class="rs-v"><span class="mut">${fa(a)}</span> → <b class="${cls}">${fa(b)}</b> ${dTxt}</div>${bar}</div>`;
+}
+const ITEM_NAME = { LED: '① LED 배치', 'LED 높이': '① LED 높이', 형상: '② 형상', Milky: '③ Milky', '케이스 면': '케이스 면' };
+const STAGE_KEY = { position: ['leds', 'height', 'position'], shape: ['shape'], milky: ['milky'], housing: ['housing'] };
+// 무엇을 바꿔서 얼마나 좋아졌나 — 바뀐 항목 + 이번에 돌렸지만 그대로인 항목(그대로). 효과 = 그 단계 몫(≈)
+function changeTableHtml(r, effects) {
+  const ran = (k) => STAGE_KEY[k].some((x) => r.stages?.[x]);
+  const seen = new Set(), rows = cmpParts(r).items.filter((it) => it.a !== it.b || ran(it.k)).map((it) => {
+    const chg = it.a !== it.b, e = !seen.has(it.k) && chg ? effects?.[it.k] : null; seen.add(it.k);
+    const sgn = (v) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}`;
+    const ef = e && (Number.isFinite(e.dl) || Number.isFinite(e.dw)) ? `<span class="rs-ef" title="단계별 빠른 계산값을 전체 변화에 맞춰 나눈 대략값">≈ ${sgn(e.dl ?? 0)} / ${sgn(e.dw ?? 0)}</span>` : '<span class="mut">–</span>';
+    return `<tr><th>${ITEM_NAME[it.label] ?? it.label}</th><td class="mut">${it.a}</td><td>${chg ? `<b class="rs-new">${it.b}</b>${it.d}` : '<span class="mut">그대로</span>'}</td><td>${ef}</td></tr>`;
+  });
+  return rows.length ? `<div class="rs-h">무엇을 바꿔서 얼마나 좋아졌나</div><table class="rs-t"><tr><th>항목</th><th>이전</th><th>이후</th><th>효과 (길이 / 폭)</th></tr>${rows.join('')}</table>` : '<div class="rs-h mut">바뀐 항목 없음</div>';
+}
+// r = 이번 결과(없으면 applied = 적용한 결과) · hist = 지난 후보 · effects = 항목별 효과
+export function resultViewHtml(r, { applied = null, effects = null, hist = null, busy = false, catalog = null } = {}) {
+  const x = r ?? applied, tg = x?.targets ?? {};
+  const histBox = hist?.length ? `<details class="m3-more rs-more" data-keep="hist"><summary>다른 후보 고르기 (${hist.length})</summary>${histTableHtml(hist, tg.len, tg.wid, busy, { pick: 'ad' })}</details>` : '';
+  if (!x) return `<div class="rs"><div class="rs-h mut">이번 결과 없음</div>${histBox}</div>`;
+  const y = catalog ? { ...x, catalog } : x;
+  const cards = `<div class="rs-cards">${changeCard('길이 균일도', x.cur?.Ulen, x.best?.Ulen, tg.len)}${changeCard('폭 균일도', x.cur?.Uwid, x.best?.Uwid, tg.wid)}${changeCard('광 효율', x.cur?.eff, x.best?.eff, NaN, true)}</div>`;
+  if (!r) return `<div class="rs"><div class="rs-vd ok"><b>✓ 적용됨</b> <span class="mut">${esc(applied.at ?? '')} · 되돌리기 전까지 유지</span></div>${cards}${changeTableHtml(y, effects)}
+    <div class="rs-btn"><button type="button" data-ad="revert" title="적용 전 값으로">↶ 되돌리기</button></div>${histBox}</div>`;
+  const v = verdictOf(r), lim = limitText(r.reason);
+  const clash = r.clash > 0 ? `<div class="m3-clash" role="alert">LED 몸체가 부품과 겹침(${r.clash}개) — 적용 불가</div>` : '';
+  const twoRow = r.best?.rows === 2 && r.cur?.rows !== 2 ? '<div class="m3-warn">2열 배치 = LED PCB 를 새로 설계해야 함</div>' : '';
+  const effDrop = Number.isFinite(r.cur?.eff) && Number.isFinite(r.best?.eff) && r.best.eff - r.cur.eff <= -0.02 ? `<div class="m3-warn">광 효율 ${((r.cur.eff - r.best.eff) * 100).toFixed(1)}%p 감소 — 같은 LED 광속이면 그만큼 어두워짐</div>` : '';
+  return `<div class="rs"><div class="rs-vd ${v[0]}"><b>${v[1]}</b> <span class="mut">${v[2]}</span>${lim ? ` <span class="rs-lim">· 한계: ${esc(lim)}</span>` : ''}</div>${clash}
+    ${cards}${changeTableHtml(y, effects)}${twoRow}${effDrop}${altNote(r)}
+    <div class="rs-btn">${applyBtn(r, 'LED 몸체가 부품과 겹침')}${altBtn(r)}${shapeDeepBtn(r)}${r.clash > 0 ? '' : `<button type="button" data-ad="continue" title="${r.unchanged ? '지금 설계 그대로' : '이 안을 적용한 뒤'}, 체크했지만 이번에 돌리지 않은 항목을 이어서 최적화">이 안에서 이어서 ▸</button>`}<span class="m3-ad-sp"></span>${r.shape ? '<button type="button" data-ad="step">STEP 내보내기</button>' : ''}<button type="button" data-ad="view" title="프로파일 비교·전체 표">자세히</button><button type="button" data-ad="cancel" title="이 결과 버리기">버리기</button></div>
+    ${histBox}${notesHtml(r)}<button type="button" class="rs-link" data-ad="chart">진행 그래프</button></div>`;
+}
 // 참고 문구·Milky 표는 접어 둠(2026-11-08) — 메인 카드는 판정·값·단추만
 function notesHtml(r) {
   const n = [
@@ -361,8 +421,14 @@ export function resultLineHtml(r) {
 }
 // el 에 그리고 이벤트를 h 로 넘김. state = { avail, sel, running, result, resultOpen, … } — 결과가 있으면 한 줄 + (열림) 결과 창
 export function renderAutoPanel(el, state, h) {
+  const mode = state.mode ?? 'result';
   const r = state.result, full = r ? compareHtml({ ...r, canRevert: state.canRevert, ...(state.catalog ? { catalog: state.catalog } : {}) }) : '';
-  const html = r ? `${state.flash ? `<div class="m3-rflash" role="alert">${esc(state.flash)}</div>` : ''}${resultLineHtml(r)}${state.resultOpen ? `<div class="m3-rmodal" role="dialog" aria-modal="true" aria-label="기구 최적화 결과"><div class="m3-rmodal-in"><div class="m3-rmodal-hd"><b>기구 최적화 결과</b><span class="m3-ad-sp"></span><button type="button" data-ad="hide" title="결과는 남음">✕ 닫기</button></div>
+  const flashH = state.flash ? `<div class="m3-rflash" role="alert">${esc(state.flash)}</div>` : '';
+  const modal = r && state.resultOpen ? `<div class="m3-rmodal" role="dialog" aria-modal="true" aria-label="기구 최적화 결과"><div class="m3-rmodal-in"><div class="m3-rmodal-hd"><b>기구 최적화 결과 — 자세히</b><span class="m3-ad-sp"></span><button type="button" data-ad="hide" title="결과는 남음">✕ 닫기</button></div>${full}</div></div>` : '';
+  const html = state.mode === 'result' ? `${flashH}${resultViewHtml(r, { applied: state.applied, effects: state.effects, hist: state.hist, busy: !!state.running, catalog: state.catalog })}${modal}`
+    : state.mode === 'set' ? `${flashH}${autoCardHtml({ ...state, applied: null })}`
+    : state.mode === 'run' ? flashH
+    : r ? `${state.flash ? `<div class="m3-rflash" role="alert">${esc(state.flash)}</div>` : ''}${resultLineHtml(r)}${state.resultOpen ? `<div class="m3-rmodal" role="dialog" aria-modal="true" aria-label="기구 최적화 결과"><div class="m3-rmodal-in"><div class="m3-rmodal-hd"><b>기구 최적화 결과</b><span class="m3-ad-sp"></span><button type="button" data-ad="hide" title="결과는 남음">✕ 닫기</button></div>
       <div class="m3-rverdict ${r.unchanged ? '' : r.targets?.judge?.all === 'near' ? 'near' : r.feasible ? 'ok' : 'bad'}">${r.unchanged ? `현재 설계보다 나은 안을 찾지 못함 — 현재안 유지${r.alt ? ' (찾은 후보가 뚜렷이 낫지 않음 — 원하면 [후보로 바꾸기])' : ''}` : r.targets?.judge?.all === 'near' ? '≈ 목표 근처 — 목표와의 차이가 노이즈보다 작음' : r.feasible ? '✓ 목표 통과' : '✕ 목표 미달 — 가장 가까운 안'}</div>${full}</div></div>` : ''}` : `${state.flash ? `<div class="m3-rflash" role="alert">${esc(state.flash)}</div>` : ''}${autoCardHtml(state)}`;
   const tb = state.caseView ? shapeCasesHtml(state.caseView) : '';   // 형상 후보 표 — 결과가 있든 없든 아래에 붙임
   const key = html + tb;
