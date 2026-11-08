@@ -144,6 +144,11 @@ export function tileConfigHtml(k, { avail, sel, running, names = [], milkyPart =
 }
 // 기구 최적화 한 줄(대시보드 맨 위) — 켠 항목 · [▶ 실행] · [되돌리기] · [접기]. 실행 중 = 진행 막대 · [중지]. 항목 고르기는 아래 타일에서
 // noLine = 관측 라인 없음 · noLed = 실행할 수 없는 이유(LED 없음·읽는 중) — 실행 불가
+export function nowCardsHtml(nw) {   // 설정 화면 = 지금 값(결과·진행 화면과 같은 자리)
+  if (!nw || !Number.isFinite(nw.Ulen)) return '';
+  const c = (label, v, t, pct = false) => `<div class="rs-card"><div class="mut">${label}${!pct && Number.isFinite(t) ? ` · 목표 ${fmtTg(t)}` : ''}</div><div class="rs-v"><b class="${!pct && Number.isFinite(t) ? (v + 1e-9 >= t ? 'ok' : 'bad') : ''}">${pct ? (Number.isFinite(v) ? `${(v * 100).toFixed(1)}%` : '–') : fmtJudge(v)}</b> <span class="mut">지금</span></div></div>`;
+  return `<div class="rs-cards">${c('길이 균일도', nw.Ulen, nw.tgLen)}${c('폭 균일도', nw.Uwid, nw.tgWid)}${c('광 효율', nw.eff, NaN, true)}</div>`;
+}
 export function autoCardHtml({ avail, sel, running, canRevert = false, noLine = false, noLed = '', applied = null }) {
   const on = AD_ITEMS.filter(([, , ks]) => ks.some((k) => sel[k] && avail[k]?.ok)).map(([, l]) => l);
   if (running) return '';   // 실행 단추·진행은 창 오른쪽 위
@@ -345,7 +350,7 @@ export function stageEffects(bests, cur, best, order = ['position', 'shape', 'mi
   if (!ks.length) return null;
   const out = {};
   for (const ax of ['Ulen', 'Uwid']) {
-    const tot = best[ax] - cur[ax];
+    const tot = flU(best[ax]) - flU(cur[ax]);   // 카드의 ▲ 값(내림 표시끼리의 차)과 같게
     if (!Number.isFinite(tot)) continue;
     let prev = cur[ax]; const raw = ks.map((k) => { const v = bests[k][ax], d = Number.isFinite(v) && Number.isFinite(prev) ? v - prev : 0; if (Number.isFinite(v)) prev = v; return d; });
     const pos = raw.map((d) => Math.max(0, d)), S = pos.reduce((a, b) => a + b, 0);
@@ -382,8 +387,14 @@ function changeTableHtml(r, effects) {
 export const clip = (t, n = 22) => { const s = String(t ?? ''); return s.length > n ? `<span title="${esc(s)}">${esc(s.slice(0, n - 1))}…</span>` : esc(s); };
 const ledShort = (x, stepN) => (x?.stepOrig !== false && stepN != null && !x?.layoutText ? `LED ${x?.count ?? stepN}개` : `${x?.rows === 2 ? '2열×' : ''}${x?.count ?? '?'}개${x?.pitch > 0 ? ` · ${(+x.pitch).toFixed(1)}mm` : ''}`);
 const FB = { position: ['① 위치', '#f59e0b'], shape: ['② 형상', '#a855f7'], milky: ['③ Milky', '#3b82f6'] };
+// 인자별 결과(설계 인자 상자에 넣음) — { chg, chip(바뀜/그대로/고정/안 돌림), body(이전 → 이후, 짧게), eff(효과 ≈) } | null
+export function factorResult(x, effects, locked = {}, k) {
+  if (!x || !FB[k]) return null;
+  const html = factorBoxesHtml(x, effects, locked, k);
+  return html;
+}
 // 최적화 인자 상자 3개 — 이전 → 이후(짧게) · 효과(≈ 길이/폭) · 상태(바뀜/그대로/고정/안 돌림)
-function factorBoxesHtml(x, effects, locked = {}) {
+function factorBoxesHtml(x, effects, locked = {}, only = null) {
   const c = x.cur ?? {}, b = x.best ?? {}, ran = (k) => STAGE_KEY[k].some((q) => x.stages?.[q]);
   const val = {
     position: [ledShort(c, x.stepLeds), x.best?.stepOrig === true ? ledShort(c, x.stepLeds) : ledShort(b, x.stepLeds), x.height && nz(x.height.dz) ? `높이 ${sg(x.height.dz)}mm` : ''],
@@ -396,8 +407,10 @@ function factorBoxesHtml(x, effects, locked = {}) {
     const sgn = fmtDp;
     const ef = e && (Number.isFinite(e.dl) || Number.isFinite(e.dw)) ? `<div class="rs-fef" title="단계별 빠른 계산값을 전체 변화에 맞춰 나눈 대략값">효과 ≈ 길이 ${sgn(e.dl ?? 0)} · 폭 ${sgn(e.dw ?? 0)}</div>` : '';
     const body = chg ? `<div class="rs-fv"><span class="mut">${clip(a0, 14)}</span> → <b>${clip(b0, 20)}</b>${extra ? ` <b>${esc(extra)}</b>` : ''}</div>` : `<div class="rs-fv mut">${clip(a0, 26)}</div>`;
+    if (only) return { chg, chip: st[1], body: body.replace(/^<div class="rs-fv( mut)?">|<\/div>$/g, ''), eff: ef.replace(/^<div class="rs-fef"[^>]*>|<\/div>$/g, '') };
     return `<div class="rs-fb rs-${st[0]}" style="--fb:${col}"><div class="rs-fh"><b>${name}</b><span class="rs-fs">${st[1]}</span></div>${body}${ef}</div>`;
   };
+  if (only) return box(only);
   return `<div class="rs-fbs">${['position', 'shape', 'milky'].map(box).join('')}</div>`;
 }
 // 참고 한 줄씩(최대 3, 길면 …) — 접지 않고 바로
@@ -415,16 +428,15 @@ export function resultViewHtml(r, { applied = null, effects = null, hist = null,
   const histBox = hist?.length ? `<div class="rs-hist"><div class="rs-h">지난 후보 <span class="mut">균일도 순 · 골라서 [적용]</span>${hist.length > 3 ? ` <button type="button" class="rs-link2" data-ad="histAll">${histAll ? '접기' : `전체 ${hist.length}개`}</button>` : ''}</div>${histTableHtml(hist, tg.len, tg.wid, busy, { pick: 'ad', max: histAll ? 0 : 3 })}</div>` : '';
   if (!x) return `<div class="rs"><div class="rs-h mut">이번 결과 없음</div>${histBox}</div>`;
   const cards = `<div class="rs-cards">${changeCard('길이 균일도', x.cur?.Ulen, x.best?.Ulen, tg.len)}${changeCard('폭 균일도', x.cur?.Uwid, x.best?.Uwid, tg.wid)}${changeCard('광 효율', x.cur?.eff, x.best?.eff, NaN, true)}</div>`;
-  const boxes = factorBoxesHtml(x, effects, locked);
-  if (!r) return `<div class="rs"><div class="rs-vd ok"><b>✓ 적용됨</b> <span class="mut">${esc(applied.at ?? '')} · 되돌리기 전까지 유지</span></div>${cards}${boxes}
+  if (!r) return `<div class="rs">${cards}<div class="rs-vd ok"><b>✓ 적용됨</b> <span class="mut">${esc(applied.at ?? '')} · 되돌리기 전까지 유지</span></div>
     <div class="rs-btn"><button type="button" data-ad="revert" title="적용 전 값으로">↶ 되돌리기</button></div>${histBox}</div>`;
   const v = verdictOf(r), lim = limitText(r.reason);
   const warn = [r.clash > 0 ? `<div class="m3-clash" role="alert">LED 몸체가 부품과 겹침(${r.clash}개) — 적용 불가</div>` : '',
     r.best?.rows === 2 && r.cur?.rows !== 2 ? '<div class="rs-note warn">⚠ 2열 배치 = LED PCB 새로 설계</div>' : '',
     Number.isFinite(r.cur?.eff) && Number.isFinite(r.best?.eff) && r.best.eff - r.cur.eff <= -0.02 ? `<div class="rs-note warn">⚠ 광 효율 ${((r.cur.eff - r.best.eff) * 100).toFixed(1)}%p 감소 — 같은 광속이면 그만큼 어두워짐</div>` : ''].join('');
   const alt = r.unchanged && r.alt ? `<div class="rs-note">찾은 후보 ${fmtJudge(r.alt.Ulen)}/${fmtJudge(r.alt.Uwid)} — 지금보다 뚜렷이 낫지 않음</div>` : '';
-  return `<div class="rs"><div class="rs-vd ${v[0]}"><b>${v[1]}</b> <span class="mut">${v[2]}</span>${lim ? ` <span class="rs-lim">· 한계: ${clip(lim, 40)}</span>` : ''}</div>
-    ${cards}${boxes}${warn}${alt}${notesLines(r)}
+  return `<div class="rs">${cards}<div class="rs-vd ${v[0]}"><b>${v[1]}</b> <span class="mut">${v[2]}</span>${lim ? ` <span class="rs-lim">· 한계: ${clip(lim, 40)}</span>` : ''}</div>
+    ${warn}${alt}${notesLines(r)}
     <div class="rs-btn">${applyBtn(r, 'LED 몸체가 부품과 겹침')}${altBtn(r)}${shapeDeepBtn(r)}${r.clash > 0 ? '' : `<button type="button" data-ad="continue" title="${r.unchanged ? '지금 설계 그대로' : '이 안을 적용한 뒤'}, 체크했지만 이번에 돌리지 않은 항목을 이어서 최적화">이 안에서 이어서 ▸</button>`}<span class="m3-ad-sp"></span>${r.shape ? '<button type="button" data-ad="step">STEP 내보내기</button>' : ''}<button type="button" data-ad="view" title="프로파일 비교 · Milky 표 · 전체 비교표">프로파일·표</button><button type="button" data-ad="cancel" title="이 결과 버리기">버리기</button></div>
     ${histBox}</div>`;
 }
@@ -460,7 +472,7 @@ export function renderAutoPanel(el, state, h) {
   const flashH = state.flash ? `<div class="m3-rflash" role="alert">${esc(state.flash)}</div>` : '';
   const modal = r && state.resultOpen ? `<div class="m3-rmodal" role="dialog" aria-modal="true" aria-label="기구 최적화 결과"><div class="m3-rmodal-in"><div class="m3-rmodal-hd"><b>기구 최적화 결과 — 프로파일·표</b><span class="m3-ad-sp"></span><button type="button" data-ad="hide" title="결과는 남음">✕ 닫기</button></div>${full}${milkyTableHtml(r.milkyRows, r.best?.milky, r.targets ?? {})}</div></div>` : '';
   const html = state.mode === 'result' ? `${flashH}${resultViewHtml(r, { applied: state.applied, effects: state.effects, hist: state.hist, busy: !!state.running, catalog: state.catalog, locked: state.locked ?? {}, histAll: !!state.histAll })}${modal}`
-    : state.mode === 'set' ? `${flashH}${autoCardHtml({ ...state, applied: null })}`
+    : state.mode === 'set' ? `${nowCardsHtml(state.now)}${flashH}${autoCardHtml({ ...state, applied: null })}`
     : state.mode === 'run' ? flashH
     : r ? `${state.flash ? `<div class="m3-rflash" role="alert">${esc(state.flash)}</div>` : ''}${resultLineHtml(r)}${state.resultOpen ? `<div class="m3-rmodal" role="dialog" aria-modal="true" aria-label="기구 최적화 결과"><div class="m3-rmodal-in"><div class="m3-rmodal-hd"><b>기구 최적화 결과</b><span class="m3-ad-sp"></span><button type="button" data-ad="hide" title="결과는 남음">✕ 닫기</button></div>
       <div class="m3-rverdict ${r.unchanged ? '' : r.targets?.judge?.all === 'near' ? 'near' : r.feasible ? 'ok' : 'bad'}">${r.unchanged ? `현재 설계보다 나은 안을 찾지 못함 — 현재안 유지${r.alt ? ' (찾은 후보가 뚜렷이 낫지 않음 — 원하면 [후보로 바꾸기])' : ''}` : r.targets?.judge?.all === 'near' ? '≈ 목표 근처 — 목표와의 차이가 노이즈보다 작음' : r.feasible ? '✓ 목표 통과' : '✕ 목표 미달 — 가장 가까운 안'}</div>${full}</div></div>` : ''}` : `${state.flash ? `<div class="m3-rflash" role="alert">${esc(state.flash)}</div>` : ''}${autoCardHtml(state)}`;

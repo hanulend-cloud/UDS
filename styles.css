@@ -1187,10 +1187,10 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 .m3-mon[data-mode] .m3-mon-colsplit { display: none; }
 .m3-mon[data-mode] .m3-mon-body #m3-auto, .m3-mon[data-mode] .m3-mon-body #m3-odchart, .m3-mon[data-mode] .m3-mon-body > #m3-dock, .m3-mon[data-mode] .m3-mon-body .fb-body { grid-column: 1; grid-row: auto; border-right: 0; }
 .m3-mon[data-mode="set"] #m3-odchart, .m3-mon[data-mode="set"] .m3-mon-body > #m3-dock { display: none !important; }
-.m3-mon[data-mode="run"] .fb-body, .m3-mon[data-mode="run"] #m3-auto:empty, .m3-mon[data-mode="run"] .om-hist { display: none !important; }
+.m3-mon[data-mode="run"] #m3-auto:empty, .m3-mon[data-mode="run"] .om-hist { display: none !important; }
 .m3-mon[data-mode="run"] .m3-mon-body > #m3-dock { order: 1; }
 .m3-mon[data-mode="run"] #m3-odchart { order: 2; }
-.m3-mon[data-mode="result"] .fb-body, .m3-mon[data-mode="result"] .m3-mon-body > #m3-dock { display: none !important; }
+.m3-mon[data-mode="result"] .m3-mon-body > #m3-dock { display: none !important; }
 .m3-mon[data-mode="result"]:not(.show-chart) #m3-odchart { display: none !important; }
 .m3-mon[data-mode="result"] #m3-odchart { order: 2; }
 .m3-mon[data-mode="result"] #m3-auto { order: 1; padding: 10px 14px; }
@@ -1255,3 +1255,8 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .fb-card.fb-on { border-color: var(--fb); background: color-mix(in srgb, var(--fb) 9%, #fff); box-shadow: 0 0 0 1px var(--fb); }
 .fb-card.fb-on .fb-head { background: color-mix(in srgb, var(--fb) 16%, #fff); }
 .fb-card.fb-run { box-shadow: 0 0 0 2px var(--fb), 0 2px 8px color-mix(in srgb, var(--fb) 35%, transparent); }
+
+/* 설정·진행·결과 같은 배치(2026-11-08): 맨 위 = 설계 인자 상자, 그 아래 = 길이·폭·효율 카드 */
+.m3-mon[data-mode] .fb-body { order: -1; }
+.fb-eff { margin-top: 3px; font-size: 11.5px; color: var(--m3-ok); }
+.m3-mon[data-mode="run"] .om-kpi { margin: 2px 0 8px; }

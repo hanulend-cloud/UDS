@@ -838,7 +838,8 @@ done();
   ok(Math.abs(eff.shape.dl + eff.milky.dl - 0.1) < 1e-9 && Math.abs(eff.shape.dw + eff.milky.dw - 0.15) < 1e-9 && eff.shape.dl > eff.milky.dl, `항목 효과 합 = 전체 변화(배분): ${JSON.stringify(eff)}`);
   const h = resultViewHtml(r, { effects: eff, hist: [{ label: 'Milky 3.6', Ulen: 0.75, Uwid: 0.77, eff: 0.5 }] });
   ok(h.includes('목표 미달') && (h.match(/rs-card/g) ?? []).length >= 3 && h.includes('65.0%') && h.includes('75.0%') && h.includes('▲10.0%p'), '판정 · 카드(이전 → 이후 ▲)');
-  ok((h.match(/class="rs-fb /g) ?? []).length === 3 && h.includes('① 위치') && h.includes('② 형상') && h.includes('③ Milky') && h.includes('3.60') && /효과 ≈ 길이 \+\d+\.\d%p/.test(h) && h.includes('안 돌림') && (h.match(/바뀜/g) ?? []).length === 2, '최적화 인자 상자 3개 · 상태 · 효과 ≈');
+  { const { factorResult } = await import('../src/ui/m3/autodesign-panel.js'), F = (k) => factorResult(r, eff, {}, k);
+    ok(!h.includes('class="rs-fb ') && F('shape').chg && F('milky').chg && F('milky').body.includes('3.60') && /길이 \+\d+\.\d%p/.test(F('milky').eff) && !F('position').chg && F('position').chip === '안 돌림', '결과 = 설계 인자 상자 자리에(이전 → 이후 · 효과 · 상태)'); }
   ok(h.includes('data-ad="apply"') && h.includes('data-ad="hpick" data-v="0"') && h.includes('지난 후보') && !h.includes('<details'), '적용 · 지난 후보(접지 않음)');
   { const many = Array.from({ length: 6 }, (_, i) => ({ label: `M${i}`, Ulen: 0.7 + i * 0.01, Uwid: 0.7, eff: 0.5 })), hm = resultViewHtml(r, { hist: many }), ha = resultViewHtml(r, { hist: many, histAll: true });
     ok((hm.match(/data-ad="hpick"/g) ?? []).length === 3 && hm.includes('전체 6개') && (ha.match(/data-ad="hpick"/g) ?? []).length === 6, '지난 후보: 위 3개 · [전체 N개]'); }
@@ -846,7 +847,7 @@ done();
   ok((h.match(/한계/g) ?? []).length === 1, '한계 한 번만');
   const a = resultViewHtml(null, { applied: { ...r, at: '13:57' } });
   ok(a.includes('적용됨') && a.includes('13:57') && a.includes('data-ad="revert"') && !a.includes('data-ad="apply"'), '적용 뒤: 적용됨 · 되돌리기');
-  ok(/효과 ≈/.test(resultViewHtml(null, { applied: { ...r, at: '13:57' }, effects: eff })), '적용 뒤에도 항목별 효과'); }
+  { const { factorResult } = await import('../src/ui/m3/autodesign-panel.js'); ok(/효과 ≈/.test(factorResult({ ...r, at: '13:57' }, eff, {}, 'shape').eff), '적용 뒤에도 항목별 효과'); } }
 { // 광분포 진행 그래프 안내선(2026-11-08): 오차·균일도 둘 다 가로·세로 안내선 + 눈금 글
   const { simPlotSvg, simCaption } = await import('../src/ui/m3/opt-dash.js');
   const H = [{ ph: 1e6, noise: 0.04, Ulen: 0.5, Uwid: 0.6 }, { ph: 4e6, noise: 0.02, Ulen: 0.7, Uwid: 0.75 }], svg = simPlotSvg(H, 0.01, { targetLen: 0.8, targetWid: 0.8 }, 600, 160);
