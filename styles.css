@@ -1251,3 +1251,7 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .m3-big-prog .od-pct { gap: 8px; }
 .od-capr { flex: none; margin: 0 !important; color: var(--m3-mut, #6b7385); }
 .m3-big-grid .m3-hsplit, .m3-big-grid[data-focus] .m3-psplit.m3-hsplit { display: block; }   /* 진행 그래프 높이 손잡이 = 한 그림만 볼 때도 */
+/* 설계 인자 상자 강조(2026-11-08): 체크(이번에 최적화) = 상자 테두리·바탕을 인자 색으로, 진행 중 = 깜빡이지 않는 굵은 테두리 */
+.fb-card.fb-on { border-color: var(--fb); background: color-mix(in srgb, var(--fb) 9%, #fff); box-shadow: 0 0 0 1px var(--fb); }
+.fb-card.fb-on .fb-head { background: color-mix(in srgb, var(--fb) 16%, #fff); }
+.fb-card.fb-run { box-shadow: 0 0 0 2px var(--fb), 0 2px 8px color-mix(in srgb, var(--fb) 35%, transparent); }
