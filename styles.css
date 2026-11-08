@@ -1193,7 +1193,7 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 .m3-mon[data-mode="result"] .m3-mon-body > #m3-dock { display: none !important; }
 .m3-mon[data-mode="result"]:not(.show-chart) #m3-odchart { display: none !important; }
 .m3-mon[data-mode="result"] #m3-odchart { order: 2; }
-.m3-mon[data-mode="result"] #m3-auto { order: 1; padding: 10px 14px; }
+.m3-mon[data-mode="result"] #m3-auto { order: 1; }
 .rs-vd { font-size: 14px; margin: 2px 0 10px; }
 .rs-vd b { font-size: 15px; margin-right: 4px; }
 .rs-vd.ok b { color: var(--m3-ok); } .rs-vd.bad b { color: var(--m3-bad); } .rs-vd.near b { color: var(--m3-warn); }
@@ -1260,3 +1260,25 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .m3-mon[data-mode] .fb-body { order: -1; }
 .fb-eff { margin-top: 3px; font-size: 11.5px; color: var(--m3-ok); }
 .m3-mon[data-mode="run"] .om-kpi { margin: 2px 0 8px; }
+/* 인자 강조 차이 크게 · 상자 크기 고정(2026-11-08) */
+.m3-mon .fb-cards { align-items: stretch; }
+.m3-mon .fb-cards .fb-card { min-height: 108px; box-sizing: border-box; display: flex; flex-direction: column; }
+.m3-mon .fb-cards .fb-card .fb-in { flex: 1; }
+.fb-card.fb-off { border: 1px dashed #c3c9d4 !important; border-left: 4px solid #c3c9d4 !important; background: #f6f7f9 !important; box-shadow: none !important; }
+.fb-card.fb-off .fb-head { background: transparent !important; color: #8a93a6; }
+.fb-card.fb-off .fb-head .fb-dot { background: #c3c9d4 !important; }
+.fb-card.fb-off .fb-in { opacity: .55; }
+.fb-card.fb-on { border: 2px solid var(--fb) !important; border-left-width: 6px !important; background: color-mix(in srgb, var(--fb) 14%, #fff) !important; box-shadow: 0 2px 10px color-mix(in srgb, var(--fb) 30%, transparent) !important; }
+.fb-card.fb-on .fb-head { background: var(--fb) !important; color: #fff; }
+.fb-card.fb-on .fb-head .fb-name { color: #fff; }
+.fb-card.fb-on .fb-head .fb-dot { background: #fff !important; }
+.fb-card.fb-on .fb-head .od-chip { background: #fff !important; color: #20262f !important; border-color: transparent !important; }
+.fb-card.fb-run { box-shadow: 0 0 0 3px color-mix(in srgb, var(--fb) 45%, transparent), 0 2px 10px color-mix(in srgb, var(--fb) 35%, transparent) !important; }
+/* 길이·폭·효율 카드 = 세 화면 같은 크기, 낮게 */
+.m3-mon .rs-cards, .m3-mon .om-kpi { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0 0 8px; }
+.m3-mon .rs-card, .m3-mon .om-k { height: 54px; box-sizing: border-box; padding: 5px 10px; border-radius: 8px; background: rgba(127,127,160,.08); font-size: 11.5px; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; }
+.m3-mon .rs-card .rs-v { margin: 0; font-size: 12.5px; line-height: 1.2; }
+.m3-mon .rs-card .rs-v b, .m3-mon .om-k .om-v { font-size: 17px; line-height: 1.15; }
+.m3-mon .om-k .om-v { display: inline; }
+.m3-mon .rs-card .rs-bar { height: 4px; }
+.m3-mon[data-mode] .m3-mon-body #m3-auto { padding: 8px 10px; }   /* 세 화면 카드 높이 위치 같게 */
