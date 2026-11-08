@@ -7,21 +7,21 @@ import { showCtxMenu } from './feature-tree.js';
 // 결과 패널 — spec 2026-10-15 m3-cad-ui §2(시안 m3-ui-mockup 오른쪽):
 // ① 2D 광량 분포(관측면 펼침 s×w) + 평균 광량(목표 대비)·광 효율 ② 길이 1D 프로파일(목표선) + 길이 균일도 ③ 폭 1D 프로파일(최저 창) + 폭 균일도.
 // update({ snap(progressive snapshot), observe(spec.mech3d.observe), message(안내 | ''), leds?: [{s, w}](LED 위치 — 프로파일 아래 표시) })
-import { windowProfile, uVerdict, uBand } from '../../engine/mech3d/tally.js';
+import { windowProfile, uVerdict, uBand, fmtJudge, fmtTg } from '../../engine/mech3d/tally.js';
 import { ramp, NO_DATA } from './colormap.js';
 
 export const DEFAULT_GUIDE = '관측면을 지정하면 결과가 여기에 표시됩니다.';
 // 표시 반올림은 판정과 엇갈리지 않게 한다: U·광량(클수록 좋음)은 내림, 미달 폭은 최소 한 자리(0.01 · 1 cd/m²)
-const fl100 = (v) => Math.floor(v * 100 + 1e-9);
-export const fmtU = (v) => (Number.isFinite(v) ? (fl100(v) / 100).toFixed(2) : '–');
+const fl1000 = (v) => Math.floor(v * 1000 + 1e-9);   // 0.1% 단위 내림 — 판정은 목표(1% 단위)와 견주므로 전과 같음
+export const fmtU = fmtJudge;   // 균일도 = % 소수 한 자리(2026-11-08)
 const finiteMax = (a) => { let m = -Infinity; for (const v of a) if (Number.isFinite(v) && v > m) m = v; return m; };
 // 판정도 표시된(내림) 값끼리 비교한다 — 화면에 0.80 / 목표 0.80 인데 "미달"이 뜨는 일이 없게
 export function judgeText(v, tg, se = null, relNoise = null) {
-  if (!Number.isFinite(v)) return { cls: '', text: `목표 ${fmtU(tg)}` };
-  if (relNoise > 0.05) return { cls: 'busy', text: `목표 ${fmtU(tg)} · 노이즈 큼 — 판정 보류(계산 중)` };   // 계산 초반(광선 수천 개) 값은 크게 흔들림 — 빨간 미달로 보이지 않게(2026-11-07)
-  if (uVerdict(v, tg, se, relNoise) === 'near') return { cls: 'near', text: `목표 ${fmtU(tg)} · 근처 (오차 ±${uBand(v, se, relNoise).toFixed(3)})` };
-  const vi = fl100(v), ti = fl100(tg), ok = vi >= ti;
-  return { cls: ok ? 'ok' : 'bad', text: `목표 ${fmtU(tg)} · ${ok ? '합격' : `미달 −${(Math.max(1, ti - vi) / 100).toFixed(2)}`}` };
+  if (!Number.isFinite(v)) return { cls: '', text: `목표 ${fmtTg(Math.floor(tg * 100 + 1e-9) / 100)}` };
+  if (relNoise > 0.05) return { cls: 'busy', text: `목표 ${fmtTg(Math.floor(tg * 100 + 1e-9) / 100)} · 노이즈 큼 — 판정 보류(계산 중)` };   // 계산 초반(광선 수천 개) 값은 크게 흔들림 — 빨간 미달로 보이지 않게(2026-11-07)
+  if (uVerdict(v, tg, se, relNoise) === 'near') return { cls: 'near', text: `목표 ${fmtTg(Math.floor(tg * 100 + 1e-9) / 100)} · 근처 (오차 ±${(uBand(v, se, relNoise) * 100).toFixed(1)}%p)` };
+  const ok = Math.floor(v * 100 + 1e-9) >= Math.floor(tg * 100 + 1e-9), gap = Math.max(1, Math.floor(tg * 100 + 1e-9) * 10 - fl1000(v));   // 판정 규칙은 그대로(1% 단위 내림 비교) · 미달 폭은 0.1%p
+  return { cls: ok ? 'ok' : 'bad', text: `목표 ${fmtTg(Math.floor(tg * 100 + 1e-9) / 100)} · ${ok ? '합격' : `미달 −${(gap / 10).toFixed(1)}%p`}` };
 }
 // 평균 광량 카드: 광속이 있으면 cd/m²(목표 대비), 없으면 상대값(길이 프로파일 평균/최대)
 export function lumCard(st, ph, targetLum) {

@@ -2,7 +2,7 @@
 // 후보 지도(방출 1 기준, (s, w) 격자) 를 더해 배치를 즉시 평가. 총 LED 수 오름차순 → 같은 총수면 1열 → 2열,
 // 열당 개수 n 마다 단계식: 1 같은 피치 + 끝 여백 → 2 끝 압축 → 3 자유 위치(대칭 쌍 좌표 하강). 앞 단계 통과면 멈춤.
 import { layoutMap2, nearestRow } from './basis.js';
-import { tallyStats } from './tally.js';
+import { tallyStats, fmtJudge } from './tally.js';
 import { margin } from './milky-search.js';
 
 export const SNAP = 0.25;   // 라인 가운데 기준 격자(대칭 쌍 간격 = 0.5 mm 단위)
@@ -155,7 +155,7 @@ function* solveLayoutSteps(args) {
     const q = yield* solveLayoutSteps({ ...args, inner: true, obs: { ...obs, targetWid: null } });
     if (q.positions?.length) {
       const { feasible, reason: _r, alts, evals: e2, atCount: at2, limit: _l, ...b } = q, s = b.stats;
-      return { feasible: false, ...b, margin: margin(s, obs), reason: `LED 개수를 늘려도 폭 목표에 못 닿음 — 길이가 가장 적게 통과하는 ${layoutText(b)}: 길이 균일도 ${s.Ulen.toFixed(2)}${s.Uwid == null ? '' : ` · 폭 균일도 ${s.Uwid.toFixed(2)}`} — 폭 방향 확산 부족: ③ 형상 또는 Milky 상향 권장`, alts: [], evals: evals + e2, atCount: at2, limit };
+      return { feasible: false, ...b, margin: margin(s, obs), reason: `LED 개수를 늘려도 폭 목표에 못 닿음 — 길이가 가장 적게 통과하는 ${layoutText(b)}: 길이 균일도 ${fmtJudge(s.Ulen)}${s.Uwid == null ? '' : ` · 폭 균일도 ${fmtJudge(s.Uwid)}`} — 폭 방향 확산 부족: ③ 형상 또는 Milky 상향 권장`, alts: [], evals: evals + e2, atCount: at2, limit };
     }
   }
   // 안쪽 풀이가 못 닿으면 가장 가까운 안(차이가 작으면 적은 개수)
@@ -165,6 +165,6 @@ function* solveLayoutSteps(args) {
   if (b0.nRow == null) return { feasible: false, n: nMax, rows: 1, rowGap: 0, total: nMax, positions: [], kind: 'uniform', pitch: 0, stats: null, eff: NaN, margin: -Infinity, reason: '평가할 수 있는 배치가 없음 — 관측면·LED 를 확인하세요', alts: [], evals, atCount };
   const b = strip({ ...b0, n: b0.nRow }); delete b.nRow; delete b.j;
   const st = b.stats, wid = st?.Uwid != null && st.Uwid - obs.targetWid < st.Ulen - obs.targetLen;
-  const reason = `${timedOut ? '시간 제한 안에서' : `LED 총 ${nMax}개까지`} 배치를 바꿔도 목표 미달 — 가장 가까운 ${layoutText(b)}: 길이 균일도 ${st.Ulen.toFixed(2)}${st.Uwid == null ? '' : ` · 폭 균일도 ${st.Uwid.toFixed(2)}`} — ${wid ? '폭 방향 확산 부족: ③ 형상 또는 Milky 상향 권장' : '길이 방향 리플·끝 어두움: Milky 상향 또는 LED–커버 거리 확대 권장'}`;
+  const reason = `${timedOut ? '시간 제한 안에서' : `LED 총 ${nMax}개까지`} 배치를 바꿔도 목표 미달 — 가장 가까운 ${layoutText(b)}: 길이 균일도 ${fmtJudge(st.Ulen)}${st.Uwid == null ? '' : ` · 폭 균일도 ${fmtJudge(st.Uwid)}`} — ${wid ? '폭 방향 확산 부족: ③ 형상 또는 Milky 상향 권장' : '길이 방향 리플·끝 어두움: Milky 상향 또는 LED–커버 거리 확대 권장'}`;
   return { feasible: false, ...b, reason, alts: [], evals, atCount, limit: null };
 }

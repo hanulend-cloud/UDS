@@ -28,7 +28,11 @@ export function judgeStats(s, obs) {
 }
 // 균일도 표시 — 미달인데 반올림하면 목표와 같아 보일 때만 세 자리(0.795 ✕)
 // 균일도 표시 = 내림(판정과 엇갈리지 않게, results-panel.fmtU 와 같음) — 카드는 반올림, 화면은 내림이라 같은 0.7886 이 0.79 와 0.78 로 달랐음(2026-11-05)
-export const fmtJudge = (v) => (!Number.isFinite(v) ? '–' : (Math.floor(v * 100 + 1e-9) / 100).toFixed(2));
+// 균일도 표시(2026-11-08) = % 소수 한 자리, 0.1% 단위 내림(판정과 같은 쪽으로) — 어디서나 이 셋만 씀
+export const flU = (v) => Math.floor(v * 1000 + 1e-9) / 1000;
+export const fmtJudge = (v) => (!Number.isFinite(v) ? '–' : `${(flU(v) * 100).toFixed(1)}%`);
+export const fmtTg = (t) => (!Number.isFinite(t) ? '–' : `${+(t * 100).toFixed(1)}%`);   // 목표(입력값 그대로, 80%)
+export const fmtDp = (d) => (!Number.isFinite(d) ? '–' : `${d >= 0 ? '+' : '−'}${(Math.round(Math.abs(d) * 1000) / 10).toFixed(1)}%p`);   // 차이
 export const GRID_QUALITY = { low: { cell: 1.5 }, mid: { cell: 1 }, high: { cell: 0.5 } };
 export function autoCells(L, width, quality) {
   const c = (GRID_QUALITY[quality] ?? GRID_QUALITY.low).cell;

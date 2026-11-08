@@ -1,3 +1,4 @@
+import { fmtJudge } from '../../engine/mech3d/tally.js';
 // 실행 · 일시정지 · 중지 단추(2026-11-04) — 광분포 시뮬레이션과 기구 최적화가 같은 세 단추. 지금 쓸 수 없는 단추는 흐리게
 // 실행 = 일시정지면 이어서, 그 밖에는 처음부터 · 일시정지 = 나중에 이어서 · 중지 = 끝냄(이어서 못 함)
 const LABEL = [['run', '▶ 실행'], ['pause', '⏸'], ['stop', '■ 중지']];   // 일시정지 = 표시만(글씨 빼고 마우스 설명·읽기 이름으로, 2026-11-08)
@@ -23,7 +24,7 @@ export function setStepMark(i, n, done) {
 }
 // 적용 전 결과를 버리고 다시 실행할 때 묻는 말 — 긴 계산 결과를 실수로 잃지 않게
 export function rerunAsk(best) {
-  const n = (v) => (Number.isFinite(v) ? v.toFixed(2) : '–');
+  const n = fmtJudge;
   return `적용하지 않은 최적화 결과가 있습니다${best ? ` (길이 균일도 ${n(best.Ulen)} · 폭 균일도 ${n(best.Uwid)})` : ''}.\n버리고 처음부터 다시 실행할까요?`;
 }
 // 단추 틀(한 번만 만듦) + 상태 갱신 — fn(k) k = run | pause | stop

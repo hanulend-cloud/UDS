@@ -1,4 +1,4 @@
-import { fmtJudge } from '../../engine/mech3d/tally.js';
+import { fmtJudge, fmtTg, fmtDp, flU } from '../../engine/mech3d/tally.js';
 import { judgeStats, uVerdict } from '../../engine/mech3d/tally.js';
 // 아래 칸 대시보드 — ① 기구 최적화 진행(6 항목 타일) ② 시뮬레이션 진행현황(수렴 그래프).
 // 최적화: app.js 의 기구 최적화 io 가 progress(stage, frac, text) · evals(stage, [{label, Ulen, Uwid, ok, why}]) 를 부른다.
@@ -24,7 +24,7 @@ export function evalSparkSvg(evals, tgLen, tgWid, bestIdx = -1, w = 220, h = 70)
   const tg = (v, cls) => (Number.isFinite(v) ? `<line class="${cls}" x1="4" x2="${w - 4}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/>` : '');
   const best = bestIdx >= 0 && evals[bestIdx] && Number.isFinite(evals[bestIdx].Ulen) ? `<circle class="od-best" cx="${X(bestIdx).toFixed(1)}" cy="${Y(evals[bestIdx].Ulen).toFixed(1)}" r="5"/>` : '';
   return `<svg class="od-spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">${tg(tgLen, 'od-tg')}${tg(tgWid, 'od-tg od-tg2')}${line('Ulen', 'od-l1')}${line('Uwid', 'od-l2')}${dots('Ulen', 'od-d1')}${dots('Uwid', 'od-d2')}${best}
-    <text class="od-ax" x="2" y="10">${hi.toFixed(2)}</text><text class="od-ax" x="2" y="${h - 2}">${lo.toFixed(2)}</text></svg>`;
+    <text class="od-ax" x="2" y="10">${fmtTg(hi)}</text><text class="od-ax" x="2" y="${h - 2}">${fmtTg(lo)}</text></svg>`;
 }
 // 설계 인자 현황판(순수, 왼쪽 창 맨 아래) — S = 최적화 상태(null = 실행 전), nw = 지금 설계 { milky, milkyCap, leds, shape, on:{milky,position,shape}, Ulen, Uwid, tgLen, tgWid }
 // 그래프 1개에 인자 3개: 시험 순서대로 후보의 길이 균일도(실선)·폭 균일도(점선)를 인자 색으로 · 목표선(빨강) · 지금 설계(회색) · 최고 후보(노란 원)
@@ -58,7 +58,7 @@ export const chartHeight = (W) => (W >= CHART_TWO_MIN ? 150 : 250);
 export function factorChartSvg(S, nw = {}, W = 240, H = 100) {
   const tl = S?.tgLen ?? nw.tgLen, tw = S?.tgWid ?? nw.tgWid, seq = S?.seq ?? [], okE = (e) => e.ok !== false && Number.isFinite(e.Ulen), fin = S?.final ?? null;
   if (!seq.some(okE)) return `<div class="od-sim2 one"><div class="od-none-box">후보를 시험하면 여기에 그려집니다</div></div>`;
-  const one = W < CHART_TWO_MIN, cw = one ? W : Math.floor((W - 12) / 2), ch = Math.max(60, (one ? Math.floor(H / 2) : H) - 19), x0 = 28, x1 = cw - (fin ? 46 : 8), y0 = 12, y1 = ch - 15, n = seq.length;
+  const one = W < CHART_TWO_MIN, cw = one ? W : Math.floor((W - 12) / 2), ch = Math.max(60, (one ? Math.floor(H / 2) : H) - 19), x0 = 34, x1 = cw - (fin ? 50 : 8), y0 = 12, y1 = ch - 22, n = seq.length;
   const X = (i) => x0 + (n > 1 ? (i / (n - 1)) * (x1 - x0) : (x1 - x0) / 2), wd = (x1 - x0) / Math.max(1, n - 1);
   let bb = null; const run = seq.map((e) => { if (okE(e) && (!bb || scoreOf(e, tl, tw) > scoreOf(bb, tl, tw))) bb = e; return bb; });
   let bands = '';
@@ -75,9 +75,14 @@ export function factorChartSvg(S, nw = {}, W = 240, H = 100) {
     const mark = Number.isFinite(last) ? `<circle class="od-dot ${d}" cx="${X(n - 1).toFixed(1)}" cy="${Y(last).toFixed(1)}" r="3.5"/>` : '';
     // 기준선 이름은 선 위 왼쪽 안 — 두 선이 가까우면 시작선 이름을 선 아래로
     const yT = Number.isFinite(t) ? Y(t) : null, yS = Number.isFinite(v0) ? Y(v0) : null, near = yT != null && yS != null && Math.abs(yT - yS) < 11;
-    const tg = yT != null ? `<line class="od-tg" x1="${x0}" x2="${x1}" y1="${yT.toFixed(1)}" y2="${yT.toFixed(1)}"/><text class="od-lb od-lb-tg" x="${x0 + 3}" y="${(yT - 2.5).toFixed(1)}">목표 ${f2(t)}</text>` : '';
+    const tg = yT != null ? `<line class="od-tg" x1="${x0}" x2="${x1}" y1="${yT.toFixed(1)}" y2="${yT.toFixed(1)}"/><text class="od-lb od-lb-tg" x="${x0 + 3}" y="${(yT - 2.5).toFixed(1)}">목표 ${fmtTg(t)}</text>` : '';
     const st = yS != null ? `<line class="od-st" x1="${x0}" x2="${x1}" y1="${yS.toFixed(1)}" y2="${yS.toFixed(1)}"/><text class="od-lb" x="${x0 + 3}" y="${(near && yS >= yT ? yS + 9 : yS - 2.5).toFixed(1)}">시작 ${fmtJudge(v0)}</text>` : '';
-    const grid = [lo, (lo + hi) / 2, hi].map((v) => `<line class="od-gr" x1="${x0}" x2="${x1}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text class="od-ax" x="${x0 - 3}" y="${(Y(v) + 3).toFixed(1)}" text-anchor="end">${v.toFixed(2)}</text>`).join('');
+    // 1D 광분포와 같은 양식(2026-11-08): 실선 격자 · 테두리 · % 눈금 · 세로 = 후보 번호
+    const ys = niceStep(hi - lo || 0.1, Math.max(2, Math.round((y1 - y0) / 22))), yt = []; for (let v = Math.ceil((lo - 1e-9) / ys) * ys; v <= hi + 1e-9; v += ys) yt.push(+v.toFixed(4));
+    const xs = Math.max(1, niceStep(Math.max(1, n - 1), Math.max(2, Math.round((x1 - x0) / 70)))), xt = []; for (let i = xs; i < n - 1 - xs * 0.3; i += xs) xt.push(i);
+    const grid = yt.map((v) => `<line class="od-gl h" x1="${x0}" x2="${x1}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text class="od-ax" x="${x0 - 3}" y="${(Y(v) + 3).toFixed(1)}" text-anchor="end">${+(v * 100).toFixed(1)}%</text>`).join('')
+      + xt.map((i) => `<line class="od-gl v" x1="${X(i).toFixed(1)}" x2="${X(i).toFixed(1)}" y1="${y0}" y2="${y1}"/><text class="od-ax" x="${X(i).toFixed(1)}" y="${y1 + 9}" text-anchor="middle">${i + 1}</text>`).join('')
+      + `<rect class="od-frame" x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}"/>`;
     const final = Number.isFinite(fv) ? (() => { const fx = x1 + 8, fy = Y(fv), p = (dx, dy) => `${(fx + dx).toFixed(1)},${(fy + dy).toFixed(1)}`; return `<polygon class="od-final" points="${p(0, -5)} ${p(5, 0)} ${p(0, 5)} ${p(-5, 0)}"/><text class="od-lb od-lb-fin" x="${fx + 7}" y="${(fy - 7 < y0 ? fy + 13 : fy - 7).toFixed(1)}" text-anchor="end">최종 ${fmtJudge(fv)}</text>`; })() : '';
     const ok = Number.isFinite(last) && Number.isFinite(t) ? (last + 1e-9 >= t ? '<span class="od-ok">✓</span>' : '<span class="od-bad">✕</span>') : '';
     return `<div><div class="od-simt"><b>${title}</b></div><svg class="od-sim" width="${cw}" height="${ch}" viewBox="0 0 ${cw} ${ch}">${bands}${grid}${st}${tg}${dots}${line ? `<polyline class="${s}" points="${line}"/>` : ''}${mark}${final}${hits}<text class="od-ax" x="${((x0 + x1) / 2).toFixed(1)}" y="${ch - 3}" text-anchor="middle">시험한 후보 ${n}개 (시험한 순서 →)</text></svg></div>`;
@@ -120,13 +125,13 @@ export function monitorHtml(S, sec = 0, { chart = true } = {}) {
   const kpi = (label, tg, v, v0) => {
     const pass = Number.isFinite(v) && Number.isFinite(tg) ? (v + 1e-9 >= tg ? 'ok' : 'bad') : '';
     const d = Number.isFinite(v) && Number.isFinite(v0) ? v - v0 : NaN;
-    return `<div class="om-k"><div class="mut">${label}${Number.isFinite(tg) ? ` · 목표 ${f2(tg)}` : ''}</div><b class="om-v ${pass}">${fmtJudge(v)}</b><div class="mut">시작 ${fmtJudge(v0)}${Number.isFinite(d) && Math.abs(d) >= 0.005 ? ` → ${d > 0 ? '▲' : '▼'}${f2(Math.abs(d))}` : ''}</div></div>`;
+    return `<div class="om-k"><div class="mut">${label}${Number.isFinite(tg) ? ` · 목표 ${fmtTg(tg)}` : ''}</div><b class="om-v ${pass}">${fmtJudge(v)}</b><div class="mut">시작 ${fmtJudge(v0)}${Number.isFinite(d) && Math.abs(d) >= 0.0005 ? ` → ${d > 0 ? '▲' : '▼'}${fmtDp(Math.abs(d)).slice(1)}` : ''}</div></div>`;
   };
   const effB = S.effBest, eff0 = b0.eff;
   const effK = `<div class="om-k"><div class="mut">광 효율</div><b class="om-v">${Number.isFinite(effB) ? `${(effB * 100).toFixed(1)}%` : Number.isFinite(eff0) ? `${(eff0 * 100).toFixed(1)}%` : '–'}</b><div class="mut">${Number.isFinite(effB) && Number.isFinite(eff0) ? `시작 ${(eff0 * 100).toFixed(1)}%` : Number.isFinite(eff0) ? '시작값 · 최적안은 끝나면' : ''}</div></div>`;
   const mmss = (t) => `${String((t / 60) | 0).padStart(2, '0')}:${String(t % 60 | 0).padStart(2, '0')}`;
   const nEval = (S.seq ?? []).length;
-  const fin = S.final, cur = fin ?? best, J = fin ? judgeStats(fin, { targetLen: tl, targetWid: tw }) : {}, uTxt = (l, v, t, j) => `${l} <b>${fmtJudge(v)}</b>${Number.isFinite(v) && Number.isFinite(t) ? ` (목표 ${f2(t)} ${j === 'near' ? '<span class="od-near">근처</span>' : v + 1e-9 >= t ? '<span class="od-ok">통과</span>' : '<span class="od-bad">미달</span>'})` : ''}`;
+  const fin = S.final, cur = fin ?? best, J = fin ? judgeStats(fin, { targetLen: tl, targetWid: tw }) : {}, uTxt = (l, v, t, j) => `${l} <b>${fmtJudge(v)}</b>${Number.isFinite(v) && Number.isFinite(t) ? ` (목표 ${fmtTg(t)} ${j === 'near' ? '<span class="od-near">근처</span>' : v + 1e-9 >= t ? '<span class="od-ok">통과</span>' : '<span class="od-bad">미달</span>'})` : ''}`;
   const uLine = cur ? `${uTxt('길이 균일도', cur.Ulen, tl, J.len)}, ${uTxt('폭 균일도', cur.Uwid, tw, J.wid)}` : '';
   const doing = S.note || (S.cur ? S.tiles[S.cur].text : '') || '준비하는 중';
   // 판정은 한 줄만 — 값은 아래 지표 카드에(같은 값을 여러 곳에 쓰지 않음, 2026-11-08)
@@ -308,14 +313,14 @@ export function simPlotSvg(H, tgt, obs, w, h) {
   const YB = (v) => y0 + (1 - (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo)) * (y1 - y0);
   const uLine = (k, cls) => { const pts = H.filter((p) => Number.isFinite(p[k])).map((p) => [X(p.ph), YB(p[k])]); return pts.length ? `<polyline class="${cls}" points="${lineOf(pts)}"/>` : ''; };
   const mark = (v, se, cls) => { if (!Number.isFinite(v)) return ''; const x = X(last.ph).toFixed(1), d = 2 * (Number.isFinite(se) ? se : 0); return `${d > 0 ? `<line class="od-bar-e ${cls}" x1="${x}" x2="${x}" y1="${YB(v + d).toFixed(1)}" y2="${YB(v - d).toFixed(1)}"/>` : ''}<circle class="od-dot ${cls}" cx="${x}" cy="${YB(v).toFixed(1)}" r="3"/>`; };
-  const tgLines = [...new Set([tl, tw].filter(Number.isFinite))].map((t) => `<line class="od-tg" x1="${x0}" x2="${x1}" y1="${YB(t).toFixed(1)}" y2="${YB(t).toFixed(1)}"/><text class="od-ax" x="${x0 - 3}" y="${(YB(t) + 3).toFixed(1)}" text-anchor="end">${Math.round(t * 100)}%</text>`).join('');
+  const tgLines = [...new Set([tl, tw].filter(Number.isFinite))].map((t) => `<line class="od-tg" x1="${x0}" x2="${x1}" y1="${YB(t).toFixed(1)}" y2="${YB(t).toFixed(1)}"/><text class="od-ax" x="${x0 - 3}" y="${(YB(t) + 3).toFixed(1)}" text-anchor="end">${fmtTg(t)}</text>`).join('');
   const stB = hi - lo > 0.3 ? 0.1 : 0.05, ysB = []; for (let v = Math.ceil((lo + 1e-9) / stB) * stB; v < hi - 1e-9; v += stB) ysB.push(+v.toFixed(2));
   const gridB = vGrid + hGrid(ysB, YB, (v) => `${Math.round(v * 100)}%`, [...[tl, tw].filter(Number.isFinite).map(YB), y0 + 4, y1]);
   const svgB = `<svg class="od-sim" width="${cw}" height="${ch}" viewBox="0 0 ${cw} ${ch}">${gridB}${tgLines}<text class="od-ax" x="${x0 - 3}" y="${y0 + 7}" text-anchor="end">${Math.round(hi * 100)}%</text><text class="od-ax" x="${x0 - 3}" y="${y1}" text-anchor="end">${Math.round(lo * 100)}%</text>${xAxis}
-    ${uLine('Ulen', 'od-s1')}${uLine('Uwid', 'od-s2')}${mark(last.Ulen, last.seLen, 'od-d1')}${mark(last.Uwid, last.seWid, 'od-d2')}${hits((p) => `광선 ${human(p.ph)} · 길이 ${f1(p.Ulen)}% · 폭 ${f1(p.Uwid)}%`)}</svg>`;
+    ${uLine('Ulen', 'od-s1')}${uLine('Uwid', 'od-s2')}${mark(last.Ulen, last.seLen, 'od-d1')}${mark(last.Uwid, last.seWid, 'od-d2')}${hits((p) => `광선 ${human(p.ph)} · 길이 ${fmtJudge(p.Ulen)} · 폭 ${fmtJudge(p.Uwid)}`)}</svg>`;
   const mk = (v, t, se, rn) => ({ ok: '<span class="od-ok">✓</span>', near: '<span class="od-near">≈</span>', bad: '<span class="od-bad">✕</span>' })[uVerdict(v, t, se, rn)] ?? '';
   return `<div class="od-sim2${one ? ' one' : ''}"><div><div class="od-simt" title="계산 오차 — 점선(목표)까지 내려가면 계산 끝, 옅은 점선 = 예상"><b>${cw >= 190 ? '계산 오차' : '오차'}</b> ±${f2(last.noise)}% → ±${f2(tgt)}%</div>${svgA}</div>
-    <div><div class="od-simt" title="균일도 — 목표 점선 위면 통과, 세로 막대 = 불확실 범위">${cw >= 190 ? '<b>균일도</b> ' : ''}<i class="od-k od-d1"></i>길이 ${f1(last.Ulen)}%${mk(last.Ulen, tl, last.seLen, last.noise)} <i class="od-k od-d2"></i>폭 ${f1(last.Uwid)}%${mk(last.Uwid, tw, last.seWid, last.noise)}</div>${svgB}</div></div>`;
+    <div><div class="od-simt" title="균일도 — 목표 점선 위면 통과, 세로 막대 = 불확실 범위">${cw >= 190 ? '<b>균일도</b> ' : ''}<i class="od-k od-d1"></i>길이 ${fmtJudge(last.Ulen)}${mk(last.Ulen, tl, last.seLen, last.noise)} <i class="od-k od-d2"></i>폭 ${fmtJudge(last.Uwid)}${mk(last.Uwid, tw, last.seWid, last.noise)}</div>${svgB}</div></div>`;
 }
 // 그래프 위 설명 한 줄(순수) — 광선 수 / 총광선 · 남은 시간
 export function simCaption(H, tgt, obs, state) {

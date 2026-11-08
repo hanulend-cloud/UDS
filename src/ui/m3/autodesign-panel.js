@@ -1,5 +1,5 @@
 // 기구 최적화 카드 — spec P4 §3. 체크 5개(①~⑤) · ③·④ 대상 부품 · [실행]/[중지] · 진행 · 현재|최적 비교 · [적용][취소][되돌리기][STEP]
-import { fmtJudge } from '../../engine/mech3d/tally.js';
+import { fmtJudge, fmtTg, fmtDp, flU } from '../../engine/mech3d/tally.js';
 import { histTableHtml } from './opt-dash.js';
 import { shapeCasesHtml } from './shape-cases.js';
 import { stepRefEmitter } from '../../engine/mech3d/virtual-leds.js';   // 가상 배치 기준 LED(엔진과 같은 규칙)
@@ -177,6 +177,7 @@ export function screenSummary(gains) {
 // finish = ④ { cur, best }(면 처리) | null · height = ⑤ { dz, gap(현재 LED–커버 축 거리, NaN = 모름) } | null
 // 바뀐 양(소수 2자리, 0.005 미만 = 없음) — Milky·U 는 값 차, 광 효율은 %p
 // 화면에 보이는 값(소수 2자리)끼리의 차 — 표의 두 값과 어긋나지 않게
+const dU = (a, b) => (Number.isFinite(a) && Number.isFinite(b) && Math.abs(flU(b) - flU(a)) >= 0.0005 ? ` <span class="m3-dl">(${fmtDp(flU(b) - flU(a))})</span>` : '');   // 균일도 차이(%p)
 const dl = (a, b, k = 1, u = '') => { if (!Number.isFinite(a) || !Number.isFinite(b)) return ''; const d = +(b * k).toFixed(2) - +(a * k).toFixed(2); return Math.abs(d) >= 0.005 ? ` <span class="m3-dl">(${d > 0 ? '+' : ''}${d.toFixed(2)}${u})</span>` : ''; };
 // 총 LED 수(2열 = 열 수 × 열당, 위치 목록 = 그 수)
 const ledTotal = (x) => (x?.positions?.length ? x.positions.length : Number.isFinite(x?.count) ? x.count * (x.rows === 2 ? 2 : 1) : NaN);
@@ -192,8 +193,8 @@ function cmpParts({ cur, best, shape, stepLeds = null, finish = null, height = n
   const tc = stepLeds != null && cur.stepOrig !== false ? stepLeds : ledTotal(cur), tb = best.stepOrig === true ? tc : ledTotal(best);
   const tot = Number.isFinite(tc) && Number.isFinite(tb) && tb !== tc ? ` <b class="m3-tot">· 총 ${tb}개 (${tb > tc ? '+' : ''}${tb - tc})</b>` : '';
   const metric = [
-    tr(`길이 균일도${tg?.len != null ? ` <span class="mut">목표 ${f2(tg.len)}</span>` : ''}`, fmtJudge(cur.Ulen, tg?.len), fmtJudge(best.Ulen, tg?.len), `${dl(cur.Ulen, best.Ulen)}${passMark(best.Ulen, tg?.len, tg?.judge?.len)}`),
-    tr(`폭 균일도${tg?.wid != null ? ` <span class="mut">목표 ${f2(tg.wid)}</span>` : ''}`, fmtJudge(cur.Uwid, tg?.wid), fmtJudge(best.Uwid, tg?.wid), `${dl(cur.Uwid, best.Uwid)}${passMark(best.Uwid, tg?.wid, tg?.judge?.wid)}`),
+    tr(`길이 균일도${tg?.len != null ? ` <span class="mut">목표 ${fmtTg(tg.len)}</span>` : ''}`, fmtJudge(cur.Ulen, tg?.len), fmtJudge(best.Ulen, tg?.len), `${dU(cur.Ulen, best.Ulen)}${passMark(best.Ulen, tg?.len, tg?.judge?.len)}`),
+    tr(`폭 균일도${tg?.wid != null ? ` <span class="mut">목표 ${fmtTg(tg.wid)}</span>` : ''}`, fmtJudge(cur.Uwid, tg?.wid), fmtJudge(best.Uwid, tg?.wid), `${dU(cur.Uwid, best.Uwid)}${passMark(best.Uwid, tg?.wid, tg?.judge?.wid)}`),
     tr('광 효율', `${f2(cur.eff * 100)}%`, `${f2(best.eff * 100)}%`, dl(cur.eff, best.eff, 100, '%p')),
   ];
   const design = [
@@ -271,7 +272,7 @@ export function peekText(pk) {
   if (!pk) return '';
   const b = pk.best;
   if (!b) return `참고: Milky 를 ${pk.cap} 보다 높여도 균일도가 오르지 않음`;
-  return `참고: Milky ${b.milky}이면 길이 약 ${b.Ulen.toFixed(1)}${b.Uwid == null ? '' : ` · 폭 약 ${b.Uwid.toFixed(1)}`}, 광 효율 약 ${Math.round(b.eff * 100)}% (대략값 · 최적화에는 쓰지 않음)`;
+  return `참고: Milky ${b.milky}이면 길이 약 ${Math.round(b.Ulen * 100)}%${b.Uwid == null ? '' : ` · 폭 약 ${Math.round(b.Uwid * 100)}%`}, 광 효율 약 ${Math.round(b.eff * 100)}% (대략값 · 최적화에는 쓰지 않음)`;
 }
 export function loweredText(l, unchanged = false) {
   if (!l) return '';
@@ -313,7 +314,7 @@ export function caseHintText(r) {
   const d = (k) => (Number.isFinite(h[k]) && Number.isFinite(b[k]) ? h[k] - b[k] : 0), dl = d('Ulen'), dw = d('Uwid');
   if (Math.max(dl, dw) < 0.02 || Math.min(dl, dw) < -0.01) return '';
   // 차이로 표시 — 추천 계산은 빠른 계산이라 절대값이 카드의 최종 판정값과 달라 보임(같은 조건끼리 비교한 오름폭만 의미 있음)
-  const f = (v) => `${v >= 0 ? '+' : '−'}${(Math.floor(Math.abs(v) * 100 + 1e-9) / 100).toFixed(2)}`;
+  const f = fmtDp;
   return `💡 추천: 부품 속성에서 케이스 면을 '${h.text}'(으)로 바꾸면 길이 ${f(dl)} · 폭 ${f(dw)} 정도 오름 (빠른 계산 비교)`;
 }
 // 지난 최적화 후보(2026-11-07) — 한 번 실행에서 정밀 재계산 값이 있는 후보: 최종안(겹치지 않을 때) + 최종 판정에서 재확인한 대안(겹침 제외).
@@ -356,12 +357,12 @@ const verdictOf = (r) => (r.unchanged ? ['keep', '현재안 유지', r.caseCheck
 // 변화 카드 — 이전 → 이후 ▲증가 · 막대(회색 = 이전, 파랑 = 오른 만큼, 빨강 선 = 목표)
 function changeCard(label, a, b, t, pct = false) {
   const fa = pct ? (v) => (Number.isFinite(v) ? `${(v * 100).toFixed(1)}%` : '–') : (v) => fmtJudge(v);
-  const d = Number.isFinite(a) && Number.isFinite(b) ? (pct ? (b - a) * 100 : +fmtJudge(b) - +fmtJudge(a)) : NaN;
-  const dTxt = Number.isFinite(d) && Math.abs(d) >= (pct ? 0.05 : 0.005) ? `<span class="rs-d ${d > 0 ? 'up' : 'dn'}">${d > 0 ? '▲' : '▼'}${Math.abs(d).toFixed(pct ? 1 : 2)}${pct ? '%p' : ''}</span>` : '';
+  const d = Number.isFinite(a) && Number.isFinite(b) ? (pct ? (b - a) * 100 : (flU(b) - flU(a)) * 100) : NaN;
+  const dTxt = Number.isFinite(d) && Math.abs(d) >= 0.05 ? `<span class="rs-d ${d > 0 ? 'up' : 'dn'}">${d > 0 ? '▲' : '▼'}${Math.abs(d).toFixed(1)}%p</span>` : '';
   const cls = !pct && Number.isFinite(t) && Number.isFinite(b) ? (b + 1e-9 >= t ? 'ok' : 'bad') : '';
   const W = (v) => `${Math.round(Math.max(0, Math.min(1, v)) * 1000) / 10}%`;
-  const bar = !pct && Number.isFinite(a) && Number.isFinite(b) ? `<div class="rs-bar"><i class="rs-b0" style="width:${W(Math.min(a, b))}"></i><i class="rs-b1 ${b < a ? 'dn' : ''}" style="left:${W(Math.min(a, b))};width:${W(Math.abs(b - a))}"></i>${Number.isFinite(t) ? `<i class="rs-tg" style="left:${W(t)}" title="목표 ${f2(t)}"></i>` : ''}</div>` : '';
-  return `<div class="rs-card"><div class="mut">${label}${!pct && Number.isFinite(t) ? ` · 목표 ${f2(t)}` : ''}</div><div class="rs-v"><span class="mut">${fa(a)}</span> → <b class="${cls}">${fa(b)}</b> ${dTxt}</div>${bar}</div>`;
+  const bar = !pct && Number.isFinite(a) && Number.isFinite(b) ? `<div class="rs-bar"><i class="rs-b0" style="width:${W(Math.min(a, b))}"></i><i class="rs-b1 ${b < a ? 'dn' : ''}" style="left:${W(Math.min(a, b))};width:${W(Math.abs(b - a))}"></i>${Number.isFinite(t) ? `<i class="rs-tg" style="left:${W(t)}" title="목표 ${fmtTg(t)}"></i>` : ''}</div>` : '';
+  return `<div class="rs-card"><div class="mut">${label}${!pct && Number.isFinite(t) ? ` · 목표 ${fmtTg(t)}` : ''}</div><div class="rs-v"><span class="mut">${fa(a)}</span> → <b class="${cls}">${fa(b)}</b> ${dTxt}</div>${bar}</div>`;
 }
 const ITEM_NAME = { LED: '① LED 배치', 'LED 높이': '① LED 높이', 형상: '② 형상', Milky: '③ Milky', '케이스 면': '케이스 면' };
 const STAGE_KEY = { position: ['leds', 'height', 'position'], shape: ['shape'], milky: ['milky'], housing: ['housing'] };
@@ -370,7 +371,7 @@ function changeTableHtml(r, effects) {
   const ran = (k) => STAGE_KEY[k].some((x) => r.stages?.[x]);
   const seen = new Set(), rows = cmpParts(r).items.filter((it) => it.a !== it.b || ran(it.k)).map((it) => {
     const chg = it.a !== it.b, e = !seen.has(it.k) && chg ? effects?.[it.k] : null; seen.add(it.k);
-    const sgn = (v) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}`;
+    const sgn = fmtDp;
     const ef = e && (Number.isFinite(e.dl) || Number.isFinite(e.dw)) ? `<span class="rs-ef" title="단계별 빠른 계산값을 전체 변화에 맞춰 나눈 대략값">≈ ${sgn(e.dl ?? 0)} / ${sgn(e.dw ?? 0)}</span>` : '<span class="mut">–</span>';
     return `<tr><th>${ITEM_NAME[it.label] ?? it.label}</th><td class="mut">${it.a}</td><td>${chg ? `<b class="rs-new">${it.b}</b>${it.d}` : '<span class="mut">그대로</span>'}</td><td>${ef}</td></tr>`;
   });
@@ -392,7 +393,7 @@ function factorBoxesHtml(x, effects, locked = {}) {
   const box = (k) => {
     const [name, col] = FB[k], [a0, b0, extra] = val[k], chg = a0 !== b0 || !!extra, e = chg ? effects?.[k] : null;
     const st = chg ? ['chg', '바뀜'] : locked[k] ? ['lock', '🔒 고정'] : ran(k) ? ['same', '그대로'] : ['off', '안 돌림'];
-    const sgn = (v) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}`;
+    const sgn = fmtDp;
     const ef = e && (Number.isFinite(e.dl) || Number.isFinite(e.dw)) ? `<div class="rs-fef" title="단계별 빠른 계산값을 전체 변화에 맞춰 나눈 대략값">효과 ≈ 길이 ${sgn(e.dl ?? 0)} · 폭 ${sgn(e.dw ?? 0)}</div>` : '';
     const body = chg ? `<div class="rs-fv"><span class="mut">${clip(a0, 14)}</span> → <b>${clip(b0, 20)}</b>${extra ? ` <b>${esc(extra)}</b>` : ''}</div>` : `<div class="rs-fv mut">${clip(a0, 26)}</div>`;
     return `<div class="rs-fb rs-${st[0]}" style="--fb:${col}"><div class="rs-fh"><b>${name}</b><span class="rs-fs">${st[1]}</span></div>${body}${ef}</div>`;

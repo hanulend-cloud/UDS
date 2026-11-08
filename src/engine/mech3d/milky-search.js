@@ -1,5 +1,5 @@
 // ① Milky 탐색 — spec P4 §2.1. 재가중 격자 지도(배치별) → 행 → 목표를 만족하는 최소 Milky(선형 보간).
-import { tallyStats, windowProfile } from './tally.js';
+import { tallyStats, windowProfile, fmtJudge, fmtTg } from './tally.js';
 import { ESS_MIN } from './reweight.js';
 
 // 목표 여유: min(U길이 − 목표, U폭 − 목표). 폭 판정이 없으면(좁은 라인) 길이만
@@ -32,7 +32,7 @@ export function pickMilky(rows, obs) {
   const i = R.findIndex((r, k) => r.margin >= 0 && (k + 1 >= R.length || R[k + 1].margin >= 0));   // 통과가 이어져야 함(단발 노이즈 무시)
   if (i < 0) {
     const best = R.reduce((a, b) => (b.margin > a.margin ? b : a));
-    return { feasible: false, best, milky: best.milky, edge: 'high', reason: `Milky ${best.milky}에서도 길이 균일도 ${best.Ulen.toFixed(2)}${best.Uwid == null ? '' : ` · 폭 균일도 ${best.Uwid.toFixed(2)}`} — 목표 ${obs.targetLen.toFixed(2)}${best.Uwid == null ? '' : ` / ${obs.targetWid.toFixed(2)}`} 미달` };
+    return { feasible: false, best, milky: best.milky, edge: 'high', reason: `Milky ${best.milky}에서도 길이 균일도 ${fmtJudge(best.Ulen)}${best.Uwid == null ? '' : ` · 폭 균일도 ${fmtJudge(best.Uwid)}`} — 목표 ${fmtTg(obs.targetLen)}${best.Uwid == null ? '' : ` / ${fmtTg(obs.targetWid)}`} 미달` };
   }
   if (i === 0) return { feasible: true, best: R[0], milky: R[0].milky, edge: 'low', reason: '' };
   if (ix[i] - ix[i - 1] !== 1) return { feasible: true, best: R[i], milky: R[i].milky, edge: null, reason: '' };   // 원 격자에서 이웃이 아니면 보간 안 함

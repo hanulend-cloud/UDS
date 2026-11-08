@@ -64,7 +64,7 @@ ok(isActivateKey({ key: 'Enter' }) && isActivateKey({ key: ' ' }) && !isActivate
   ok(L instanceof Uint8Array && L.length === 768 && [0, 1, 2].every((k) => L[k] === Math.round(ramp(0)[k] * 255) && L[765 + k] === Math.round(ramp(1)[k] * 255) && L[384 + k] === Math.round(ramp(128 / 255)[k] * 255)), '256단계 색 표 = ramp');
   ok(n.every((v, k) => v === Math.round(NO_DATA[k] * 255)), '자료 없음 색 = colormap NO_DATA'); }
 ok(typeof DEFAULT_GUIDE === 'string' && DEFAULT_GUIDE.length > 0, '기본 안내 문구');
-ok(JSON.stringify(judgeText(0.85, 0.8)) === '{"cls":"ok","text":"목표 0.80 · 합격"}' && judgeText(0.7, 0.8).cls === 'bad' && judgeText(0.7, 0.8).text === '목표 0.80 · 미달 −0.10' && judgeText(NaN, 0.8).cls === '', '판정 문구(합격·미달·값 없음)');
+ok(JSON.stringify(judgeText(0.85, 0.8)) === '{"cls":"ok","text":"목표 80% · 합격"}' && judgeText(0.7, 0.8).cls === 'bad' && judgeText(0.7, 0.8).text === '목표 80% · 미달 −10.0%p' && judgeText(NaN, 0.8).cls === '', '판정 문구(합격·미달·값 없음)');
 { const st = { profile: Float64Array.from([1, 0.5, NaN]) };
   const rel = lumCard(st, { eff: 0.2, lum: null }, null), abs = lumCard(st, { eff: 0.2, lum: 1234.4 }, 1000), none = lumCard(st, { eff: 0.2, lum: 800 }, null);
   ok(rel.value === '75%' && rel.ratio === null && abs.value === '1234 cd/m²' && abs.pass === true && Math.abs(abs.ratio - 1.2344) < 1e-12 && none.pass === null && none.sub === '목표 없음',
@@ -73,14 +73,14 @@ ok(JSON.stringify(judgeText(0.85, 0.8)) === '{"cls":"ok","text":"목표 0.80 · 
   ok(T.map((t) => t.text).join(' | ') === 'LED–부품 간섭 2건 | 살두께 0.50 mm | 부품 간섭 –' && T.map((t) => t.st).join() === 'bad,warn,na', `점검 배지(조립·성형만): ${T.map((t) => t.text).join(' | ')}`);
   ok(checkLabels({}).every((t) => t.st === 'na' && t.text.endsWith('–')) && checkLabels({ interference: { status: 'ok', count: 0 } })[0].text === 'LED–부품 간섭 없음', '점검 전 → 회색 –'); }
 // 반올림: 판정과 표시가 엇갈리지 않게(좋을수록 큰 값은 내림, 작을수록 좋은 값은 올림, 미달 폭은 최소 0.01)
-ok(fmtU(0.7999) === '0.79' && fmtU(0.92) === '0.92' && fmtU(0.29) === '0.29' && fmtU(1) === '1.00' && fmtU(NaN) === '–'
-  && judgeText(0.7999, 0.8).text === '목표 0.80 · 미달 −0.01', `U 표시 내림 · 미달 폭: ${fmtU(0.7999)} / ${judgeText(0.7999, 0.8).text}`);
+ok(fmtU(0.7999) === '79.9%' && fmtU(0.92) === '92.0%' && fmtU(0.29) === '29.0%' && fmtU(1) === '100.0%' && fmtU(0.80009) === '80.0%' && fmtU(NaN) === '–'
+  && judgeText(0.7999, 0.8).text === '목표 80% · 미달 −0.1%p', `U 표시 내림 · 미달 폭: ${fmtU(0.7999)} / ${judgeText(0.7999, 0.8).text}`);
 { const st = { profile: Float64Array.from([1, 0.5]) }, a = lumCard(st, { lum: 999.7 }, 1000), e = lumCard({ profile: Float64Array.from([NaN, NaN]) }, null, null);
   ok(a.value === '999 cd/m²' && a.pass === false && a.sub.endsWith('미달 −1') && e.value === '–', `광량 내림·빈 프로파일: ${a.value} ${a.sub} / ${e.value}`); }
 { const { leakText } = await import('../src/ui/m3/status-bar.js');
   ok(checkLabels({ wall: { status: 'warn', min: 0.7996 } })[1].text === '살두께 0.79 mm' && leakText({ status: 'warn', ratio: 0.2004, worst: { part: 1, face: 5, ratio: 0.12 } }, ['케이스', '확산판']) === '새는 빛 21% · 주로 확산판 면 #5 12%'
     && leakText({ status: 'ok', ratio: 0.07, worst: { part: -1, face: -1, ratio: 0.07 } }) === '새는 빛 7% · 주로 틈으로 바로 7%' && leakText({ status: 'na' }) === '', '살두께 내림 · 새는 빛 문구(올림, 가장 많이 새는 면)'); }
-ok(judgeText(0.8004, 0.8009).cls === 'ok' && judgeText(0.7999, 0.8).cls === 'bad' && judgeText(0.8, 0.8).cls === 'ok' && judgeText(0.855, 0.8567).text === '목표 0.85 · 합격', '판정 = 표시(내림)값 비교, 목표도 내림 표시');
+ok(judgeText(0.8004, 0.8009).cls === 'ok' && judgeText(0.7999, 0.8).cls === 'bad' && judgeText(0.8, 0.8).cls === 'ok' && judgeText(0.855, 0.8567).text === '목표 85% · 합격', '판정 = 표시(내림)값 비교, 목표도 내림 표시');
 { const base = { parts: [{ material: { kind: 'milky' } }, { material: { kind: 'opaque' } }], light: { kind: 'manual' }, observe: { faces: [{ part: 0, face: 1 }] } };
   const a = stageAvailability(base, { non25: [0, 0.5] });
   ok(a.milky.ok && a.leds.ok && a.shape.ok && a.shape.parts.join() === '0', '가능: Milky 부품 있음 · 직접 배치 · 2.5D 부품만 ③ 대상');
@@ -94,7 +94,7 @@ ok(judgeText(0.8004, 0.8009).cls === 'ok' && judgeText(0.7999, 0.8).cls === 'bad
   ok(h.includes('data-ad="milky" checked') && !h.includes('data-ad="run"') && !h.includes('disabled data-ad="milky"'), '카드: 체크 상태(실행 단추는 창 오른쪽 위)');
   ok(autoCardHtml({ avail: a, sel: { milky: true }, running: null, canRevert: true }).includes('data-ad="revert"') && !h.includes('data-ad="revert"'), '카드: 적용 뒤에만 되돌리기');
   const c = compareHtml({ cur: { count: 5, pitch: 0, milky: 3, Ulen: 0.62, Uwid: 0.7, eff: 0.6 }, best: { count: 4, pitch: 0, milky: 3.5, Ulen: 0.81, Uwid: 0.72, eff: 0.55 }, feasible: true, reason: '', shape: null });
-  ok(c.includes('LED') && c.includes('4') && c.includes('0.81') && c.includes('data-ad="apply"') && c.includes('data-ad="cancel"'), '비교표: 현재 | 최적 · 적용·취소');
+  ok(c.includes('LED') && c.includes('4') && c.includes('81.0%') && c.includes('data-ad="apply"') && c.includes('data-ad="cancel"'), '비교표: 현재 | 최적 · 적용·취소');
   const cs = compareHtml({ cur: { count: 10, pitch: 0, stepOrig: true, milky: 2, Ulen: 0.6, Uwid: 0.7, eff: 0.5 }, best: { count: 10, pitch: 0, stepOrig: true, milky: 3, Ulen: 0.8, Uwid: 0.7, eff: 0.4 }, feasible: true, reason: '', shape: null, stepLeds: 10 });
   ok((cs.match(/LED STEP 현재 10개/g) ?? []).length === 2 && !cs.includes('균등'), '비교표: LED STEP 원래 위치 유지 = 두 열 모두 LED STEP 현재 10개');
   const cv = compareHtml({ cur: { count: 10, pitch: 0, stepOrig: true, milky: 2, Ulen: 0.6, Uwid: 0.7, eff: 0.5 }, best: { count: 8, pitch: 14, stepOrig: false, milky: 2, Ulen: 0.8, Uwid: 0.7, eff: 0.5 }, feasible: true, reason: '', shape: null, stepLeds: 10 });
@@ -118,7 +118,7 @@ ok(judgeText(0.8004, 0.8009).cls === 'ok' && judgeText(0.7999, 0.8).cls === 'bad
   { const { resultLineHtml, peekText, loweredText } = await import('../src/ui/m3/autodesign-panel.js');
     { const { caseHintText } = await import('../src/ui/m3/autodesign-panel.js');
       const h = (Ulen, Uwid) => ({ finish: { part: 0 }, text: '백색 90%', Ulen, Uwid, base: { Ulen: 0.8, Uwid: 0.45 } });
-      ok(/추천: 부품 속성에서 케이스 면을 '백색 90%'.*길이 \+0\.01 · 폭 \+0\.07 정도 오름/.test(caseHintText({ hint: h(0.81, 0.52) })), `케이스 면 추천: ${caseHintText({ hint: h(0.81, 0.52) })}`);
+      ok(/추천: 부품 속성에서 케이스 면을 '백색 90%'.*길이 \+1\.0%p · 폭 \+7\.0%p 정도 오름/.test(caseHintText({ hint: h(0.81, 0.52) })), `케이스 면 추천: ${caseHintText({ hint: h(0.81, 0.52) })}`);
       ok(caseHintText({ hint: h(0.805, 0.455) }) === '' && caseHintText({ hint: h(0.75, 0.6) }) === '' && caseHintText({}) === '', '뚜렷이 나아질 때만(하나라도 크게 나빠지면 안 띄움)');
       ok(/data-ad="casePart" data-v="0"/.test(resultLineHtml({ best: { Ulen: 0.8, Uwid: 0.45 }, cur: {}, targets: {}, stages: { milky: true }, hint: h(0.81, 0.52) })), '추천 줄 = 누르면 케이스 부품으로'); }
     { const { retuneMilky } = await import('../src/ui/m3/autodesign-panel.js');
@@ -130,7 +130,7 @@ ok(judgeText(0.8004, 0.8009).cls === 'ok' && judgeText(0.7999, 0.8).cls === 'bad
       ok(resultLineHtml({ ...b, feasible: false, unchanged: true, stages: { shape: true }, shapeNote: '후보 11개가 모두 탈락' }).includes('후보 11개가 모두 탈락'), '형상이 안 바뀐 이유가 결과 카드에 보임');
       ok(/형상만으로는 목표 미달/.test(miss) && /위치/.test(miss) && /Milky/.test(miss) && !/형상만으로는/.test(all) && !/형상만으로는/.test(pass) && !/형상만으로는/.test(other), '형상 미달 안내: 형상만 돌렸을 때 다음 항목을 알려 줌'); }
     const pk = { cap: 5, rows: [], best: { milky: 7, Ulen: 0.84, Uwid: 0.66, eff: 0.31 } };
-    ok(/Milky 7.*길이 약 0\.8.*폭 약 0\.7.*광 효율 약 31%.*대략값/.test(peekText(pk)) && /최적화에는 쓰지 않음/.test(peekText(pk)), `참고 문구: ${peekText(pk)}`);
+    ok(/Milky 7.*길이 약 84%.*폭 약 66%.*광 효율 약 31%.*대략값/.test(peekText(pk)) && /최적화에는 쓰지 않음/.test(peekText(pk)), `참고 문구: ${peekText(pk)}`);
     ok(/5 보다 높여도.*오르지 않음/.test(peekText({ cap: 5, rows: [], best: null })) && peekText(null) === '', '참고 문구: 이득 없음 · 없음');
     ok(/Milky 7\.00? → 5/.test(loweredText({ from: 7, to: 5 }, false)) && /낫지 않음/.test(loweredText({ from: 7, to: 5 }, true)) && loweredText(null) === '' && /현재 값은 대략값/.test(loweredText({ from: 7, to: 5, rough: true }, false)) && !/대략값/.test(loweredText({ from: 7, to: 5 }, false)), `낮춤 문구: ${loweredText({ from: 7, to: 5 }, false)}`);
     const base = { best: { Ulen: 0.7, Uwid: 0.7 }, cur: { Ulen: 0.6, Uwid: 0.6 }, reason: 'x', targets: {} };
@@ -449,7 +449,7 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   ok(judgeStats({ Ulen: 0.75, seLen: 0.004, Uwid: 0.801, seWid: 0.004 }, O).all === 'bad' && judgeStats({ Ulen: 0.802, seLen: 0.004, Uwid: 0.84, seWid: 0.004 }, O).all === 'near' && judgeStats({ Ulen: 0.85, seLen: 0.004, Uwid: 0.84, seWid: 0.004 }, O).all === 'ok', '하나라도 미달 = 미달, 아니면 하나라도 근처 = 근처');
   const f = flowState({ state: 'done' }, { Ulen: 0.802, seLen: 0.004, Uwid: 0.84, seWid: 0.004 }, { observe: O });
   ok(f.sim.cls === 'near' && f.sim.text.includes('목표 근처') && f.opt.text.includes('목표 근처'), `상단 표시: ${f.sim.text} / ${f.opt.text}`);
-  const j = judgeText(0.802, 0.8, 0.004); ok(j.cls === 'near' && j.text.includes('근처') && j.text.includes('±0.008'), `결과 판: ${j.text}`);
+  const j = judgeText(0.802, 0.8, 0.004); ok(j.cls === 'near' && j.text.includes('근처') && j.text.includes('±0.8%p'), `결과 판: ${j.text}`);
 ok(judgeText(0.3, 0.8, null, 0.2).cls === 'busy' && /판정 보류/.test(judgeText(0.3, 0.8, null, 0.2).text) && judgeText(0.85, 0.8, null, 0.01).cls === 'ok', '계산 초반(노이즈 큼) = 빨간 미달 대신 판정 보류');
 }
 { // 전체 판정이 근처면 설명 문장도 근처로(엔진 사유의 '미달'이 남지 않게) · 하나라도 미달이면 그대로
@@ -475,7 +475,7 @@ ok(judgeText(0.3, 0.8, null, 0.2).cls === 'busy' && /판정 보류/.test(judgeTe
 { // 적용 전 결과가 있으면 다시 실행 전에 물음
   const { rerunAsk, optCtl } = await import('../src/ui/m3/run-ctl.js');
   const q = rerunAsk({ Ulen: 0.8302, Uwid: 0.7421 });
-  ok(q.includes('0.83') && q.includes('0.74') && q.includes('버리고') && rerunAsk(null).includes('버리고') && optCtl({ hasResult: true }).runTitle.includes('확인'), `확인 문구: ${q.replace('\n', ' ')}`);
+  ok(q.includes('83') && q.includes('74') && q.includes('버리고') && rerunAsk(null).includes('버리고') && optCtl({ hasResult: true }).runTitle.includes('확인'), `확인 문구: ${q.replace('\n', ' ')}`);
 }
 { // 창 제목 단계 표시: 번호 ↔ 초록 ✓
   const { setStepMark } = await import('../src/ui/m3/run-ctl.js');
@@ -516,10 +516,10 @@ ok(judgeText(0.3, 0.8, null, 0.2).cls === 'busy' && /판정 보류/.test(judgeTe
   const seq = [{ k: 'milky', label: 'Milky 1', Ulen: 0.7, Uwid: 0.9 }, { k: 'milky', label: 'Milky 2', Ulen: 0.82, Uwid: 0.84 }, { k: 'milky', label: 'Milky 3', Ulen: 0.75, Uwid: 0.86 }];
   const S = { tgLen: 0.8, tgWid: 0.8, seq, before: { Ulen: 0.6, Uwid: 0.7 }, overall: 0.44, tiles: Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', evals: [] }])) };
   const g = factorChartSvg(S, S.before, 600, 170);
-  ok((g.match(/<svg/g) ?? []).length === 2 && g.includes('길이 균일도') && g.includes('폭 균일도') && !g.includes('→ 최고') && g.includes('시작 0.60') && g.includes('③ 확산도(Milky)') && (g.match(/od-cand/g) ?? []).length === 6 && g.includes('<title>후보 2'), '그래프 2개: 최고 = 같은 후보 · 후보 점 · 항목 이름');
+  ok((g.match(/<svg/g) ?? []).length === 2 && g.includes('길이 균일도') && g.includes('폭 균일도') && !g.includes('→ 최고') && g.includes('시작 60.0%') && g.includes('③ 확산도(Milky)') && (g.match(/od-cand/g) ?? []).length === 6 && g.includes('<title>후보 2'), '그래프 2개: 최고 = 같은 후보 · 후보 점 · 항목 이름');
   ok(factorChartSvg({ ...S, seq: [] }, {}, 600, 170).includes('후보를 시험하면'), '후보 전 안내');
-  ok(g.includes('목표 0.80') && g.includes('시작 0.60') && g.includes('시작 0.70') && /시험한 후보 3개/.test(g), '그래프 안에 목표·시작선 이름과 가로축 뜻');
-  ok(!g.includes('최종') && factorChartSvg({ ...S, final: { Ulen: 0.7886, Uwid: 0.8 } }, S.before, 600, 170).includes('최종 0.78') && (factorChartSvg({ ...S, final: { Ulen: 0.7886, Uwid: 0.8 } }, S.before, 600, 170).match(/od-final/g) ?? []).length === 2, '최종 판정 값을 후보 값과 구분해 표시');
+  ok(g.includes('목표 80%') && g.includes('시작 60.0%') && g.includes('시작 70.0%') && /시험한 후보 3개/.test(g), '그래프 안에 목표·시작선 이름과 가로축 뜻');
+  ok(!g.includes('최종') && factorChartSvg({ ...S, final: { Ulen: 0.7886, Uwid: 0.8 } }, S.before, 600, 170).includes('최종 78.8%') && (factorChartSvg({ ...S, final: { Ulen: 0.7886, Uwid: 0.8 } }, S.before, 600, 170).match(/od-final/g) ?? []).length === 2, '최종 판정 값을 후보 값과 구분해 표시');
   { const { chartHtml, chartHeight } = await import('../src/ui/m3/opt-dash.js'), L = chartHtml();
     ok(/얼마나 좋아졌나/.test(L) && /위로 갈수록 좋음/.test(L) && /시험한 후보/.test(L) && /지금까지 최고/.test(L) && /최종 판정/.test(L) && /대략값/.test(L), '그래프 제목·범례가 뜻을 말함');
     ok(chartHeight(600) === 150 && chartHeight(401) === 150 && chartHeight(300) === 250, `높이 제한: 나란히 ${chartHeight(600)} · 위아래 ${chartHeight(300)}`);
@@ -555,7 +555,7 @@ done();
   const ok5 = (c, m) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) process.exitCode = 1; };
   const base = { unchanged: true, feasible: true, cur: { Ulen: 0.83, Uwid: 0.8 }, best: { Ulen: 0.83, Uwid: 0.8 }, targets: { len: 0.8, wid: 0.8 } };
   const a = resultLineHtml({ ...base, alt: { design: { milky: 2.47 }, milky: 2.47, Ulen: 0.84, Uwid: 0.8 } }), b = resultLineHtml(base);
-  ok5(!a.includes('data-ad="apply"') && a.includes('data-ad="applyAlt"') && a.includes('후보로 바꾸기 (Milky 2.47)<') && a.includes('0.84') && a.includes('유지를 추천') && !b.includes('applyAlt'), '현재안 유지 + 찾은 후보 → 단추는 [후보로 바꾸기] 하나 · 이유 한 줄'); }
+  ok5(!a.includes('data-ad="apply"') && a.includes('data-ad="applyAlt"') && a.includes('후보로 바꾸기 (Milky 2.47)<') && a.includes('84.0%') && a.includes('유지를 추천') && !b.includes('applyAlt'), '현재안 유지 + 찾은 후보 → 단추는 [후보로 바꾸기] 하나 · 이유 한 줄'); }
 { const { etaText } = await import('../src/ui/m3/opt-dash.js');
   const H = [{ ph: 1e6, t: 0, noise: 0.1 }, { ph: 2e6, t: 5000, noise: 0.07 }, { ph: 3e6, t: 10000, noise: 0.0577 }];
   const e = etaText(H, 0.02);
@@ -603,7 +603,7 @@ done();
   const okB = h.includes('data-ad="milky" checked') && h.includes('data-ad="position"') && h.includes('data-ad="shape" disabled') && (h.match(/class="fb-opt"/g) ?? []).length === 1 && h.includes('title="확산 부품 없음"');
   // 최적화 타일 전후: 사양·길이 균일도·폭 균일도, 바뀐 칸 강조, 목표 통과 ✓/✕
   const t = beforeAfterHtml('milky', { milky: 2, Ulen: 0.58, Uwid: 0.64 }, { label: 'Milky 3.50', Ulen: 0.82, Uwid: 0.71 }, 0.8, 0.8, 7);
-  const okT = t.includes('Milky 2.00') && t.includes('<td class="chg">Milky 3.50') && /0\.82 <b class="od-ok">✓/.test(t) && /0\.71 <b class="od-bad">✕/.test(t) && t.includes('후보 7개') && beforeAfterHtml('shape', {}, null).includes('후보 없음');
+  const okT = t.includes('Milky 2.00') && t.includes('<td class="chg">Milky 3.50') && /82\.0% <b class="od-ok">✓/.test(t) && /71\.0% <b class="od-bad">✕/.test(t) && t.includes('후보 7개') && beforeAfterHtml('shape', {}, null).includes('후보 없음');
   console.log(okB && okT ? 'PASS 설계 인자 현황 체크(켜기·설정) · 최적화 타일 전후 사양표' : (process.exitCode = 1, `FAIL 인자 체크/전후 ${okB} ${okT} ${t}`)); }
 { const { simPlotSvg, simCaption, optMatrixHtml, topPaths } = await import('../src/ui/m3/opt-dash.js');
   const obs = { targetLen: 0.8, targetWid: 0.8 }, H = [{ ph: 1e6, noise: 0.04, Ulen: 0.5, Uwid: 0.6 }, { ph: 4e6, noise: 0.02, Ulen: 0.7, Uwid: 0.75 }];
@@ -613,24 +613,24 @@ done();
   const stages = { milky: { status: 'done', frac: 1, text: '', evals: [{ label: 'Milky 1.5', Ulen: 0.76, Uwid: 0.84 }, { label: 'Milky 1.0', Ulen: 0.7, Uwid: 0.8 }] } };
   const tiles = new Proxy(stages, { get: (o, k) => o[k] ?? { status: 'off', frac: 0, text: '', evals: [] } });
   const mx = optMatrixHtml({ tiles, tgLen: 0.8, tgWid: 0.8, final: { Ulen: 0.81, Uwid: 0.85 } });
-  if (!mx.includes('최종 판정') || !mx.includes('Milky 1.5') || !mx.includes('0.81') || !mx.includes('<th>폭</th>') || mx.includes('Milky 1.0')) throw new Error(`최적화 현황 표: ${mx}`);
+  if (!mx.includes('최종 판정') || !mx.includes('Milky 1.5') || !mx.includes('81.0%') || !mx.includes('<th>폭</th>') || mx.includes('Milky 1.0')) throw new Error(`최적화 현황 표: ${mx}`);
   { // ① 위치 줄: 배치 추정값(est)은 실제 계산값처럼 보이지 않게(2026-11-07 — 추정 0.82/0.87 이 실제로는 0.64/0.82)
     const est = { label: '2열 × 28개', Ulen: 0.82, Uwid: 0.87, est: true }, real = { label: 'LED 높이 +0.00', Ulen: 0.64, Uwid: 0.82 };
     const tl = (ev) => new Proxy({ position: { status: 'done', frac: 1, text: '', evals: ev } }, { get: (o, k) => o[k] ?? { status: 'off', frac: 0, text: '', evals: [] } });
     const both = optMatrixHtml({ tiles: tl([est, real]), tgLen: 0.8, tgWid: 0.8 }), only = optMatrixHtml({ tiles: tl([est]), tgLen: 0.8, tgWid: 0.8 });
-    if (!both.includes('0.64') || both.includes('0.87') || !only.includes('≈0.82') || !only.includes('추정')) throw new Error(`추정값 표시: ${both} / ${only}`);
+    if (!both.includes('64.0%') || both.includes('87.0%') || !only.includes('≈82.0%') || !only.includes('추정')) throw new Error(`추정값 표시: ${both} / ${only}`);
     console.log('PASS ① 배치 추정값 = 실제값이 있으면 실제값, 없으면 ≈ 추정 표시'); }
   const tp = topPaths({ ':0>1': 3, ':1': 1 }, 2, 3, [0]);
   if (tp.length !== 1 || tp[0].parts.join() !== '1' || tp[0].share !== 1) throw new Error(`빛 계산 제외 부품은 광경로에서 뺌: ${JSON.stringify(tp)}`); }
 { const { flowState } = await import('../src/ui/m3/command-bar.js'); const t = flowState({ state: 'done' }, { Ulen: 0.795, Uwid: 0.83 }, { observe: { targetLen: 0.8, targetWid: 0.8 } }).sim.text;
-  if (t !== '79% / 83% 목표 미달') throw new Error(`미달 표시 = 내림(결과 창과 같게): ${t}`);
+  if (t !== '79.5% / 83.0% 목표 미달') throw new Error(`미달 표시 = 내림(결과 창과 같게): ${t}`);
   const t2 = flowState({ state: 'done' }, { Ulen: 0.596, Uwid: 0.107 }, { observe: { targetLen: 0.8, targetWid: 0.8 } }).sim.text;
-  if (!/^59% \/ 10%/.test(t2)) throw new Error(`단계 막대도 내림(0.596 → 59%, 결과 창 0.59): ${t2}`); }
+  if (!/^59\.6% \/ 10\.7%/.test(t2)) throw new Error(`단계 막대도 내림(0.596 → 59%, 결과 창 0.59): ${t2}`); }
 { const { flowState } = await import('../src/ui/m3/command-bar.js');
   // 흐름 4 광분포 시뮬레이션 → 5 기구 최적화: 계산 중 % · 완료 통과/미달 · 미달이면 5 '필요' · 최적화 진행 중
   const M = { observe: { targetLen: 0.8, targetWid: 0.8, targetNoise: 0.01 } }, st = (a, b) => ({ Ulen: a, Uwid: b });
   const r1 = flowState({ state: 'running', stats: { relNoise: 0.02 } }, st(0.58, 0.64), M), r2 = flowState({ state: 'done' }, st(0.58, 0.64), M), r3 = flowState({ state: 'done' }, st(0.85, 0.9), M), r4 = flowState({ state: 'done' }, st(0.58, 0.64), M, { running: true });
-  console.log(r1.sim.text === '계산 중 25% · 58% / 64%' && r1.opt.text === '시뮬레이션 뒤' && r2.sim.cls === 'bad' && r2.sim.done && r2.opt.cls === 'need' && r3.sim.cls === 'ok' && r3.opt.done && r4.opt.text === '진행 중' && flowState(null, null, M).sim.text === '–'
+  console.log(r1.sim.text === '계산 중 25% · 58.0% / 64.0%' && r1.opt.text === '시뮬레이션 뒤' && r2.sim.cls === 'bad' && r2.sim.done && r2.opt.cls === 'need' && r3.sim.cls === 'ok' && r3.opt.done && r4.opt.text === '진행 중' && flowState(null, null, M).sim.text === '–'
     ? 'PASS 흐름 4 광분포 시뮬레이션 · 5 기구 최적화 상태' : (process.exitCode = 1, `FAIL 흐름 ${JSON.stringify([r1, r2, r3, r4])}`)); }
 { // 3D 보기 상태(2026-11-05): 같은 도면이면 유지 — 최적화 시작·취소·적용·되돌리기에도 숨긴 부품이 풀리지 않게. 다른 도면만 초기화
   const { viewKeep } = await import('../src/ui/m3/feature-tree.js'), a = {}, b = {};
@@ -652,7 +652,7 @@ done();
   const tl = Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', evals: [] }])), SS = { tgLen: 0.8, tgWid: 0.8, seq: [], before: {}, tiles: tl };
   ok(monitorHtml(SS, 1).includes('od-plot') && !monitorHtml(SS, 1, { chart: false }).includes('od-plot') && monitorHtml(SS, 1, { chart: false }).includes('om-mx'), '그래프를 따로 그리면 오른쪽 칸에서 빠짐');
   const SF = { ...SS, final: { Ulen: 0.7886, Uwid: 0.7052, label: 'x' } }, mh = monitorHtml(SF, 1);
-  ok(mh.includes('0.78') && !mh.includes('0.79') && mh.includes('0.70') && !mh.includes('0.71'), '최종 값 = 결과 카드와 같은 내림 표시(표·문장·지표)');
+  ok(mh.includes('78.8%') && !mh.includes('78.9%') && mh.includes('70.5%') && !mh.includes('70.6%'), '최종 값 = 결과 카드와 같은 내림 표시(표·문장·지표)');
   const { chartHtml } = await import('../src/ui/m3/opt-dash.js');
   ok(chartHtml().includes('od-plot') && chartHtml().includes('od-legend'), '왼쪽 그래프 칸'); }
 { // 우클릭 메뉴가 열리는 행 — 항목을 만들어 두고 화면에서 안 열리는 일이 없게(2026-11-05)
@@ -741,7 +741,7 @@ done();
   const S = { tgLen: 0.8, tgWid: 0.8, t0: 0, tiles: { position: { status: 'done', frac: 1, evals: [{ label: '1열 17개', Ulen: 0.84, Uwid: 0.81 }] }, housing: { status: 'off', evals: [] }, shape: { status: 'run', frac: 0.46, evals: [] }, milky: { status: 'off', evals: [] } },
     seq: [{ k: 'position', label: '1열 17개', Ulen: 0.84, Uwid: 0.81 }], before: { Ulen: 0.55, Uwid: 0.62 }, log: [{ sec: 92, k: 'position', label: '1열 17개', Ulen: 0.84, Uwid: 0.81 }], locked: { milky: true } };
   const m = monitorHtml(S, 130);
-  const okMon = m.indexOf('① 위치') < m.indexOf('② 형상') && m.includes('46%') && /고정/.test(m) && m.includes('0.84') && m.includes('▲0.29') && m.includes('1열 17개') && m.includes('od-plot');
+  const okMon = m.indexOf('① 위치') < m.indexOf('② 형상') && m.includes('46%') && /고정/.test(m) && m.includes('84.0%') && m.includes('▲29.0%p') && m.includes('1열 17개') && m.includes('od-plot');
   console.log(order === 'position,shape,milky' && okLock && okMon ? 'PASS 기구 최적화 창: 계산 순서 · 고정 항목 · 모니터(진행 줄·지표·기록)' : (process.exitCode = 1, `FAIL 최적화 창: ${order} lock ${okLock} mon ${okMon}`)); }
 { // 트리 우클릭 메뉴(2026-10-30): 고른 부품 수에 맞는 항목 · 그룹에서 빼기 · Shift 범위 선택
   const { treeCtxItems, removeFromGroups, rangeSelect } = await import('../src/ui/m3/feature-tree.js');
@@ -837,8 +837,8 @@ done();
   const eff = stageEffects({ shape: { Ulen: 0.7, Uwid: 0.74 }, milky: { Ulen: 0.72, Uwid: 0.75 } }, r.cur, r.best);
   ok(Math.abs(eff.shape.dl + eff.milky.dl - 0.1) < 1e-9 && Math.abs(eff.shape.dw + eff.milky.dw - 0.15) < 1e-9 && eff.shape.dl > eff.milky.dl, `항목 효과 합 = 전체 변화(배분): ${JSON.stringify(eff)}`);
   const h = resultViewHtml(r, { effects: eff, hist: [{ label: 'Milky 3.6', Ulen: 0.75, Uwid: 0.77, eff: 0.5 }] });
-  ok(h.includes('목표 미달') && (h.match(/rs-card/g) ?? []).length >= 3 && h.includes('0.65') && h.includes('0.75') && h.includes('▲0.10'), '판정 · 카드(이전 → 이후 ▲)');
-  ok((h.match(/class="rs-fb /g) ?? []).length === 3 && h.includes('① 위치') && h.includes('② 형상') && h.includes('③ Milky') && h.includes('3.60') && /효과 ≈ 길이 \+0\.\d\d/.test(h) && h.includes('안 돌림') && (h.match(/바뀜/g) ?? []).length === 2, '최적화 인자 상자 3개 · 상태 · 효과 ≈');
+  ok(h.includes('목표 미달') && (h.match(/rs-card/g) ?? []).length >= 3 && h.includes('65.0%') && h.includes('75.0%') && h.includes('▲10.0%p'), '판정 · 카드(이전 → 이후 ▲)');
+  ok((h.match(/class="rs-fb /g) ?? []).length === 3 && h.includes('① 위치') && h.includes('② 형상') && h.includes('③ Milky') && h.includes('3.60') && /효과 ≈ 길이 \+\d+\.\d%p/.test(h) && h.includes('안 돌림') && (h.match(/바뀜/g) ?? []).length === 2, '최적화 인자 상자 3개 · 상태 · 효과 ≈');
   ok(h.includes('data-ad="apply"') && h.includes('data-ad="hpick" data-v="0"') && h.includes('지난 후보') && !h.includes('<details'), '적용 · 지난 후보(접지 않음)');
   { const many = Array.from({ length: 6 }, (_, i) => ({ label: `M${i}`, Ulen: 0.7 + i * 0.01, Uwid: 0.7, eff: 0.5 })), hm = resultViewHtml(r, { hist: many }), ha = resultViewHtml(r, { hist: many, histAll: true });
     ok((hm.match(/data-ad="hpick"/g) ?? []).length === 3 && hm.includes('전체 6개') && (ha.match(/data-ad="hpick"/g) ?? []).length === 6, '지난 후보: 위 3개 · [전체 N개]'); }

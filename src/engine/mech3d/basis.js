@@ -1,7 +1,7 @@
 // ② LED 개수·피치 — spec P4 §2.2. 후보 위치(1mm)마다 LED 1개의 관측 지도를 추적해 두고, (개수, 피치) 지도 = 위치별 지도 합(사이 위치는 이웃 두 후보 선형 보간).
 // 빛은 선형 중첩이므로 보간 외에는 근사가 없다. 우선순위: 목표 만족 → 최소 개수 → (① 이 켜져 있으면) 최소 Milky → 효율.
 import { ledSPositions } from './placement.js';
-import { tallyStats } from './tally.js';
+import { tallyStats, fmtJudge } from './tally.js';
 import { margin } from './milky-search.js';
 
 export function candidatePositions(line, step = 1) {
@@ -78,7 +78,7 @@ export function searchLeds({ G, obs, line, cand, maps, pitches = [0], pitchRange
   if (found) return { feasible: true, ...found, reason: '', tried };
   const b = nearestRow(rows, obs, nMax);
   const st = b.stats;
-  return { feasible: false, ...b, tried, reason: `LED ${nMax}개까지 늘려도 목표 미달 — 가장 가까운 ${b.n}개: 길이 균일도 ${st ? st.Ulen.toFixed(2) : '–'}${st?.Uwid == null ? '' : ` · 폭 균일도 ${st.Uwid.toFixed(2)}`} — ${st && st.Uwid != null && st.Uwid - obs.targetWid < st.Ulen - obs.targetLen ? '폭 방향 확산 부족: ③ 형상 또는 Milky 상향 권장' : '길이 방향 리플: Milky 상향 또는 LED–커버 거리 확대 권장'}` };
+  return { feasible: false, ...b, tried, reason: `LED ${nMax}개까지 늘려도 목표 미달 — 가장 가까운 ${b.n}개: 길이 균일도 ${fmtJudge(st?.Ulen)}${st?.Uwid == null ? '' : ` · 폭 균일도 ${fmtJudge(st.Uwid)}`} — ${st && st.Uwid != null && st.Uwid - obs.targetWid < st.Ulen - obs.targetLen ? '폭 방향 확산 부족: ③ 형상 또는 Milky 상향 권장' : '길이 방향 리플: Milky 상향 또는 LED–커버 거리 확대 권장'}` };
 }
 
 // ── 폭 방향 열(spec P4 §2.2b): 후보 = (s, w) 격자, 보간은 같은 w 줄 안 s 방향만 ──
@@ -144,5 +144,5 @@ export function searchLeds2({ G, obs, line, cand, maps, rowsOptions = [1, 2], ga
   const b = b0.nRow == null ? { ...b0, n: nMax, rows: 1, rowGap: 0, total: nMax } : { ...b0, n: b0.nRow };
   delete b.nRow; delete b.j;
   const st = b.stats, lay = b.rows === 2 ? `2열 × ${b.n}개(±${b.rowGap.toFixed(1)}mm)` : `${b.total}개`;
-  return { feasible: false, ...b, tried, reason: `LED 총 ${nMax}개까지 늘려도 목표 미달 — 가장 가까운 ${lay}: 길이 균일도 ${st ? st.Ulen.toFixed(2) : '–'}${st?.Uwid == null ? '' : ` · 폭 균일도 ${st.Uwid.toFixed(2)}`} — ${st && st.Uwid != null && st.Uwid - obs.targetWid < st.Ulen - obs.targetLen ? '폭 방향 확산 부족: ③ 형상 또는 Milky 상향 권장' : '길이 방향 리플: Milky 상향 또는 LED–커버 거리 확대 권장'}` };
+  return { feasible: false, ...b, tried, reason: `LED 총 ${nMax}개까지 늘려도 목표 미달 — 가장 가까운 ${lay}: 길이 균일도 ${fmtJudge(st?.Ulen)}${st?.Uwid == null ? '' : ` · 폭 균일도 ${fmtJudge(st.Uwid)}`} — ${st && st.Uwid != null && st.Uwid - obs.targetWid < st.Ulen - obs.targetLen ? '폭 방향 확산 부족: ③ 형상 또는 Milky 상향 권장' : '길이 방향 리플: Milky 상향 또는 LED–커버 거리 확대 권장'}` };
 }

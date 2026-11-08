@@ -1,4 +1,4 @@
-import { judgeStats } from '../../engine/mech3d/tally.js';
+import { judgeStats, fmtJudge } from '../../engine/mech3d/tally.js';
 // 명령 막대 — ① LED 지정 ② 관측면 지정 ③ 목표 설정(사용 순서). 나머지는 상단 메뉴
 // h = { onLed(), onObs(), onTarget() }
 // 사용 순서대로 ① LED 지정 → ② 관측면 지정 → ③ 목표 설정(2026-10-27). 끝난 단계는 ✓. 계산 제어는 오른쪽 위 '광분포 시뮬레이션' 카드로 옮김
@@ -11,7 +11,7 @@ export function stepState(M) {
 // calc = 점진 계산 스냅숏, stats = 그 결과, ad = { running, result } (기구 최적화). 반환 { sim:{ text, cls, done }, opt:{ text, cls, done } }
 export function flowState(calc, stats, M, ad = {}) {
   const O = M.observe, st = calc?.state ?? 'idle', rn = calc?.stats?.relNoise ?? stats?.relNoise, tn = calc?.targetNoise ?? O.targetNoise ?? 0.01;
-  const has = !!stats && !stats.empty, pc = (v) => (!Number.isFinite(v) ? '–' : `${Math.floor(v * 100 + 1e-9)}%`);   // 판정 값은 어디서나 내림(결과 창·목표 표와 같게, 2026-11-07)
+  const has = !!stats && !stats.empty, pc = fmtJudge;   // 판정 값은 어디서나 내림(결과 창·목표 표와 같게, 2026-11-07)
   const J = has ? judgeStats(stats, O).all : '', pass = J === 'ok';
   const res = has ? `${pc(stats.Ulen, O.targetLen)} / ${pc(stats.Uwid, O.targetWid)}` : '';
   const running = st === 'running' || st === 'pending' || st === 'starting', done = st === 'done';

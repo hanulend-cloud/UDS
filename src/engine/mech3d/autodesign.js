@@ -1,7 +1,7 @@
 // P4 자동설계 단계 실행기 — spec §1·§2. 순서 ② → ⑤ LED 높이 → ④ 케이스 면 → ① → ③(§2.3c), 체크 안 한 항목은 현재 값 고정. 계산은 io 가 맡는다(Worker / 시험 가짜).
 // ① 재가중 창은 기준 ±0.25(ESS 한계, spec §2.1). U(Milky) 는 단봉형(§2.1a) — 거친 탐색으로 최고점을 지나면 멈추고, 오르는 구간에서만 할선/이분으로 최소 통과 Milky. ② 는 기준(①·④ 함께면 거친 최고점 Milky ≤ 5·케이스 최고 등급, §2.2c)에서 최소 개수를 구한 뒤 ④·① 이 고른다.
 // io.milkyRows(d, ms, { precise }) — precise = 경계가 든 창의 재추적(광자 많이). 결과 { feasible, best(design), steps:[{stage, …}], reason, verified, current(현재안 io.verify), cancelled }
-import { nearTarget, fmtJudge, JUDGE_NOISE, JUDGE_BAND } from './tally.js';
+import { nearTarget, fmtJudge, JUDGE_NOISE, JUDGE_BAND, fmtTg } from './tally.js';
 import { hasCurve, hasField } from './shape-opt.js';
 import { milkyAxis } from './reweight.js';
 import { pickMilky, margin } from './milky-search.js';
@@ -586,7 +586,7 @@ export async function runAutoDesign(cfg, io) {
       steps.push({ stage: 'shapeField', passes: r.passes, sens: r.sens ?? null, modes: r.modes ?? null, pred: r.pred ?? null, limited: !!r.limited, tried: r.tried.map((x) => ({ ok: x.ok, why: x.why ?? null, Ulen: x.stats?.Ulen ?? null, Uwid: x.stats?.Uwid ?? null, peak: Math.max(0, ...(x.cand.kF?.v ?? []).map(Math.abs)) })) });
       steps.push({ stage: 'shape', best: b });
       d = { ...d, shape: none ? null : { part: cfg.shapePart, ...c } };
-      if (margin(b.stats, obs) < 0) { feasible = false; reason = `형상 최적안도 목표 미달 — 길이 균일도 ${b.stats.Ulen.toFixed(2)}${b.stats.Uwid == null ? '' : ` · 폭 균일도 ${b.stats.Uwid.toFixed(2)}`}`; }
+      if (margin(b.stats, obs) < 0) { feasible = false; reason = `형상 최적안도 목표 미달 — 길이 균일도 ${fmtJudge(b.stats.Ulen)}${b.stats.Uwid == null ? '' : ` · 폭 균일도 ${fmtJudge(b.stats.Uwid)}`}`; }
       else { feasible = true; reason = ''; }
       if (r.limited) reason = `형상으로 줄일 수 있는 불균일이 약 ${Math.max(0, Math.round((1 - r.pred.rmsP / r.pred.rms0) * 100))}% 뿐 — 형상은 그대로 둠`;
       if (none) shapeNote = shapeWhyNot(r, r0, obs, reason);
@@ -631,7 +631,7 @@ export async function runAutoDesign(cfg, io) {
     if (best !== shapeZero) {
       d = { ...d, shape: { part: cfg.shapePart, ...best.cand } };
       steps.push({ stage: 'shape', best });
-      if (margin(best.stats, obs) < 0) { feasible = false; reason = `형상 최적안도 목표 미달 — 길이 균일도 ${best.stats.Ulen.toFixed(2)}${best.stats.Uwid == null ? '' : ` · 폭 균일도 ${best.stats.Uwid.toFixed(2)}`}`; }
+      if (margin(best.stats, obs) < 0) { feasible = false; reason = `형상 최적안도 목표 미달 — 길이 균일도 ${fmtJudge(best.stats.Ulen)}${best.stats.Uwid == null ? '' : ` · 폭 균일도 ${fmtJudge(best.stats.Uwid)}`}`; }
       else { feasible = true; reason = ''; }
     }
   }
@@ -653,7 +653,7 @@ export async function runAutoDesign(cfg, io) {
     if (best) {
       const c = best.cand, zero = !cfg.fixedShape && ['dt', 'h', 'e', 'c'].every((k) => !(c[k] ?? 0)) && !hasCurve(c);   // 전부 0 이면 R 무관 — 빈 shapeMod 안 만듦
       d = { ...d, shape: zero ? null : { part: cfg.shapePart, ...c } };
-      if (margin(best.stats, obs) < 0) { feasible = false; reason = `형상 최적안도 목표 미달 — 길이 균일도 ${best.stats.Ulen.toFixed(2)}${best.stats.Uwid == null ? '' : ` · 폭 균일도 ${best.stats.Uwid.toFixed(2)}`}`; }
+      if (margin(best.stats, obs) < 0) { feasible = false; reason = `형상 최적안도 목표 미달 — 길이 균일도 ${fmtJudge(best.stats.Ulen)}${best.stats.Uwid == null ? '' : ` · 폭 균일도 ${fmtJudge(best.stats.Uwid)}`}`; }
       else { feasible = true; reason = ''; }
     } else { feasible = false; reason = '제약(살두께·간섭)을 만족하는 형상 후보가 없음 — 범위를 줄이세요'; }
   }
@@ -665,7 +665,7 @@ export async function runAutoDesign(cfg, io) {
     else {
       const p = m.peak, atCap = p.milky >= sCap - 0.3;
       feasible = false; d = { ...d, milky: p.milky };
-      reason = `균일도 최고 Milky ${p.milky}에서도 ${uText(p)} — 목표 ${obs.targetLen.toFixed(2)}${p.Uwid == null ? '' : ` / ${obs.targetWid.toFixed(2)}`} 미달 · ${limitText(p, obs)}${atCap ? ` · Milky 상한(${sCap}) — 위치·형상을 함께 쓰세요` : ''}`;
+      reason = `균일도 최고 Milky ${p.milky}에서도 ${uText(p)} — 목표 ${fmtTg(obs.targetLen)}${p.Uwid == null ? '' : ` / ${fmtTg(obs.targetWid)}`} 미달 · ${limitText(p, obs)}${atCap ? ` · Milky 상한(${sCap}) — 위치·형상을 함께 쓰세요` : ''}`;
       peek = await peekAbove(d, p, sCap, io);
       if (stop()) return { cancelled: true };
       if (cfg.housingProbe && io.evalVariants && !stop()) {   // 보완 계산: 최고점 Milky 에서 케이스 면 한 단계 위 한 번
@@ -708,7 +708,7 @@ export async function runAutoDesign(cfg, io) {
     currentVerified = await judgeCurrent(currentVerified);
     if (stop()) return { cancelled: true };   // 현재안이 최선 — 현재안이 목표 미달이면 이유를 비워 두지 않음
     const okCur = margin(currentVerified.stats, obs) >= 0, cs = currentVerified.stats;
-    const why = reason || (okCur ? '' : `현재 설계가 최선 — 목표 미달(길이 균일도 ${cs.Ulen.toFixed(2)}${cs.Uwid == null ? '' : ` · 폭 균일도 ${cs.Uwid.toFixed(2)}`})`);
+    const why = reason || (okCur ? '' : `현재 설계가 최선 — 목표 미달(길이 균일도 ${fmtJudge(cs.Ulen)}${cs.Uwid == null ? '' : ` · 폭 균일도 ${fmtJudge(cs.Uwid)}`})`);
     return { feasible: feasible && okCur, best: { ...cfg.current }, steps, reason: why, verified: currentVerified, current: currentVerified, unchanged: true, cancelled: false, hint, peek, milkyLowered: lowered, shapeNote };
   }
   let verified = await io.verify(d);
