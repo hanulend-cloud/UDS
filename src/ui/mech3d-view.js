@@ -96,7 +96,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   }
   controls.addEventListener('change', () => { fitDepth(); render(); });
 
-  let xray = false, dim = null, lines = false;
+  let xray = false, dim = null, lines = false, obsShow = true;   // obsShow = 관측면 보이기(테두리·채움·화살표·색지도)
   // 선 보기(2026-11-08): 면은 감추고(클릭 판정은 그대로) 부품마다 다른 색의 외곽 모서리선만 — 부품 구조 확인용
   const HIDE_MAT = new THREE.MeshBasicMaterial({ visible: false });
   // 색 = 부품 소재·면 처리(looks[i].line, part-look.js lineLook) · LED 도면 부품은 종류별. 같은 계열끼리도 구분되게 밝기를 부품마다 조금씩
@@ -331,6 +331,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   }
   function setDim(fn) { dim = fn; meshes.forEach((_, i) => colorize(i)); render(); }
   function setLines(on) { lines = !!on; meshes.forEach((_, i) => colorize(i)); render(); }
+  function setObsShow(on) { obsShow = !!on; if (obsMesh) obsMesh.visible = obsShow; if (lastOver) setOverlay(lastOver); else render(); }
   function setXray(on) { xray = !!on; meshes.forEach((_, i) => colorize(i)); if (lastOver) setOverlay(lastOver); else render(); }
   // 화면 1 px 이 pos 에서 몇 mm 인지 — 광경로 화살표·글씨를 확대·축소와 상관없이 같은 화면 크기로(render 마다)
   function worldPerPx(pos) {
@@ -412,7 +413,8 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   function setOverlay(over) {
     lastOver = over;
     const prev = obsSet;
-    obsSet = new Set((over.obsFaces ?? []).map((f) => `${f.part}|${f.face}`));
+    const oFaces = obsShow ? over.obsFaces ?? [] : [];
+    obsSet = new Set(oFaces.map((f) => `${f.part}|${f.face}`));
     if (overlay) { scene.remove(overlay); overlay.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); }); }
     overlay = new THREE.Group(); coneMeshes = [];
     if (over.line3d?.length) {
@@ -421,11 +423,11 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
       ln.renderOrder = 2; overlay.add(ln);
     }
     // 관측면 강조: 고른 면들의 바깥 테두리(밝은 하늘색, 가려도 보이게) + 빛 방향 화살표(over.obsArrow = { pos, axis, len, incoming })
-    const ob = obsOutline(over.obsFaces ?? []);
+    const ob = obsOutline(oFaces);
     if (ob) overlay.add(ob);
-    const of = obsFill(over.obsFaces ?? [], xray ? 0.4 : obsMesh ? 0.12 : 0.3);
+    const of = obsFill(oFaces, xray ? 0.4 : obsMesh ? 0.12 : 0.3);
     if (of) overlay.add(of);
-    const oa = over.obsArrow;
+    const oa = obsShow ? over.obsArrow : null;
     obsUi = null;
     if (oa) {   // 들어오는 빛 = 면을 향해, 나가는 빛 = 면에서 밖으로 — 길이·글씨는 화면 px(obsLayout)
       const a = new THREE.Vector3(...oa.axis).normalize(), dirv = oa.incoming ? a.clone().negate() : a.clone();
@@ -497,7 +499,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
       g.setIndex(new THREE.BufferAttribute(geom.triangles, 1));
       obsMesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, clippingPlanes: clip, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
       obsMesh.renderOrder = 1.5;
-      obsDir = geom.dir ?? null; liftObs();
+      obsDir = geom.dir ?? null; liftObs(); obsMesh.visible = obsShow;
       scene.add(obsMesh);
     }
     if (had !== !!obsMesh && lastOver) { setOverlay(lastOver); return; }   // 색지도가 생기거나 없어지면 관측면 채움 진하기를 바꿈
@@ -590,5 +592,5 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
 
   // 다 쓴 보기(불러오기 미리보기)의 그래픽 메모리를 돌려줌 — 큰 도면에서 3D 문맥 두 개가 메모리를 나눠 쓰지 않게
   function dispose() { for (const m of meshes) { scene.remove(m); m.geometry.dispose(); } meshes = []; for (const m of partMats.values()) m.dispose(); partMats.clear(); renderer.dispose(); renderer.forceContextLoss(); }
-  return { dispose, setTheme, theme: () => theme, setLightPaths, setXray, xray: () => xray, setLines, lines: () => lines, setDim, setParts, setKinds, setHidden, setSelection, setOverlay, setPickMode, render, setView, fit, fitAll, viewName: () => viewName, setSection, setObsSurface, setObsColors, setCheckMarkers };
+  return { dispose, setTheme, theme: () => theme, setLightPaths, setXray, xray: () => xray, setLines, lines: () => lines, setObsShow, obsShow: () => obsShow, setDim, setParts, setKinds, setHidden, setSelection, setOverlay, setPickMode, render, setView, fit, fitAll, viewName: () => viewName, setSection, setObsSurface, setObsColors, setCheckMarkers };
 }
