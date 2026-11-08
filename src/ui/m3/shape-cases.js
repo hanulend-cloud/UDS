@@ -55,7 +55,7 @@ export function shapeCasesHtml({ cases, fp, sort = { key: 'dt', dir: 1 }, sel = 
   const mixed = cases.mixed ? '<div class="sc-note mut">다른 항목과 함께 돌린 실행 — 값은 참고용입니다.</div>' : '';
   const act = sel && !busy && cases.rows.some((r) => caseKey(r.c) === sel && r.ok !== false)
     ? '<div class="m3-rbtn"><button type="button" data-ad="caseRun">이 후보로 계산 ▸</button><button type="button" data-ad="casePick" data-v="">미리보기 끄기</button></div>' : '';
-  return `<details class="sc-box" open><summary>형상 후보 ${cases.rows.length}개${name ? ` — ${name}` : ''}</summary>${stale}${mixed}
-    <div class="sc-note mut">≈ 대략값(적은 광선) · <b>굵게</b> 정식 계산값. 행을 누르면 3D 로 보고, 계산 뒤 적용할 수 있습니다. 단위 mm</div>
+  return `<details class="sc-box"><summary>상세 — 형상 후보 ${cases.rows.length}개${name ? ` — ${name}` : ''}</summary>${stale}${mixed}
+    <div class="sc-note mut">≈ 대략값 · <b>굵게</b> 정식 계산 · 행 클릭 = 3D 보기 · mm</div>
     <div class="sc-wrap"><table class="m3-cmp sc-tb"><thead><tr>${head}<th>상태</th></tr></thead><tbody>${rows}</tbody></table></div>${act}</details>`;
 }

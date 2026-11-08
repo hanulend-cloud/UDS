@@ -49,7 +49,7 @@ export function factorBoardHtml(S, nw = {}, cfg = null) {
   const nowOf = { position: nw.leds ?? '–', housing: nw.housing ?? '–', shape: nw.shape ?? '원래 형상', milky: Number.isFinite(nw.milky) ? `Milky ${f2(nw.milky)}` : '확산 부품 없음' };
   return `<div class="od-h">설계 인자 <span class="mut">체크 = 이번에 최적화 · 🔒 = 적용해서 고정</span> <span class="mut">${Number.isFinite(nw.Ulen) ? `지금 ${fmtJudge(nw.Ulen)}/${fmtJudge(nw.Uwid)}` : ''}</span></div>
     <div class="fb-cards">${STAGES.map(([k, name]) => row(k, name, nowOf[k])).join('')}</div>
-    <div class="mut fb-hint">한 항목씩: 체크 → ▶ 실행 → [적용] = 🔒 고정 → 다음 항목 체크 → ▶ 실행</div>`;
+`;
 }
 // 그래프 칸 높이 제한(2026-11-05) — 넓으면 길이·폭 나란히, 좁으면 위아래
 const CHART_TWO_MIN = 360;   // 기본 폭(약 400 px)에서도 나란히 — 위아래로 쌓으면 높이가 커짐
@@ -97,24 +97,25 @@ export function beforeAfterHtml(k, b0, best, tl, tw, n = 0) {
 }
 // 오른쪽 모니터(순수, 2026-10-30) — 진행 줄(계산 순서 · 고정/완료/진행/대기) · 지표 3개(지금까지 최고, 시작 대비) · 그래프 자리(.od-plot) · 기록(최고 갱신만)
 // S = createOptDash 상태, sec = 걸린 초. 그래프는 자리 크기로 factorChartSvg 가 나중에 그림
-export const chartHtml = () => `<div class="od-chart-h"><b>균일도가 얼마나 좋아졌나</b> <span class="mut">위로 갈수록 좋음 · 빨간 선에 닿으면 목표 통과</span></div>
+export const chartHtml = () => `<div class="od-chart-h"><b title="위로 갈수록 좋음 · 빨간 선에 닿으면 목표 통과">균일도가 얼마나 좋아졌나</b></div>
     <div class="od-plot"></div>
     <div class="od-legend od-lg"><span><i class="lg-dot"></i>시험한 후보(대략값)</span><span><i class="lg-line"></i>지금까지 최고</span><span><i class="lg-dia"></i>최종 판정(확정값)</span><span><i class="lg-tg"></i>목표</span><span><i class="lg-st"></i>시작</span></div>`;
 // chart = false → 그래프는 따로(창 왼쪽 아래 칸, createOptDash h.chart)
 export function monitorHtml(S, sec = 0, { chart = true } = {}) {
   const tl = S.tgLen, tw = S.tgWid, ok = (e) => e.ok !== false && Number.isFinite(e.Ulen);
   let best = null; for (const e of S.seq ?? []) if (ok(e) && (!best || scoreOf(e, tl, tw) > scoreOf(best, tl, tw))) best = e;
-  const busy = S.ended == null && !S.stopped;
+  const busy = S.ended == null && !S.stopped, fin0 = S.final;
   const step = (cls, name, sub) => `<div class="om-st om-${cls}"><b>${name}</b><span>${sub}</span></div>`;
+  const uv = (e) => (e && Number.isFinite(e.Ulen) ? ` <i class="om-sv">${e.est ? '≈' : ''}${fmtJudge(e.Ulen)}/${fmtJudge(e.Uwid)}</i>` : '');   // 단계 최고(길이/폭) — 현황표 대신 상자 안에(2026-11-08)
   const steps = [step(S.seq?.length || !busy ? 'done' : 'run', '현재안', S.seq?.length || !busy ? '✓' : `${Math.round((S.curFrac ?? 0) * 100)}%`)];
   for (const [k, name] of STAGES) {
     const t = S.tiles[k];
     if (S.locked?.[k] && t.status === 'off') steps.push(step('lock', name, '고정 ✓'));
     else if (t.status === 'run') steps.push(step('run', name, `${Math.round(t.frac * 100)}%`));
-    else if (t.status === 'done') steps.push(step('done', name, '✓'));
+    else if (t.status === 'done') steps.push(step('done', name, `✓${uv(stageBest(t, tl, tw))}`));
     else if (t.status === 'wait') steps.push(step('wait', name, '대기'));
   }
-  steps.push(S.ended != null ? step('done', '검증', '✓') : busy && S.verFrac != null ? step('run', '검증', `${Math.round(S.verFrac * 100)}%`) : step('wait', '검증', ''));
+  steps.push(S.ended != null ? step('done', '검증', `✓${uv(fin0)}`) : busy && S.verFrac != null ? step('run', '검증', `${Math.round(S.verFrac * 100)}%`) : step('wait', '검증', ''));
   const b0 = S.before ?? {};
   const kpi = (label, tg, v, v0) => {
     const pass = Number.isFinite(v) && Number.isFinite(tg) ? (v + 1e-9 >= tg ? 'ok' : 'bad') : '';
@@ -128,16 +129,18 @@ export function monitorHtml(S, sec = 0, { chart = true } = {}) {
   const fin = S.final, cur = fin ?? best, J = fin ? judgeStats(fin, { targetLen: tl, targetWid: tw }) : {}, uTxt = (l, v, t, j) => `${l} <b>${fmtJudge(v)}</b>${Number.isFinite(v) && Number.isFinite(t) ? ` (목표 ${f2(t)} ${j === 'near' ? '<span class="od-near">근처</span>' : v + 1e-9 >= t ? '<span class="od-ok">통과</span>' : '<span class="od-bad">미달</span>'})` : ''}`;
   const uLine = cur ? `${uTxt('길이 균일도', cur.Ulen, tl, J.len)}, ${uTxt('폭 균일도', cur.Uwid, tw, J.wid)}` : '';
   const doing = S.note || (S.cur ? S.tiles[S.cur].text : '') || '준비하는 중';
-  const say = busy ? `<p><b>지금 하는 일</b> ${esc(doing)}</p>${uLine ? `<p><b>지금까지 가장 좋은 안</b> ${uLine}</p>` : ''}`
+  // 판정은 한 줄만 — 값은 아래 지표 카드에(같은 값을 여러 곳에 쓰지 않음, 2026-11-08)
+  const say = busy ? `<p><b>지금</b> ${esc(doing)}</p>`
     : S.stopped ? '<p><b>중지했습니다.</b> 찾던 안은 설계에 반영되지 않았습니다.</p>'
-    : `<p><b>${J.all === 'near' ? '목표 근처의 안을 찾았습니다. 차이가 노이즈보다 작아 통과·미달은 계산마다 달라질 수 있습니다.' : S.ended ? '목표를 통과한 안을 찾았습니다.' : '목표에 닿는 안을 찾지 못해 가장 가까운 안을 골랐습니다.'}</b></p>${uLine ? `<p><b>최종 판정</b> ${uLine}</p>` : ''}${!S.ended && S.note ? `<p class="mut">${esc(J.all === 'near' ? S.note.replace(/미달/g, '근처') : S.note)}</p>` : ''}<p class="mut">왼쪽 아래 결과에서 적용하면 이 값이 그대로 화면에 나옵니다.</p>`;
+    : J.all === 'near' ? '<p class="om-vd near"><b>≈ 목표 근처</b> <span class="mut">차이가 노이즈보다 작아 통과·미달이 계산마다 달라질 수 있음</span></p>'
+    : S.ended ? '<p class="om-vd ok"><b>✓ 목표 통과</b></p>' : '<p class="om-vd bad"><b>✕ 목표 미달</b> <span class="mut">가장 가까운 안을 골랐습니다</span></p>';
   const pct = S.ended != null ? 100 : Math.round(Math.max(0, Math.min(1, S.overall ?? 0)) * 100);
   return `<div class="od-pct om-pct"><b>${pct}%</b><div class="od-bar od-bar-big" role="progressbar" aria-label="기구 최적화 진행" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div><span class="mut od-simst">${busy ? `${S.pauseAt ? '일시정지' : '진행'} ${mmss(sec)}` : S.stopped ? '중지됨' : `끝남 ${mmss((S.endSec ?? sec))}`} · 후보 ${nEval}개</span></div>
     <div class="om-steps">${steps.join('<i class="om-ar">→</i>')}</div>
     <div class="om-say">${say}</div>
     <div class="om-kpi">${kpi(fin ? '길이 균일도 최종' : '길이 균일도', tl, cur?.Ulen ?? b0.Ulen, b0.Ulen)}${kpi(fin ? '폭 균일도 최종' : '폭 균일도', tw, cur?.Uwid ?? b0.Uwid, b0.Uwid)}${effK}</div>
     ${chart ? chartHtml() : ''}
-    ${optMatrixHtml(S)}`;
+    <details class="om-more" data-keep="mx"><summary>상세 — 항목별 현황</summary>${optMatrixHtml(S)}</details>`;
 }
 // 최적화 현황 표(순수, 2026-11-03) — 항목 × (상태 · 시험 후보 · 그 항목 최고 길이·폭 · 최고안). 마지막 줄 = 최종 판정(최종 화질)
 export function optMatrixHtml(S) {
@@ -148,12 +151,17 @@ export function optMatrixHtml(S) {
     const t = S.tiles[k], locked = S.locked?.[k] && t.status === 'off';
     if (t.status === 'off' && !locked) return [];
     const st = locked ? '고정' : t.status === 'run' ? `진행 ${Math.round(t.frac * 100)}%` : t.status === 'done' ? '완료' : '대기';
-    const real = t.evals.some((q) => q.ok !== false && !q.est);   // 실제 계산값이 있으면 그것 중 최고(추정은 빼고)
-    let e = null; for (const q of t.evals) if (q.ok !== false && (!real || !q.est) && (!e || scoreOf(q, tl, tw) > scoreOf(e, tl, tw))) e = q;
+    const e = stageBest(t, tl, tw);
     return [row(name, st, t.evals.length || '–', e)];
   });
   const stF = S.final ? '완료' : S.stopped ? '중지' : '대기';
-  return `<div class="om-mx"><div class="mut om-lh">최적화 현황</div><table class="om-mx-t"><tr><th>항목</th><th>상태</th><th>시험 후보</th><th>길이</th><th>폭</th><th>최고안</th></tr>${rows.join('')}${row('최종 판정', stF, '–', S.final, 'om-mx-f')}</table><div class="mut od-tx">항목 줄 = 가장 좋았던 후보 하나의 값. 적은 광선으로 빠르게 비교해 낮게 나옴 · 최종 판정 = 고른 안을 많은 광선으로 다시 잰 확정값</div></div>`;
+  return `<div class="om-mx" title="항목 줄 = 가장 좋았던 후보 하나의 값(적은 광선으로 빠르게 비교해 낮게 나옴) · 최종 판정 = 고른 안을 많은 광선으로 다시 잰 확정값"><table class="om-mx-t"><tr><th>항목</th><th>상태</th><th>시험 후보</th><th>길이</th><th>폭</th><th>최고안</th></tr>${rows.join('')}${row('최종 판정', stF, '–', S.final, 'om-mx-f')}</table></div>`;
+}
+// 단계 최고 후보 — 실제 계산값이 있으면 그것 중 최고(배치 추정은 빼고)
+function stageBest(t, tl, tw) {
+  const ev = t?.evals ?? [], real = ev.some((q) => q.ok !== false && !q.est);
+  let e = null; for (const q of ev) if (q.ok !== false && (!real || !q.est) && (!e || scoreOf(q, tl, tw) > scoreOf(e, tl, tw))) e = q;
+  return e;
 }
 // 지난 최적화 후보 표(순수, 2026-11-07) — 균일도 순(목표 대비 여유가 큰 순, 같으면 효율). 값 = 최종 판정과 같은 정밀 재계산. [적용] = data-hpick(원래 번호)
 export function histTableHtml(list, tl, tw, busy) {
@@ -165,11 +173,16 @@ export function histTableHtml(list, tl, tw, busy) {
   const rows = list.map((e, i) => ({ e, i })).sort((a, b) => mg(b.e) - mg(a.e) || sum(b.e) - sum(a.e) || (b.e.eff || 0) - (a.e.eff || 0)).map(({ e, i }, n) =>
     `<tr${e.applied ? ' class="om-h-on"' : ''}><td>${n + 1}</td><td class="om-mx-l">${esc(e.label)}${e.kind === 'final' ? '' : ' <span class="mut">(대안)</span>'}</td><td>${cell(e.Ulen, tl)}</td><td>${cell(e.Uwid, tw)}</td><td>${Number.isFinite(e.eff) ? `${(e.eff * 100).toFixed(1)}%` : '–'}</td><td class="mut">${esc(e.at ?? '')}</td>`
     + `<td><button type="button" data-hpick="${i}"${busy ? ' disabled title="최적화가 끝난 뒤 고르세요"' : ''}>${e.applied ? '적용됨' : '적용'}</button></td></tr>`);
-  return `<div class="om-mx om-hist"><div class="mut om-lh">지난 최적화 후보 — 균일도 순 (값 = 정밀 재계산) · 원하는 사양을 골라 [적용]</div><table class="om-mx-t"><tr><th>#</th><th>사양</th><th>길이</th><th>폭</th><th>효율</th><th>시각</th><th></th></tr>${rows.join('')}</table></div>`;
+  return `<div class="om-mx om-hist"><div class="om-lh" title="값 = 정밀 재계산 · 원하는 사양을 골라 [적용]"><b>지난 후보</b> <span class="mut">균일도 순 · ${list.length}개</span></div><div class="om-hist-sc"><table class="om-mx-t"><tr><th>#</th><th>사양</th><th>길이</th><th>폭</th><th>효율</th><th>시각</th><th></th></tr>${rows.join('')}</table></div></div>`;
 }
 // 후보의 점수(목표 대비 여유 — 둘 다 있으면 작은 쪽)
 const scoreOf = (e, tl, tw) => (e.ok === false || !Number.isFinite(e.Ulen) ? -Infinity : Math.min(e.Ulen - tl, Number.isFinite(e.Uwid) && Number.isFinite(tw) ? e.Uwid - tw : Infinity));
 
+// 다시 그려도 펼친 상세(details[data-keep])는 펼친 채로
+export function keepOpen(node) {
+  const open = new Set([...node.querySelectorAll('details[data-keep]')].filter((d) => d.open).map((d) => d.dataset.keep));
+  return () => node.querySelectorAll('details[data-keep]').forEach((d) => { if (open.has(d.dataset.keep)) d.open = true; });
+}
 // h = { config(k) → { on, html }(타일 머리의 켜기 스위치·설정), onSel(key, value) } — 실행 전·후에는 타일에서 항목을 고르고, 실행 중에는 진행을 봄
 export function createOptDash(el, h = {}) {
   let S = null, raf = 0;
@@ -207,7 +220,7 @@ export function createOptDash(el, h = {}) {
   el.addEventListener('click', (e) => { const b = e.target.closest('[data-hpick]'); if (b && !b.disabled) h.onPick?.(+b.dataset.hpick); });
   function render() {
     // 바뀐 것만 갱신(2026-11-07) — 전에는 초당 3~4번 통째로 다시 만들고 그래프 칸을 비웠다가 그려 화면이 깜빡였음
-    const put = (node, html) => { if (node && node._html !== html) { node.innerHTML = html; node._html = html; } };
+    const put = (node, html) => { if (node && node._html !== html) { const op = keepOpen(node); node.innerHTML = html; node._html = html; op(); } };
     if (!S) { put(el, histHtml()); if (h.chart) put(h.chart, ''); return; }   // 실행 전 = 비움(항목 켜기는 왼쪽 설계 인자 체크) — 지난 후보만
     put(el, monitorHtml(S, ((S.pauseAt ?? performance.now()) - S.t0) / 1000, { chart: !h.chart }) + histHtml());
     if (h.chart) put(h.chart, chartHtml());   // 틀은 한 번 — 같은 글이면 그대로

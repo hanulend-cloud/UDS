@@ -1163,3 +1163,17 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 .om-hist td button { padding: 1px 8px; font-size: 12px; }
 .om-hist tr.om-h-on td { background: #e9f6ee; }
 .m3-rbtn button.m3-off { opacity: .55; }   /* 겹침으로 적용 불가 — 누르면 이유 안내 */
+
+/* 기구 최적화 결과 요약·상세(2026-11-08) — 메인은 판정·값·단추, 나머지는 접어 둠 */
+.om-sv { display: block; font-style: normal; font-size: 11px; font-weight: 600; opacity: .85; }
+.om-vd { margin: 2px 0; }
+.om-vd.ok b { color: var(--m3-ok); } .om-vd.bad b { color: var(--m3-bad); } .om-vd.near b { color: var(--m3-warn); }
+.om-more, .m3-more { margin-top: 6px; font-size: 12px; }
+.om-more > summary, .m3-more > summary { cursor: pointer; color: var(--m3-mut); user-select: none; padding: 2px 0; }
+.om-more > summary:hover, .m3-more > summary:hover { color: inherit; }
+.om-more .om-mx { border-top: 0; margin-top: 2px; }
+.om-hist .om-lh { font-size: 12px; margin-bottom: 2px; }
+.om-hist-sc { max-height: 196px; overflow: auto; }
+.om-hist-sc th { position: sticky; top: 0; z-index: 1; }
+.m3-asum { font-size: 12.5px; margin: 2px 0 4px; }
+.m3-asum b.ok { color: var(--m3-ok); } .m3-asum b.bad { color: var(--m3-bad); }

@@ -147,7 +147,7 @@ export function autoCardHtml({ avail, sel, running, canRevert = false, noLine = 
   const on = AD_ITEMS.filter(([, , ks]) => ks.some((k) => sel[k] && avail[k]?.ok)).map(([, l]) => l);
   if (running) return '';   // 실행 단추·진행은 창 오른쪽 위
   const why = noLine ? '관측 라인이 없음' : noLed;
-  return `<div class="m3-ad-bar"><span class="m3-ad-on">${why ? `<span class="warn">${esc(why)}</span> ` : ''}${on.length ? `켠 항목 <b>${on.join(' ')}</b>` : '<span class="mut">왼쪽 설계 인자에서 최적화할 항목을 체크하세요</span>'}</span>${canRevert ? '<span class="m3-ad-sp"></span><button type="button" data-ad="revert" title="마지막 적용 전 값으로">↶ 되돌리기</button>' : ''}</div>${appliedHtml(applied)}`;
+  return `<div class="m3-ad-bar"><span class="m3-ad-on">${why ? `<span class="warn">${esc(why)}</span> ` : ''}${on.length ? `켠 항목 <b>${on.join(' ')}</b>` : '<span class="mut">위 설계 인자에서 최적화할 항목을 체크하세요</span>'}</span>${canRevert ? '<span class="m3-ad-sp"></span><button type="button" data-ad="revert" title="마지막 적용 전 값으로">↶ 되돌리기</button>' : ''}</div>${appliedHtml(applied)}`;
 }
 // 형상 문구 — 0 인 항 생략. e = 끝단 두께, c = 폭 가장자리 두께(+ 가장자리 두껍게 · − 얇게), h < 0 = 돌출
 const sg = (v) => `${v >= 0 ? '+' : '−'}${f2(Math.abs(v))}`, nz = (v) => Number.isFinite(v) && Math.abs(v) >= 5e-5;
@@ -220,10 +220,17 @@ export function compareHtml(r) {
     ${altNote(r)}<div class="m3-row">${applyBtn(r, 'LED 몸체가 부품과 겹침')}${altBtn(r)}<button type="button" data-ad="cancel">취소</button>${shape ? '<button type="button" data-ad="step">STEP 내보내기</button>' : ''}${canRevert ? '<button type="button" data-ad="revert">되돌리기</button>' : ''}</div>`;
 }
 // 적용 뒤에도 남는 요약(이전 → 적용 후) — applied = 적용한 결과(compareHtml 인자와 같은 꼴) + at(시각 문구)
+// 요약(2026-11-08): 균일도·효율 한 줄 + 바뀐 설계 항목만. 전체 비교표는 [자세히]로 펼침
 export function appliedHtml(applied) {
   if (!applied) return '';
-  return `<div class="m3-applied"><div class="m3-h">적용한 변경 <span class="mut">${esc(applied.at ?? '')} · 되돌리기 전까지 유지</span></div>
-    <table class="m3-cmp"><tr><th></th><th>현재</th><th>최적화 후</th></tr>${cmpRows(applied)}</table></div>`;
+  const { cur = {}, best = {} } = applied, tg = applied.targets ?? {};
+  const u = (l, a, b, t) => `${l} ${fmtJudge(a)} → <b class="${Number.isFinite(t) && Number.isFinite(b) ? (b + 1e-9 >= t ? 'ok' : 'bad') : ''}">${fmtJudge(b)}</b>`;
+  const e = Number.isFinite(cur.eff) && Number.isFinite(best.eff) ? ` · 효율 ${(cur.eff * 100).toFixed(1)} → <b>${(best.eff * 100).toFixed(1)}%</b>` : '';
+  const chg = cmpParts(applied).design.filter((x) => x.includes('class="chg"'));
+  return `<div class="m3-applied"><div class="m3-h">✓ 적용됨 <span class="mut">${esc(applied.at ?? '')}</span></div>
+    <div class="m3-asum">${u('길이', cur.Ulen, best.Ulen, tg.len)} · ${u('폭', cur.Uwid, best.Uwid, tg.wid)}${e}</div>
+    ${chg.length ? `<table class="m3-cmp m3-cmp-s"><tr><th></th><th>이전</th><th>지금</th></tr>${chg.join('')}</table>` : ''}
+    <details class="m3-more" data-keep="applied"><summary>자세히</summary><table class="m3-cmp"><tr><th></th><th>이전</th><th>지금</th></tr>${cmpRows(applied)}</table></details></div>`;
 }
 
 // el 에 카드를 그리고 이벤트를 h 로 넘긴다. state = { avail, sel, running, result, names, canRevert, noLine, milkyPart }
@@ -327,6 +334,20 @@ export function mergeHist(list, add, max = 60) {
   for (const e of add) if (!out.some((x) => x.label === e.label && x.Ulen === e.Ulen && x.Uwid === e.Uwid)) out.push(e);
   return out.slice(-max);
 }
+// 참고 문구·Milky 표는 접어 둠(2026-11-08) — 메인 카드는 판정·값·단추만
+function notesHtml(r) {
+  const n = [
+    caseHintText(r) ? `<button type="button" class="m3-rlim m3-rhint" data-ad="casePart" data-v="${r.hint.finish.part}" title="케이스 부품 속성 열기 — 면 처리는 직접 바꿈">${esc(caseHintText(r))} ▸</button>` : '',
+    oneRowHint(r) ? `<div class="m3-rlim">${esc(oneRowHint(r))}</div>` : '',
+    r.milkyRetuned ? '<div class="m3-rlim">💡 고정했던 Milky 도 위치·형상에 맞춰 다시 맞춤</div>' : '',
+    r.shapeNote ? `<div class="m3-rlim">💡 형상 그대로: ${esc(r.shapeNote)}</div>` : '',
+    shapeMissText(r) ? `<div class="m3-rlim">${esc(shapeMissText(r))}</div>` : '',
+    r.lowered ? `<div class="m3-rlim">${esc(loweredText(r.lowered, r.unchanged))}</div>` : '',
+    !r.feasible && r.peek ? `<div class="m3-rlim">${esc(peekText(r.peek))}</div>` : '',
+  ].filter(Boolean), mt = milkyTableHtml(r.milkyRows, r.best?.milky, r.targets ?? {});
+  if (!n.length && !mt) return '';
+  return `<details class="m3-more" data-keep="notes"><summary>참고${n.length ? ` ${n.length}개` : ''}${mt ? ' · Milky 표' : ''}</summary>${n.join('')}${mt}</details>`;
+}
 export function resultLineHtml(r) {
   const verdict = r.unchanged ? ['keep', '현재안 유지', r.caseCheck ? '고른 후보를 쓸 수 없음' : '더 나은 안 없음'] : r.targets?.judge?.all === 'near' ? ['near', '목표 근처', '통과·미달을 가를 수 없는 차이'] : r.feasible ? ['ok', '목표 통과', r.caseCheck ? '고른 후보' : '최적안을 찾음'] : ['bad', '목표 미달', r.caseCheck ? '고른 후보' : '가장 가까운 안'];
   const P = cmpParts(r), chg = P.design.filter((x) => x.includes('class="chg"'));   // 설계 항목 = 바뀐 것만, 목표 지표 = 늘
@@ -335,14 +356,7 @@ export function resultLineHtml(r) {
   return `<div class="m3-rcard ${verdict[0]}"><div class="m3-rcard-hd"><b class="m3-rv">${verdict[1]}</b><span class="mut">${verdict[2]}</span></div>
     <table class="m3-cmp m3-cmp-s"><tr><th></th><th>현재</th><th>최적화 후</th></tr>${rows}</table>${clash}
     ${lim ? `<div class="m3-rlim">💡 한계: ${esc(lim)}</div>` : ''}
-    ${caseHintText(r) ? `<button type="button" class="m3-rlim m3-rhint" data-ad="casePart" data-v="${r.hint.finish.part}" title="케이스 부품 속성 열기 — 면 처리는 직접 바꿈">${esc(caseHintText(r))} ▸</button>` : ''}
-    ${oneRowHint(r) ? `<div class="m3-rlim">${esc(oneRowHint(r))}</div>` : ''}
-    ${r.milkyRetuned ? `<div class="m3-rlim">💡 고정했던 Milky 도 위치·형상에 맞춰 다시 맞춤</div>` : ''}
-    ${r.shapeNote ? `<div class="m3-rlim">💡 형상 그대로: ${esc(r.shapeNote)}</div>` : ''}
-    ${shapeMissText(r) ? `<div class="m3-rlim">${esc(shapeMissText(r))}</div>` : ''}
-    ${r.lowered ? `<div class="m3-rlim">${esc(loweredText(r.lowered, r.unchanged))}</div>` : ''}
-    ${!r.feasible && r.peek ? `<div class="m3-rlim">${esc(peekText(r.peek))}</div>` : ''}
-    ${milkyTableHtml(r.milkyRows, r.best?.milky, r.targets ?? {})}
+    ${notesHtml(r)}
     ${altNote(r)}<div class="m3-rbtn">${applyBtn(r, 'LED 몸체가 부품과 겹침')}${altBtn(r)}${shapeDeepBtn(r)}<button type="button" data-ad="cancel">취소</button>${r.clash > 0 ? '' : `<button type="button" data-ad="continue" title="${r.unchanged ? '지금 설계 그대로' : '이 안을 적용한 뒤'}, 체크했지만 이번에 돌리지 않은 항목(예: 위치·Milky)을 그 위에서 이어서 최적화">이 안에서 이어서 ▸</button>`}<span class="m3-ad-sp"></span><button type="button" data-ad="view" title="프로파일 비교·사유 전문">자세히 ▸</button></div></div>`;
 }
 // el 에 그리고 이벤트를 h 로 넘김. state = { avail, sel, running, result, resultOpen, … } — 결과가 있으면 한 줄 + (열림) 결과 창
@@ -363,7 +377,9 @@ export function renderAutoPanel(el, state, h) {
   if (el._adDown) { el._adPend = true; return; }
   if (el._adKey === key) return;   // 내용이 그대로면(결과·설정 모두) 다시 만들지 않음 — 누르는 사이 단추가 바뀌면 클릭이 사라지고, 펼친 Milky 표도 닫힘
   const box0 = el.querySelector('.sc-box'), open0 = box0?.open, top0 = el.querySelector('.sc-wrap')?.scrollTop;   // 다시 그려도 표의 펼침·스크롤 유지
+  const keep = [...el.querySelectorAll('details[data-keep]')].filter((d) => d.open).map((d) => d.dataset.keep);
   el._adKey = key; el.innerHTML = html + tb;
+  el.querySelectorAll('details[data-keep]').forEach((d) => { if (keep.includes(d.dataset.keep)) d.open = true; });
   if (box0 && el.querySelector('.sc-box')) { el.querySelector('.sc-box').open = open0; el.querySelector('.sc-wrap').scrollTop = top0; }
   el.querySelectorAll('tr[data-ad]').forEach((x) => { x.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); x.click(); } }; });
   el.querySelectorAll('[data-ad]').forEach((x) => {

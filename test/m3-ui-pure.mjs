@@ -457,8 +457,8 @@ ok(judgeText(0.3, 0.8, null, 0.2).cls === 'busy' && /판정 보류/.test(judgeTe
   const tiles = Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', text: '' }]));
   const S = { tiles, seq: [], tgLen: 0.8, tgWid: 0.8, ended: false, endSec: 10, note: '균일도 최고 Milky 1.5에서도 길이 균일도 0.80 · 폭 균일도 0.84 — 목표 0.80 / 0.80 미달 · 한계: 길이 방향', b0: {} };
   const near = monitorHtml({ ...S, final: { Ulen: 0.799, seLen: 0.004, Uwid: 0.84, seWid: 0.004 } }, 10), say = near.match(/om-say">([\s\S]*?)<\/div>/)[1];
-  ok(say.includes('목표 근처의 안') && !say.includes('미달</') && !say.includes('/ 0.80 미달') && say.includes('0.80 근처') && !say.includes('찾지 못해'), `근처 설명: ${say.replace(/<[^>]+>/g, '').slice(0, 90)}`);
-  const bad = monitorHtml({ ...S, final: { Ulen: 0.7, seLen: 0.004, Uwid: 0.84, seWid: 0.004 } }, 10); ok(bad.includes('찾지 못해') && bad.includes('/ 0.80 미달'), '미달이면 문구 그대로'); }
+  ok(say.includes('목표 근처') && !say.includes('목표 미달') && !say.includes('0.80'), `근처 판정 한 줄(값은 지표 카드에): ${say.replace(/<[^>]+>/g, '').slice(0, 90)}`);
+  const bad = monitorHtml({ ...S, final: { Ulen: 0.7, seLen: 0.004, Uwid: 0.84, seWid: 0.004 } }, 10), bsay = bad.match(/om-say">([\s\S]*?)<\/div>/)[1]; ok(bsay.includes('목표 미달') && !bsay.includes('0.70'), '미달 판정 한 줄'); }
 { // 광원 접기 · 관측면 창 ②·③ 번호 · 목표 꼭 입력
   const base = { parts: [], observe: { faces: [], targetLen: 0.8, targetWid: 0.8 }, light: { kind: 'manual', spec: { beam: 120 }, manual: { count: 3, pitch: 0, rows: 1 } }, checks: {} };
   const open = treeNodes(base, { node: null, line: null }), shut = treeNodes(base, { node: null, line: null, fold: { light: true } });
