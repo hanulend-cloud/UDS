@@ -1,6 +1,7 @@
 // 실행 · 일시정지 · 중지 단추(2026-11-04) — 광분포 시뮬레이션과 기구 최적화가 같은 세 단추. 지금 쓸 수 없는 단추는 흐리게
 // 실행 = 일시정지면 이어서, 그 밖에는 처음부터 · 일시정지 = 나중에 이어서 · 중지 = 끝냄(이어서 못 함)
-const LABEL = [['run', '▶ 실행'], ['pause', '⏸ 일시정지'], ['stop', '■ 중지']];
+const LABEL = [['run', '▶ 실행'], ['pause', '⏸'], ['stop', '■ 중지']];   // 일시정지 = 표시만(글씨 빼고 마우스 설명·읽기 이름으로, 2026-11-08)
+const NAME = { run: '실행', pause: '일시정지', stop: '중지' };
 
 // snap = 점진 계산 스냅숏, busy = 기구 최적화 중
 export function simCtl(snap, busy = false) {
@@ -28,9 +29,9 @@ export function rerunAsk(best) {
 // 단추 틀(한 번만 만듦) + 상태 갱신 — fn(k) k = run | pause | stop
 export function setCtl(box, c, fn) {
   if (!box) return;
-  if (!box.querySelector('[data-ctl]')) box.innerHTML = LABEL.map(([k, t]) => `<button type="button" data-ctl="${k}">${t}</button>`).join('');
+  if (!box.querySelector('[data-ctl]')) box.innerHTML = LABEL.map(([k, t]) => `<button type="button" data-ctl="${k}" aria-label="${NAME[k]}">${t}</button>`).join('');
   for (const [k] of LABEL) {
-    const b = box.querySelector(`[data-ctl="${k}"]`), title = c[`${k}Title`] ?? '';
+    const b = box.querySelector(`[data-ctl="${k}"]`), title = c[`${k}Title`] || (k === 'pause' ? '일시정지' : '');
     b.disabled = !c[k]; if (b.title !== title) b.title = title; b.onclick = () => fn(k);
   }
 }
