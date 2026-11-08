@@ -423,9 +423,9 @@ function notesLines(r) {
   return n.join('') + ch;
 }
 // 결과 화면 — 판정 · 균일도 카드 · 최적화 인자 상자 · 참고 · 단추 · 지난 후보(위 3개, 나머지는 [전체 보기])
-export function resultViewHtml(r, { applied = null, effects = null, hist = null, busy = false, catalog = null, locked = {}, histAll = false } = {}) {
+export function resultViewHtml(r, { applied = null, effects = null, hist = null, busy = false, catalog = null, locked = {} } = {}) {
   const x = r ?? applied, tg = x?.targets ?? {};
-  const histBox = hist?.length ? `<div class="rs-hist"><div class="rs-h">지난 후보 <span class="mut">균일도 순 · 골라서 [적용]</span>${hist.length > 3 ? ` <button type="button" class="rs-link2" data-ad="histAll">${histAll ? '접기' : `전체 ${hist.length}개`}</button>` : ''}</div>${histTableHtml(hist, tg.len, tg.wid, busy, { pick: 'ad', max: histAll ? 0 : 3 })}</div>` : '';
+  const histBox = hist?.length ? `<div class="rs-hist"><div class="rs-h">지난 후보 <span class="mut">균일도 순 · 골라서 [적용]</span><span class="rs-hn mut">${hist.length}개</span></div>${histTableHtml(hist, tg.len, tg.wid, busy, { pick: 'ad' })}</div>` : '';
   if (!x) return `<div class="rs"><div class="rs-h mut">이번 결과 없음</div>${histBox}</div>`;
   const cards = `<div class="rs-cards">${changeCard('길이 균일도', x.cur?.Ulen, x.best?.Ulen, tg.len)}${changeCard('폭 균일도', x.cur?.Uwid, x.best?.Uwid, tg.wid)}${changeCard('광 효율', x.cur?.eff, x.best?.eff, NaN, true)}</div>`;
   if (!r) return `<div class="rs">${cards}<div class="rs-vd ok"><b>✓ 적용됨</b> <span class="mut">${esc(applied.at ?? '')} · 되돌리기 전까지 유지</span></div>
@@ -471,7 +471,7 @@ export function renderAutoPanel(el, state, h) {
   const r = state.result, full = r ? compareHtml({ ...r, canRevert: state.canRevert, ...(state.catalog ? { catalog: state.catalog } : {}) }) : '';
   const flashH = state.flash ? `<div class="m3-rflash" role="alert">${esc(state.flash)}</div>` : '';
   const modal = r && state.resultOpen ? `<div class="m3-rmodal" role="dialog" aria-modal="true" aria-label="기구 최적화 결과"><div class="m3-rmodal-in"><div class="m3-rmodal-hd"><b>기구 최적화 결과 — 프로파일·표</b><span class="m3-ad-sp"></span><button type="button" data-ad="hide" title="결과는 남음">✕ 닫기</button></div>${full}${milkyTableHtml(r.milkyRows, r.best?.milky, r.targets ?? {})}</div></div>` : '';
-  const html = state.mode === 'result' ? `${flashH}${resultViewHtml(r, { applied: state.applied, effects: state.effects, hist: state.hist, busy: !!state.running, catalog: state.catalog, locked: state.locked ?? {}, histAll: !!state.histAll })}${modal}`
+  const html = state.mode === 'result' ? `${flashH}${resultViewHtml(r, { applied: state.applied, effects: state.effects, hist: state.hist, busy: !!state.running, catalog: state.catalog, locked: state.locked ?? {} })}${modal}`
     : state.mode === 'set' ? `${nowCardsHtml(state.now)}${flashH}${autoCardHtml({ ...state, applied: null })}`
     : state.mode === 'run' ? flashH
     : r ? `${state.flash ? `<div class="m3-rflash" role="alert">${esc(state.flash)}</div>` : ''}${resultLineHtml(r)}${state.resultOpen ? `<div class="m3-rmodal" role="dialog" aria-modal="true" aria-label="기구 최적화 결과"><div class="m3-rmodal-in"><div class="m3-rmodal-hd"><b>기구 최적화 결과</b><span class="m3-ad-sp"></span><button type="button" data-ad="hide" title="결과는 남음">✕ 닫기</button></div>

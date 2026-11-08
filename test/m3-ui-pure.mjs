@@ -841,8 +841,8 @@ done();
   { const { factorResult } = await import('../src/ui/m3/autodesign-panel.js'), F = (k) => factorResult(r, eff, {}, k);
     ok(!h.includes('class="rs-fb ') && F('shape').chg && F('milky').chg && F('milky').body.includes('3.60') && /길이 \+\d+\.\d%p/.test(F('milky').eff) && !F('position').chg && F('position').chip === '안 돌림', '결과 = 설계 인자 상자 자리에(이전 → 이후 · 효과 · 상태)'); }
   ok(h.includes('data-ad="apply"') && h.includes('data-ad="hpick" data-v="0"') && h.includes('지난 후보') && !h.includes('<details'), '적용 · 지난 후보(접지 않음)');
-  { const many = Array.from({ length: 6 }, (_, i) => ({ label: `M${i}`, Ulen: 0.7 + i * 0.01, Uwid: 0.7, eff: 0.5 })), hm = resultViewHtml(r, { hist: many }), ha = resultViewHtml(r, { hist: many, histAll: true });
-    ok((hm.match(/data-ad="hpick"/g) ?? []).length === 3 && hm.includes('전체 6개') && (ha.match(/data-ad="hpick"/g) ?? []).length === 6, '지난 후보: 위 3개 · [전체 N개]'); }
+  { const many = Array.from({ length: 6 }, (_, i) => ({ label: `M${i}`, Ulen: 0.7 + i * 0.01, Uwid: 0.7, eff: 0.5 })), hm = resultViewHtml(r, { hist: many }), h1 = resultViewHtml(r, { hist: many.slice(0, 1) });
+    ok((hm.match(/data-ad="hpick"/g) ?? []).length === 6 && hm.includes('6개') && !hm.includes('data-ad="histAll"') && hm.includes('rs-histt') && h1.includes('rs-histt') && hm.includes('<colgroup>'), '지난 후보: 같은 크기 표(고정 높이 · 넘치면 스크롤 · 열 폭 고정)'); }
   { const { clip } = await import('../src/ui/m3/autodesign-panel.js'); ok(clip('가'.repeat(30), 10).includes('…') && clip('가'.repeat(30), 10).includes('title=') && clip('짧음', 10) === '짧음', '긴 글 = … + 전체는 마우스'); }
   ok((h.match(/한계/g) ?? []).length === 1, '한계 한 번만');
   const a = resultViewHtml(null, { applied: { ...r, at: '13:57' } });

@@ -1240,7 +1240,12 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .rs-hist { border-top: 1px solid var(--m3-line); padding-top: 6px; margin-top: 4px; }
 .rs-hist .rs-h { display: flex; align-items: center; gap: 6px; color: inherit; }
 .rs-link2 { border: 0; background: none; color: var(--m3-acc); cursor: pointer; font-size: 12px; margin-left: auto; padding: 0; }
-.rs-histt { max-height: none; }
+/* 지난 후보 표 = 늘 같은 크기(2026-11-08): 머리 + 3줄 높이 고정 · 넘치면 스크롤 · 열 폭 고정(긴 사양은 …) */
+.rs-histt { height: 113px; max-height: none; overflow-y: auto; scrollbar-gutter: stable; border: 1px solid var(--m3-line); }
+.rs-histt .om-mx-t td.om-mx-l { white-space: nowrap !important; text-align: left; }
+.rs-histt .om-mx-t { table-layout: fixed; }
+.rs-histt .om-mx-t td, .rs-histt .om-mx-t th { overflow: hidden; text-overflow: ellipsis; height: 24px; box-sizing: border-box; }
+.rs-hist .rs-hn { margin-left: auto; font-size: 12px; }
 @media (max-width: 860px) { .rs-fbs { grid-template-columns: minmax(0, 1fr); } }
 /* 광분포 진행 그래프(2026-11-08): 안내선 · 높이 조절 · 광선 수는 막대 오른쪽 */
 .od-gl { stroke: rgba(128, 140, 160, .22); stroke-width: 1; vector-effect: non-scaling-stroke; }   /* = 1D 광분포 격자 */
