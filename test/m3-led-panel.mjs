@@ -10,7 +10,7 @@ ok(beamPreset({ model: 'lambertian', beam: 120 }) === 120 && beamPreset({ model:
 ok(beamPreset({ model: 'gaussian', beam: 90 }) === 90 && beamPreset({ model: 'gaussian', beam: 60 }) === 60, '가우시안 90/60 = 보통/좁게');
 ok(beamPreset({ model: 'gaussian', beam: 45 }) === 'custom' && beamPreset({ model: 'gaussian', beam: 120 }) === 'custom', '그 밖 = 직접 입력');
 ok(JSON.stringify(beamSpec(120)) === '{"model":"lambertian","beam":120}' && JSON.stringify(beamSpec(90)) === '{"model":"gaussian","beam":90}', '120 → 램버시안, 그 밖 → 가우시안');
-ok(beamSpec(5).beam === 10 && beamSpec(400).beam === 170 && beamSpec(NaN) === null, '각도 10~170 으로 자름 · 숫자 아님 = null');
+ok(beamSpec(5).beam === 10 && beamSpec(400).beam === 180 && beamSpec(180).beam === 180 && beamSpec(NaN) === null, '각도 10~180 으로 자름(180 입력 가능) · 숫자 아님 = null');
 
 // 3D 클릭 → LED 번호
 const lay = { leds: [2, 3, 5], pcb: 0, excluded: [3] };
@@ -54,7 +54,7 @@ const ui = (o = {}) => ({ line, ledList: list, ledGap: 6.25, ...o });
   ok(h.includes('data-lp-tab="basic"') && !h.includes('◀') && !h.includes('하나씩'), '탭 · ◀ ▶ 없음');
   ok(/data-lp-beam="120" aria-pressed="true"/.test(h) && /data-lp-beam="90" aria-pressed="false"/.test(h) && /data-lp-beam="60" aria-pressed="false"/.test(h), '120 = 넓게 눌림');
   ok(h.includes('넓게 120°') && !h.includes('램버시안') && !h.includes('가우시안'), '기본 탭: 쉬운 말 · 모델 이름 숨김');
-  ok(/data-lp-spec="sizeX"/.test(h) && !/data-lp-mauto/.test(h) && !/data-lp-spec="fluxLm"/.test(h) && !h.includes('m3-ledlist') && !/data-lp-dist/.test(h), '기본 탭 = 빛 퍼짐 · 발광면 크기 · 자동 선택');
+  ok(/data-lp-spec="sizeX"/.test(h) && !/data-lp-mauto/.test(h) && !/data-lp-spec="fluxLm"/.test(h) && !h.includes('m3-ledlist') && !/data-lp-dist/.test(h), '기본 탭 = 지향각·퍼짐 · 발광면 크기 · 자동 선택');
   setLpTab('leds', 'detail'); h = ledPanelHtml(man, ui());
   ok(/data-lp-spec="fluxLm"/.test(h) && h.includes('lm/개') && h.includes('0 = 상대값'), '밝기');
   ok(/value="6.3" data-lp-dist/.test(h) && !/data-lp-dist[^>]*disabled/.test(h), '커버까지 거리 — LED 를 안 골라도 보임');
@@ -94,12 +94,12 @@ const ui = (o = {}) => ({ line, ledList: list, ledGap: 6.25, ...o });
   setLpTab('leds', 'basic'); }
 { // 지정은 광원 노드에서만, LED 노드·LED 한 개는 사양만(2026-11-04)
   const mech = { light: { ...defaultLight(), kind: 'step', step: { fromMech: [0, 1], leds: [0, 1], excluded: [], emitters: [{ pos: [0, 0, 0] }], offset: [0, 0, 0], rot: [0, 0, 0], name: 'x' } } };
-  const shut = ledPanelHtml(mech, ui({ pickOnly: true })); ok(shut.includes('class="m3-fl">1</i> LED 지정') && shut.indexOf('data-lp-mauto') < shut.indexOf('LED 수동 선택') && !shut.includes('data-lp-kind') && !shut.includes('role="tab"') && !shut.includes('빛 퍼짐'), '광원 노드 = ① 칸: 자동 아래 수동(접힘)');
+  const shut = ledPanelHtml(mech, ui({ pickOnly: true })); ok(shut.includes('class="m3-fl">1</i> LED 지정') && shut.indexOf('data-lp-mauto') < shut.indexOf('LED 수동 선택') && !shut.includes('data-lp-kind') && !shut.includes('role="tab"') && !shut.includes('지향각'), '광원 노드 = ① 칸: 자동 아래 수동(접힘)');
   setManualOpen(true); const p = ledPanelHtml(mech, ui({ pickOnly: true })); setManualOpen(false);
   ok(p.indexOf('LED 수동 선택') < p.indexOf('data-lp-kind') && ['value="click"', 'value="step"', 'value="manual"', 'value="none"'].every((o) => p.includes(o)) && p.includes('value="click" selected') && !p.includes('value="mech"'), '수동 선택을 누르면 방식 선택 칸');
   ok(ledPanelHtml(mech, ui({ pickOnly: true, pick: 'mled' })).includes('클릭 대기 중 — 취소') && ledPanelHtml(man, ui({ pickOnly: true })).includes('data-lp-kind'), '직접 지정 중이면 늘 펼침');
   const n = ledPanelHtml({ light: { ...man.light, kind: 'none' } }, ui()); ok(n.includes('LED 수동 선택') && !n.includes('role="tab"'), '광원 없음 = ① 칸');
-  setLpTab('leds', 'basic'); const h = ledPanelHtml(man, ui()); ok(!h.includes('LED 수동 선택') && !h.includes('data-lp-mauto') && !h.includes('data-lp-kind') && h.includes('빛 퍼짐') && h.includes('role="tab"'), 'LED 기본 탭 = 사양만');
+  setLpTab('leds', 'basic'); const h = ledPanelHtml(man, ui()); ok(!h.includes('LED 수동 선택') && !h.includes('data-lp-mauto') && !h.includes('data-lp-kind') && h.includes('지향각') && h.includes('role="tab"'), 'LED 기본 탭 = 사양만');
   const one = ledPanelHtml(man, ui({ led: led({}) })); ok(!one.includes('LED 수동 선택') && !one.includes('data-lp-kind'), 'LED 한 개 = 지정 없음');
   setLpTab('leds', 'detail'); const d = ledPanelHtml(man, ui()); ok(!d.includes('data-lp-kind') && !d.includes('인식 고치기') && (d.match(/data-lp-man="count"/g) ?? []).length === 1, 'LED 상세 탭 = 지정 없음'); setLpTab('leds', 'basic'); }
 done();

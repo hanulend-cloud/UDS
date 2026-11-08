@@ -8,11 +8,11 @@ export function beamPreset(spec) {
   if (spec?.model !== 'gaussian') return 120;
   return spec.beam === 90 || spec.beam === 60 ? spec.beam : 'custom';
 }
-// 각도(°, 반치폭) → { model, beam } — 120 = 램버시안, 그 밖 = 가우시안. 10~170 으로 자름, 숫자 아님 = null
+// 각도(°, 반치폭) → { model, beam } — 120 = 램버시안, 그 밖 = 가우시안. 10~180 으로 자름(180 = 반구 끝까지 반치, 2026-11-08), 숫자 아님 = null
 export function beamSpec(angle) {
   const a = Number(angle);
   if (!Number.isFinite(a)) return null;
-  const b = Math.min(170, Math.max(10, Math.round(a * 10) / 10));
+  const b = Math.min(180, Math.max(10, Math.round(a * 10) / 10));
   return b === 120 ? { model: 'lambertian', beam: 120 } : { model: 'gaussian', beam: b };
 }
 // 3D 클릭 → LED 번호 | null. hit = { led }(원뿔) | { part }(합친 장면 번호, nMech 이상 = LED STEP 부품), lay = stepLayout 결과
