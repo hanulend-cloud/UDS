@@ -838,9 +838,12 @@ done();
   ok(Math.abs(eff.shape.dl + eff.milky.dl - 0.1) < 1e-9 && Math.abs(eff.shape.dw + eff.milky.dw - 0.15) < 1e-9 && eff.shape.dl > eff.milky.dl, `항목 효과 합 = 전체 변화(배분): ${JSON.stringify(eff)}`);
   const h = resultViewHtml(r, { effects: eff, hist: [{ label: 'Milky 3.6', Ulen: 0.75, Uwid: 0.77, eff: 0.5 }] });
   ok(h.includes('목표 미달') && (h.match(/rs-card/g) ?? []).length >= 3 && h.includes('0.65') && h.includes('0.75') && h.includes('▲0.10'), '판정 · 카드(이전 → 이후 ▲)');
-  ok(h.includes('② 형상') && h.includes('③ Milky') && h.includes('3.60') && /≈\s*\+0\.\d\d/.test(h), '바뀐 항목 · 효과 ≈');
-  ok(h.includes('data-ad="apply"') && h.includes('data-ad="hpick" data-v="0"') && h.includes('다른 후보') && h.includes('data-ad="chart"'), '적용 · 다른 후보(접힘) · 그래프');
+  ok((h.match(/class="rs-fb /g) ?? []).length === 3 && h.includes('① 위치') && h.includes('② 형상') && h.includes('③ Milky') && h.includes('3.60') && /효과 ≈ 길이 \+0\.\d\d/.test(h) && h.includes('안 돌림') && (h.match(/바뀜/g) ?? []).length === 2, '최적화 인자 상자 3개 · 상태 · 효과 ≈');
+  ok(h.includes('data-ad="apply"') && h.includes('data-ad="hpick" data-v="0"') && h.includes('지난 후보') && !h.includes('<details'), '적용 · 지난 후보(접지 않음)');
+  { const many = Array.from({ length: 6 }, (_, i) => ({ label: `M${i}`, Ulen: 0.7 + i * 0.01, Uwid: 0.7, eff: 0.5 })), hm = resultViewHtml(r, { hist: many }), ha = resultViewHtml(r, { hist: many, histAll: true });
+    ok((hm.match(/data-ad="hpick"/g) ?? []).length === 3 && hm.includes('전체 6개') && (ha.match(/data-ad="hpick"/g) ?? []).length === 6, '지난 후보: 위 3개 · [전체 N개]'); }
+  { const { clip } = await import('../src/ui/m3/autodesign-panel.js'); ok(clip('가'.repeat(30), 10).includes('…') && clip('가'.repeat(30), 10).includes('title=') && clip('짧음', 10) === '짧음', '긴 글 = … + 전체는 마우스'); }
   ok((h.match(/한계/g) ?? []).length === 1, '한계 한 번만');
   const a = resultViewHtml(null, { applied: { ...r, at: '13:57' } });
   ok(a.includes('적용됨') && a.includes('13:57') && a.includes('data-ad="revert"') && !a.includes('data-ad="apply"'), '적용 뒤: 적용됨 · 되돌리기');
-  ok(/≈\s*\+0\.\d\d/.test(resultViewHtml(null, { applied: { ...r, at: '13:57' }, effects: eff })), '적용 뒤에도 항목별 효과'); }
+  ok(/효과 ≈/.test(resultViewHtml(null, { applied: { ...r, at: '13:57' }, effects: eff })), '적용 뒤에도 항목별 효과'); }

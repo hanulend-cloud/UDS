@@ -58,6 +58,7 @@ export function mountResizers(el, { rect, apply, ok = () => true, end = () => {}
 export function createMonitor({ host, items, onChange = () => {}, onTab = () => {} }) {
   const sv = load(), old = sv.lay !== LAY;
   let st = { open: false, min: false, ...DEF_RECT, ...(old ? { open: sv.open, min: sv.min } : sv) };
+  st.min = !!st.min; st.open = !!st.open;
   const persist = () => save({ lay: LAY, open: st.open, min: st.min, x: st.x, y: st.y, w: st.w, h: st.h });
   const el = document.createElement('div');
   const place = () => { const r = clampRect(st.min ? { ...st, w: COLLAPSED_W } : st, innerWidth, innerHeight); st.x = r.x; st.y = r.y; if (!st.min) { st.w = r.w; st.h = r.h; } el.style.left = `${r.x}px`; el.style.top = `${r.y}px`; el.style.width = `${r.w}px`; el.style.height = st.min ? 'auto' : `${r.h}px`; };
@@ -80,6 +81,7 @@ export function createMonitor({ host, items, onChange = () => {}, onTab = () => 
     el.querySelectorAll('[data-mon-tab]').forEach((b) => { const k = b.dataset.monTab, on = k === mode; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); b.disabled = !on && ok[k] === false; });
   }
   function setMin(v) {
+    v = !!v;   // 저장값에 min 이 없으면 undefined → classList.toggle 이 뒤집기로 동작해 몸통은 숨고 단추는 '접기'로 남았음(펼칠 방법 없음, 2026-11-08)
     st.min = v; persist();
     el.classList.toggle('min', v);
     const b = el.querySelector('[data-mon-min]'); b.textContent = v ? '▾ 펼치기' : '▴ 접기'; b.title = v ? '모든 칸 보기' : '제목과 현재 결과만 남기기';
