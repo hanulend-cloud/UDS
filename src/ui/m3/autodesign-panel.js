@@ -146,7 +146,7 @@ export function tileConfigHtml(k, { avail, sel, running, names = [], milkyPart =
 // noLine = 관측 라인 없음 · noLed = 실행할 수 없는 이유(LED 없음·읽는 중) — 실행 불가
 export function nowCardsHtml(nw) {   // 설정 화면 = 지금 값(결과·진행 화면과 같은 자리)
   if (!nw || !Number.isFinite(nw.Ulen)) return '';
-  const c = (label, v, t, pct = false) => `<div class="rs-card"><div class="mut">${label}${!pct && Number.isFinite(t) ? ` · 목표 ${fmtTg(t)}` : ''}</div><div class="rs-v"><b class="${!pct && Number.isFinite(t) ? (v + 1e-9 >= t ? 'ok' : 'bad') : ''}">${pct ? (Number.isFinite(v) ? `${(v * 100).toFixed(1)}%` : '–') : fmtJudge(v)}</b> <span class="mut">지금</span></div></div>`;
+  const c = (label, v, t, pct = false) => `<div class="rs-card"><div class="mut">${label}${!pct && Number.isFinite(t) ? ` · 목표 ${fmtTg(t)}` : ''}</div><div class="rs-v"><b class="${!pct && Number.isFinite(t) ? (v + 1e-9 >= t ? 'ok' : 'bad') : ''}">${pct ? (Number.isFinite(v) ? `${(v * 100).toFixed(1)}%` : '–') : fmtJudge(v)}</b><span class="rs-side">지금</span></div></div>`;
   return `<div class="rs-cards">${c('길이 균일도', nw.Ulen, nw.tgLen)}${c('폭 균일도', nw.Uwid, nw.tgWid)}${c('광 효율', nw.eff, NaN, true)}</div>`;
 }
 export function autoCardHtml({ avail, sel, running, canRevert = false, noLine = false, noLed = '', applied = null }) {
@@ -367,7 +367,7 @@ function changeCard(label, a, b, t, pct = false) {
   const cls = !pct && Number.isFinite(t) && Number.isFinite(b) ? (b + 1e-9 >= t ? 'ok' : 'bad') : '';
   const W = (v) => `${Math.round(Math.max(0, Math.min(1, v)) * 1000) / 10}%`;
   const bar = !pct && Number.isFinite(a) && Number.isFinite(b) ? `<div class="rs-bar"><i class="rs-b0" style="width:${W(Math.min(a, b))}"></i><i class="rs-b1 ${b < a ? 'dn' : ''}" style="left:${W(Math.min(a, b))};width:${W(Math.abs(b - a))}"></i>${Number.isFinite(t) ? `<i class="rs-tg" style="left:${W(t)}" title="목표 ${fmtTg(t)}"></i>` : ''}</div>` : '';
-  return `<div class="rs-card"><div class="mut">${label}${!pct && Number.isFinite(t) ? ` · 목표 ${fmtTg(t)}` : ''}</div><div class="rs-v"><span class="mut">${fa(a)}</span> → <b class="${cls}">${fa(b)}</b> ${dTxt}</div>${bar}</div>`;
+  return `<div class="rs-card"><div class="mut">${label}${!pct && Number.isFinite(t) ? ` · 목표 ${fmtTg(t)}` : ''}</div><div class="rs-v"><b class="${cls}">${fa(b)}</b><span class="rs-side">시작 ${fa(a)} ${dTxt}</span></div>${bar}</div>`;   // 바뀐 값 = 왼쪽 크게, 시작·변화 = 오른쪽(카드 높이 고정에서 안 잘리게, 2026-11-08)
 }
 const ITEM_NAME = { LED: '① LED 배치', 'LED 높이': '① LED 높이', 형상: '② 형상', Milky: '③ Milky', '케이스 면': '케이스 면' };
 const STAGE_KEY = { position: ['leds', 'height', 'position'], shape: ['shape'], milky: ['milky'], housing: ['housing'] };

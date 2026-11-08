@@ -1282,3 +1282,13 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .m3-mon .om-k .om-v { display: inline; }
 .m3-mon .rs-card .rs-bar { height: 4px; }
 .m3-mon[data-mode] .m3-mon-body #m3-auto { padding: 8px 10px; }   /* 세 화면 카드 높이 위치 같게 */
+/* 길이·폭·효율 카드 안 배치(2026-11-08): 윗줄 = 이름, 아랫줄 = 값(왼쪽 크게) · 시작·변화(오른쪽) — 높이 54px 안에서 안 잘리게, 막대는 맨 아래 선 */
+.m3-mon .rs-card, .m3-mon .om-k { position: relative; justify-content: flex-start; gap: 2px; }
+.m3-mon .rs-card > .mut:first-child, .m3-mon .om-k > div:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m3-mon .rs-card .rs-v { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; white-space: nowrap; }
+.m3-mon .rs-side { font-size: 11px; color: var(--m3-mut); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.m3-mon .rs-card .rs-bar { position: absolute; left: 10px; right: 10px; bottom: 4px; height: 3px; }
+.m3-mon .om-k { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 6px; row-gap: 2px; align-content: start; }
+.m3-mon .om-k > div:first-child { grid-column: 1 / -1; }
+.m3-mon .om-k > .om-v { grid-column: 1; align-self: baseline; }
+.m3-mon .om-k > div:last-child:not(:first-child) { grid-column: 2; justify-self: end; align-self: baseline; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
