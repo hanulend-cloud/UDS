@@ -620,7 +620,8 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     wireMapHover(cvs.map); cvs.map._onPin = onPin; cvs.map._onPinOff = pinOff; cvs.map._onMenu = (e, c, cv) => mapMenu(e, c, cv); wireHover(cvs.prof); wireHover(cvs.wprof); cvs.prof._onMenu = plotMenu('prof'); cvs.wprof._onMenu = plotMenu('wprof');
     // 창 안 크기 조절: 2D ↕ 1D(높이) · 길이 1D ↔ 폭 1D(폭) — 끌기 막대(비율 기억). 창 자체 = 오른쪽 아래 모서리(CSS resize)
     const C = (k) => ov.querySelector(`.m3-big-c[data-k="${k}"]`);
-    mountSplit([C('map'), ov.querySelector('.m3-big-row')], { key: 'uds.m3.bigV', dir: 'col', min: 120, onChange: () => paintBig() });
+    // 진행 현황(그래프) ↕ 2D ↕ 1D — 경계선을 끌어 높이 조절(2026-11-08: 진행 그래프도 크기 조절)
+    mountSplit([ov.querySelector('[data-big-prog]'), C('map'), ov.querySelector('.m3-big-row')], { key: 'uds.m3.bigV3', dir: 'col', min: 90, init: [1.2, 3, 2], onChange: () => { paintBig(); window.dispatchEvent(new Event('resize')); } });
     mountSplit([C('prof'), C('wprof')], { key: 'uds.m3.bigH', dir: 'row', min: 160, onChange: () => paintBig() });
     if (typeof ResizeObserver !== 'undefined') { big.ro = new ResizeObserver(() => paintBig()); big.ro.observe(ov); }
     setMin(false); raiseWin(ov); setFocus(null); syncBig(); onBig?.(ov.querySelector('[data-big-prog]'));

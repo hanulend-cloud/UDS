@@ -1242,3 +1242,9 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .rs-link2 { border: 0; background: none; color: var(--m3-acc); cursor: pointer; font-size: 12px; margin-left: auto; padding: 0; }
 .rs-histt { max-height: none; }
 @media (max-width: 860px) { .rs-fbs { grid-template-columns: minmax(0, 1fr); } }
+/* 광분포 진행 그래프(2026-11-08): 안내선 · 높이 조절 · 광선 수는 막대 오른쪽 */
+.od-gl { stroke: var(--m3-line, #d9dde5); stroke-width: 1; vector-effect: non-scaling-stroke; opacity: .75; }
+.od-gl.v { stroke-dasharray: 2 3; }
+.m3-big-prog { max-height: none !important; min-height: 0; }
+.m3-big-prog .od-pct { gap: 8px; }
+.od-capr { flex: none; margin: 0 !important; color: var(--m3-mut, #6b7385); }
