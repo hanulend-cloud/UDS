@@ -43,11 +43,11 @@ export function factorBoardHtml(S, nw = {}, cfg = null) {
     const [chipC, chipT] = t && t.status !== 'off' ? { wait: ['st-wait', '대기'], run: ['st-run', `진행 ${Math.round(t.frac * 100)}%`], done: ['st-done', '✓ 완료'] }[t.status] : on ? ['st-on', '켜짐'] : ['st-off', '꺼짐'];
     const txt = `지금 ${nowTxt}${b ? ` → ${b.label} (${fmtJudge(b.Ulen)}/${fmtJudge(b.Uwid)})` : ''}`;
     const box = c?.box ? `<label class="fb-sw" title="${esc(c.why || '최적화에 사용')}">${c.box}</label>` : '<span class="fb-sw"></span>';
-    return `<div class="fb-card${on ? '' : ' fb-off'}" style="--fb:${FB_COL[k]}" title="${esc(txt)}">${head(box, chipC, chipT)}<div class="fb-in"><div class="fb-val"><span class="mut">지금</span> ${esc(nowTxt)}${b ? ` → <b>${esc(b.label)}</b> <span class="mut">(${fmtJudge(b.Ulen)}/${fmtJudge(b.Uwid)})</span>` : ''}</div>${c?.opt ? `<div class="fb-opt">${c.opt}</div>` : ''}</div></div>`;
+    return `<div class="fb-card${on ? '' : ' fb-off'}" style="--fb:${FB_COL[k]}" title="${esc(txt)}">${head(box, chipC, chipT)}<div class="fb-in"><div class="fb-val"><span class="mut">지금</span> ${esc(nowTxt)}</div>${c?.opt ? `<div class="fb-opt">${c.opt}</div>` : ''}</div></div>`;
   };
   // 그래프는 오른쪽 모니터로(2026-10-30) — 여기는 입력(체크·옵션)과 상태만
   const nowOf = { position: nw.leds ?? '–', housing: nw.housing ?? '–', shape: nw.shape ?? '원래 형상', milky: Number.isFinite(nw.milky) ? `Milky ${f2(nw.milky)}` : '확산 부품 없음' };
-  return `<div class="od-h">설계 인자 <span class="mut">체크 = 이번에 최적화 · 🔒 = 적용해서 고정</span> <span class="mut">${Number.isFinite(nw.Ulen) ? `지금 ${fmtJudge(nw.Ulen)}/${fmtJudge(nw.Uwid)}` : ''}</span></div>
+  return `<div class="od-h" title="체크 = 이번에 최적화 · 🔒 = 적용해서 고정">설계 인자</div>
     <div class="fb-cards">${STAGES.map(([k, name]) => row(k, name, nowOf[k])).join('')}</div>
 `;
 }
@@ -80,7 +80,7 @@ export function factorChartSvg(S, nw = {}, W = 240, H = 100) {
     const grid = [lo, (lo + hi) / 2, hi].map((v) => `<line class="od-gr" x1="${x0}" x2="${x1}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text class="od-ax" x="${x0 - 3}" y="${(Y(v) + 3).toFixed(1)}" text-anchor="end">${v.toFixed(2)}</text>`).join('');
     const final = Number.isFinite(fv) ? (() => { const fx = x1 + 8, fy = Y(fv), p = (dx, dy) => `${(fx + dx).toFixed(1)},${(fy + dy).toFixed(1)}`; return `<polygon class="od-final" points="${p(0, -5)} ${p(5, 0)} ${p(0, 5)} ${p(-5, 0)}"/><text class="od-lb od-lb-fin" x="${fx + 7}" y="${(fy - 7 < y0 ? fy + 13 : fy - 7).toFixed(1)}" text-anchor="end">최종 ${fmtJudge(fv)}</text>`; })() : '';
     const ok = Number.isFinite(last) && Number.isFinite(t) ? (last + 1e-9 >= t ? '<span class="od-ok">✓</span>' : '<span class="od-bad">✕</span>') : '';
-    return `<div><div class="od-simt"><b>${title}</b> 시작 ${fmtJudge(v0)} → 최고 ${fmtJudge(last)}${ok} · 목표 ${f2(t)}</div><svg class="od-sim" width="${cw}" height="${ch}" viewBox="0 0 ${cw} ${ch}">${bands}${grid}${st}${tg}${dots}${line ? `<polyline class="${s}" points="${line}"/>` : ''}${mark}${final}${hits}<text class="od-ax" x="${((x0 + x1) / 2).toFixed(1)}" y="${ch - 3}" text-anchor="middle">시험한 후보 ${n}개 (시험한 순서 →)</text></svg></div>`;
+    return `<div><div class="od-simt"><b>${title}</b></div><svg class="od-sim" width="${cw}" height="${ch}" viewBox="0 0 ${cw} ${ch}">${bands}${grid}${st}${tg}${dots}${line ? `<polyline class="${s}" points="${line}"/>` : ''}${mark}${final}${hits}<text class="od-ax" x="${((x0 + x1) / 2).toFixed(1)}" y="${ch - 3}" text-anchor="middle">시험한 후보 ${n}개 (시험한 순서 →)</text></svg></div>`;
   };
   return `<div class="od-sim2${one ? ' one' : ''}">${panel('Ulen', tl, nw.Ulen, '길이 균일도', 'od-s1', 'od-d1')}${panel('Uwid', tw, nw.Uwid, '폭 균일도', 'od-s2', 'od-d2')}</div>`;
 }
@@ -115,7 +115,7 @@ export function monitorHtml(S, sec = 0, { chart = true } = {}) {
     else if (t.status === 'done') steps.push(step('done', name, `✓${uv(stageBest(t, tl, tw))}`));
     else if (t.status === 'wait') steps.push(step('wait', name, '대기'));
   }
-  steps.push(S.ended != null ? step('done', '검증', `✓${uv(fin0)}`) : busy && S.verFrac != null ? step('run', '검증', `${Math.round(S.verFrac * 100)}%`) : step('wait', '검증', ''));
+  steps.push(S.ended != null ? step('done', '검증', '✓') : busy && S.verFrac != null ? step('run', '검증', `${Math.round(S.verFrac * 100)}%`) : step('wait', '검증', ''));
   const b0 = S.before ?? {};
   const kpi = (label, tg, v, v0) => {
     const pass = Number.isFinite(v) && Number.isFinite(tg) ? (v + 1e-9 >= tg ? 'ok' : 'bad') : '';
@@ -132,13 +132,12 @@ export function monitorHtml(S, sec = 0, { chart = true } = {}) {
   // 판정은 한 줄만 — 값은 아래 지표 카드에(같은 값을 여러 곳에 쓰지 않음, 2026-11-08)
   const say = busy ? `<p><b>지금</b> ${esc(doing)}</p>`
     : S.stopped ? '<p><b>중지했습니다.</b> 찾던 안은 설계에 반영되지 않았습니다.</p>'
-    : J.all === 'near' ? '<p class="om-vd near"><b>≈ 목표 근처</b> <span class="mut">차이가 노이즈보다 작아 통과·미달이 계산마다 달라질 수 있음</span></p>'
-    : S.ended ? '<p class="om-vd ok"><b>✓ 목표 통과</b></p>' : '<p class="om-vd bad"><b>✕ 목표 미달</b> <span class="mut">가장 가까운 안을 골랐습니다</span></p>';
+    : '';
   const pct = S.ended != null ? 100 : Math.round(Math.max(0, Math.min(1, S.overall ?? 0)) * 100);
   return `<div class="od-pct om-pct"><b>${pct}%</b><div class="od-bar od-bar-big" role="progressbar" aria-label="기구 최적화 진행" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div><span class="mut od-simst">${busy ? `${S.pauseAt ? '일시정지' : '진행'} ${mmss(sec)}` : S.stopped ? '중지됨' : `끝남 ${mmss((S.endSec ?? sec))}`} · 후보 ${nEval}개</span></div>
     <div class="om-steps">${steps.join('<i class="om-ar">→</i>')}</div>
     <div class="om-say">${say}</div>
-    <div class="om-kpi">${kpi(fin ? '길이 균일도 최종' : '길이 균일도', tl, cur?.Ulen ?? b0.Ulen, b0.Ulen)}${kpi(fin ? '폭 균일도 최종' : '폭 균일도', tw, cur?.Uwid ?? b0.Uwid, b0.Uwid)}${effK}</div>
+    <div class="om-kpi">${kpi('길이 균일도', tl, cur?.Ulen ?? b0.Ulen, b0.Ulen)}${kpi('폭 균일도', tw, cur?.Uwid ?? b0.Uwid, b0.Uwid)}${effK}</div>
     ${chart ? chartHtml() : ''}
     <details class="om-more" data-keep="mx"><summary>상세 — 항목별 현황</summary>${optMatrixHtml(S)}</details>`;
 }

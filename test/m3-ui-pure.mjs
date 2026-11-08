@@ -457,8 +457,8 @@ ok(judgeText(0.3, 0.8, null, 0.2).cls === 'busy' && /판정 보류/.test(judgeTe
   const tiles = Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', text: '' }]));
   const S = { tiles, seq: [], tgLen: 0.8, tgWid: 0.8, ended: false, endSec: 10, note: '균일도 최고 Milky 1.5에서도 길이 균일도 0.80 · 폭 균일도 0.84 — 목표 0.80 / 0.80 미달 · 한계: 길이 방향', b0: {} };
   const near = monitorHtml({ ...S, final: { Ulen: 0.799, seLen: 0.004, Uwid: 0.84, seWid: 0.004 } }, 10), say = near.match(/om-say">([\s\S]*?)<\/div>/)[1];
-  ok(say.includes('목표 근처') && !say.includes('목표 미달') && !say.includes('0.80'), `근처 판정 한 줄(값은 지표 카드에): ${say.replace(/<[^>]+>/g, '').slice(0, 90)}`);
-  const bad = monitorHtml({ ...S, final: { Ulen: 0.7, seLen: 0.004, Uwid: 0.84, seWid: 0.004 } }, 10), bsay = bad.match(/om-say">([\s\S]*?)<\/div>/)[1]; ok(bsay.includes('목표 미달') && !bsay.includes('0.70'), '미달 판정 한 줄'); }
+  ok(!say.includes('목표') && !say.includes('0.80'), `끝나면 판정 문장 없음(결과 카드에): ${say.replace(/<[^>]+>/g, '').slice(0, 90)}`);
+  const bad = monitorHtml({ ...S, final: { Ulen: 0.7, seLen: 0.004, Uwid: 0.84, seWid: 0.004 } }, 10), bsay = bad.match(/om-say">([\s\S]*?)<\/div>/)[1]; ok(!bsay.includes('0.70'), '미달도 값 반복 없음'); }
 { // 광원 접기 · 관측면 창 ②·③ 번호 · 목표 꼭 입력
   const base = { parts: [], observe: { faces: [], targetLen: 0.8, targetWid: 0.8 }, light: { kind: 'manual', spec: { beam: 120 }, manual: { count: 3, pitch: 0, rows: 1 } }, checks: {} };
   const open = treeNodes(base, { node: null, line: null }), shut = treeNodes(base, { node: null, line: null, fold: { light: true } });
@@ -516,7 +516,7 @@ ok(judgeText(0.3, 0.8, null, 0.2).cls === 'busy' && /판정 보류/.test(judgeTe
   const seq = [{ k: 'milky', label: 'Milky 1', Ulen: 0.7, Uwid: 0.9 }, { k: 'milky', label: 'Milky 2', Ulen: 0.82, Uwid: 0.84 }, { k: 'milky', label: 'Milky 3', Ulen: 0.75, Uwid: 0.86 }];
   const S = { tgLen: 0.8, tgWid: 0.8, seq, before: { Ulen: 0.6, Uwid: 0.7 }, overall: 0.44, tiles: Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', evals: [] }])) };
   const g = factorChartSvg(S, S.before, 600, 170);
-  ok((g.match(/<svg/g) ?? []).length === 2 && g.includes('길이 균일도') && g.includes('폭 균일도') && g.includes('최고 0.82') && g.includes('최고 0.84') && g.includes('시작 0.60') && g.includes('③ 확산도(Milky)') && (g.match(/od-cand/g) ?? []).length === 6 && g.includes('<title>후보 2'), '그래프 2개: 최고 = 같은 후보 · 후보 점 · 항목 이름');
+  ok((g.match(/<svg/g) ?? []).length === 2 && g.includes('길이 균일도') && g.includes('폭 균일도') && !g.includes('→ 최고') && g.includes('시작 0.60') && g.includes('③ 확산도(Milky)') && (g.match(/od-cand/g) ?? []).length === 6 && g.includes('<title>후보 2'), '그래프 2개: 최고 = 같은 후보 · 후보 점 · 항목 이름');
   ok(factorChartSvg({ ...S, seq: [] }, {}, 600, 170).includes('후보를 시험하면'), '후보 전 안내');
   ok(g.includes('목표 0.80') && g.includes('시작 0.60') && g.includes('시작 0.70') && /시험한 후보 3개/.test(g), '그래프 안에 목표·시작선 이름과 가로축 뜻');
   ok(!g.includes('최종') && factorChartSvg({ ...S, final: { Ulen: 0.7886, Uwid: 0.8 } }, S.before, 600, 170).includes('최종 0.78') && (factorChartSvg({ ...S, final: { Ulen: 0.7886, Uwid: 0.8 } }, S.before, 600, 170).match(/od-final/g) ?? []).length === 2, '최종 판정 값을 후보 값과 구분해 표시');
@@ -555,7 +555,7 @@ done();
   const ok5 = (c, m) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) process.exitCode = 1; };
   const base = { unchanged: true, feasible: true, cur: { Ulen: 0.83, Uwid: 0.8 }, best: { Ulen: 0.83, Uwid: 0.8 }, targets: { len: 0.8, wid: 0.8 } };
   const a = resultLineHtml({ ...base, alt: { design: { milky: 2.47 }, milky: 2.47, Ulen: 0.84, Uwid: 0.8 } }), b = resultLineHtml(base);
-  ok5(!a.includes('data-ad="apply"') && a.includes('data-ad="applyAlt"') && a.includes('후보로 바꾸기 (Milky 2.47) · 0.84/0.80') && a.includes('유지를 추천') && !b.includes('applyAlt'), '현재안 유지 + 찾은 후보 → 단추는 [후보로 바꾸기] 하나 · 이유 한 줄'); }
+  ok5(!a.includes('data-ad="apply"') && a.includes('data-ad="applyAlt"') && a.includes('후보로 바꾸기 (Milky 2.47)<') && a.includes('0.84') && a.includes('유지를 추천') && !b.includes('applyAlt'), '현재안 유지 + 찾은 후보 → 단추는 [후보로 바꾸기] 하나 · 이유 한 줄'); }
 { const { etaText } = await import('../src/ui/m3/opt-dash.js');
   const H = [{ ph: 1e6, t: 0, noise: 0.1 }, { ph: 2e6, t: 5000, noise: 0.07 }, { ph: 3e6, t: 10000, noise: 0.0577 }];
   const e = etaText(H, 0.02);
@@ -695,7 +695,7 @@ done();
     cur: { count: 40, pitch: 10, milky: 1.43, Ulen: 0.61, Uwid: 0.6, eff: 0.107 }, best: { count: 40, pitch: 10, milky: 1.8, Ulen: 0.66, Uwid: 0.62, eff: 0.1 } };
   const h = resultLineHtml(r);
   { const hn = resultLineHtml({ ...r, targets: { ...(r.targets ?? {}), len: 0.8, wid: 0.8, judge: { all: 'near', len: 'near', wid: 'ok' } } }); if (!hn.includes('m3-rcard near') || !hn.includes('목표 근처') || !hn.includes('≈')) throw new Error('결과 카드 근처 표시'); }
-  console.log(h.includes('m3-rcard bad') && h.includes('목표 미달') && h.includes('<th>Milky') && !h.includes('<th>LED') && h.includes('<th>길이 균일도') && h.includes('<th>광 효율') && h.includes('💡 한계: 길이 방향 — 끝단이 가장 어두움') && h.includes('data-ad="view"') && limitText('없음') === ''
+  console.log(h.includes('m3-rcard bad') && h.includes('목표 미달') && h.includes('<th>Milky') && !h.includes('<th>LED') && !h.includes('<th>길이 균일도') && !h.includes('<th>광 효율') && h.includes('💡 한계: 길이 방향 — 끝단이 가장 어두움') && h.includes('data-ad="view"') && limitText('없음') === ''
     ? 'PASS 기구 최적화 결과 카드(판정·바뀐 사양만·한계 한 줄)' : (process.exitCode = 1, `FAIL 결과 카드 ${h}`)); }
 { const { milkyTable, milkyTableHtml } = await import('../src/ui/m3/autodesign-panel.js');
   // Milky 조정 표: 마지막 Milky 단계 기록(뒤에서부터 연속 'milky', ② 기준 'ledsRef' 제외)만 · 같은 Milky 는 정밀(나중) 값 · 믿는 행만 · Milky 오름차순

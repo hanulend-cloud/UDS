@@ -63,7 +63,7 @@ export function createMonitor({ host, items, onChange = () => {} }) {
   const place = () => { const r = clampRect(st.min ? { ...st, w: COLLAPSED_W } : st, innerWidth, innerHeight); st.x = r.x; st.y = r.y; if (!st.min) { st.w = r.w; st.h = r.h; } el.style.left = `${r.x}px`; el.style.top = `${r.y}px`; el.style.width = `${r.w}px`; el.style.height = st.min ? 'auto' : `${r.h}px`; };
   const kick = () => window.dispatchEvent(new Event('resize'));   // 담은 칸의 그래프·캔버스 크기 다시
   el.className = 'm3-mon'; el.hidden = true; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', '기구 최적화');
-  el.innerHTML = `<div class="m3-mon-hd" title="끌어서 옮기기"><b><i class="m3-fl" data-mon-step>5</i>기구 최적화</b><span class="mut m3-mon-flow" title="④ 광분포 시뮬레이션이 목표 미달이면 여기서 Milky·LED 위치·형상 후보를 찾아 최종 화질로 판정하고, [적용] 하면 그 값이 화면에 그대로 나옴">④ 결과 미달 → 후보 탐색 → 최종 판정 → 적용</span><span class="m3-mon-sum" data-mon-sum></span><span class="m3-mon-sp"></span><span class="m3-ctl" data-mon-ctl></span><button type="button" data-mon-min></button><button type="button" data-mon-close title="창 닫기(진행 중인 최적화는 계속)">✕ 닫기</button></div><div class="m3-mon-body"></div>`;
+  el.innerHTML = `<div class="m3-mon-hd" title="끌어서 옮기기 · ④ 광분포 결과가 목표 미달이면 여기서 후보를 찾아 최종 판정 → [적용]"><b><i class="m3-fl" data-mon-step>5</i>기구 최적화</b><span class="m3-mon-sum" data-mon-sum></span><span class="m3-mon-sp"></span><span class="m3-ctl" data-mon-ctl></span><button type="button" data-mon-min></button><button type="button" data-mon-close title="창 닫기(진행 중인 최적화는 계속)">✕ 닫기</button></div><div class="m3-mon-body"></div>`;
   const body = el.querySelector('.m3-mon-body');
   for (const it of items.filter(Boolean)) body.appendChild(it);   // 기본 화면에서 빼서 창 안으로(닫아도 여기 그대로)
   host.appendChild(el);

@@ -236,7 +236,7 @@ export function appliedHtml(applied) {
 // el 에 카드를 그리고 이벤트를 h 로 넘긴다. state = { avail, sel, running, result, names, canRevert, noLine, milkyPart }
 // 실행 중 카드 구조가 같으면 진행 막대·문구만 바꿈(갱신마다 innerHTML 을 다시 만들지 않게)
 // '현재안 유지'인데 시험한 후보가 있으면(차이가 노이즈 수준·더 나쁨) [후보로 바꾸기] — 후보 값을 함께 보임. [적용] = 추천안이 있을 때만, 이때는 숨김(같은 뜻의 단추 둘로 헷갈림, 2026-11-02)
-const altBtn = (r) => (r.unchanged && r.alt ? `<button type="button" data-ad="applyAlt" title="추천은 지금 설계 유지 — 그래도 찾은 후보로 바꾸려면 누름">후보로 바꾸기${r.alt.milky != null ? ` (Milky ${(+r.alt.milky).toFixed(2)})` : ''} · ${fmtJudge(r.alt.Ulen)}/${fmtJudge(r.alt.Uwid)}</button>` : '');
+const altBtn = (r) => (r.unchanged && r.alt ? `<button type="button" data-ad="applyAlt" title="추천은 지금 설계 유지 — 그래도 찾은 후보로 바꾸려면 누름">후보로 바꾸기${r.alt.milky != null ? ` (Milky ${(+r.alt.milky).toFixed(2)})` : ''}</button>` : '');
 const altNote = (r) => (r.unchanged && r.alt ? `<div class="m3-rlim">찾은 후보 길이 ${fmtJudge(r.alt.Ulen)} · 폭 ${fmtJudge(r.alt.Uwid)} (지금 ${fmtJudge(r.cur?.Ulen)} · ${fmtJudge(r.cur?.Uwid)}) — 지금보다 뚜렷이 낫지 않아 지금 설계 유지를 추천</div>` : '');
 const applyBtn = (r, clashTitle) => (r.unchanged ? '' : r.clash > 0 ? `<button type="button" class="m3-off" data-ad="applyBlocked" title="${clashTitle}">적용</button>` : `<button type="button" data-ad="apply">적용</button>`);
 // Milky 조정 표(2026-10-29) — 마지막 ① Milky 단계 기록(뒤에서부터 연속 'milky' 단계, ② 기준 'ledsRef' 제외)의 Milky 별 길이 균일도·폭 균일도·광 효율.
@@ -349,12 +349,12 @@ function notesHtml(r) {
   return `<details class="m3-more" data-keep="notes"><summary>참고${n.length ? ` ${n.length}개` : ''}${mt ? ' · Milky 표' : ''}</summary>${n.join('')}${mt}</details>`;
 }
 export function resultLineHtml(r) {
-  const verdict = r.unchanged ? ['keep', '현재안 유지', r.caseCheck ? '고른 후보를 쓸 수 없음' : '더 나은 안 없음'] : r.targets?.judge?.all === 'near' ? ['near', '목표 근처', '통과·미달을 가를 수 없는 차이'] : r.feasible ? ['ok', '목표 통과', r.caseCheck ? '고른 후보' : '최적안을 찾음'] : ['bad', '목표 미달', r.caseCheck ? '고른 후보' : '가장 가까운 안'];
+  const verdict = r.unchanged ? ['keep', '현재안 유지', r.caseCheck ? '고른 후보를 쓸 수 없음' : '더 나은 안 없음'] : r.targets?.judge?.all === 'near' ? ['near', '≈ 목표 근처', '통과·미달을 가를 수 없는 차이'] : r.feasible ? ['ok', '✓ 목표 통과', r.caseCheck ? '고른 후보' : '최적안을 찾음'] : ['bad', '✕ 목표 미달', r.caseCheck ? '고른 후보' : '가장 가까운 안'];
   const P = cmpParts(r), chg = P.design.filter((x) => x.includes('class="chg"'));   // 설계 항목 = 바뀐 것만, 목표 지표 = 늘
-  const rows = `${secRow('목표 지표')}${P.metric.join('')}${secRow('설계 최적화 항목')}${chg.length ? chg.join('') : '<tr><td colspan="3" class="mut">바뀐 항목 없음</td></tr>'}`;
+  const rows = chg.join('');   // 균일도·효율은 오른쪽 지표 카드에(같은 값 두 번 안 씀, 2026-11-08)
   const lim = limitText(r.reason), clash = r.clash > 0 ? `<div class="m3-clash" role="alert">LED 몸체가 부품과 겹침(${r.clash}개) — 적용 불가</div>` : '';
   return `<div class="m3-rcard ${verdict[0]}"><div class="m3-rcard-hd"><b class="m3-rv">${verdict[1]}</b><span class="mut">${verdict[2]}</span></div>
-    <table class="m3-cmp m3-cmp-s"><tr><th></th><th>현재</th><th>최적화 후</th></tr>${rows}</table>${clash}
+    ${rows ? `<table class="m3-cmp m3-cmp-s"><tr><th></th><th>현재</th><th>최적화 후</th></tr>${rows}</table>` : ''}${clash}
     ${lim ? `<div class="m3-rlim">💡 한계: ${esc(lim)}</div>` : ''}
     ${notesHtml(r)}
     ${altNote(r)}<div class="m3-rbtn">${applyBtn(r, 'LED 몸체가 부품과 겹침')}${altBtn(r)}${shapeDeepBtn(r)}<button type="button" data-ad="cancel">취소</button>${r.clash > 0 ? '' : `<button type="button" data-ad="continue" title="${r.unchanged ? '지금 설계 그대로' : '이 안을 적용한 뒤'}, 체크했지만 이번에 돌리지 않은 항목(예: 위치·Milky)을 그 위에서 이어서 최적화">이 안에서 이어서 ▸</button>`}<span class="m3-ad-sp"></span><button type="button" data-ad="view" title="프로파일 비교·사유 전문">자세히 ▸</button></div></div>`;
