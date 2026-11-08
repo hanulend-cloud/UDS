@@ -852,5 +852,5 @@ done();
   const H = [{ ph: 1e6, noise: 0.04, Ulen: 0.5, Uwid: 0.6 }, { ph: 4e6, noise: 0.02, Ulen: 0.7, Uwid: 0.75 }], svg = simPlotSvg(H, 0.01, { targetLen: 0.8, targetWid: 0.8 }, 600, 160);
   const parts = svg.split('<svg').slice(1), gl = (s, v) => (s.match(new RegExp(`class="od-gl ${v}"`, 'g')) ?? []).length;
   ok(parts.length === 2 && parts.every((s) => gl(s, 'h') >= 2 && gl(s, 'v') >= 2), `두 그래프 모두 가로·세로 안내선: ${parts.map((s) => `${gl(s, 'h')}/${gl(s, 'v')}`)}`);
-  ok(/>400만</.test(svg) || />800만</.test(svg), '세로 안내선 눈금 = 광선 수');
+  ok(/text-anchor="middle">[0-9,]+만</.test(svg), '세로 안내선 눈금 = 광선 수');
   ok(simCaption(H, 0.01, {}, 'done') === '광선 400만 / 총 400만', '광선 수 글'); }

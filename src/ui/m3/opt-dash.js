@@ -283,6 +283,7 @@ export function reachDiag(ledger, leak, names = []) {
 // 진행 현황 그래프(순수, 2026-11-03) — 가로 = 광선 수(0 ~ 예상 총광선), 세로 = 균일도 %(점선 = 목표). H = [{ ph, noise, Ulen, Uwid }]
 export const simTotal = (last, tgt) => (last ? Math.max(last.ph, Number.isFinite(last.noise) ? last.ph * (last.noise / tgt) ** 2 : 0) : 0);
 // 진행 그래프 2개(2026-11-04): ① 계산 오차가 목표까지 내려가는 모습(남은 양 = 점선 예상) ② 길이·폭 균일도와 목표선(세로 막대 = 값의 불확실 범위 ±2 표준오차)
+const niceStep = (span, want) => { const raw = span / want, p = 10 ** Math.floor(Math.log10(raw)); for (const m of [1, 2, 5, 10]) if (m * p >= raw) return m * p; return 10 * p; };   // results-panel 1D 와 같은 눈금 간격
 const lineOf = (pts) => pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
 export function simPlotSvg(H, tgt, obs, w, h) {
   if (!(H?.length > 1)) return '';
@@ -290,8 +291,10 @@ export function simPlotSvg(H, tgt, obs, w, h) {
   const x0 = 28, x1 = cw - 5, y0 = 4, y1 = ch - 12, X = (ph) => x0 + (ph / total) * (x1 - x0), f1 = (v) => (Number.isFinite(v) ? (v * 100).toFixed(1) : '–'), f2 = (v) => (v * 100).toFixed(2);
   const xAxis = `<line class="od-ax-l" x1="${x0}" x2="${x1}" y1="${y1}" y2="${y1}"/><text class="od-ax" x="${x0}" y="${ch - 2}">0</text><text class="od-ax" x="${x1}" y="${ch - 2}" text-anchor="end">총 ${human(total)} 광선</text>`;
   // 안내선(2026-11-08): 세로 = 광선 수 ¼·½·¾(눈금 글), 가로 = 그래프마다 눈금(목표 글과 겹치면 글 생략)
-  const vGrid = [1, 2, 3].map((k) => { const ph = (total * k) / 4, x = X(ph).toFixed(1); return `<line class="od-gl v" x1="${x}" x2="${x}" y1="${y0}" y2="${y1}"/>${cw >= 200 ? `<text class="od-ax" x="${x}" y="${ch - 2}" text-anchor="middle">${human(ph)}</text>` : ''}`; }).join('');
-  const hGrid = (ys, Y, lab, avoid) => ys.map((v) => { const y = Y(v); return `<line class="od-gl h" x1="${x0}" x2="${x1}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/>${avoid.every((a) => Math.abs(a - y) > 9) ? `<text class="od-ax" x="${x0 - 3}" y="${(y + 3).toFixed(1)}" text-anchor="end">${lab(v)}</text>` : ''}`; }).join('');
+  // 1D 광분포와 같은 양식(2026-11-08): 실선 격자(가로 진하게·세로 옅게) · 테두리 · 회색 눈금 글 · 세로 눈금 = 보기 좋은 간격(≈70px)
+  const xst = niceStep(total, Math.max(2, Math.round((x1 - x0) / 70))), vTicks = []; for (let ph = xst; ph < total * 0.97; ph += xst) vTicks.push(ph);
+  const vGrid = vTicks.map((ph) => { const x = X(ph).toFixed(1); return `<line class="od-gl v" x1="${x}" x2="${x}" y1="${y0}" y2="${y1}"/>${X(ph) < x1 - 40 ? `<text class="od-ax" x="${x}" y="${ch - 2}" text-anchor="middle">${human(ph)}</text>` : ''}`; }).join('') + `<rect class="od-frame" x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}"/>`;
+  const hGrid = (ys, Y, lab, avoid) => { const gap = ys.length > 1 ? Math.abs(Y(ys[1]) - Y(ys[0])) : 99, every = gap >= 11 ? 1 : gap >= 6 ? 2 : 0; return ys.map((v, i) => { const y = Y(v); return `<line class="od-gl h" x1="${x0}" x2="${x1}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/>${every && i % every === 0 && avoid.every((a) => Math.abs(a - y) > 9) ? `<text class="od-ax" x="${x0 - 3}" y="${(y + 3).toFixed(1)}" text-anchor="end">${lab(v)}</text>` : ''}`; }).join(''); };   // 칸이 낮아 눈금이 촘촘하면 글은 건너뛰거나 생략(겹침 방지)
   const hits = (fn) => { const n = Math.min(24, H.length), wd = (x1 - x0) / n; let out = ''; for (let i = 0; i < n; i++) { const p = H[Math.round((i * (H.length - 1)) / Math.max(1, n - 1))]; out += `<rect class="od-hit" x="${(x0 + i * wd).toFixed(1)}" y="${y0}" width="${wd.toFixed(1)}" height="${y1 - y0}"><title>${fn(p)}</title></rect>`; } return out; };
   // ① 계산 오차
   const nMax = tgt * 4, YA = (v) => y0 + (1 - Math.min(v, nMax) / nMax) * (y1 - y0), mes = H.filter((p) => Number.isFinite(p.noise)).map((p) => [X(p.ph), YA(p.noise)]);
@@ -345,8 +348,8 @@ export function createSimDash(el, { onCtl = null } = {}) {
     // 틀은 한 번만 만들고 칸마다 바뀐 것만 고침 — 계산 중 갱신이 잦아도 단추 클릭·접는 칸이 끊기지 않게
     if (!el.querySelector('.od-simh')) {
       el.innerHTML = `<div class="od-h od-simh"><i class="m3-fl" data-s="step">4</i>광분포 시뮬레이션<span class="m3-ad-sp"></span>${onCtl ? '<span class="m3-ctl" data-sim-ctl></span>' : ''}</div>
-        <div class="od-pct"><b data-s="pct"></b><div class="od-bar od-bar-big" title="계산 오차가 목표에 닿으면 100%"><i data-s="bar"></i></div><span class="mut od-simst" data-s="st"></span></div>
-        <div class="od-simbox"><div class="od-simcap" data-s="row"></div><div class="od-simplot" data-s="svg"></div></div><div class="od-diag" data-s="diag" hidden></div>
+        <div class="od-pct"><b data-s="pct"></b><div class="od-bar od-bar-big" title="계산 오차가 목표에 닿으면 100%"><i data-s="bar"></i></div><span class="od-simcap od-capr" data-s="row"></span><span class="mut od-simst" data-s="st"></span></div>
+        <div class="od-simbox"><div class="od-simplot" data-s="svg"></div></div><div class="od-diag" data-s="diag" hidden></div>
         <details class="od-more"><summary><span data-s="sum">광경로</span></summary><div data-s="paths"></div></details>`;
     }
     const set = (k, html) => { const n = el.querySelector(`[data-s="${k}"]`); if (n && n.innerHTML !== html) n.innerHTML = html; };

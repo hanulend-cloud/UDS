@@ -30,6 +30,26 @@ export function mountSplit(items, { key, dir = 'col', min = 60, init = null, onC
   return { reset: () => { w = def(); apply(); save(); onChange(); } };
 }
 
+// 한 칸 높이 손잡이(2026-11-08) — el 바로 아래 막대를 끌어 el 높이(px)만 바꿈. 옆 칸이 숨어 있어도(한 그림만 보기) 동작. 보는 사람별 저장
+export function mountHeightHandle(el, { key, min = 70, max = () => 600, onChange = () => {} } = {}) {
+  if (!el || el.dataset.hHandle) return null;
+  el.dataset.hHandle = '1';
+  const h = document.createElement('div');
+  h.className = 'm3-psplit col m3-hsplit'; h.setAttribute('role', 'separator'); h.setAttribute('aria-orientation', 'horizontal'); h.title = '위아래로 끌어 높이 조절 · 두 번 클릭 = 처음 높이';
+  const set = (px, save = true) => { el.style.height = `${Math.round(px)}px`; el.style.flex = 'none'; if (save) { try { localStorage.setItem(key, String(Math.round(px))); } catch {} } onChange(); };
+  try { const v = +localStorage.getItem(key); if (v > 0) set(v, false); } catch {}
+  h.addEventListener('pointerdown', (ev) => {
+    ev.preventDefault(); h.setPointerCapture(ev.pointerId); h.classList.add('on');
+    const y0 = ev.clientY, a0 = el.getBoundingClientRect().height;
+    const mv = (m) => set(Math.max(min, Math.min(max(), a0 + m.clientY - y0)), false);
+    const up = () => { h.removeEventListener('pointermove', mv); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', up); h.classList.remove('on'); set(el.getBoundingClientRect().height); };
+    h.addEventListener('pointermove', mv); h.addEventListener('pointerup', up); h.addEventListener('pointercancel', up);
+  });
+  h.addEventListener('dblclick', () => { el.style.height = ''; el.style.flex = ''; try { localStorage.removeItem(key); } catch {} onChange(); });
+  el.after(h);
+  return h;
+}
+
 // 기구 최적화 창 아래 칸의 좌우 경계(2026-11-05) — x = 왼쪽 폭(px), W = 전체 폭. 왼쪽 ≥ minL, 오른쪽 ≥ minR(좁으면 왼쪽 우선)
 export const clampLeft = (x, W, minL = 300, minR = 320) => Math.max(minL, Math.min(x, W - minR));
 // grid 칸(--m3-mon-l)을 끌어서 조절 · 보는 사람별로 기억 · 더블클릭 = 처음 비율 · 방향키 = 20 px

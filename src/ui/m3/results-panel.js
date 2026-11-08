@@ -1,5 +1,5 @@
 import { shapeLayout } from './map-shape.js';
-import { mountSplit } from './pane-split.js';
+import { mountSplit, mountHeightHandle } from './pane-split.js';
 import { clampRect, fitRect, dragBy, raiseWin, mountResizers, COLLAPSED_W } from './monitor.js';
 import { simPct } from './opt-dash.js';
 import { simCtl, setCtl, setStepMark } from './run-ctl.js';
@@ -621,7 +621,9 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     // 창 안 크기 조절: 2D ↕ 1D(높이) · 길이 1D ↔ 폭 1D(폭) — 끌기 막대(비율 기억). 창 자체 = 오른쪽 아래 모서리(CSS resize)
     const C = (k) => ov.querySelector(`.m3-big-c[data-k="${k}"]`);
     // 진행 현황(그래프) ↕ 2D ↕ 1D — 경계선을 끌어 높이 조절(2026-11-08: 진행 그래프도 크기 조절)
-    mountSplit([ov.querySelector('[data-big-prog]'), C('map'), ov.querySelector('.m3-big-row')], { key: 'uds.m3.bigV3', dir: 'col', min: 90, init: [1.2, 3, 2], onChange: () => { paintBig(); window.dispatchEvent(new Event('resize')); } });
+    mountSplit([C('map'), ov.querySelector('.m3-big-row')], { key: 'uds.m3.bigV', dir: 'col', min: 120, onChange: () => paintBig() });
+    // 진행 그래프 칸 높이 = 따로 손잡이(2026-11-08) — 2D·1D 를 '이 그림만'으로 볼 때도 조절. 아래 그림이 최소 120px 은 남게
+    { const pg = ov.querySelector('[data-big-prog]'); mountHeightHandle(pg, { key: 'uds.m3.bigProgH', min: 120, max: () => Math.max(120, big.grid.clientHeight - 140), onChange: () => paintBig() }); }
     mountSplit([C('prof'), C('wprof')], { key: 'uds.m3.bigH', dir: 'row', min: 160, onChange: () => paintBig() });
     if (typeof ResizeObserver !== 'undefined') { big.ro = new ResizeObserver(() => paintBig()); big.ro.observe(ov); }
     setMin(false); raiseWin(ov); setFocus(null); syncBig(); onBig?.(ov.querySelector('[data-big-prog]'));
