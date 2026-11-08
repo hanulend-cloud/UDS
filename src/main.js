@@ -315,6 +315,7 @@ function setupMenubar() {
       '-',
       { id: 'theme', label: '3D 배경 어둡게', checked: () => m3app.theme() === 'dark', enabled: m3 },
       { id: 'xray', label: '투시 보기 (전체 반투명)', checked: () => m3app.xrayOn(), enabled: m3 },
+      { id: 'lines', label: '선 보기 (부품별 색 외곽선)', checked: () => m3app.linesOn(), enabled: m3 },
       { id: 'paths', label: '광경로 화살표', checked: () => m3app.pathsOn(), enabled: m3 },
     ] },
     { label: '계산', items: [
@@ -346,6 +347,7 @@ function setupMenubar() {
     if (id === 'admin') { setAdmin(!isAdmin()); return m3app.adminChanged(); }
     if (id === 'paths') return m3app.setPathsOn(!m3app.pathsOn());
     if (id === 'xray') return m3app.setXrayOn(!m3app.xrayOn());
+    if (id === 'lines') return m3app.setLinesOn(!m3app.linesOn());
     if (id === 'guide') return alert(GUIDE);
     if (id === 'errlog') return openErrorLog();
     if (id === 'about') return alert(`Uniform Design Simulator ${APP_VERSION} (${APP_DATE})

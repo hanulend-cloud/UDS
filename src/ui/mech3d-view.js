@@ -95,7 +95,15 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   }
   controls.addEventListener('change', () => { fitDepth(); render(); });
 
-  let xray = false, dim = null;
+  let xray = false, dim = null, lines = false;
+  // 선 보기(2026-11-08): 면은 감추고(클릭 판정은 그대로) 부품마다 다른 색의 외곽 모서리선만 — 부품 구조 확인용
+  const HIDE_MAT = new THREE.MeshBasicMaterial({ visible: false });
+  const lineColor = (i) => new THREE.Color().setHSL((i * 0.618034 + 0.05) % 1, 0.8, theme === 'dark' ? 0.62 : 0.4);
+  function edgeOf(m) {
+    let e = m.userData.edges;
+    if (!e) { e = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry, 25), new THREE.LineBasicMaterial({ clippingPlanes: clip, transparent: true })); m.add(e); m.userData.edges = e; }
+    return e;
+  }
   const fatMats = new Set();   // 굵은 선 재질 — 창 크기가 바뀌면 resolution 갱신
   let pathGroup = null, pathItems = [], obsUi = null;   // 광경로 그룹 · 화면 크기 맞춤 항목 · 관측면 표시(render 가 쓰므로 위에 선언)
   let looks = [];   // 부품별 색·투명도(없으면 종류 기본값)
@@ -133,6 +141,12 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     if (dim?.(i)) op = Math.min(op, 0.12);   // 추적 제외 부품: 아주 흐리게(남아 있지만 빛 계산엔 없음)   // 투시 보기: 전체 반투명 — 속 구조·광경로를 봄
     if (picked && !ghost?.(i)) op = Math.max(op, xray ? 0.45 : 0.7);   // 선택 부품: 투명 소재여도 잘 보이게
     m.material = partMat(op); m.renderOrder = m.material.transparent ? 1 : 0;
+    if (lines) {
+      const e = edgeOf(m); e.visible = true;
+      e.material.color.copy(picked ? (kinds[i] === 'led' ? LED_SEL : SEL_TINT) : lineColor(i));
+      e.material.opacity = dim?.(i) || (ghost?.(i) && !picked) ? 0.25 : 1;
+      m.material = HIDE_MAT;
+    } else if (m.userData.edges) m.userData.edges.visible = false;
   }
 
   // 보기 전환: 등각 = 원근, 나머지 = 정투영. 모델 외곽 구(model)에 맞춘다
@@ -184,7 +198,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
 
   // parts: 런타임 scene.parts, kindsOf: 부품별 소재 종류 배열, keepCamera: 카메라를 다시 맞추지 않음(LED 위치 보정 등)
   function setParts(parts, kindsOf, { keepCamera = false, looks: lookOf = [] } = {}) {
-    for (const m of meshes) { scene.remove(m); m.geometry.dispose(); }   // 재질은 공유 — 버리지 않음
+    for (const m of meshes) { scene.remove(m); m.geometry.dispose(); m.userData.edges?.geometry.dispose(); m.userData.edges?.material.dispose(); }   // 재질은 공유 — 버리지 않음
     partsRef = parts; kinds = kindsOf.slice(); looks = lookOf;
     meshes = parts.map((p, i) => {
       const g = new THREE.BufferGeometry();
@@ -254,6 +268,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     scene.background = new THREE.Color(BG[theme]);
     CONE_COLOR = theme === 'dark' ? CONE_DARK : CONE_LIGHT;
     hemi.groundColor.set(theme === 'dark' ? 0x404050 : 0xa8b0bd); hemi.intensity = theme === 'dark' ? 1.0 : 1.25; amb.intensity = theme === 'dark' ? 0 : 0.9;
+    if (lines) meshes.forEach((_, i) => colorize(i));
     if (lastOver) setOverlay(lastOver); else render();
   }
   // 관측면 테두리 — 고른 면 삼각형들의 바깥 모서리(한 번만 쓰인 모서리)만
@@ -308,6 +323,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     o.label.position.copy(o.base).addScaledVector(o.a, L + OBS_TEXT_PX * u);
   }
   function setDim(fn) { dim = fn; meshes.forEach((_, i) => colorize(i)); render(); }
+  function setLines(on) { lines = !!on; meshes.forEach((_, i) => colorize(i)); render(); }
   function setXray(on) { xray = !!on; meshes.forEach((_, i) => colorize(i)); if (lastOver) setOverlay(lastOver); else render(); }
   // 화면 1 px 이 pos 에서 몇 mm 인지 — 광경로 화살표·글씨를 확대·축소와 상관없이 같은 화면 크기로(render 마다)
   function worldPerPx(pos) {
@@ -567,5 +583,5 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
 
   // 다 쓴 보기(불러오기 미리보기)의 그래픽 메모리를 돌려줌 — 큰 도면에서 3D 문맥 두 개가 메모리를 나눠 쓰지 않게
   function dispose() { for (const m of meshes) { scene.remove(m); m.geometry.dispose(); } meshes = []; for (const m of partMats.values()) m.dispose(); partMats.clear(); renderer.dispose(); renderer.forceContextLoss(); }
-  return { dispose, setTheme, theme: () => theme, setLightPaths, setXray, xray: () => xray, setDim, setParts, setKinds, setHidden, setSelection, setOverlay, setPickMode, render, setView, fit, fitAll, viewName: () => viewName, setSection, setObsSurface, setObsColors, setCheckMarkers };
+  return { dispose, setTheme, theme: () => theme, setLightPaths, setXray, xray: () => xray, setLines, lines: () => lines, setDim, setParts, setKinds, setHidden, setSelection, setOverlay, setPickMode, render, setView, fit, fitAll, viewName: () => viewName, setSection, setObsSurface, setObsColors, setCheckMarkers };
 }

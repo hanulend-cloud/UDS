@@ -158,13 +158,14 @@ function getView() {
     const v = createMech3dView($('#mech3d-canvas'), { onPick: (s) => { if (A) onPick(s); }, onContext: (c) => { if (A) onViewContext(c); }, gizmo: $('#m3-axes'),
       onLost: () => { const n = getMech3d()?.combined?.partOf?.length ?? 0; reportError('3D 화면', `3D 화면 끊김 — 그래픽 메모리 부족으로 보임(삼각형 ${Math.round(n / 1e4)}만 개)`); setStatus(`3D 화면이 끊겨 도면이 안 보임 — 그래픽 메모리 부족으로 보임(삼각형 ${Math.round(n / 1e4)}만 개). 다른 프로그램·탭을 닫고 새로고침하세요`); } });
     const el = $('#m3-views');
-    el.innerHTML = VIEWS.map(([k, t, r, rt]) => (r ? `<div class="m3-vrow"><button data-view="${k}">${t}</button><button data-view="${r}" class="m3-vrev" title="${rt}" aria-label="${rt}">반대</button></div>` : `<button data-view="${k}">${t}</button>`)).join('') + '<button type="button" data-fit title="지금 보이는 도면 전체를 창에 맞춤 — 보는 방향은 그대로 (F)">⤢ 맞춤</button><button type="button" data-xray aria-pressed="false" title="전체 부품 반투명 — 속 구조를 봄">투시</button><button type="button" data-paths aria-pressed="false" title="광경로 화살표 켜기/끄기">광경로</button><button type="button" data-theme-toggle aria-pressed="false"></button>';
+    el.innerHTML = VIEWS.map(([k, t, r, rt]) => (r ? `<div class="m3-vrow"><button data-view="${k}">${t}</button><button data-view="${r}" class="m3-vrev" title="${rt}" aria-label="${rt}">반대</button></div>` : `<button data-view="${k}">${t}</button>`)).join('') + '<button type="button" data-fit title="지금 보이는 도면 전체를 창에 맞춤 — 보는 방향은 그대로 (F)">⤢ 맞춤</button><button type="button" data-xray aria-pressed="false" title="전체 부품 반투명 — 속 구조를 봄">투시</button><button type="button" data-lines aria-pressed="false" title="면을 감추고 부품마다 다른 색의 외곽선만 표시 — 부품 구조 확인">선 보기</button><button type="button" data-paths aria-pressed="false" title="광경로 화살표 켜기/끄기">광경로</button><button type="button" data-theme-toggle aria-pressed="false"></button>';
     el.querySelector('[data-fit]').onclick = () => v.fitAll();
     el.querySelectorAll('[data-view]').forEach((b) => { b.onclick = () => { v.setView(b.dataset.view); A?.store.update('view', (_, s) => { s.view = b.dataset.view; }); }; });
     // 3D 배경 밝게/어둡게 — 보는 사람별 편의 설정(새로고침해도 유지)
     const tb = el.querySelector('[data-theme-toggle]'), vp = $('#mech3d-canvas').parentElement;
     const applyTheme = (t) => { v.setTheme(t); vp.dataset.theme = t; const wr = $('#mech3d-wrap'); if (wr) wr.dataset.theme = t; tb.textContent = t === 'dark' ? '☀ 밝게' : '☾ 어둡게'; tb.setAttribute('aria-pressed', String(t === 'dark')); tb.title = '3D 배경 밝게/어둡게'; };
     el.querySelector('[data-xray]').onclick = () => setXrayOn(!xrayOn());
+    el.querySelector('[data-lines]').onclick = () => setLinesOn(!linesOn());
     el.querySelector('[data-paths]').onclick = () => setPathsOn(!pathsOn());
     let t0 = 'light'; try { t0 = localStorage.getItem('uds.m3.theme') === 'dark' ? 'dark' : 'light'; } catch {}
     applyTheme(t0);
@@ -863,10 +864,13 @@ export function setPathsOn(v) { try { localStorage.setItem('uds.m3.paths', v ? '
 // 투시 보기(전체 반투명) — 보는 사람별 설정(uds.m3.xray)
 export const xrayOn = () => { try { return localStorage.getItem('uds.m3.xray') === '1'; } catch { return false; } };
 export function setXrayOn(v) { try { localStorage.setItem('uds.m3.xray', v ? '1' : '0'); } catch {} A?.view?.setXray?.(v); syncViewBtns(); }
+// 선 보기(부품별 색 외곽선만) — 보는 사람별 설정(uds.m3.lines)
+export const linesOn = () => { try { return localStorage.getItem('uds.m3.lines') === '1'; } catch { return false; } };
+export function setLinesOn(v) { try { localStorage.setItem('uds.m3.lines', v ? '1' : '0'); } catch {} A?.view?.setLines?.(v); syncViewBtns(); }
 function syncViewBtns() {
   const el = document.querySelector('#m3-views'); if (!el) return;
   const set = (q, on) => { const b = el.querySelector(q); if (b) { b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); } };
-  set('[data-xray]', xrayOn()); set('[data-paths]', pathsOn());
+  set('[data-xray]', xrayOn()); set('[data-lines]', linesOn()); set('[data-paths]', pathsOn());
 }
 function drawLightPaths() {
   if (!A?.view?.setLightPaths) return;
@@ -2112,6 +2116,7 @@ function renderView() {
   v.setPickMode(led ? (i) => i >= nM : mech ? (i) => i < nM : null, led ? (i) => i < nM : null);
   if (v.viewName() !== S.view) v.setView(S.view);
   if (v.xray?.() !== xrayOn()) v.setXray(xrayOn());
+  if (v.lines?.() !== linesOn()) v.setLines(linesOn());
   syncViewBtns();
   $('#m3-views').querySelectorAll('[data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === S.view));
   v.setSection(S.section);
