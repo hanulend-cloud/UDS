@@ -102,8 +102,7 @@ export function beforeAfterHtml(k, b0, best, tl, tw, n = 0) {
 }
 // 오른쪽 모니터(순수, 2026-10-30) — 진행 줄(계산 순서 · 고정/완료/진행/대기) · 지표 3개(지금까지 최고, 시작 대비) · 그래프 자리(.od-plot) · 기록(최고 갱신만)
 // S = createOptDash 상태, sec = 걸린 초. 그래프는 자리 크기로 factorChartSvg 가 나중에 그림
-export const chartHtml = () => `<div class="od-chart-h"><b title="위로 갈수록 좋음 · 빨간 선에 닿으면 목표 통과">균일도가 얼마나 좋아졌나</b></div>
-    <div class="od-plot"></div>
+export const chartHtml = () => `<div class="od-plot" title="위로 갈수록 좋음 · 빨간 선에 닿으면 목표 통과"></div>
     <div class="od-legend od-lg"><span><i class="lg-dot"></i>시험한 후보(대략값)</span><span><i class="lg-line"></i>지금까지 최고</span><span><i class="lg-dia"></i>최종 판정(확정값)</span><span><i class="lg-tg"></i>목표</span><span><i class="lg-st"></i>시작</span></div>`;
 // chart = false → 그래프는 따로(창 왼쪽 아래 칸, createOptDash h.chart)
 export function monitorHtml(S, sec = 0, { chart = true } = {}) {

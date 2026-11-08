@@ -521,7 +521,7 @@ ok(judgeText(0.3, 0.8, null, 0.2).cls === 'busy' && /판정 보류/.test(judgeTe
   ok(g.includes('목표 80%') && g.includes('시작 60.0%') && g.includes('시작 70.0%') && /시험한 후보 3개/.test(g), '그래프 안에 목표·시작선 이름과 가로축 뜻');
   ok(!g.includes('최종') && factorChartSvg({ ...S, final: { Ulen: 0.7886, Uwid: 0.8 } }, S.before, 600, 170).includes('최종 78.8%') && (factorChartSvg({ ...S, final: { Ulen: 0.7886, Uwid: 0.8 } }, S.before, 600, 170).match(/od-final/g) ?? []).length === 2, '최종 판정 값을 후보 값과 구분해 표시');
   { const { chartHtml, chartHeight } = await import('../src/ui/m3/opt-dash.js'), L = chartHtml();
-    ok(/얼마나 좋아졌나/.test(L) && /위로 갈수록 좋음/.test(L) && /시험한 후보/.test(L) && /지금까지 최고/.test(L) && /최종 판정/.test(L) && /대략값/.test(L), '그래프 제목·범례가 뜻을 말함');
+    ok(!/얼마나 좋아졌나/.test(L) && /위로 갈수록 좋음/.test(L) && /시험한 후보/.test(L) && /지금까지 최고/.test(L) && /최종 판정/.test(L) && /대략값/.test(L), '그래프 제목·범례가 뜻을 말함');
     ok(chartHeight(600) === 150 && chartHeight(401) === 150 && chartHeight(300) === 250, `높이 제한: 나란히 ${chartHeight(600)} · 위아래 ${chartHeight(300)}`);
     ok(factorChartSvg(S, S.before, 300, 250).includes('od-sim2 one') && !factorChartSvg(S, S.before, 600, 150).includes('od-sim2 one'), '좁으면 위아래로'); }
   { const { clampLeft } = await import('../src/ui/m3/pane-split.js');
