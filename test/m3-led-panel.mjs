@@ -103,3 +103,8 @@ const ui = (o = {}) => ({ line, ledList: list, ledGap: 6.25, ...o });
   const one = ledPanelHtml(man, ui({ led: led({}) })); ok(!one.includes('LED 수동 선택') && !one.includes('data-lp-kind'), 'LED 한 개 = 지정 없음');
   setLpTab('leds', 'detail'); const d = ledPanelHtml(man, ui()); ok(!d.includes('data-lp-kind') && !d.includes('인식 고치기') && (d.match(/data-lp-man="count"/g) ?? []).length === 1, 'LED 상세 탭 = 지정 없음'); setLpTab('leds', 'basic'); }
 done();
+{ // 3D 빛 원뿔 크기(2026-11-08): 넓은 지향각도 보이게 — 반각 60° 넘으면 빗변 길이 고정, 최대 89.5°(179°)
+  const { coneDims } = await import('../src/ui/m3/cone-dims.js');
+  const a = coneDims(30, 4), b = coneDims(80, 4), c = coneDims(90, 4), d = coneDims(85, 4);
+  ok(Math.abs(a.ax - 4) < 1e-9 && Math.abs(a.r - 4 * Math.tan(Math.PI / 6)) < 1e-9, '좁은 원뿔 = 길이 그대로');
+  ok(b.r < 9 && d.r > b.r && c.r > d.r && c.ax > 0 && c.ax < d.ax, `넓을수록 더 퍼지고 유한(80°:${b.r.toFixed(1)} 85°:${d.r.toFixed(1)} 90°:${c.r.toFixed(2)}/${c.ax.toFixed(3)})`); }

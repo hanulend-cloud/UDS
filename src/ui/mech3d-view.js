@@ -3,6 +3,7 @@
 // 클릭(드래그 아님) → onPick({ part, face, ray:{o,d}, worldPerPixel }) 또는 onPick(null)(선택 모드에선 { part:null, face:null, ray }).
 // 회전·이동·확대는 OrbitControls(Z 위): 드래그 회전, 휠 확대, 우클릭·Shift 드래그 이동.
 import * as THREE from 'three';
+import { coneDims } from './m3/cone-dims.js';
 import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
@@ -239,7 +240,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     const P = new Float32Array(list.length * (CONE_SEG + 1) * 3), I = new Uint32Array(list.length * CONE_SEG * 3);
     list.forEach((c, k) => {
       const a = new THREE.Vector3(...c.axis).normalize(), u = new THREE.Vector3(Math.abs(a.x) < 0.9 ? 1 : 0, Math.abs(a.x) < 0.9 ? 0 : 1, 0).cross(a).normalize(), w = a.clone().cross(u);
-      const len = c.len > 0 ? c.len : 4, r = len * Math.tan((Math.min(80, Math.max(1, c.half)) * Math.PI) / 180), b0 = k * (CONE_SEG + 1);
+      const { ax: len, r } = coneDims(c.half, c.len > 0 ? c.len : 4), b0 = k * (CONE_SEG + 1);
       P.set(c.pos, b0 * 3);
       for (let i = 0; i < CONE_SEG; i++) {
         const t = (2 * Math.PI * i) / CONE_SEG, q = (b0 + 1 + i) * 3;
@@ -258,7 +259,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     const pts = [];
     list.forEach((c) => {
       const a = new THREE.Vector3(...c.axis).normalize(), u = new THREE.Vector3(Math.abs(a.x) < 0.9 ? 1 : 0, Math.abs(a.x) < 0.9 ? 0 : 1, 0).cross(a).normalize(), w = a.clone().cross(u);
-      const len = c.len > 0 ? c.len : 4, r = len * Math.tan((Math.min(80, Math.max(1, c.half)) * Math.PI) / 180), o = new THREE.Vector3(...c.pos);
+      const { ax: len, r } = coneDims(c.half, c.len > 0 ? c.len : 4), o = new THREE.Vector3(...c.pos);
       const rim = (t) => o.clone().addScaledVector(a, len).addScaledVector(u, r * Math.cos(t)).addScaledVector(w, r * Math.sin(t));
       for (let i = 0; i < CONE_RAYS; i++) pts.push(o.clone(), rim((2 * Math.PI * i) / CONE_RAYS));
     });
