@@ -98,7 +98,13 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   let xray = false, dim = null, lines = false;
   // 선 보기(2026-11-08): 면은 감추고(클릭 판정은 그대로) 부품마다 다른 색의 외곽 모서리선만 — 부품 구조 확인용
   const HIDE_MAT = new THREE.MeshBasicMaterial({ visible: false });
-  const lineColor = (i) => new THREE.Color().setHSL((i * 0.618034 + 0.05) % 1, 0.8, theme === 'dark' ? 0.62 : 0.4);
+  // 색 = 부품 소재·면 처리(looks[i].line, part-look.js lineLook) · LED 도면 부품은 종류별. 같은 계열끼리도 구분되게 밝기를 부품마다 조금씩
+  const LINE_KIND = { led: 0x8e4fd0, pcb: 0x2f6b3a, opaque: 0x7a808a };
+  const lineColor = (i) => {
+    const c = new THREE.Color(looks[i]?.line ?? LINE_KIND[kinds[i]] ?? 0x3a4a8c), hsl = c.getHSL({});
+    const l = hsl.l + (((i * 0.37) % 1) - 0.5) * 0.14 + (theme === 'dark' ? 0.18 : 0);
+    return c.setHSL(hsl.h, hsl.s, Math.max(0.2, Math.min(0.8, l)));
+  };
   function edgeOf(m) {
     let e = m.userData.edges;
     if (!e) { e = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry, 25), new THREE.LineBasicMaterial({ clippingPlanes: clip, transparent: true })); m.add(e); m.userData.edges = e; }
@@ -225,7 +231,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   // 바뀐 부품만 재착색
   function setKinds(kindsOf, lookOf = []) {
     const old = kinds, oldL = looks; kinds = kindsOf.slice(); looks = lookOf;
-    meshes.forEach((_, i) => { if (old[i] !== kinds[i] || oldL[i]?.color !== looks[i]?.color || oldL[i]?.opacity !== looks[i]?.opacity) colorize(i); }); render();
+    meshes.forEach((_, i) => { if (old[i] !== kinds[i] || oldL[i]?.color !== looks[i]?.color || oldL[i]?.opacity !== looks[i]?.opacity || oldL[i]?.line !== looks[i]?.line) colorize(i); }); render();
   }
   // LED 빛 원뿔(spec m3-cad-ui §4a) — 꼭짓점 = 발광점, 축 = 발광 방향, 반각 = 배광/2(그림은 80° 까지), 길이 len(축 방향).
   // 원뿔 여럿을 기하 하나로 합친다(LED ~120개도 메쉬 1개). 삼각형 k·CONE_SEG… = 원뿔 k → userData.nums[k] = LED 번호(클릭용)

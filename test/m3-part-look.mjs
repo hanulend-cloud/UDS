@@ -1,5 +1,5 @@
 // 3D 부품 색(2026-11-05) — 투명도·소재·면 처리에 따라 약간씩 달라 구분되게
-import { partLook } from '../src/ui/m3/part-look.js';
+import { partLook, lineLook } from '../src/ui/m3/part-look.js';
 let fails = 0;
 const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok', m); };
 const lum = (c) => 0.3 * ((c >> 16) & 255) + 0.6 * ((c >> 8) & 255) + 0.1 * (c & 255);
@@ -25,5 +25,18 @@ const P = (material, finish, extra = {}) => ({ material, finish, ...extra });
   ok(base.color !== mir.color && base.opacity === mir.opacity, '투명 부품 면 처리 = 색만 달라짐, 투명도 유지'); }
 { const a = partLook(P({ kind: 'opaque' }, { kind: 'whiteDiffuse', R: 0.3 }, { role: 'pcb' }));
   ok(a.opacity === 1 && ((a.color >> 8) & 255) > ((a.color >> 16) & 255), '도면 PCB = 초록'); }
+// 선 보기 색(2026-11-08): 투명 = 파랑, 반투명 = 빨강, 불투명 = 남색·무채색, 면 처리 = 주황(경면)·노랑(백색)·초록(흑색) 살짝
+{ const rgb = (c) => [(c >> 16) & 255, (c >> 8) & 255, c & 255];
+  const [cr, cg, cb] = rgb(lineLook(P({ kind: 'clear', T: 0.9 }))); ok(cb > cr + 40 && cb > cg, '투명 = 파랑 계열');
+  for (const m of [{ kind: 'milky', milky: 3 }, { kind: 'whiteTrans', T: 0.2 }]) { const [r, g, b] = rgb(lineLook(P(m))); ok(r > g + 40 && r > b + 40, `반투명(${m.kind}) = 빨강 계열`); }
+  const [or, og, ob] = rgb(lineLook(P({ kind: 'opaque' }))); ok(ob >= or && ob >= og && or < 140, '불투명 = 남색·무채색 계열');
+  const base = lineLook(P({ kind: 'opaque' })), tints = ['metal', 'whiteDiffuse', 'black'].map((k) => lineLook(P({ kind: 'opaque' }, { kind: k, R: 0.5 })));
+  ok(new Set([base, ...tints]).size === 4, '면 처리마다 선 색이 조금씩 다름');
+  const [mr, , mb] = rgb(tints[0]), [wr, wg, wb] = rgb(tints[1]), [kr, kg, kb] = rgb(tints[2]);
+  const [br, bg, bb] = rgb(base);
+  ok(mr - br > 20 && mb < bb, '경면 = 주황 기운'); ok(wr > br && wg > bg && wb < bb, '백색 = 노랑 기운'); ok(kg - bg > kr - br + 10, '흑색 = 초록 기운');
+  for (const c of tints) { const [r, g, b] = rgb(c); ok(b >= Math.max(r, g) - 10, '불투명 + 면 처리 — 남색 계열이 남음(조금만 물듦)'); }
+  const tb = rgb(lineLook(P({ kind: 'clear', T: 0.9 }, { kind: 'metal', R: 0.8 }))); ok(tb[2] > tb[0], '투명 + 경면 — 여전히 파랑 계열');
+  ok(lineLook(P({ kind: 'opaque' }, null, { role: 'pcb' })) !== base, 'PCB 는 따로'); }
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
 console.log('all ok');

@@ -26,3 +26,14 @@ export function partLook(p) {
   if (f?.kind && f.kind !== 'gloss') color = mix(color, finishColor(f), 0.45);   // 투과 부품의 면 처리 = 색만 물듦, 투명도는 소재대로
   return { color, opacity };
 }
+
+// 선 보기 색(2026-11-08) — 투명 = 파랑, 반투명(Milky·백색 투과) = 빨강, 불투명 = 남색, PCB = 짙은 초록.
+// 면 처리는 살짝 물들임: 경면 = 주황, 백색 = 노랑, 흑색 = 초록(광택·없음 = 그대로)
+const LINE_TINT = { metal: 0xf08a24, whiteDiffuse: 0xe6c619, black: 0x2fa84a };
+export function lineLook(p) {
+  if (p?.role === 'pcb') return 0x2f6b3a;
+  const k = p?.material?.kind;
+  const base = k === 'clear' ? 0x2f7fe0 : k === 'milky' ? 0xd8443a : k === 'whiteTrans' ? 0xc0304f : 0x3a4a8c;
+  const t = LINE_TINT[p?.finish?.kind];
+  return t ? mix(base, t, 0.25) : base;
+}
