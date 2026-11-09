@@ -1,10 +1,14 @@
 // ③ LGP 형상: node test/mech3d-shape-opt.mjs
-import { fieldAt, fieldThickness, clampField, hasField, FIELD_TAPER, frameHeights, deformPart, refineForBumps, bump, minThickness, shapeCandidates, isWatertight, refinedFor, heightsFor, memoStats, pathFromLine, swOnPath, endW, lineVarH, shapeVarRanges, gridCandidates, ledEll, partFrame, curveAt, bottomAt, hasCurve, bumpCenters } from '../src/engine/mech3d/shape-opt.js';
+import { fieldAt, fieldThickness, clampField, hasField, FIELD_TAPER, frameHeights, deformPart, refineForBumps, bump, minThickness, shapeCandidates, isWatertight, refinedFor, heightsFor, memoStats, pathFromLine, swOnPath, endW, lineVarH, shapeVarRanges, gridCandidates, ledEll, partFrame, shapeReferenceFrame, curveAt, bottomAt, hasCurve, bumpCenters } from '../src/engine/mech3d/shape-opt.js';
 import { meshVolume } from '../src/engine/mech3d/mesh.js';
 import { boxMesh, ok, done } from './mech3d-util.mjs';
 
 const frame = { u: [1, 0, 0], v: [0, 1, 0], d: [0, 0, 1] };   // 관측 = +z
 const plate = boxMesh(0, 0, 0, 40, 10, 2);
+{ const C = shapeReferenceFrame({ frame, data: { surface: 'cylinder', cylinder: { e1: [1, 0, 0], e2: [0, 1, 0], axis: [0, 0, 1] } } });
+  ok(C.u.join() === '1,0,0' && C.v.join() === '0,1,0' && C.d.join() === '0,0,1', '원통 관측 형상 기준 = 한쪽 방사 법선이 아니라 원통 축');
+  ok(shapeReferenceFrame({ frame }) === frame, '평면 관측 형상 기준 = 기존 관측 프레임');
+}
 { const H = frameHeights(plate, frame, 0.5), z = H.at(20, 5);
   ok(Math.abs(z.zt - 2) < 1e-6 && Math.abs(z.zb) < 1e-6 && H.non25 === 0, `관측 좌표 높이: 윗면 2 · 아랫면 0 (${z.zt}, ${z.zb})`);
   ok(Math.abs(H.at(40, 10).zt - 2) < 1e-6, '외곽 점은 가장 가까운 칸 값'); }

@@ -352,12 +352,14 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   ok(all.shape.parts.join() === '1,0' && all.housing.parts.join() === '3,4', '검출 전: 쓸 수 있는 부품 전체(추적 제외는 뺌)');
   const path = { shares: { 0: 0.4, 1: 1, 2: 0.9, 3: PATH_MIN / 2, 4: 0.3 } }, a = stageAvailability(M, { non25, path });
   ok(a.shape.parts.join() === '1,0' && a.shape.skip.join() === '2' && a.housing.parts.join() === '4', '검출 뒤: 광경로 위만 · 빛 많은 순 · 2.5D 아닌 부품은 skip · 1% 미만 뺌');
-  const none = stageAvailability(M, { non25, path: { shares: {} } });
-  ok(!none.shape.ok && /광경로/.test(none.shape.why) && !none.housing.ok && /닿는/.test(none.housing.why), '광경로에 부품이 없으면 이유 표시');
+  const nonePath = { shares: {} }, none = stageAvailability(M, { non25, path: nonePath });
+  ok(none.shape.ok && none.shape.fallback && none.shape.parts.join() === '1,0' && !none.housing.ok && /닿는/.test(none.housing.why), '광경로 표본이 후보를 놓치면 형상 가능한 전체 부품으로 대체');
   const st = { avail: a, sel: { shape: true, shapePart: 1, housing: true, housingPart: 4 }, running: null, names: ['커버', 'LGP', '렌즈', '벽', '케이스', '제외'], path };
   const hs = tileConfigHtml('shape', st).html, hh = tileConfigHtml('housing', st).html;
   ok(/LGP · 빛 100%/.test(hs) && hs.indexOf('LGP') < hs.indexOf('커버') && /value="2" disabled>렌즈 · 빛 90% · 2\.5D 아님/.test(hs) && !hs.includes('제외') && hs.includes('자동 검출'), '③ 목록: 빛 % · 많은 순 · 못 바꾸는 부품은 비활성');
   ok(/케이스 · 빛 30%/.test(hh) && !hh.includes('>벽') && hh.includes('자동 검출'), '② 목록: 빛이 닿는 불투명 부품만');
+  const hf = tileConfigHtml('shape', { ...st, avail: none, path: nonePath }).html;
+  ok(hf.includes('형상 변경 가능한 부품 전체') && hf.includes('LGP') && !hf.includes('빛 0%'), '대체 목록 안내 · 0% 표시는 생략');
   ok(tileConfigHtml('shape', { ...st, avail: all, path: null }).html.includes('검출 전'), '검출 전 안내');
 }
 { // 큰 도면 Worker 수 제한: 어떤 크기에서도 예산을 넘지 않음 · 보통 도면은 제한 없음 · 최소 1개

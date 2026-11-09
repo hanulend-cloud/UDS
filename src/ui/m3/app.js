@@ -54,7 +54,7 @@ import { LOAD_LABEL } from '../../engine/shape/step-load-plan.js';
 import { partLook, lineLook } from './part-look.js';
 import { mapShape } from './map-shape.js';
 import { caseKey, caseCand, caseFp, mergeCaseRows } from './shape-cases.js';
-import { heightsFor, deformPart, refinedFor, minThickness, pathFromLine, swOnPath, ledEll, lineVarH, splineInput, partFrame, bumpCenters, fieldThickness, clampField, fieldRoom, lensCandidates, swingCandidates } from '../../engine/mech3d/shape-opt.js';
+import { heightsFor, deformPart, refinedFor, minThickness, pathFromLine, swOnPath, ledEll, lineVarH, splineInput, partFrame, shapeReferenceFrame, bumpCenters, fieldThickness, clampField, fieldRoom, lensCandidates, swingCandidates } from '../../engine/mech3d/shape-opt.js';
 import { interferenceKeys, newInterference, travelDistance } from '../../engine/mech3d/clearance.js';
 import { pacer } from '../../engine/mech3d/yield.js';
 import { scaleMoveMesh, isIdentityXform } from '../../engine/mech3d/xform.js';
@@ -596,7 +596,7 @@ function clearanceOf(i) {
 function adState() { return (A.ad ??= { open: true, sel: { milky: true, leds: false, shape: false, shapePart: -1, milkyMax: null, height: false, housing: false, housingPart: -1, housingSpecial: false, boost: false, oneRow: false }, running: null, result: null, undo: null, milkyPart: null, runner: null, info: null, stepBusy: false, stepWorker: null, locked: {}, lastLock: null, hist: [], flash: '', view: 'set', showChart: false }); }   // view = 창 화면(설정·진행·결과)   // hist = 지난 최적화 후보(지난 후보 표) · flash = 결과 카드 안내 한 줄 · locked = 적용해서 고정한 항목(position·housing·shape·milky)
 function adInfo() {   // 부품별 비 2.5D 비율(부품 윗면 기준 — partFrame) — 라인이 있을 때만. (기구·라인) 별 캐시(높이맵 계산이 무거움)
   const st = adState(), S = A.store.session, rt = getMech3d();
-  if (!st.info || st.info.rt !== rt || st.info.line !== S.line) st.info = { rt, line: S.line, non25: S.line && rt ? rt.parts.map((p) => heightsFor(p, partFrame(p, S.line.frame), 0.5).non25) : [], boxes: rt ? rt.parts.map((p) => bounds(p.positions)) : [] };   // boxes = ④ 기본 대상용 외곽
+  if (!st.info || st.info.rt !== rt || st.info.line !== S.line) { const F = S.line && shapeReferenceFrame(S.line); st.info = { rt, line: S.line, non25: F && rt ? rt.parts.map((p) => { try { return heightsFor(p, partFrame(p, F), 0.5).non25; } catch { return Infinity; } }) : [], boxes: rt ? rt.parts.map((p) => bounds(p.positions)) : [] }; }   // boxes = ④ 기본 대상용 외곽
   return st.info;
 }
 // LED 빛이 처음 맞는 부품 — LED 축 방향 광선(최대 5개)의 다수결. (기구·라인·광원 배치)별 메모, 못 재면 null
@@ -779,7 +779,7 @@ function designScene(d, ctx) {
 const adPaths = new WeakMap();   // 라인·기준 좌표별 중심선 메모(후보마다 다시 표본하지 않게)
 // ③ 형상 기준 좌표 = 대상 부품 윗면 방향(관측면이 기울거나 꺾여도 부품 두께를 바르게 — 2026-10-29). 원본 메쉬별 메모
 const SHAPE_F = new WeakMap();
-const shapeFrame = (base, line) => { let m = SHAPE_F.get(base); if (!m || m.line !== line) SHAPE_F.set(base, (m = { line, F: partFrame(base, line.frame) })); return m.F; };
+const shapeFrame = (base, line) => { let m = SHAPE_F.get(base); if (!m || m.line !== line) SHAPE_F.set(base, (m = { line, F: partFrame(base, shapeReferenceFrame(line)) })); return m.F; };
 function shapeModFor({ dt, h, R, e = 0, c = 0, kL = null, kW = null, kF = null }, M, line, F = line.frame) {   // kL·kW = 길이·폭 두께 곡선(제어점, mm)   // F = 형상 기준 좌표(shapeFrame — 대상 부품 윗면 방향)
   const em = L.currentEmitters(M, line);
   const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];

@@ -9,6 +9,14 @@ const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 export const bump = (r) => (r >= 1 ? 0 : 0.5 * (1 + Math.cos(Math.PI * r)));
 export const toFrame = (F, p) => [dot(p, F.u), dot(p, F.v), dot(p, F.d)];
 export const fromFrame = (F, q) => [0, 1, 2].map((k) => q[0] * F.u[k] + q[1] * F.v[k] + q[2] * F.d[k]);
+// 형상 최적화 기준 방향. 평면 관측면은 관측 좌표를 쓰고, 원통 측면은 한쪽 방사 법선이 아닌
+// 원통 축을 두께 방향으로 쓴다. 그래야 평평한 링 부품을 2.5D 로 판정하고 원주 경로를 XY 에 놓을 수 있다.
+export function shapeReferenceFrame(line) {
+  const C = line?.data?.surface === 'cylinder' ? line.data.cylinder : null;
+  if (!C) return line?.frame;
+  return { u: [...C.e1], v: [...C.e2], d: [...C.axis] };
+}
+
 
 // 형상 기준 좌표 — 대상 부품의 윗면(관측 쪽) 방향. 관측 좌표 F 의 d 쪽을 보는(n·d > minDot) 삼각형들의 면적 가중 법선 = d',
 // v' = F.v 를 d' 에 수직으로, u' = v' × d'(F 와 같은 손잡이). 관측면이 기울거나 꺾여 있어도(예: 꺾인 확산판 → 14.5°) 상자형 도광판의
