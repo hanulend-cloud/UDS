@@ -7,7 +7,7 @@ import { buildTraceScene } from '../src/engine/mech3d/scene3d.js';
 import { setMech3dMesh, getMech3d } from '../src/engine/mech3d/runtime.js';
 import { defaultPart, setPartMaterial } from '../src/engine/mech3d/materials.js';
 import { loadTable } from './l2-util.mjs';
-import { topFaceMesh, rectTris, annulusTris, boxMesh, ok, done } from './mech3d-util.mjs';
+import { topFaceMesh, cylinderSideMesh, rectTris, annulusTris, boxMesh, ok, done } from './mech3d-util.mjs';
 
 const line = recognizeLine([topFaceMesh(rectTris(0, 0, 100, 6), 2)], [{ part: 0, face: 1 }], [0, 0, 1]);
 const obs = { faces: [{ part: 0, face: 1 }], dir: [0, 0, 1], cone: 10, edgeExcl: 0.5, targetLen: 0.8, targetWid: 0.5, cellS: 1, cellW: 0.75 };   // 격자 직접 지정(아래 값 검증이 1 mm 칸 기준)
@@ -29,6 +29,16 @@ for (let b = 0; b < B; b++) {
 }
 const S = tallyStats(G, accs, obs), want = (20 + 0.75) / (20 + 99.25);   // 끝 칸은 [0.5,1] 만 집계 → 무게중심 0.75 / 99.25
 ok(Math.abs(S.Ulen - want) < 0.01, `길이 방향 U ${S.Ulen.toFixed(4)} (해석 ${want.toFixed(4)}), σ ${S.seLen.toFixed(4)}`);
+{   // 원통 측면은 고정 정면이 아니라 출사 위치의 지역 법선으로 360° 전체 집계
+  const parts = [cylinderSideMesh(40, 6)], fs = [{ part: 0, face: 1 }], cyl = recognizeLine(parts, fs, [0, 0, 0]);
+  const ob = { faces: fs, dir: null, localDir: true, cone: 10, edgeExcl: 0 }, gc = tallyGeometry(cyl, ob), a = makeAccumulator(gc, cyl, ob);
+  for (const [k, p] of [[1, [40, 0, 0, 1, 0, 0]], [2, [-40, 0, 0, -1, 0, 0]], [3, [0, 40, 0, 0, 1, 0]], [4, [0, -40, 0, 0, -1, 0]]]) {
+    a.onExit(0, 1, p[0], p[1], p[2], p[3], p[4], p[5], 1, k);
+    a.onEscape(...p, 1, k);
+  }
+  ok(a.accAll.reduce((x, y) => x + y, 0) === 4, '원통 관측면: 앞·뒤·좌·우 전체 출사 집계');
+}
+
 ok(S.Uwid > 0.7 && S.Uwid <= 1, `폭 방향 최저 U ${S.Uwid.toFixed(3)} @ s=${S.sWorst.toFixed(1)}mm (균일 + 셀 노이즈)`);
 const rr = S.profile[75] / S.profile[25], r2 = Math.max(rr, 1 / rr), want2 = (20 + 75.5) / (20 + 25.5);   // 라인 진행 방향과 무관하게 비교
 ok(!S.passLen && S.profile.length === 100 && Math.abs(r2 / want2 - 1) < 0.03, `판정·프로파일(길이 ${S.passLen ? '합격' : '불합격'}, 칸 75/25 비 ${r2.toFixed(3)} / 해석 ${want2.toFixed(3)})`);

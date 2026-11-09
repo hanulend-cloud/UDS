@@ -99,7 +99,7 @@ export function buildObsOverlay(parts, faces, line, G, { maxTris = 200000, lift 
   const maxEdge = Math.min(G.ds, G.cell), d = line.frame.d, pos = [], tri = [];
   for (const [p, set] of byPart) {
     const s = subdivide(extractFaces(parts[p], set), maxEdge, Math.floor(maxTris / byPart.size)), base = pos.length / 3;
-    for (let k = 0; k < s.positions.length; k += 3) pos.push(s.positions[k] + lift * d[0], s.positions[k + 1] + lift * d[1], s.positions[k + 2] + lift * d[2]);
+    for (let k = 0; k < s.positions.length; k += 3) { const p = [s.positions[k], s.positions[k + 1], s.positions[k + 2]], n = line.normalAt?.(p) ?? d; pos.push(p[0] + lift * n[0], p[1] + lift * n[1], p[2] + lift * n[2]); }
     for (const t of s.triangles) tri.push(t + base);
   }
   const positions = Float32Array.from(pos);

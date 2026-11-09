@@ -338,13 +338,13 @@ async function refreshLine() {
 }
 function afterLine() {
   const held = A.adSeedLine; A.adSeedLine = null;
-  if (held && A.store.session.line && seedFits(held, geometry(tallyObs(A.store.mspec.observe, A.store.mspec.observe.dir ?? A.store.session.line.frame.d)))) { A.adSeed = held; A.adSeedSealed = false; }
+  if (held && A.store.session.line && seedFits(held, geometry(tallyObs(A.store.mspec.observe, A.store.mspec.observe.dir ?? A.store.session.line.frame.d, A.store.session.line)))) { A.adSeed = held; A.adSeedSealed = false; }
   restartCalc(); rerunGeomChecks(); A.store.update('session');
 }
 
 // ---- 점진 계산 ----
 // 집계 격자 인자(빈칸 = 자동) — tally.js 계약: cellS·cellW·winS(null = 자동). 구버전 obs.cell 은 쓰지 않음 (main.js:284)
-const tallyObs = (O, dir) => ({ ...O, dir, cell: null, cellS: O.cellS ?? null, cellW: O.cellW ?? null, winS: O.winS ?? null });
+const tallyObs = (O, dir, line = null) => ({ ...O, dir: line?.data?.surface === 'cylinder' && O.dir == null ? null : dir, localDir: line?.data?.surface === 'cylinder' && O.dir == null, cell: null, cellS: O.cellS ?? null, cellW: O.cellW ?? null, winS: O.winS ?? null });
 // 집계 격자 — (라인, cellS, cellW, winS, 가장자리 제외) 별로 캐시(계산 ≈60ms). 색지도 덧그림도 같은 캐시에 (main.js:286-290)
 function geometry(obs) {
   const S = A.store.session, key = JSON.stringify([obs.cellS, obs.cellW, obs.quality, obs.winS, obs.edgeExcl]);
@@ -359,7 +359,7 @@ export function jobFor(M, mechParts, { emitters = null, line = null, G = null, o
   if (!ln) return null;
   const em = emitters ?? L.currentEmitters(M, ln);
   if (!em.length) return null;
-  const o = obs ?? tallyObs(M.observe, M.observe.dir ?? ln.frame.d), g = G ?? geometry(o);
+  const o = obs ?? tallyObs(M.observe, M.observe.dir ?? ln.frame.d, ln), g = G ?? geometry(o);
   const isStep = M.light.kind === 'step' && getLedMesh(), lay = isStep ? L.stepLayout(M, ln) : null, ms = JSON.parse(JSON.stringify(M));
   let ledParts = isStep ? L.rawParts(getLedMesh().parts) : null;
   // 가상 배치·개별 조정(spec §4a): 부품은 이미 월드 좌표 → composeScene 이 다시 변환하지 않게 offset·rot = 0, 번호는 그 배치 기준
@@ -1064,9 +1064,9 @@ async function adRun(opt = {}) {
   const hpSel = avail.housing?.parts?.includes(st.sel.housingPart) ? st.sel.housingPart : defaultHousingPart(M0, adInfo().boxes);   // 보완으로 ④ 를 더했으면 기본 케이스 부품
   // 최적화 판정 격자 = 늘 저화질(2026-11-02) — 고화질 칸(0.5 mm)으로 짧게 평가하면 노이즈가 '불균일' 로 보여 값이 크게 낮게 나오고(실측 길이 균일도 0.65 vs 정밀 0.76)
   // LED 를 너무 많이 쓰거나 간격이 제멋대로가 됨. 화면 화질은 그대로, 최적화 평가만. 후보를 고른 뒤 최종 판정만 화면 화질 격자(Gs)로(io.verify screen, 2026-11-03)
-  const lowQ = (M0.observe.quality ?? 'low') === 'low', obs = tallyObs({ ...M0.observe, quality: 'low' }, M0.observe.dir ?? line.frame.d), G = lowQ ? geometry(tallyObs(M0.observe, M0.observe.dir ?? line.frame.d)) : tallyGeometry(line, obs), sp = st.sel.shapePart, hp = stages.housing ? hpSel : -1;
+  const lowQ = (M0.observe.quality ?? 'low') === 'low', obs = tallyObs({ ...M0.observe, quality: 'low' }, M0.observe.dir ?? line.frame.d, line), G = lowQ ? geometry(tallyObs(M0.observe, M0.observe.dir ?? line.frame.d, line)) : tallyGeometry(line, obs), sp = st.sel.shapePart, hp = stages.housing ? hpSel : -1;
   const ctx = { M0, line, G, obs, rt, mp: st.milkyPart };
-  const obsS = lowQ ? obs : tallyObs(M0.observe, M0.observe.dir ?? line.frame.d), Gs = lowQ ? G : geometry(obsS), ctxS = { ...ctx, G: Gs, obs: obsS };
+  const obsS = lowQ ? obs : tallyObs(M0.observe, M0.observe.dir ?? line.frame.d, line), Gs = lowQ ? G : geometry(obsS), ctxS = { ...ctx, G: Gs, obs: obsS };
   const R = (st.runner = createAdRunner({ ports: A.pool.ports(), chunkTimeoutMs: 90000 }));   // 높은 Milky 청크는 30 초를 넘기기도 함
   // 같은 Worker 를 쓰므로 점진 계산은 멈춤 — 대기(디바운스) 중이면 장면을 곧 보내므로 취소. 사용자 일시정지 여부는 기억(끝나고 그대로)
   const snap0 = A.prog.snapshot(), ps = snap0.state, currentVerified = reusableCurrent(snap0, G), curS = lowQ ? null : reusableCurrent(snap0, Gs), currentScreen = curS ? { ...curS, sharp: true } : null;   // 수렴한 점진 결과 = 현재안(verify 생략)

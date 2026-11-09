@@ -42,6 +42,12 @@ export function topFaceMesh(tris, z = 2) {
   return { positions: Float32Array.from(P), triangles: Uint32Array.from(T), faceIds: Uint32Array.from(F), faceCount: 2 };
 }
 export const rectTris = (x0, y0, x1, y1) => [[[x0, y0], [x1, y0], [x1, y1]], [[x0, y0], [x1, y1], [x0, y1]]];
+export function cylinderSideMesh(r = 40, h = 6, n = 192) {
+  const P = [], T = [], F = [];
+  for (let k = 0; k < n; k++) { const a = 2 * Math.PI * k / n; P.push(r * Math.cos(a), r * Math.sin(a), -h / 2, r * Math.cos(a), r * Math.sin(a), h / 2); }
+  for (let k = 0; k < n; k++) { const a = 2 * k, b = 2 * ((k + 1) % n); T.push(a, b, b + 1, a, b + 1, a + 1); F.push(1, 1); }
+  return { positions: Float32Array.from(P), triangles: Uint32Array.from(T), faceIds: Uint32Array.from(F), faceCount: 2 };
+}
 export function annulusTris(cx, cy, r0, r1, n = 256) {
   const out = [];
   for (let k = 0; k < n; k++) {

@@ -511,6 +511,54 @@ export function lightData(L) {
   return { ...d, raster };
 }
 
+// 닫힌 원통 측면은 면적 가중 법선이 0이라 한 평면으로 투영할 수 없다.
+// 삼각형 법선에서 축을 찾고 원을 맞춘 뒤 원주(s) × 축(w) 직사각형으로 펼친다.
+function solve3(A, b) {
+  A = A.map((r, i) => [...r, b[i]]);
+  for (let k = 0; k < 3; k++) {
+    let p = k; for (let i = k + 1; i < 3; i++) if (Math.abs(A[i][k]) > Math.abs(A[p][k])) p = i;
+    if (Math.abs(A[p][k]) < 1e-12) return null;
+    [A[k], A[p]] = [A[p], A[k]];
+    const q = A[k][k]; for (let j = k; j < 4; j++) A[k][j] /= q;
+    for (let i = 0; i < 3; i++) if (i !== k) { const f = A[i][k]; for (let j = k; j < 4; j++) A[i][j] -= f * A[k][j]; }
+  }
+  return A.map((r) => r[3]);
+}
+function cylinderData(parts, faces) {
+  const want = new Set(faces.map((f) => f.part + '|' + f.face)), ns = [], pts = [];
+  let area = 0, sum = [0, 0, 0];
+  parts.forEach((m, pi) => {
+    const P = m.positions, T = m.triangles;
+    for (let t = 0; t < T.length / 3; t++) {
+      if (!want.has(pi + '|' + m.faceIds[t])) continue;
+      const ids = [T[3 * t], T[3 * t + 1], T[3 * t + 2]], v = ids.map((i) => [P[3 * i], P[3 * i + 1], P[3 * i + 2]]);
+      const u = v[1].map((x, k) => x - v[0][k]), w = v[2].map((x, k) => x - v[0][k]), c = cross(u, w), a = Math.hypot(...c) / 2;
+      if (!(a > 1e-12)) continue;
+      const n = c.map((x) => x / (2 * a)); ns.push({ n, a, p: v[0] }); area += a; sum = sum.map((x, k) => x + c[k] / 2); pts.push(...v);
+    }
+  });
+  if (ns.length < 8 || !(area > 0) || Math.hypot(...sum) > 0.05 * area) return null;
+  let best = 0, axis = null, stride = Math.max(1, Math.floor(ns.length / 80));
+  for (let i = 0; i < ns.length; i += stride) for (let j = i + 1; j < ns.length; j += stride) {
+    const q = cross(ns[i].n, ns[j].n), l = Math.hypot(...q); if (l > best) { best = l; axis = q.map((x) => x / l); }
+  }
+  if (!axis || best < 0.2) return null;
+  const major = axis.reduce((m, x, i) => Math.abs(x) > Math.abs(axis[m]) ? i : m, 0); if (axis[major] < 0) axis = axis.map((x) => -x);
+  if (ns.reduce((s, q) => s + q.a * Math.abs(dot(q.n, axis)), 0) / area > 0.03) return null;
+  const ref = Math.abs(axis[0]) < 0.8 ? [1, 0, 0] : [0, 1, 0], e1 = unit(ref.map((x, k) => x - dot(ref, axis) * axis[k])), e2 = cross(axis, e1);
+  const M = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], B = [0, 0, 0]; let h0 = Infinity, h1 = -Infinity;
+  const xy = pts.map((p) => { const x = dot(p, e1), y = dot(p, e2), h = dot(p, axis), z = -(x * x + y * y), row = [x, y, 1]; h0 = Math.min(h0, h); h1 = Math.max(h1, h); for (let i = 0; i < 3; i++) { B[i] += row[i] * z; for (let j = 0; j < 3; j++) M[i][j] += row[i] * row[j]; } return [x, y]; });
+  const fit = solve3(M, B); if (!fit) return null;
+  const cx = -fit[0] / 2, cy = -fit[1] / 2, r = Math.sqrt(Math.max(0, cx * cx + cy * cy - fit[2]));
+  if (!(r > 0) || !(h1 - h0 > 0)) return null;
+  const err = Math.sqrt(xy.reduce((s, p) => s + (Math.hypot(p[0] - cx, p[1] - cy) - r) ** 2, 0) / xy.length);
+  if (err > Math.max(0.05, 0.01 * r)) return null;
+  const sign = ns.reduce((s, q) => { const x = dot(q.p, e1) - cx, y = dot(q.p, e2) - cy, l = Math.hypot(x, y) || 1; return s + q.a * dot(q.n, e1.map((v, k) => v * x / l + e2[k] * y / l)); }, 0) >= 0 ? 1 : -1;
+  const L = 2 * Math.PI * r, W = h1 - h0, tris = Float64Array.from([0, -W / 2, L, -W / 2, L, W / 2, 0, -W / 2, L, W / 2, 0, W / 2]);
+  const R = rasterize(tris, Math.max(0.05, Math.min(0.5, W / 20))), dt = distanceTransform(R), frame = { u: e1, v: axis, d: e1.map((x) => x * sign) };
+  return { kind: 'circle', closed: true, surface: 'cylinder', branched: false, frame, hMin: 0, width: W, raster: { ...R, dt }, cylinder: { axis, e1, e2, c: [cx, cy], r, h: (h0 + h1) / 2, sign } };
+}
+
 export function lineFromData(data) {
   data = { ...data, pts: revive(data.pts, Float64Array), raster: { ...data.raster, mask: revive(data.raster.mask, Uint8Array), dt: revive(data.raster.dt, Float32Array) } };
   const { kind, closed, frame: F, raster: R, width } = data;
@@ -521,8 +569,14 @@ export function lineFromData(data) {
   // 꺾인 모서리 안쪽(오목한 쪽 꼭짓점에서 W/2 이내)은 여러 (s,w) 가 같은 점에 대응한다 → fromSW→toSW 왕복이 원래 (s,w) 로 돌아오지 않을 수 있다(가장 가까운 구간을 고름).
   // 급한 굽힘(굽힘 반경 ≤ W: 머리핀, R10 S자 등)도 같다: 안쪽(곡률 중심 쪽) |w| 가 국소 굽힘 반경에 가까우면 법선들이 모여 s 가 모호해진다
   // (|w| ≥ 0.8 × 국소 반경 영역은 (s,w) 정확도를 보장하지 않음). 바깥쪽과 |w| 가 작은 곳은 정상.
-  let length, toSW, fromSW, tangentAt;
-  if (kind === 'line') {
+  let length, toSW, fromSW, tangentAt, to2D, to3D, normalAt;
+  if (data.surface === 'cylinder') {
+    const C = data.cylinder, { axis, e1, e2 } = C; length = 2 * Math.PI * C.r;
+    to2D = (p) => { const x = dot(p, e1) - C.c[0], y = dot(p, e2) - C.c[1], th = ((Math.atan2(y, x) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI); return [th * C.r, dot(p, axis) - C.h]; };
+    toSW = (s, w) => [((s % length) + length) % length, w]; fromSW = (s, w) => [((s % length) + length) % length, w]; tangentAt = () => [1, 0];
+    to3D = (s, w, lift = 0) => { const th = s / C.r, rr = C.r + C.sign * lift, h = C.h + w; return axis.map((x, k) => x * h + e1[k] * (C.c[0] + rr * Math.cos(th)) + e2[k] * (C.c[1] + rr * Math.sin(th))); };
+    normalAt = (p) => { const x = dot(p, e1) - C.c[0], y = dot(p, e2) - C.c[1], l = Math.hypot(x, y) || 1; return e1.map((v, k) => C.sign * (v * x + e2[k] * y) / l); };
+  } else if (kind === 'line') {
     const [ax, ay] = data.a, [tx, ty] = data.t; length = data.length;
     toSW = (x, y) => [(x - ax) * tx + (y - ay) * ty, tx * (y - ay) - ty * (x - ax)];
     fromSW = (s, w) => [ax + s * tx - w * ty, ay + s * ty + w * tx];
@@ -576,12 +630,14 @@ export function lineFromData(data) {
     fromSW = (s, w) => { const a = at(s); return [a.x - w * a.ty, a.y + w * a.tx]; };
     tangentAt = (s) => { const a = at(s); return [a.tx, a.ty]; };
   }
-  const to2D = (p) => [dot(p, F.u), dot(p, F.v)];
-  const to3D = (x, y, h) => { const hh = data.hMin + h; return [x * F.u[0] + y * F.v[0] + hh * F.d[0], x * F.u[1] + y * F.v[1] + hh * F.d[1], x * F.u[2] + y * F.v[2] + hh * F.d[2]]; };
-  return { kind, closed, length, width, branched: data.branched, frame: F, data, inside, boundaryDist, toSW, fromSW, tangentAt, to2D, to3D };
+  to2D ??= (p) => [dot(p, F.u), dot(p, F.v)];
+  to3D ??= (x, y, h) => { const hh = data.hMin + h; return [x * F.u[0] + y * F.v[0] + hh * F.d[0], x * F.u[1] + y * F.v[1] + hh * F.d[1], x * F.u[2] + y * F.v[2] + hh * F.d[2]]; };
+  normalAt ??= () => F.d;
+  return { kind, closed, length, width, branched: data.branched, frame: F, data, inside, boundaryDist, toSW, fromSW, tangentAt, to2D, to3D, normalAt };
 }
 
 export function recognizeLine(parts, faces, dir) {
+  { const c = cylinderData(parts, faces); if (c) return lineFromData(c); }
   const F = viewFrame(dir), { tris, hMin } = project(parts, faces, F);
   if (!tris.length) throw new Error('관측면이 선택되지 않음');
   let R = rasterize(tris), topo = cleanTopology(R), dt = distanceTransform(R), W0 = ridgeWidth(R, dt);

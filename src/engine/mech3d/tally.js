@@ -93,6 +93,7 @@ export function makeAccumulator(G, line, obs, rw = null, { virtual = false } = {
   const R = G.pix, nCell = G.ns * G.nw, acc = new Float64Array(nCell), accAll = new Float64Array(nCell), cnt = new Uint32Array(nCell);
   const C = rw?.C ?? null, nJ = C ? C.n : 0, racc = C ? new Float64Array(nJ * nCell) : null, sf = C ? new Float64Array(nJ) : null, sf2 = C ? new Float64Array(nJ) : null;
   let lx = 0, ly = 0, lz = 0, has = false, lp = -1, nRw = 0;
+  const inCone = (x, y, z, dx, dy, dz) => { const q = obs.localDir && line.normalAt ? line.normalAt([x, y, z]) : d; return dx * q[0] + dy * q[1] + dz * q[2] >= cosC; };
   const acc_ = {
     acc, accAll, cnt,
     get rw() { return C ? { acc: racc, sf, sf2, n: nRw } : null; },
@@ -102,12 +103,12 @@ export function makeAccumulator(G, line, obs, rw = null, { virtual = false } = {
       if (!has || lp !== p) {
         if (!virtual) return;
         const dn = dx * nP[0] + dy * nP[1] + dz * nP[2];
-        if (!(dn > 1e-9) || dx * d[0] + dy * d[1] + dz * d[2] < cosC) return;
+        if (!(dn > 1e-9) || !inCone(x, y, z, dx, dy, dz)) return;
         const t = (hP - (x * nP[0] + y * nP[1] + z * nP[2])) / dn;
         return t >= -1e-6 ? add(x + t * dx, y + t * dy, z + t * dz, w, tL, tK) : undefined;
       }
       has = false;
-      if (dx * d[0] + dy * d[1] + dz * d[2] < cosC) return;
+      if (!inCone(lx, ly, lz, dx, dy, dz)) return;
       return add(lx, ly, lz, w, tL, tK);   // 집계했으면 true(광경로 집계용)
     },
   };

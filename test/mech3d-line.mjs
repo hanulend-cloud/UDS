@@ -1,6 +1,6 @@
 // 라인 인식(V3D-5): node test/mech3d-line.mjs
 import { recognizeLine, obsDirection, lineFromData, lightData } from '../src/engine/mech3d/line.js';
-import { topFaceMesh, rectTris, annulusTris, rng, ok, done } from './mech3d-util.mjs';
+import { topFaceMesh, cylinderSideMesh, rectTris, annulusTris, rng, ok, done } from './mech3d-util.mjs';
 
 const faces = [{ part: 0, face: 1 }];
 // s 방향(어느 끝이 시작인지)·w 부호는 인식 결과에 따라 정해지므로, 첫 점으로 방향을 정해 나머지를 같은 방향으로 판정(열린 경로용)
@@ -36,8 +36,15 @@ function checkPoints(L, pts, label) {
   const w = Math.abs(L.toSW(...L.to2D([0, 42, 2]))[1]);
   ok(Math.abs(w - 2) <= 0.2, `V3D-5 원: 폭 방향 |w| ${w.toFixed(3)} (해석 2)`);
 }
-{   // ㄱ자 띠: 가로 0..60×0..6 + 세로 54..60×6..46. 중심선 = 중앙축(medial axis): y=3 (x≤54) → 안쪽 모서리 (54,6) 둘레
+{   // 링 바깥 원통 측면: 법선 평균은 0이지만 전체 원주를 펼쳐 인식
+  const parts = [cylinderSideMesh(40, 6)], d = obsDirection(parts, faces), L = recognizeLine(parts, faces, d);
+  const a = L.toSW(...L.to2D([40, 0, 0]))[0], b = L.toSW(...L.to2D([0, 40, 2]))[0], ds = ((b - a) % L.length + L.length) % L.length;
+  const back = lineFromData(JSON.parse(JSON.stringify(L.data))), n = back.normalAt([-40, 0, 0]);
+  ok(Math.hypot(...d) < 1e-6 && L.data.surface === 'cylinder' && L.closed && Math.abs(L.length - 80 * Math.PI) < 0.1 && Math.abs(L.width - 6) < 0.01, '원통 측면 전체: 둘레 ' + L.length.toFixed(3) + ' · 높이 ' + L.width.toFixed(3));
+  ok(Math.min(Math.abs(ds - 20 * Math.PI), Math.abs(L.length - ds - 20 * Math.PI)) < 0.1 && Math.abs(n[0] + 1) < 1e-6, '원통 펼침·직렬화: 90° 호와 뒷면 지역 법선');
+}
     // 반경 3 의 1/4 원호 → x=57 (y≥6). 길이 = 54 + 1.5π + 40 = 98.712 (직각 꺾음 100 이 아님 — 폭 중심을 지키는 실제 중심선)
+{   // ㄱ자 띠: 가로 0..60×0..6 + 세로 54..60×6..46. 중심선 = 중앙축(medial axis): y=3 (x≤54) → 안쪽 모서리 (54,6) 둘레
   const parts = [topFaceMesh([...rectTris(0, 0, 60, 6), ...rectTris(54, 6, 60, 46)])];
   const L = recognizeLine(parts, faces, [0, 0, 1]), arc = 54 + 1.5 * Math.PI;
   ok(L.kind === 'path' && !L.closed && Math.abs(L.length - (arc + 40)) <= 0.3, `ㄱ자: ${L.kind}, 길이 ${L.length.toFixed(3)} (중앙축 ${(arc + 40).toFixed(3)})`);
