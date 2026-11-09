@@ -569,12 +569,13 @@ export function lineFromData(data) {
   // 꺾인 모서리 안쪽(오목한 쪽 꼭짓점에서 W/2 이내)은 여러 (s,w) 가 같은 점에 대응한다 → fromSW→toSW 왕복이 원래 (s,w) 로 돌아오지 않을 수 있다(가장 가까운 구간을 고름).
   // 급한 굽힘(굽힘 반경 ≤ W: 머리핀, R10 S자 등)도 같다: 안쪽(곡률 중심 쪽) |w| 가 국소 굽힘 반경에 가까우면 법선들이 모여 s 가 모호해진다
   // (|w| ≥ 0.8 × 국소 반경 영역은 (s,w) 정확도를 보장하지 않음). 바깥쪽과 |w| 가 작은 곳은 정상.
-  let length, toSW, fromSW, tangentAt, to2D, to3D, normalAt;
+  let length, toSW, fromSW, tangentAt, to2D, to3D, normalAt, mapSW;
   if (data.surface === 'cylinder') {
     const C = data.cylinder, { axis, e1, e2 } = C; length = 2 * Math.PI * C.r;
     to2D = (p) => { const x = dot(p, e1) - C.c[0], y = dot(p, e2) - C.c[1], th = ((Math.atan2(y, x) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI); return [th * C.r, dot(p, axis) - C.h]; };
     toSW = (s, w) => [((s % length) + length) % length, w]; fromSW = (s, w) => [((s % length) + length) % length, w]; tangentAt = () => [1, 0];
     to3D = (s, w, lift = 0) => { const th = s / C.r, rr = C.r + C.sign * lift, h = C.h + w; return axis.map((x, k) => x * h + e1[k] * (C.c[0] + rr * Math.cos(th)) + e2[k] * (C.c[1] + rr * Math.sin(th))); };
+    mapSW = (s, w) => { const th = s / C.r, rr = C.r + w; return [rr * Math.cos(th), rr * Math.sin(th)]; };
     normalAt = (p) => { const x = dot(p, e1) - C.c[0], y = dot(p, e2) - C.c[1], l = Math.hypot(x, y) || 1; return e1.map((v, k) => C.sign * (v * x + e2[k] * y) / l); };
   } else if (kind === 'line') {
     const [ax, ay] = data.a, [tx, ty] = data.t; length = data.length;
@@ -633,7 +634,7 @@ export function lineFromData(data) {
   to2D ??= (p) => [dot(p, F.u), dot(p, F.v)];
   to3D ??= (x, y, h) => { const hh = data.hMin + h; return [x * F.u[0] + y * F.v[0] + hh * F.d[0], x * F.u[1] + y * F.v[1] + hh * F.d[1], x * F.u[2] + y * F.v[2] + hh * F.d[2]]; };
   normalAt ??= () => F.d;
-  return { kind, closed, length, width, branched: data.branched, frame: F, data, inside, boundaryDist, toSW, fromSW, tangentAt, to2D, to3D, normalAt };
+  return { kind, closed, length, width, branched: data.branched, frame: F, data, inside, boundaryDist, toSW, fromSW, tangentAt, to2D, to3D, normalAt, mapSW };
 }
 
 export function recognizeLine(parts, faces, dir) {

@@ -6,17 +6,18 @@
 // 라인 → 칸 모서리 좌표. y 는 관측면 좌표(위 = +). 바깥 방향 wOut = +1 이면 +w 가 링 바깥
 export function mapShape(line, G) {
   const ns = G.ns, nw = G.nw, xy = new Float32Array((ns + 1) * (nw + 1) * 2);
+  const point = line.mapSW ?? line.fromSW;
   for (let i = 0; i <= ns; i++) for (let j = 0; j <= nw; j++) {
-    const [x, y] = line.fromSW(Math.min(i * G.ds, line.closed ? i * G.ds : G.L), G.w0 + j * G.cell), k = (i * (nw + 1) + j) * 2;
+    const [x, y] = point(Math.min(i * G.ds, line.closed ? i * G.ds : G.L), G.w0 + j * G.cell), k = (i * (nw + 1) + j) * 2;
     xy[k] = x; xy[k + 1] = y;
   }
   // 중심선 → 무게중심 · 넓이 부호(+ = 반시계) · 시작점
   let cx = 0, cy = 0, area = 0;
   const N = Math.max(8, Math.min(720, ns)), pts = [];
-  for (let k = 0; k < N; k++) pts.push(line.fromSW((k / N) * G.L, 0));
+  for (let k = 0; k < N; k++) pts.push(point((k / N) * G.L, 0));
   for (const [x, y] of pts) { cx += x / N; cy += y / N; }
   for (let k = 0; k < N; k++) { const [x1, y1] = pts[k], [x2, y2] = pts[(k + 1) % N]; area += x1 * y2 - x2 * y1; }
-  const a = line.fromSW(0, 1), b = line.fromSW(0, -1), wOut = Math.hypot(a[0] - cx, a[1] - cy) >= Math.hypot(b[0] - cx, b[1] - cy) ? 1 : -1;
+  const a = point(0, 1), b = point(0, -1), wOut = Math.hypot(a[0] - cx, a[1] - cy) >= Math.hypot(b[0] - cx, b[1] - cy) ? 1 : -1;
   const s0 = pts[0], start = Math.atan2(-(s0[1] - cy), s0[0] - cx);   // 화면 각도(아래 = +y)
   return { ns, nw, xy, closed: !!line.closed, wOut, ccw: area > 0, start };
 }

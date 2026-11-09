@@ -41,7 +41,9 @@ function checkPoints(L, pts, label) {
   const a = L.toSW(...L.to2D([40, 0, 0]))[0], b = L.toSW(...L.to2D([0, 40, 2]))[0], ds = ((b - a) % L.length + L.length) % L.length;
   const back = lineFromData(JSON.parse(JSON.stringify(L.data))), n = back.normalAt([-40, 0, 0]);
   ok(Math.hypot(...d) < 1e-6 && L.data.surface === 'cylinder' && L.closed && Math.abs(L.length - 80 * Math.PI) < 0.1 && Math.abs(L.width - 6) < 0.01, '원통 측면 전체: 둘레 ' + L.length.toFixed(3) + ' · 높이 ' + L.width.toFixed(3));
+  const mp = back.mapSW(back.length / 4, 0);
   ok(Math.min(Math.abs(ds - 20 * Math.PI), Math.abs(L.length - ds - 20 * Math.PI)) < 0.1 && Math.abs(n[0] + 1) < 1e-6, '원통 펼침·직렬화: 90° 호와 뒷면 지역 법선');
+  ok(Math.abs(mp[0]) < 1e-6 && Math.abs(mp[1] - 40) < 1e-6, '원통 2D 표시 방향: s=0 오른쪽 · 1/4 둘레 위쪽(+Y)');
 }
     // 반경 3 의 1/4 원호 → x=57 (y≥6). 길이 = 54 + 1.5π + 40 = 98.712 (직각 꺾음 100 이 아님 — 폭 중심을 지키는 실제 중심선)
 {   // ㄱ자 띠: 가로 0..60×0..6 + 세로 54..60×6..46. 중심선 = 중앙축(medial axis): y=3 (x≤54) → 안쪽 모서리 (54,6) 둘레

@@ -34,5 +34,14 @@ for (const mode of ['ring', 'real']) {
   const lshape = { closed: false, fromSW: (s, w) => (s <= 50 ? [s, w] : [50 - w, s - 50]) };
   const G2 = { ns: 20, nw: 4, ds: 5, w0: -2, cell: 1, L: 100, closed: false }, s2 = mapShape(lshape, G2), Ly = shapeLayout(G2, s2, box, [0, 3], 'real');
   ok(Math.abs(Ly.info.mm[0] - 52) < 0.5 && Math.abs(Ly.info.mm[1] - 52) < 0.5, `ㄱ자 실제 크기 ${Ly.info.mm.map((v) => v.toFixed(0)).join('×')}`);
+{ // 원통은 계산용 펼침(fromSW)이 아니라 물리 원주 표시(mapSW)를 사용 — 3D·2D·실제 비율 방향 일치
+  const cyl = { closed: true, fromSW: (s, w) => [s, w], mapSW: (s, w) => { const a = s / R; return [(R + w) * Math.cos(a), (R + w) * Math.sin(a)]; } };
+  const sc = mapShape(cyl, G), Lr = shapeLayout(G, sc, box, [0, 7], 'ring'), Le = shapeLayout(G, sc, box, [0, 7], 'real');
+  const cr = Lr.info.center, er = Le.info.mm, pr = Lr.P(18, 4), pe = Le.P(18, 4), p0 = Le.P(0, 4), p2 = Le.P(36, 4), ce = [(p0[0] + p2[0]) / 2, (p0[1] + p2[1]) / 2];
+  ok(sc.ccw && sc.wOut === 1, '원통 표시 좌표: +s 반시계 · +w 바깥쪽');
+  ok(pr[1] < cr[1] && pe[1] < ce[1], '원통 밝기 방향: 기본 2D·실제 비율 모두 3D +Y를 화면 위로 표시');
+  ok(Math.abs(er[0] - er[1]) < 0.5 && Math.abs(er[0] - 68) < 0.5, '원통 실제 비율 = 지름 68 mm 링(' + er.map((v) => v.toFixed(1)).join('×') + ')');
+}
+
 }
 done();
