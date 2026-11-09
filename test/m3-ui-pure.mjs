@@ -121,8 +121,9 @@ ok(judgeText(0.8004, 0.8009).cls === 'ok' && judgeText(0.7999, 0.8).cls === 'bad
       ok(/추천: 부품 속성에서 케이스 면을 '백색 90%'.*길이 \+1\.0%p · 폭 \+7\.0%p 정도 오름/.test(caseHintText({ hint: h(0.81, 0.52) })), `케이스 면 추천: ${caseHintText({ hint: h(0.81, 0.52) })}`);
       ok(caseHintText({ hint: h(0.805, 0.455) }) === '' && caseHintText({ hint: h(0.75, 0.6) }) === '' && caseHintText({}) === '', '뚜렷이 나아질 때만(하나라도 크게 나빠지면 안 띄움)');
       ok(/data-ad="casePart" data-v="0"/.test(resultLineHtml({ best: { Ulen: 0.8, Uwid: 0.45 }, cur: {}, targets: {}, stages: { milky: true }, hint: h(0.81, 0.52) })), '추천 줄 = 누르면 케이스 부품으로'); }
-    { const { retuneMilky } = await import('../src/ui/m3/autodesign-panel.js');
-      ok(retuneMilky({ leds: true }, { milky: {} }, true) && retuneMilky({ shape: true }, { milky: {} }, true) && !retuneMilky({ leds: true }, {}, true) && !retuneMilky({ milky: true, leds: true }, { milky: {} }, true) && !retuneMilky({ housing: true }, { milky: {} }, true) && !retuneMilky({ leds: true }, { milky: {} }, false), '고정된 Milky 는 위치·높이·형상을 바꿀 때 다시 맞춤');
+    { const { resultStageFlags, factorResult } = await import('../src/ui/m3/autodesign-panel.js');
+      const stages = resultStageFlags({ leds: true, height: false, milky: false });
+      ok(stages.position && stages.leds && !stages.milky && factorResult({ cur: { count: 5 }, best: { count: 5 }, stages }, null, {}, 'position').chip === '그대로', '위치 실행은 결과에 별도 기록 · 체크 해제한 Milky 는 실행 안 함');
       const b1 = { best: { Ulen: 0.85, Uwid: 0.4 }, cur: { Ulen: 0.6, Uwid: 0.3 }, targets: { len: 0.8, wid: 0.7 }, feasible: false, stages: { leds: true } };
       ok(/2열/.test(resultLineHtml({ ...b1, oneRow: true })) && !/2열 배치를 시도/.test(resultLineHtml({ ...b1, oneRow: false })) && !/2열 배치를 시도/.test(resultLineHtml({ ...b1, oneRow: true, best: { ...b1.best, Uwid: 0.75 } })) && !/2열 배치를 시도/.test(resultLineHtml({ ...b1, oneRow: true, stages: { milky: true } })), '폭 미달 + 1열만 = 2열 안내'); }
     { const b = { best: { Ulen: 0.7, Uwid: 0.7 }, cur: { Ulen: 0.6, Uwid: 0.6 }, reason: 'x', targets: {} };

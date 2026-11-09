@@ -482,13 +482,13 @@ export function pickLateral(res, obs) {
 export const LADDER_MS = 150000, LADDER_GAIN = 0.005;
 export async function runAutoDesign(cfg, io) {
   const { stages, obs } = cfg, steps = [], sCap = Math.min(cfg.milkyMax ?? MILKY_OPT_MAX, MILKY_OPT_MAX), mCap = sCap;
-  let d = { ...cfg.current }, feasible = true, reason = '', hint = null, peek = null, shapeNote = null, ledAlts = null, ledMore = null, ledLimit = null, ledRows = 1;
+  let d = { ...cfg.current }, feasible = true, reason = '', hint = null, peek = null, shapeNote = null, ledAlts = null, ledMore = null, ledLimit = null, ledRows = 1, lateralLayout = null;
   const stop = () => io.cancelled?.();
   if (stop()) return { cancelled: true };
   const clock = io.now ?? Date.now;   // 일시정지한 시간은 빼고 잼
   io.progress?.('current', 0, '현재안 계산');   // 비교표 '현재' 열 — 최종안과 같은 추정기(io.verify). 수렴한 점진 결과가 있으면 재사용
-  // 지금 Milky 가 상한보다 높으면 '현재' 열은 그 값 그대로(비교용 — 계산마다 시간 한도), 최적화는 상한으로 낮춰서 — 결과에 표시(milkyLowered)
-  const lowered = cfg.current?.milky > sCap ? { from: cfg.current.milky, to: sCap, rough: !cfg.currentVerified } : null;
+  // Milky 단계를 선택했을 때만 상한을 적용한다. 체크 해제(고정)한 Milky 는 위치·높이·형상을 돌려도 절대 바꾸지 않는다.
+  const lowered = stages.milky && cfg.current?.milky > sCap ? { from: cfg.current.milky, to: sCap, rough: !cfg.currentVerified } : null;
   let currentVerified = cfg.currentVerified ?? await (lowered ? io.verify(d, { maxMs: FAR_MS, rough: true }) : io.verify(d));
   if (stop()) return { cancelled: true };
   if (lowered) d = { ...d, milky: sCap };
@@ -516,7 +516,7 @@ export async function runAutoDesign(cfg, io) {
       if (stop()) return { cancelled: true };
       const pick = pickLateral(res, obs);
       steps.push({ stage: 'ledsLateral', pick, results: (res ?? []).map((x) => ({ wCenter: x.cand.wCenter, ok: x.ok, Ulen: x.stats?.Ulen ?? null, Uwid: x.stats?.Uwid ?? null, eff: x.eff })) });
-      if (pick != null) d = { ...d, wCenter: pick };
+      if (pick != null) { d = { ...d, wCenter: pick }; lateralLayout = res.find((x) => x.ok && x.cand.wCenter === pick)?.cand.layout ?? null; }
     }
     io.progress?.('leds', 0, 'LED 후보 위치 추적');
     const B = await io.basis(d);
@@ -537,6 +537,7 @@ export async function runAutoDesign(cfg, io) {
       : { count: e.n, pitch: e.pitch, rows: 1, rowGap: 0, positions: null, layoutKind: null, layoutText: null };
     d = { ...d, ...lay(r), stepVirt: !!cfg.stepMode };
     ledAlts = (two ? r.alts ?? [] : ledAlternatives(r, false)).map(lay);   // cfg.stepMode = LED STEP(② 는 기준 LED 복사 배치를 점수 매김)
+    if (lateralLayout) ledAlts = [lateralLayout, ...ledAlts.filter((x) => JSON.stringify(x.positions) !== JSON.stringify(lateralLayout.positions))];   // 폭 이동만으로 통과한 현재 배치를 후속 Solver가 덮지 않게 정밀 재확인 후보로 보존
     ledLimit = limit ?? null;
     // 개수 늘리기·줄이기 = 고른 안과 같은 열 수·열 간격(n = 총수, 열 수의 배수만)
     ledRows = two ? r.rows ?? 1 : 1;
@@ -719,12 +720,12 @@ export async function runAutoDesign(cfg, io) {
   const clashes = async (e) => { if (!io.clash) return false; try { return (await io.clash(e)) > 0; } catch { return false; } };
   if (ledAlts?.length || ledMore) {   // ② 재확인: 정밀 검증 미달이면 기저 순위의 다음 후보(같은 총수 → 다음 총수) 최대 2개 — 다른 필드(①③⑤④ 결과)는 그대로
     const tried = [{ design: d, verified }], scV = (v) => shapeScore({ ok: !v.stats.empty, stats: v.stats, eff: v.eff }, obs);
-    for (const [i, L] of (mgFix(verified.stats) < 0 ? ledAlts ?? [] : []).slice(0, 2).entries()) {
+    for (const [i, L] of (margin(verified.stats, obs) < 0 ? ledAlts ?? [] : []).slice(0, 2).entries()) {
       if (stop()) return { cancelled: true };
       io.progress?.('verify', (i + 1) / 3, `② 후보 재확인 (${i + 2}/3)`);
       const e = { ...d, ...L }, v = await io.verify(e);
       tried.push({ design: e, verified: v });
-      if (mgFix(v.stats) >= 0) break;
+      if (margin(v.stats, obs) >= 0) break;
     }
     // 그래도 미달 = 1열로 LED 를 하나씩 늘려(피치를 조금씩 줄여) 목표에 닿는 가장 적은 개수까지(2026-11-02). 지금 설계가 이미 통과면 지금보다 적은 개수까지만
     const mgOf = (t) => mgFix(t.verified.stats);
@@ -767,7 +768,7 @@ export async function runAutoDesign(cfg, io) {
       if (free.length && free.length < tried.length) tried.splice(0, tried.length, ...free);
     }
     steps.push({ stage: 'ledsVerify', tried });
-    const fewestPass = () => { const P = tried.filter((t) => mgOf(t) >= 0); return P.length ? P.reduce((a, b) => (totalLeds(b.design) < totalLeds(a.design) ? b : a)) : null; };
+    const fewestPass = () => { const P = tried.filter((t) => margin(t.verified.stats, obs) >= 0); return P.length ? P.reduce((a, b) => (totalLeds(b.design) < totalLeds(a.design) ? b : a)) : null; };   // 통과안 선택은 ledLimit과 무관하게 길이·폭 목표를 모두 만족해야 함
     const near = () => { const top = Math.max(...tried.map(mgOf)); return tried.filter((t) => mgOf(t) >= top - SCORE_EPS).reduce((a, b) => (totalLeds(b.design) < totalLeds(a.design) ? b : a)); };   // 못 닿으면 가장 가까운 안 — 차이가 노이즈 수준이면 적은 개수
     // 1% 로는 미달이어도 근처 후보는 노이즈로 낮게 나온 것일 수 있음 — 적은 개수부터 최대 3개를 0.5% 로 재서 처음 통과한 안
     if (!fewestPass()) {
@@ -775,7 +776,7 @@ export async function runAutoDesign(cfg, io) {
       for (const t of pool) {
         t.verified = await judge(t.design, t.verified);
         if (stop()) return { cancelled: true };
-        if (mgOf(t) >= 0) break;
+        if (margin(t.verified.stats, obs) >= 0) break;
       }
     }
     const sharp = tried.filter((t) => t.verified.sharp), pick0 = fewestPass() ?? (sharp.length ? sharp.reduce((a, b) => (mgOf(b) > mgOf(a) + SCORE_EPS ? b : a)) : more ? near() : tried.reduce((a, b) => (scV(b.verified) > scV(a.verified) ? b : a)));
@@ -783,7 +784,7 @@ export async function runAutoDesign(cfg, io) {
     if (cfg.screenGrid && ledMore) {   // 최적화 격자 통과안이 화면 격자에서 조금 미달이면 LED 를 늘려 화면 격자로 확인(최대 SHARPEN_MAX 개)
       pick.verified = await judge(pick.design, pick.verified);
       let left = SHARPEN_MAX - 1;
-      for (let n = upTo(totalLeds(pick.design) + 1); left > 0 && mgOf(pick) < 0 && mgOf(pick) >= -JUDGE_BAND && n <= cfg.nMax; n += ledRows) {
+      for (let n = upTo(totalLeds(pick.design) + 1); left > 0 && margin(pick.verified.stats, obs) < 0 && margin(pick.verified.stats, obs) >= -JUDGE_BAND && n <= cfg.nMax; n += ledRows) {
         if (stop()) return { cancelled: true };
         const known = tried.find((t) => totalLeds(t.design) === n && (t.design.rows ?? 1) === ledRows), L = known ? null : ledMore(n);
         if (!known && (!L || await clashes({ ...d, ...L }))) continue;
@@ -792,7 +793,7 @@ export async function runAutoDesign(cfg, io) {
         if (!known) { tried.push(t); more = true; }
         t.verified = await judge(t.design, t.verified);
         left--;
-        if (mgOf(t) >= 0 || mgOf(t) > mgOf(pick) + SCORE_EPS) pick = t;
+        if (margin(t.verified.stats, obs) >= 0 || margin(t.verified.stats, obs) > margin(pick.verified.stats, obs) + SCORE_EPS) pick = t;
       }
       if (stop()) return { cancelled: true };
     }

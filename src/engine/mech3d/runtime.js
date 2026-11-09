@@ -1,6 +1,6 @@
 // 3D 기구 런타임 — spec 2026-10-14 §3. 메쉬·BVH 는 여기(메모리 + IndexedDB), 사용자 지정(소재·면 처리·접촉면)은 spec.mech3d(JSON 저장).
 import { combineParts, bounds } from './mesh.js';
-import { buildBvh } from './bvh.js';
+import { buildBvh, refitBvh } from './bvh.js';
 import { findContacts } from './contacts.js';
 import { defaultPart } from './materials.js';
 import { defaultLight, defaultObserve, defaultChecks } from './defs.js';
@@ -12,11 +12,11 @@ let scene = null;   // { name, parts: [{ positions, triangles, faceIds, faceCoun
 
 // 전역을 바꾸지 않는 장면 메쉬 생성(계산 작업용) — 부품별 BVH + 결합 메쉬 + 결합 BVH
 // pre = Worker 가 미리 만든 { parts(BVH 포함), combined, bvh }(scene-prep) — 있으면 그대로 씀(화면 스레드에서 다시 만들지 않음)
-export function buildSceneMesh(name, rawParts, pre = null) {
+export function buildSceneMesh(name, rawParts, pre = null, previousBvh = null) {
   if (pre?.combined && pre?.bvh) return { name, parts: pre.parts, combined: pre.combined, bvh: pre.bvh };
   const parts = rawParts.map((p) => (p.bvh ? p : { ...p, bvh: buildBvh(p.positions, p.triangles) }));
   const combined = combineParts(parts);
-  return { name, parts, combined, bvh: buildBvh(combined.positions, combined.triangles) };
+  return { name, parts, combined, bvh: previousBvh ? refitBvh(combined.positions, combined.triangles, previousBvh) : buildBvh(combined.positions, combined.triangles) };
 }
 // 빛 추적용(계산 Worker) — 합친 메쉬와 합친 BVH 하나만. 부품별 BVH 는 추적에 안 씀(부품마다 또 만들면 Worker 15개 몫만큼 메모리·시간 낭비)
 export function buildTraceMesh(name, parts) {
@@ -58,15 +58,27 @@ export function applyPartMods(mods) {
     pmemo[i] = { raw: p, key: k, mesh: m };
     return m;
   });
-  scene = buildSceneMesh(raw.name, parts); scene.raw = raw;
+  scene = buildSceneMesh(raw.name, parts, null, scene?.bvh); scene.raw = raw;
   return true;
 }
 // 구 호출(크기·위치만) — xforms[i] → { xform }
 export const applyPartXforms = (xforms) => applyPartMods((xforms ?? []).map((x) => ({ xform: x })));
 // 현재 장면으로 접촉면을 다시 찾는다 — 같은 면 쌍은 사용자가 고른 모드(접촉/공기층)를 유지
-export function redetectContacts(old = []) {
+export function redetectContacts(old = [], changedPart = null) {
   const mode = new Map(old.map((c) => [`${c.a}|${c.faceA}|${c.b}|${c.faceB}`, c.mode]));
-  return findContacts(scene.parts).map((c) => ({ ...c, mode: mode.get(`${c.a}|${c.faceA}|${c.b}|${c.faceB}`) ?? 'contact' }));
+  const withMode = (c) => ({ ...c, mode: mode.get(`${c.a}|${c.faceA}|${c.b}|${c.faceB}`) ?? 'contact' });
+  if (!Number.isInteger(changedPart) || changedPart < 0 || changedPart >= scene.parts.length) return findContacts(scene.parts).map(withMode);
+  const keep = old.filter((c) => c.a !== changedPart && c.b !== changedPart).map((c) => ({ ...c })), found = [];
+  for (let j = 0; j < scene.parts.length; j++) {
+    if (j === changedPart) continue;
+    for (const c of findContacts([scene.parts[changedPart], scene.parts[j]])) {
+      const q = changedPart < j
+        ? { ...c, a: changedPart, b: j }
+        : { ...c, a: j, faceA: c.faceB, b: changedPart, faceB: c.faceA };
+      found.push(withMode(q));
+    }
+  }
+  return [...keep, ...found].sort((a, b) => a.a - b.a || a.b - b.b || a.faceA - b.faceA || a.faceB - b.faceB);
 }
 
 // 새로 불러온 기구의 사용자 지정 초기값(spec.mech3d)

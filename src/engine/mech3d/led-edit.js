@@ -2,7 +2,7 @@
 // 편집한 배치 = step.virtual = { positions: [{ s, w, dz }] } — w·dz 는 기준 LED(stepRefEmitter) 대비 폭·높이 오프셋(mm).
 // 그리기는 virtualLayout(positions) 가 기준 LED 몸체·발광점을 각 위치로 복사. 배열 순서 = LED 번호(s 오름차순, 같은 s 면 w).
 import { stepRefEmitter } from './virtual-leds.js';
-import { wrapS } from './placement.js';
+import { wrapS, normalizeLedPositions } from './placement.js';
 
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const TOL = 0.05;   // 같은 자리(열 묶음) 판정 mm
@@ -20,7 +20,7 @@ export function positionsFromLayout(lay, step, line, omit = null) {
   const ref = stepRefEmitter(step);
   if (!ref) throw new Error('기준이 될 LED 가 없음 — LED 발광면을 먼저 지정하세요');
   const r = swh(line, ref.pos);
-  return sortP(lay.emitters.filter((e, i) => omit == null || (e.led ?? i) !== omit).map((e) => { const q = swh(line, e.pos); return { s: q.s, w: q.w - r.w, dz: q.h - r.h }; }));
+  return normalizeLedPositions(line, lay.emitters.filter((e, i) => omit == null || (e.led ?? i) !== omit).map((e) => { const q = swh(line, e.pos); return { s: q.s, w: q.w - r.w, dz: q.h - r.h }; }));
 }
 // 같은 자리(s 차 ≤ TOL)끼리 묶음 — 2열이면 한 묶음에 2개
 function groups(P) {

@@ -32,7 +32,12 @@ const step = { leds: [1, 2], pcb: 0, excluded: [], emitters: [{ part: 1, pos: [2
   const ring = recognizeLine([topFaceMesh(annulusTris(0, 0, 37, 43), 12)], faces, [0, 0, 1]);
   const em = { part: 1, pos: [40, 0, 2.5], axis: [0, 0, 1], xAxis: [0, 1, 0] }, P = [pcb, boxMesh(39, -1, 1, 2, 2, 1.5)];
   const v = virtualLayout({ parts: P, step: { leds: [1], pcb: 0, excluded: [], emitters: [em] }, line: ring, count: 4, pitch: 0 });
-  ok(v.emitters.every((e) => Math.abs(Math.hypot(e.pos[0], e.pos[1]) - 40) < 0.2 && Math.abs(e.xAxis[0] * e.pos[0] + e.xAxis[1] * e.pos[1]) < 0.05 * 40), '원 라인: 반경 유지, xAxis ⟂ 반지름(접선)'); }
+  ok(v.emitters.every((e) => Math.abs(Math.hypot(e.pos[0], e.pos[1]) - 40) < 0.2 && Math.abs(e.xAxis[0] * e.pos[0] + e.xAxis[1] * e.pos[1]) < 0.05 * 40), '원 라인: 반경 유지, xAxis ⟂ 반지름(접선)');
+  const seam = virtualLayout({ parts: P, step: { leds: [1], pcb: 0, excluded: [], emitters: [em] }, line: ring, positions: [{ s: 0, w: -1 }, { s: 0, w: 1 }, { s: ring.length, w: -1 }, { s: ring.length, w: 1 }] });
+  ok(seam.emitters.length === 4 && seam.emitters.every((e, i) => Math.abs(e.s - (i < 2 ? 0 : ring.length / 2)) < 1e-9) && new Set(seam.emitters.map((e) => e.pos.map((v) => v.toFixed(4)).join())).size === 4, '닫힌 링 이음매: s=0·s=L 중첩 두 열을 반대편으로 옮겨 LED 수 유지');
+  const freeSeam = virtualLayout({ parts: P, step: { leds: [1], pcb: 0, excluded: [], emitters: [em] }, line: ring, positions: [0, 0.2 * ring.length, 0.6 * ring.length, ring.length] });
+  ok(freeSeam.emitters.length === 4 && new Set(freeSeam.emitters.map((e) => e.pos.map((v) => v.toFixed(4)).join())).size === 4, '닫힌 링 자유 배치: 이음매 중복만 가장 넓은 빈 구간으로 이동 · 개수 유지');
+}
 { // 원 라인: 몸체도 접선을 따라 돈다 — 접선 방향으로 긴 몸체(1×4)는 복사 뒤에도 접선 방향 길이 ≈ 4, 반지름 방향 ≈ 1
   const ring = recognizeLine([topFaceMesh(annulusTris(0, 0, 37, 43), 12)], faces, [0, 0, 1]);
   const em = { part: 1, pos: [40, 0, 2.5], axis: [0, 0, 1], xAxis: [0, 1, 0] }, P = [pcb, boxMesh(39.5, -2, 1, 1, 4, 1.5)];

@@ -13,7 +13,7 @@ import { mountSplit, mountColSplit } from './pane-split.js';
 import { findLeds, supportPart, emitterFaceAway, autoLedGroup, autoStepLeds, findPcbParts } from '../../engine/mech3d/led-detect.js';
 import { loadClear, saveClear, clearExportJson, clearImport, parseMaterialFile } from '../../model/material-io.js';
 import { setPartMaterial, setPartMaterialParam, syncPcb, setPcbOff, pcbAllOff, setPcbR, pcbPickPlan, pcbNames, clampPcbPct, CLEAR_BASE, applyClearEntry, clearEntryFromForm, editClearEntry, syncClearParts } from '../../engine/mech3d/materials.js';
-import { lineFromData, lightData, obsDirection } from '../../engine/mech3d/line.js';
+import { lineFromData, lightData, obsDirection, widthDirection } from '../../engine/mech3d/line.js';
 import { tallyGeometry, tallyStats, autoCells } from '../../engine/mech3d/tally.js';
 import { isUntraced, tracedParts } from '../../engine/mech3d/scene3d.js';
 import { bounds } from '../../engine/mech3d/mesh.js';
@@ -40,14 +40,14 @@ import { positionsFromLayout, addPosition, alignPositions } from '../../engine/m
 import { createResultsPanel } from './results-panel.js';
 import { renderStatusBar, leakText } from './status-bar.js';
 import { createAdRunner, resumable } from './autodesign-run.js';
-import { renderAutoPanel, seedFits, milkyTable, stageAvailability, clampCap, overallFrac, etaText, reusableCurrent, defaultHousingPart, applyDz, applyFinish, capDefault, nextFinish, finishText, shapeText, tileConfigHtml, AD_ITEMS, retuneMilky, histFromRun, mergeHist, stageEffects, factorResult } from './autodesign-panel.js';
+import { renderAutoPanel, seedFits, milkyTable, stageAvailability, clampCap, overallFrac, etaText, reusableCurrent, defaultHousingPart, applyDz, applyFinish, capDefault, nextFinish, finishText, shapeText, tileConfigHtml, AD_ITEMS, resultStageFlags, histFromRun, mergeHist, stageEffects, factorResult } from './autodesign-panel.js';
 import { ledHeightRange, heightCandidates, catalogOf, finishCandidatesFor, setReflMaterial, partFinishEdit } from '../../engine/mech3d/housing-led.js';
 import { migrateFinishCatalog, reflectPatch, copyAsUser, entryFromForm, addSamples, parsePercents, uniqueReflId } from '../../model/reflect-db.js';
 import { intersectRay } from '../../engine/mech3d/bvh.js';
 import { runAutoDesign, shapeTotal, shapeBudget } from '../../engine/mech3d/autodesign.js';
 import { milkyRows } from '../../engine/mech3d/milky-search.js';
 import { candidateGrid } from '../../engine/mech3d/basis.js';
-import { ledAtS, clampRowGap, rowGapOptions } from '../../engine/mech3d/placement.js';
+import { ledAtS, clampRowGap, rowGapOptions, wrapS } from '../../engine/mech3d/placement.js';
 import { virtualEmittersAt, stepRefEmitter } from '../../engine/mech3d/virtual-leds.js';
 import { rw4 } from '../../engine/mech3d/layout-solver.js';
 import { LOAD_LABEL } from '../../engine/shape/step-load-plan.js';
@@ -801,16 +801,16 @@ async function designClash(d, ctx, M0, rt, line) {
   } catch { return 0; }
 }
 // ② LED 폭 위치 이동 후보(2026-10-30) — LED STEP 만. 지금 배치(s 목록)를 폭 c(기준 LED 대비 mm)로 옮겨 봄: −16~+16 mm, 1 mm 간격.
-// 받는 조건: (1) LED 몸체가 기구 부품과 새로 겹치지 않음 (2) 몸체 양쪽 가장자리 아래가 원래와 같은 높이의 면(PCB 위 — 가장자리 밖으로 떠 있지 않음).
+// 받는 조건: (1) LED 몸체가 기구 부품과 새로 겹치지 않음 (2) 몸체 양쪽 가장자리 아래가 원래와 같은 높이의 면(PCB 위 — 가장자리 밖으로 떠 있지 않음). 링·곡선은 LED마다 로컬 폭 방향(X·Y)을 사용.
 // 광원으로 옮긴 원래 LED·추적 제외 부품은 검사에서 뺌. 반환 { cs:[0 포함], ss } | null
 async function lateralCandidates(M0, line, rt, ctx) {
   if (M0.light.kind !== 'step' || !line) return null;
   let em = []; try { em = L.currentEmitters(M0, line); } catch { return null; }
   const ref = stepRefEmitter(M0.light.step); if (!em.length || !ref) return null;
-  const ss = [...new Set(em.map((e) => rw4(line.toSW(...line.to2D(e.pos))[0])))].sort((a, b) => a - b);
+  const ss = [...new Set(em.map((e) => rw4(wrapS(line, line.toSW(...line.to2D(e.pos))[0]))))].sort((a, b) => a - b);
   const off = M0.parts.map((p) => p.role === 'light' || !!p.untrace), mech = rt.parts.map((p, j) => (off[j] ? null : p));
   const { partOf } = rt.combined, mask = new Uint8Array(partOf.length); for (let t = 0; t < partOf.length; t++) if (off[partOf[t]]) mask[t] = 1;
-  const al = Math.hypot(...ref.axis) || 1, n = ref.axis.map((v) => v / al), F = line.frame, uu = F.u.map((v, k) => v - (F.u[0] * n[0] + F.u[1] * n[1] + F.u[2] * n[2]) * n[k]), ul = Math.hypot(...uu) || 1, lat = uu.map((v) => v / ul);
+  const al = Math.hypot(...ref.axis) || 1, n = ref.axis.map((v) => v / al);
   const half = ledHalfWidth(M0, line) * 0.9, down = (p) => { const h = intersectRay(rt.bvh, p[0], p[1], p[2], -n[0], -n[1], -n[2], 1e-6, Infinity, -1, -1, mask); return h ? h.t : Infinity; };
   const t0 = down(ref.pos), cs = [0];
   const clashN = (c) => { const { M, parts } = designScene({ ...ctx.cur, positions: ss.map((s) => ({ s, w: c })), count: ss.length, rows: 1, rowGap: 0, stepVirt: true }, ctx); const lay = L.stepLayout(M, line);
@@ -823,7 +823,7 @@ async function lateralCandidates(M0, line, rt, ctx) {
     try {
       const { lay, n: nc } = clashN(c); if (nc > base) continue;
       const es = lay.emitters ?? [], pick = [es[0], es[Math.floor(es.length / 2)], es.at(-1)].filter(Boolean);
-      const okSup = pick.every((e) => [-1, 0, 1].every((sg) => Math.abs(down(e.pos.map((v, k) => v + sg * half * lat[k])) - t0) < 0.3));
+      const okSup = pick.every((e) => { const lat = widthDirection(line, e.s, n); return [-1, 0, 1].every((sg) => Math.abs(down(e.pos.map((v, k) => v + sg * half * lat[k])) - t0) < 0.3); });
       if (okSup) cs.push(c);
     } catch { /* 배치 실패 = 후보 아님 */ }
   }
@@ -1056,10 +1056,6 @@ async function adRun(opt = {}) {
   const M0 = adClone(A.store.mspec), line = S.line, rt = getMech3d();   // 실행 격리 — 편집은 실행을 중지시킴(onChange)
   const avail = adAvail(M0), stages = opt.stages ?? { milky: st.sel.milky && avail.milky.ok, leds: st.sel.leds && avail.leds.ok, shape: st.sel.shape && avail.shape.ok && avail.shape.parts.includes(st.sel.shapePart),
     height: st.sel.height && avail.height.ok, housing: st.sel.housing && avail.housing.ok && avail.housing.parts.includes(st.sel.housingPart) };
-  // 고정된 Milky 다시 맞춤(2026-11-07) — 위치·높이·형상을 바꾸면 전에 맞춘 Milky 가 더는 최적이 아님. 고정을 풀고(다시 체크) 이번 실행에 넣음 — 알림
-  const milkyRetuned = !opt.shapeDeep && !opt.caseCheck && retuneMilky(stages, st.locked, avail.milky.ok);
-  if (!milkyRetuned && /^고정했던 Milky/.test(S.status ?? '')) setStatus('');   // 지난 실행의 다시 맞춤 문구가 이번 실행에 남지 않게
-  if (milkyRetuned) { stages.milky = true; delete st.locked.milky; st.sel.milky = true; dashReset(stages); setStatus('고정했던 Milky 도 위치·형상에 맞춰 다시 맞춤'); }
   st.milkyPart = adMilkyPart(M0, avail);
   const hpSel = avail.housing?.parts?.includes(st.sel.housingPart) ? st.sel.housingPart : defaultHousingPart(M0, adInfo().boxes);   // 보완으로 ④ 를 더했으면 기본 케이스 부품
   // 최적화 판정 격자 = 늘 저화질(2026-11-02) — 고화질 칸(0.5 mm)으로 짧게 평가하면 노이즈가 '불균일' 로 보여 값이 크게 낮게 나오고(실측 길이 균일도 0.65 vs 정밀 0.76)
@@ -1181,7 +1177,8 @@ async function adRun(opt = {}) {
         progress('leds', (0.3 * i) / cs.length, `LED 폭 위치 ${c > 0 ? '+' : ''}${c} mm (${i + 1}/${cs.length})`);
         const dd = { ...d, positions: ss.map((s) => ({ s, w: c })), count: ss.length, rows: 1, rowGap: 0, stepVirt: true }, { M: Md, parts } = designScene(dd, ctx);
         const r = await R.trace(adJob(Md, parts, ctx), { N, batches: 4, crn: SHAPE_CRN }), stt = tallyStats(G, r.batches, obs);
-        out.push({ cand: { wCenter: c }, ok: !stt.empty, stats: stt, eff: adEff(r) });
+        const layout = { count: ss.length, pitch: 0, rows: 1, rowGap: 0, positions: dd.positions, wCenter: c, stepVirt: true, layoutKind: 'lateral-current', layoutText: `현재 배치 · 폭 위치 ${c > 0 ? '+' : ''}${c} mm` };
+        out.push({ cand: { wCenter: c, layout }, ok: !stt.empty, stats: stt, eff: adEff(r) });
         A.optDash?.evals('leds', [{ label: `폭 위치 ${c > 0 ? '+' : ''}${c} mm`, Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty }]);
       }
       return out;
@@ -1236,8 +1233,8 @@ async function adRun(opt = {}) {
     let nStep = null; if (M0.light.kind === 'step') { try { nStep = L.currentEmitters(M0, line).length; } catch { nStep = 0; } }
     const smI = sp >= 0 && M0.parts[sp]?.shapeMod ? sp : M0.parts.findIndex((p) => p.shapeMod), sm = smI >= 0 ? M0.parts[smI].shapeMod : null;   // 비교표 '현재' 열 — 이미 적용된 형상(표시만)
     st.resultOpen = false;   // 끝나면 결과 카드(요약)만 — 자세한 결과 창은 [자세히]
-    st.result = { seed: res.verified?.raw ?? null, shapeLimited: !!res.steps?.find((x) => x.stage === 'shapeField')?.limited, milkyRows: stages.milky ? milkyTable(res.steps ?? []) : null, targets: { len: obs.targetLen, wid: obs.targetWid, judge: judgeStats(res.verified?.stats, A.store.mspec.observe) }, design: res.best, feasible: res.feasible, reason: res.reason, shapeSwing: quickShape && !opt.shapeDeep && !opt.caseCheck, caseCheck: !!opt.caseCheck, shapeNote: res.shapeNote ?? null, hint: res.hint ?? null, peek: res.peek ?? null, lowered: res.milkyLowered ?? null, shape: res.best.shape ?? null, screen: res.steps?.find((x) => x.stage === 'shapeScreen')?.gains ?? null, stepLeds: nStep, unchanged: !!res.unchanged, ctx, stages,
-      added: opt.added ?? [], base: opt.base ?? null, clash: clashN, milkyRetuned, oneRow: !!st.sel.oneRow,
+    st.result = { seed: res.verified?.raw ?? null, shapeLimited: !!res.steps?.find((x) => x.stage === 'shapeField')?.limited, milkyRows: stages.milky ? milkyTable(res.steps ?? []) : null, targets: { len: obs.targetLen, wid: obs.targetWid, judge: judgeStats(res.verified?.stats, A.store.mspec.observe) }, design: res.best, feasible: res.feasible, reason: res.reason, shapeSwing: quickShape && !opt.shapeDeep && !opt.caseCheck, caseCheck: !!opt.caseCheck, shapeNote: res.shapeNote ?? null, hint: res.hint ?? null, peek: res.peek ?? null, lowered: res.milkyLowered ?? null, shape: res.best.shape ?? null, screen: res.steps?.find((x) => x.stage === 'shapeScreen')?.gains ?? null, stepLeds: nStep, unchanged: !!res.unchanged, ctx, stages: resultStageFlags(stages),
+      added: opt.added ?? [], base: opt.base ?? null, clash: clashN, oneRow: !!st.sel.oneRow,
       finish: stages.housing ? (() => { const c = { ...M0.parts[hp].finish, ...(M0.parts[hp].coating ? { coating: M0.parts[hp].coating } : {}) }; return { cur: c, best: res.best.finish ?? c }; })() : null, height: stages.height && hInfo ? { dz: res.best.dz ?? 0, gap: hInfo.gap } : null,
       cur: { ...cur, shape: sm ? { dt: sm.dt, h: sm.h, R: sm.R, e: sm.e ?? 0, c: sm.c ?? 0, kF: sm.kF ?? null } : null, Ulen: C?.stats?.Ulen, Uwid: C?.stats?.Uwid, eff: C?.eff ?? NaN, profile: C?.stats?.profile ?? null },
       best: { ...res.best, ...(stp ? { stepOrig: !res.best.stepVirt } : {}), Ulen: res.verified.stats.Ulen, Uwid: res.verified.stats.Uwid, eff: res.verified.eff, profile: res.verified.stats.profile ?? null } };
@@ -1252,7 +1249,7 @@ async function adRun(opt = {}) {
   if (st.deferred) { st.deferred = false; restartCalc(); if (st.userPaused) A.prog.pause(); else A.prog.resume(); }
   A.meshShown = null; renderView(); renderAuto();
   if (res && !res.cancelled && !R.stopped && st.result) A.optDash?.finish(!!res.feasible, res.feasible ? '' : res.reason ?? '', st.result?.best?.eff, res.verified?.stats ?? null);
-  return res && !res.cancelled && !R.stopped && st.result ? { feasible: !!res.feasible, stages } : null;
+  return res && !res.cancelled && !R.stopped && st.result ? { feasible: !!res.feasible, stages: st.result.stages } : null;
 }
 // 형상 후보 표(2026-11-05) — 마지막 실행 1회분을 mspec.shapeCases 에 저장. 스윙 뒤 이어서 한 정밀 탐색은 합침. 고른 후보를 계산하면 그 행에 정식 값
 function adSaveCases({ opt, res, M0, sp, stages, caseLog }) {
@@ -1746,7 +1743,7 @@ function propHandlers() {
       const apply = (xf, msg) => st.update('material', (m, x) => {
         x.xfMsg = msg ? { part: i, text: msg } : null;
         if (xf) m.parts[i].xform = xf; else delete m.parts[i].xform;
-        if (applyPartMods(m.parts)) m.contacts = redetectContacts(m.contacts);
+        if (applyPartMods(m.parts)) m.contacts = redetectContacts(m.contacts, i);
       });
       if (!want) { apply(null, note); return; }
       const m = st.mspec, x = st.session, rt = getMech3d(), stp = m.light.kind === 'step';

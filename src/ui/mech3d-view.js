@@ -1,8 +1,9 @@
 // 3D 기구 뷰 — spec 2026-10-14 §3, 2026-10-15 m3-cad-ui §2. 부품을 소재 종류별 색으로 그리고, 선택 부품·면을 강조한다.
 // 보기: 등각(원근) · 평면 XY / 정면 XZ / 측면 YZ(정투영). 원점 축 + 회전 축 창(gizmo). 관측면 색지도 덧그림, 설계 점검 표식, 단면 평면.
 // 클릭(드래그 아님) → onPick({ part, face, ray:{o,d}, worldPerPixel }) 또는 onPick(null)(선택 모드에선 { part:null, face:null, ray }).
-// 회전·이동·확대는 OrbitControls(Z 위): 드래그 회전, 휠 확대, 우클릭·Shift 드래그 이동.
+// 회전·이동·확대는 TrackballControls(Z 위): 드래그 회전, 휠 확대, 우클릭·Shift/Ctrl 드래그 이동.
 import * as THREE from 'three';
+import { srgbColorsToLinear } from './m3/colormap.js';
 import { coneDims } from './m3/cone-dims.js';
 import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
@@ -41,7 +42,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   const sun = new THREE.DirectionalLight(0xffffff, 0.8); sun.position.set(1, -1, 2); scene.add(sun);
   // 원점 축: x 빨강 · y 초록 · z 파랑. CAD 관례대로 원점에 두고(모델 구석으로 옮기지 않음) 길이만 모델 크기(r)에 맞춘다
   const axes = new THREE.AxesHelper(10); scene.add(axes);
-  // 자유 회전(2026-11-06): 위·아래 끝에서 멈추던 OrbitControls 대신 TrackballControls — 어느 방향으로든 계속 돎. 왼쪽 = 회전, 휠 = 확대, 우클릭·Shift 드래그 = 이동
+  // 자유 회전(2026-11-06): 위·아래 끝에서 멈추던 OrbitControls 대신 TrackballControls — 어느 방향으로든 계속 돎. 왼쪽 = 회전, 휠 = 확대, 우클릭·Shift/Ctrl 드래그 = 이동
   const controls = new TrackballControls(camera, canvas);
   controls.rotateSpeed = 2.5; controls.zoomSpeed = 1.2; controls.panSpeed = 0.8;
   controls.staticMoving = true;          // 놓으면 바로 멈춤(관성 없음)
@@ -53,8 +54,13 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   controls.addEventListener('start', () => wake(Infinity));
   controls.addEventListener('end', () => { spinUntil = 0; wake(300); });
   canvas.addEventListener('wheel', () => wake(300), { passive: true });
-  // Shift + 왼쪽 드래그 = 이동(예전과 같게) — Trackball 보다 먼저 받도록 capture
-  canvas.addEventListener('pointerdown', (e) => { controls.mouseButtons.LEFT = e.shiftKey ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE; }, { capture: true });
+  // Shift/Ctrl + 왼쪽 드래그 = 화면 이동 — Trackball 은 mouseButtons 값을 동작이 아니라
+  // 실제 event.button 번호로 비교하므로, 수정키를 누른 왼쪽 버튼이 PAN 분기로 가게 LEFT/RIGHT 번호를 맞바꾼다.
+  canvas.addEventListener('pointerdown', (e) => {
+    const panWithLeft = e.button === THREE.MOUSE.LEFT && (e.shiftKey || e.ctrlKey);
+    controls.mouseButtons.LEFT = panWithLeft ? THREE.MOUSE.RIGHT : THREE.MOUSE.LEFT;
+    controls.mouseButtons.RIGHT = panWithLeft ? THREE.MOUSE.LEFT : THREE.MOUSE.RIGHT;
+  }, { capture: true });
   // 부품 재질은 투명도별로 공유(2026-11-06) — 부품마다 따로 만들면 큰 도면(부품 4500개)의 첫 그리기에서 재질 준비만 4.7초 걸려 화면이 멈췄음
   const partMats = new Map();
   const partMat = (op) => {
@@ -425,7 +431,8 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     // 관측면 강조: 고른 면들의 바깥 테두리(밝은 하늘색, 가려도 보이게) + 빛 방향 화살표(over.obsArrow = { pos, axis, len, incoming })
     const ob = obsOutline(oFaces);
     if (ob) overlay.add(ob);
-    const of = obsFill(oFaces, xray ? 0.4 : obsMesh ? 0.12 : 0.3);
+    // 색지도가 있으면 하늘색 채움을 투명하게 두어 2D 와 같은 원색·대비를 유지한다(메쉬는 클릭 판정용으로 남김).
+    const of = obsFill(oFaces, obsMesh ? 0 : xray ? 0.4 : 0.3);
     obsFillMesh = of;   // 클릭 판정용(앞 부품에 가려도 관측면을 선택)
     if (of) overlay.add(of);
     const oa = obsShow ? over.obsArrow : null;
@@ -498,8 +505,8 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
       g.setAttribute('position', new THREE.BufferAttribute(geom.positions, 3));
       g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(geom.positions.length).fill(0.45), 3));
       g.setIndex(new THREE.BufferAttribute(geom.triangles, 1));
-      obsMesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, clippingPlanes: clip, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
-      obsMesh.renderOrder = 1.5;
+      obsMesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, clippingPlanes: clip, depthTest: false, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
+      obsMesh.renderOrder = 2.5;
       obsDir = geom.dir ?? null; liftObs(); obsMesh.visible = obsShow;
       scene.add(obsMesh);
     }
@@ -508,7 +515,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   }
   function setObsColors(colors) {
     if (!obsMesh) return;
-    const a = obsMesh.geometry.getAttribute('color'); a.array.set(colors); a.needsUpdate = true; render();
+    const a = obsMesh.geometry.getAttribute('color'); srgbColorsToLinear(colors, a.array); a.needsUpdate = true; render();
   }
   // 설계 점검 표식: ring(원, 화면을 향함) · line(거리선) · tris(새는 면 강조). 깊이 무시(가려도 보임).
   // 단면 평면(clip)은 일부러 적용하지 않는다 — 잘린 쪽에 있는 문제 위치도 보여야 하므로

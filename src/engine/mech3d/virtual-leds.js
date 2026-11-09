@@ -1,7 +1,7 @@
 // LED STEP 가상 배치 — spec P4 §2.2a. 기준 LED(제외 안 된 첫 LED)의 몸체·발광점을 관측 라인 위 개수·피치 위치로 복사한다.
 // 라인 좌표 (s, w, h) 중 w·h 는 기준 값 유지, 접선 각 차이만큼 관측 방향 d 축으로 회전. 원래 LED 몸체(제외 포함)는 빼고 PCB·기타는 유지.
 // parts: LED STEP 부품(월드 좌표 = offset·rot 적용 뒤), step: light.step, 반환 { parts, leds, pcb, emitters, ref }
-import { ledSPositions, clampRowGap, rowOffsets, wrapS } from './placement.js';
+import { ledSPositions, clampRowGap, rowOffsets, wrapS, normalizeLedPositions } from './placement.js';
 import { adjustEmitters, adjustBodies } from './led-adjust.js';
 
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -39,7 +39,7 @@ export function virtualLayout({ parts, step, line, count, pitch = 0, positions =
   parts.forEach((m, i) => { if (!ledSet.has(i)) { idx.set(i, keep.length); keep.push(m); } });
   const out = { parts: keep.slice(), leds: [], pcb: step.pcb >= 0 && idx.has(step.pcb) ? idx.get(step.pcb) : -1, emitters: [], ref };
   const ws = rowOffsets(rows, rows === 2 ? clampRowGap(line, rowGap) : 0);
-  const P0 = positions ? positions.map((q) => (typeof q === 'number' ? { s: q, w: 0 } : q)) : count === 0 ? [] : ledSPositions(line, count, pitch).flatMap((s) => ws.map((w) => ({ s, w })));
+  const P0 = positions ? normalizeLedPositions(line, positions) : count === 0 ? [] : ledSPositions(line, count, pitch).flatMap((s) => ws.map((w) => ({ s, w })));
   for (const [k0, q] of P0.entries()) {
     const it = adjust?.[k0], s = it ? wrapS(line, q.s + it.ds) : q.s, dw = q.w;
     // 관측 라인 점에서 관측 방향 d 로 기준 LED 의 PCB 면(LED 축 ⟂, 기준 발광점을 지남)까지 → 높이 조정(dz)은 d 방향. 관측면과 PCB 가 평행이면 전과 같음.

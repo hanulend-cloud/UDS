@@ -91,24 +91,24 @@ const peakRows = (ms, top, { len = 0.5, wid = 0.5, Uw = () => 0.9 } = {}) => ms.
   const io = { milkyRows: async (d, ms) => { seen.push(...ms); return rowsOf(ms); }, verify: async () => ({ stats: st(0.81, 0.9), eff: 1 }), progress() {}, cancelled: () => false };
   const r = await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 1 } }, io);
   ok(r.feasible && !r.peek && Math.max(...seen) <= 5, '목표 통과 → 참고 계산 없음'); }
-{ // 현재 Milky 7 + 위치(②)만: '현재' 열은 7 로 계산, 최적화는 5 로 낮춰서 · 적용 안은 Milky 5 · 표시
+{ // Milky 미선택: 현재 7 > 상한 5 여도 위치 최적화는 고정값 7 그대로 사용
   let basisMilky = null; const verified = [];
   const G = { ns: 2, nw: 1, ds: 1, cell: 1, w0: -0.5, L: 2, closed: false, winS: 5, area: new Float64Array([1, 1]), valid: new Uint8Array([1, 1]) };
   const io = { basis: async (d) => { basisMilky = d.milky; return { cand: [0, 1, 2], maps: [0, 1, 2].map(() => Float32Array.from([1, 1])), emitted: 1 }; }, milkyRows: async () => { throw new Error('Milky 탐색 금지'); },
     verify: async (d) => { verified.push(d.milky); return { stats: d.milky === 7 ? st(0.5, 0.5) : st(0.9, 0.9), eff: 1 }; }, progress() {}, cancelled: () => false };
   const r = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0 }, current: { milky: 7, count: 5, pitch: 0 }, G, line: { length: 2, closed: false }, nMax: 4 }, io);
-  ok(verified[0] === 7 && basisMilky === 5 && r.best.milky === 5 && r.milkyLowered?.from === 7 && r.milkyLowered?.to === 5 && r.milkyLowered?.rough === true && r.current.stats.Ulen === 0.5, `현재 7 → 최적화 ${basisMilky} · 최종 ${r.best.milky} · 표시 ${JSON.stringify(r.milkyLowered)}`); }
-{ // 현재 Milky 7 인데 낮춘 안이 더 나쁘면 현재안 유지(몰래 안 바꿈) · 표시는 남음
+  ok(verified.every((m) => m === 7) && basisMilky === 7 && r.best.milky === 7 && !r.milkyLowered && r.current.stats.Ulen === 0.5, `고정 7 → 최적화 ${basisMilky} · 최종 ${r.best.milky} · 표시 ${JSON.stringify(r.milkyLowered)}`); }
+{ // Milky 미선택: 상한 아래 후보와 비교하지 않고 현재 7 유지
   const G = { ns: 2, nw: 1, ds: 1, cell: 1, w0: -0.5, L: 2, closed: false, winS: 5, area: new Float64Array([1, 1]), valid: new Uint8Array([1, 1]) };
   const io = { basis: async () => ({ cand: [0, 1, 2], maps: [0, 1, 2].map(() => Float32Array.from([1, 1])), emitted: 1 }), verify: async (d) => ({ stats: d.milky === 7 ? st(0.9, 0.9) : st(0.5, 0.5), eff: 1 }), progress() {}, cancelled: () => false };
   const r = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0 }, current: { milky: 7, count: 5, pitch: 0 }, G, line: { length: 2, closed: false }, nMax: 4 }, io);
-  ok(r.unchanged && r.best.milky === 7 && r.milkyLowered?.from === 7, `낮춘 안이 나쁨 → 현재안 Milky ${r.best.milky} 유지`); }
-{ // 현재 Milky 7 은 비교용 — 계산마다 60 초 한도, 목표 근처여도 더 안 잼(낮춘 안은 한도 없음)
+  ok(r.unchanged && r.best.milky === 7 && !r.milkyLowered, `고정 Milky ${r.best.milky} 유지`); }
+{ // Milky 미선택: 현재 7은 일반 후보와 동일하게 계산하고 5 후보는 만들지 않음
   const calls = [], G = { ns: 2, nw: 1, ds: 1, cell: 1, w0: -0.5, L: 2, closed: false, winS: 5, area: new Float64Array([1, 1]), valid: new Uint8Array([1, 1]) };
   const io = { basis: async () => ({ cand: [0, 1, 2], maps: [0, 1, 2].map(() => Float32Array.from([1, 1])), emitted: 1 }), verify: async (d, o = {}) => { calls.push([d.milky, o.maxMs ?? null, !!o.screen, o.noise ?? null, !!o.rough]); return { stats: { ...st(0.8, 0.9), relNoise: 0.01 }, eff: 1, screen: !!o.screen }; }, progress() {}, cancelled: () => false };
   await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0 }, current: { milky: 7, count: 5, pitch: 0 }, G, line: { length: 2, closed: false }, nMax: 4, screenGrid: true }, io);
   const c7 = calls.filter((c) => c[0] === 7);
-  ok(c7.length >= 2 && c7.every((c) => c[1] === 60000 && c[4]) && calls.some((c) => c[0] === 5 && c[1] == null && !c[4]), `현재 Milky 7 = 대략 계산 60 초 한도: ${JSON.stringify(calls)}`); }
+  ok(c7.length === calls.length && c7.every((c) => c[1] == null && !c[4]), `고정 Milky 7만 계산: ${JSON.stringify(calls)}`); }
 { // 현재 5 이하 → 표시 없음
   const io = { milkyRows: async (d, ms) => rowsOf(ms), verify: async () => ({ stats: st(0.81, 0.9), eff: 1 }), progress() {}, cancelled: () => false };
   ok(!(await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 5 } }, io)).milkyLowered, '현재 Milky 5 → 낮춤 표시 없음'); }
@@ -348,12 +348,13 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
 { // ② LED 폭 위치 이동(2026-10-30): 후보 이동량을 빠르게 비교 → 최고(노이즈 수준이면 덜 옮긴 쪽) → 그 위치 중심으로 배치 탐색
   const G = { ns: 100, nw: 1, ds: 1, cell: 1, w0: -0.5, L: 100, closed: false, winS: 10, area: new Float64Array(100).fill(1), valid: new Uint8Array(100).fill(1) }, line = { length: 100, closed: false };
   const gain = { 0: 0.55, '-6': 0.6, '-12': 0.9, '-14': 0.895 }, seenW = [];
-  const io = { progress() {}, cancelled: () => false, verify: async (d) => ({ stats: { Ulen: d.wCenter === -12 ? 0.9 : 0.55, Uwid: 0.9 }, eff: 0.2 }),
-    evalLateral: async (d, cs) => cs.map((c) => ({ cand: { wCenter: c }, ok: true, eff: 0.2, stats: { Ulen: 0.5, Uwid: gain[c] } })),   // 폭 위치 = 폭 균일도로 고름
+  const lateralLayout = (c) => ({ count: 5, pitch: 0, rows: 1, rowGap: 0, positions: Array.from({ length: 5 }, (_, i) => ({ s: 10 + 20 * i, w: c })), wCenter: c, stepVirt: true, layoutKind: 'lateral-current' });
+  const io = { progress() {}, cancelled: () => false, verify: async (d) => ({ stats: { Ulen: d.layoutKind === 'lateral-current' ? 0.81 : 0.81, Uwid: d.layoutKind === 'lateral-current' ? 0.961 : 0.609 }, eff: 0.2 }),
+    evalLateral: async (d, cs) => cs.map((c) => ({ cand: { wCenter: c, layout: lateralLayout(c) }, ok: true, eff: 0.2, stats: { Ulen: c === -12 ? 0.81 : 0.5, Uwid: gain[c] } })),   // 폭 위치 = 폭 균일도로 고름 · 통과한 현재 배치를 보존
     basis: async (d) => { seenW.push(d.wCenter); const cand = candidateGrid(line, { sStep: 2, wOffsets: [d.wCenter ?? 0] }); return { cand, emitted: 1, gaps: [], sMargin: 0, maps: cand.map(({ s }) => Float32Array.from({ length: 100 }, (_, i) => Math.exp(-((i + 0.5 - s) ** 2) / 72))) }; } };
   const r = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.7, targetWid: 0.7 }, current: { milky: 1, count: 5, pitch: 0 }, G, line, nMax: 20, lateral: [0, -6, -12, -14] }, io);
   const lat = r.steps.find((x) => x.stage === 'ledsLateral');
-  ok(lat?.pick === -12 && seenW[0] === -12 && r.best.positions?.every((q) => q.w === -12) && r.best.wCenter === -12, `폭 위치: 고름 ${lat?.pick} (목표를 넘는 후보 중 가장 덜 옮김) · 배치 w ${[...new Set(r.best.positions?.map((q) => q.w))]}`);
+  ok(lat?.pick === -12 && seenW[0] === -12 && r.best.positions?.every((q) => q.w === -12) && r.best.wCenter === -12 && r.best.layoutKind === 'lateral-current' && r.feasible && r.verified.stats.Uwid === 0.961, `폭 위치 통과 후보 보존: 고름 ${lat?.pick} · 최종 ${r.verified.stats.Ulen}/${r.verified.stats.Uwid} · 배치 w ${[...new Set(r.best.positions?.map((q) => q.w))]}`);
   const r0 = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.7, targetWid: 0 }, current: { milky: 1, count: 5, pitch: 0 }, G, line, nMax: 20 }, { ...io, basis: async (d) => io.basis({ ...d, wCenter: 0 }) });
   ok(!r0.steps.some((x) => x.stage === 'ledsLateral'), '이동 후보가 없으면 폭 위치 단계 없음(기존과 같음)');
 }
@@ -508,8 +509,9 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
 }
 { // ⑤ 높이 범위는 ② 로 옮긴 자리에서 다시 잼(2026-11-03)
   const seen = [], io = { progress() {}, cancelled: () => false, verify: async (d) => ({ stats: st(d.dz === 3 ? 0.9 : 0.5, 0.9), eff: 0.5 }), heightRange: (d) => { seen.push(d.tag); return [0, 3]; }, evalVariants: async (d, cands) => cands.map((c) => ({ cand: c, ok: true, eff: 0.5, stats: st(c.dz === 3 ? 0.9 : 0.5, 0.9) })) };
-  const r = await runAutoDesign({ stages: { height: true }, obs, current: { milky: 1, tag: 'x' }, heightRange: [0, 1] }, io);
+  const r = await runAutoDesign({ stages: { height: true }, obs, current: { milky: 7, tag: 'x' }, milkyMax: 5, heightRange: [0, 1] }, io);
   ok(seen[0] === 'x' && r.best.dz === 3, `옮긴 자리 범위 [0, 3] 으로 후보 (+${r.best.dz})`);
+  ok(r.best.milky === 7 && !r.milkyLowered, 'Milky 체크 해제 상태에서 위치·높이를 최적화해도 확산도는 고정');
 }
 { // 최종 판정 = 화면 화질 격자(2026-11-03): 저화질 격자 통과여도 화면 격자로 다시 재서 판정
   const calls = [], io = { milkyRows: async (d, ms) => rowsOf(ms), verify: async (d, o = {}) => { calls.push(o); return o.screen ? { stats: { ...st(0.795, 0.9), relNoise: o.noise }, eff: 0.5, photons: 1e7 } : { stats: { ...st(0.82, 0.9), relNoise: 0.01 }, eff: 0.5, photons: 1e7 }; }, progress() {}, cancelled: () => false };

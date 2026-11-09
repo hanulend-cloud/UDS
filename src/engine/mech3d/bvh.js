@@ -70,6 +70,35 @@ export function buildBvh(positions, triangles, leafSize = 4) {
   return { box: boxA.slice(0, nodes * 6), meta: metaA.slice(0, nodes * 2), order, positions, triangles };
 }
 
+// 정점 위치만 바뀌고 삼각형 번호는 그대로일 때 기존 트리 구성을 재사용한다.
+// 크기·위치 편집마다 중앙값 정렬부터 다시 하면 큰 STEP에서 화면 스레드가 오래 멈춘다.
+// 잎 외곽을 다시 구한 뒤 부모 외곽만 역순으로 합치면 O(삼각형 수)로 정확한 BVH가 된다.
+export function refitBvh(positions, triangles, previous) {
+  if (!triangles.length || !previous || previous.order?.length !== triangles.length / 3 || !previous.meta?.length) return buildBvh(positions, triangles);
+  const { meta, order } = previous, box = new Float32Array(previous.box.length), nodes = meta.length / 2;
+  for (let n = nodes - 1; n >= 0; n--) {
+    const m = n * 2, cnt = meta[m + 1], b = n * 6;
+    let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+    if (cnt) {
+      for (let q = meta[m], e = q + cnt; q < e; q++) {
+        const t = order[q] * 3;
+        for (let j = 0; j < 3; j++) {
+          const p = triangles[t + j] * 3, x = positions[p], y = positions[p + 1], z = positions[p + 2];
+          if (x < x0) x0 = x; if (x > x1) x1 = x;
+          if (y < y0) y0 = y; if (y > y1) y1 = y;
+          if (z < z0) z0 = z; if (z > z1) z1 = z;
+        }
+      }
+    } else {
+      const l = (n + 1) * 6, r = meta[m] * 6;
+      x0 = Math.min(box[l], box[r]); y0 = Math.min(box[l + 1], box[r + 1]); z0 = Math.min(box[l + 2], box[r + 2]);
+      x1 = Math.max(box[l + 3], box[r + 3]); y1 = Math.max(box[l + 4], box[r + 4]); z1 = Math.max(box[l + 5], box[r + 5]);
+    }
+    box[b] = x0; box[b + 1] = y0; box[b + 2] = z0; box[b + 3] = x1; box[b + 4] = y1; box[b + 5] = z1;
+  }
+  return { box, meta, order, positions, triangles };
+}
+
 // Möller–Trumbore(양면). 적중 거리 t(음수 가능) 또는 −1(평행·빗나감). 마지막 적중의 무게중심 좌표는 hitUV 에.
 export const hitUV = { u: 0, v: 0 };
 export function hitTriangle(P, T, t, ox, oy, oz, dx, dy, dz) {

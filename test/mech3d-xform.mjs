@@ -31,10 +31,12 @@ ok(!('bvh' in transformMesh(mb, [1, 0, 0], [0, 0, 0])), '변환 사본은 캐시
   const c0 = redetectContacts([]).map((c) => ({ ...c, mode: 'air' }));
   ok(c0.length >= 1, '맞붙은 두 상자 접촉면 감지');
   ok(applyPartXforms([null, { offset: [0, 0, 0.001], scale: [1, 1, 1] }]) && getMech3d() !== raw && getMech3d().raw === raw && getMech3d().parts[0] === raw.parts[0], '변환: 새 장면, 원본 유지, 안 바뀐 부품 재사용');
+  ok(getMech3d().parts[1].bvh.order === raw.parts[1].bvh.order && getMech3d().bvh.order === raw.bvh.order, '크기·위치 변경: BVH 정렬은 재사용하고 외곽만 갱신');
   ok(!applyPartXforms([null, { offset: [0, 0, 0.001], scale: [1, 1, 1] }]), '같은 변환이면 다시 만들지 않음');
-  ok(redetectContacts(c0).length === c0.length && redetectContacts(c0).every((c) => c.mode === 'air'), '조금 옮겨도(간격 0.001) 접촉 유지 · 모드 유지');
+  const c1 = redetectContacts(c0, 1);
+  ok(c1.length === c0.length && c1.every((c) => c.mode === 'air'), '바뀐 부품만 재탐색: 조금 옮겨도 접촉·모드 유지');
   applyPartXforms([null, { offset: [0, 0, 5], scale: [1, 1, 1] }]);
-  ok(redetectContacts(c0).length === 0, '떨어뜨리면 접촉면 사라짐');
+  ok(redetectContacts(c0, 1).length === 0, '바뀐 부품만 재탐색: 떨어뜨리면 접촉면 사라짐');
   applyPartXforms([null, null]);
   ok(getMech3d() === raw, '원래대로 → 원본 장면');
   clearMech3d(); }

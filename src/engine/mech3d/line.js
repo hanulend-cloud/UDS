@@ -9,6 +9,19 @@ export function viewFrame(d) {
   return { u, v: cross(n, u), d: n };
 }
 
+// 라인의 해당 s에서 폭(+w) 방향을 3D 단위 벡터로 반환한다.
+// 직선에서는 일정하지만 링·곡선에서는 위치마다 X·Y 성분이 달라진다.
+// axis가 있으면 LED 축에 수직인 PCB 평면으로 투영한다.
+export function widthDirection(line, s, axis = null) {
+  const [ax, ay] = line.fromSW(s, -0.5), [bx, by] = line.fromSW(s, 0.5);
+  const a = line.to3D(ax, ay, 0), b = line.to3D(bx, by, 0), v = b.map((x, i) => x - a[i]);
+  if (axis) {
+    const n = unit(axis), q = dot(v, n);
+    for (let i = 0; i < 3; i++) v[i] -= q * n[i];
+  }
+  return unit(v);
+}
+
 // 선택 면들의 면적 가중 평균 바깥 법선
 export function obsDirection(parts, faces) {
   const n = [0, 0, 0], want = new Set(faces.map((f) => `${f.part}|${f.face}`));

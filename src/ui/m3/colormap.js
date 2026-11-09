@@ -8,6 +8,17 @@ export function ramp(t) {
   const i = Math.floor(t), f = t - i, a = STOPS[i], b = STOPS[i + 1];
   return [0, 1, 2].map((k) => (a[k] + f * (b[k] - a[k])) / 255);
 }
+// Canvas 2D 는 ramp 의 값을 sRGB 로 바로 표시하지만 Three.js 정점색은 선형 RGB 를 받는다.
+// 3D 에서도 2D 색 막대와 같은 화면색이 나오도록 sRGB 배열을 선형 RGB 로 바꾼다.
+export function srgbColorsToLinear(colors, out = null) {
+  const dst = out ?? new Float32Array(colors.length);
+  for (let i = 0; i < colors.length; i++) {
+    const v = Math.max(0, Math.min(1, colors[i]));
+    dst[i] = v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  }
+  return dst;
+}
+
 // 부품 메쉬에서 면 번호 집합의 삼각형만(정점 번호 다시 매김)
 export function extractFaces(mesh, faceSet) {
   const P = mesh.positions, T = mesh.triangles, F = mesh.faceIds, remap = new Map(), pos = [], tri = [];

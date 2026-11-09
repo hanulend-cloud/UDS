@@ -1,7 +1,7 @@
 // 관측면 색지도: node test/m3-colormap.mjs
 import { recognizeLine } from '../src/engine/mech3d/line.js';
 import { tallyGeometry } from '../src/engine/mech3d/tally.js';
-import { ramp, NO_DATA, extractFaces, subdivide, cellIndex, vertexCells, cellColors, buildObsOverlay } from '../src/ui/m3/colormap.js';
+import { ramp, NO_DATA, srgbColorsToLinear, extractFaces, subdivide, cellIndex, vertexCells, cellColors, buildObsOverlay } from '../src/ui/m3/colormap.js';
 import { topFaceMesh, rectTris, boxMesh, ok, done } from './mech3d-util.mjs';
 
 const top = topFaceMesh(rectTris(0, 0, 100, 6), 2), faces = [{ part: 0, face: 1 }];
@@ -24,6 +24,8 @@ const maxEdge = (m) => {
 ok(ramp(0).every((v, k) => Math.abs(v - [0x20, 0x30, 0x6e][k] / 255) < 1e-12) && ramp(2).every((v, k) => Math.abs(v - [0xe0, 0x53, 0x2a][k] / 255) < 0.01), 'ramp: 0 = 남색, 1 이상 = 주황(시안 색 막대)');
 { const f = extractFaces(boxMesh(0, 0, 0, 10, 10, 10), new Set([1]));
   ok(f.triangles.length === 6 && f.positions.length === 12 && [0, 1, 2, 3].every((v) => f.positions[3 * v + 2] === 10), 'extractFaces: +z 면 = 삼각형 2개·정점 4개'); }
+{ const c = srgbColorsToLinear(Float32Array.from([0, 0.04045, 0.5, 1]));
+  ok(Math.abs(c[0]) < 1e-12 && Math.abs(c[1] - 0.0031308) < 1e-6 && Math.abs(c[2] - 0.214041) < 1e-6 && Math.abs(c[3] - 1) < 1e-12, '3D 색공간: 2D sRGB → 선형 RGB'); }
 { const m = extractFaces(top, new Set([1])), s = subdivide(m, 0.5), c = subdivide(m, 0.01, 1000);
   ok(Math.abs(area(s) - 600) < 0.01 && maxEdge(s) <= 0.5 + 1e-6 && s.triangles.length / 3 === 2 * 201 * 201, `subdivide: 면적 ${area(s).toFixed(4)} 보존, 최대 변 ${maxEdge(s).toFixed(4)} ≤ 0.5, 삼각형 ${s.triangles.length / 3}`);
   ok(c.triangles.length / 3 <= 1000 && c.triangles.length / 3 >= 2 && Math.abs(area(c) - 600) < 0.01, `subdivide 상한: ${c.triangles.length / 3} ≤ 1000`); }

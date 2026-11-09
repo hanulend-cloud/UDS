@@ -1,5 +1,5 @@
 // 라인 인식(V3D-5): node test/mech3d-line.mjs
-import { recognizeLine, obsDirection, lineFromData, lightData } from '../src/engine/mech3d/line.js';
+import { recognizeLine, obsDirection, lineFromData, lightData, widthDirection } from '../src/engine/mech3d/line.js';
 import { topFaceMesh, cylinderSideMesh, rectTris, annulusTris, rng, ok, done } from './mech3d-util.mjs';
 
 const faces = [{ part: 0, face: 1 }];
@@ -35,6 +35,10 @@ function checkPoints(L, pts, label) {
   ok(Math.min(Math.abs(ds - want), Math.abs(L.length - ds - want)) <= 0.2, `V3D-5 원: 1rad 호 길이 ${Math.min(ds, L.length - ds).toFixed(3)} (해석 40)`);
   const w = Math.abs(L.toSW(...L.to2D([0, 42, 2]))[1]);
   ok(Math.abs(w - 2) <= 0.2, `V3D-5 원: 폭 방향 |w| ${w.toFixed(3)} (해석 2)`);
+  const sx = L.toSW(...L.to2D([40, 0, 2]))[0], sy = L.toSW(...L.to2D([0, 40, 2]))[0];
+  const dx = widthDirection(L, sx, [0, 0, 1]), dy = widthDirection(L, sy, [0, 0, 1]), dp = Math.abs(dx[0] * dy[0] + dx[1] * dy[1] + dx[2] * dy[2]);
+  ok(dp < 0.02 && Math.abs(Math.hypot(...dx) - 1) < 1e-9 && Math.abs(Math.hypot(...dy) - 1) < 1e-9,
+    `링 로컬 폭 방향: 0° ${dx.map((v) => v.toFixed(2))} · 90° ${dy.map((v) => v.toFixed(2))} (X·Y 방향이 함께 회전)`);
 }
 {   // 링 바깥 원통 측면: 법선 평균은 0이지만 전체 원주를 펼쳐 인식
   const parts = [cylinderSideMesh(40, 6)], d = obsDirection(parts, faces), L = recognizeLine(parts, faces, d);

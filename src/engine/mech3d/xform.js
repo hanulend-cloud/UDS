@@ -1,4 +1,5 @@
 // 메쉬 강체 변환 — LED STEP 위치 맞춤(spec §4.1: 이동 x,y,z · 축별 회전 각도). 회전 = Rz·Ry·Rx (deg), 이동은 회전 뒤.
+import { refitBvh } from './bvh.js';
 export function eulerMatrix([rx, ry, rz]) {
   const [a, b, c] = [rx, ry, rz].map((d) => (d * Math.PI) / 180);
   const ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b), cc = Math.cos(c), sc = Math.sin(c);
@@ -35,5 +36,7 @@ export function scaleMoveMesh(m, xf, c) {
   const P = new Float32Array(m.positions.length);
   for (let i = 0; i < P.length; i += 3) for (let k = 0; k < 3; k++) P[i + k] = c[k] + s[k] * (m.positions[i + k] - c[k]) + t[k];
   const { bvh, ...rest } = m;
-  return { ...rest, positions: P, volume: m.volume != null ? m.volume * s[0] * s[1] * s[2] : m.volume };
+  const out = { ...rest, positions: P, volume: m.volume != null ? m.volume * s[0] * s[1] * s[2] : m.volume };
+  if (bvh) out.bvh = refitBvh(P, m.triangles, bvh);
+  return out;
 }

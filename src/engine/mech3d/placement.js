@@ -49,13 +49,55 @@ export function ledAtS(line, s, { side = 'direct', pcb }, rt = null, w = 0) {
 
 // 개별 조정 s 정리: 닫힌 라인은 감고, 열린 라인은 [0, L] 로 자름
 export const wrapS = (line, s) => (line.closed ? ((s % line.length) + line.length) % line.length : Math.max(0, Math.min(line.length, s)));
+
+// 위치 목록 정리 — 닫힌 라인의 s=0 과 s=L 은 같은 자리다.
+// STEP 편집·최적화 결과에 둘 다 남으면 첫 LED 묶음이 마지막 번호로 한 번 더 생성된다.
+export function normalizeLedPositions(line, positions, tol = 1e-4) {
+  const P = (positions ?? []).map((q) => {
+    const p = typeof q === 'number' ? { s: q, w: 0, dz: 0 } : { ...q, w: q.w ?? 0, dz: q.dz ?? 0 };
+    const s = wrapS(line, Number(p.s));
+    return { ...p, s: line.closed && (s < tol || line.length - s < tol) ? 0 : s };
+  }).filter((q) => Number.isFinite(q.s) && Number.isFinite(q.w) && Number.isFinite(q.dz))
+    .sort((a, b) => a.s - b.s || a.w - b.w || a.dz - b.dz);
+  if (!line.closed || P.length < 2) return P;
+  const G = [];
+  for (const q of P) {
+    let g = G.at(-1);
+    if (!g || Math.abs(q.s - g.s) > tol) G.push((g = { s: q.s, items: [], extra: [] }));
+    const same = g.items.some((p) => Math.abs(q.w - p.w) <= tol && Math.abs(q.dz - p.dz) <= tol);
+    (same ? g.extra : g.items).push(q);
+  }
+  const dup = G.filter((g) => g.extra.length);
+  if (!dup.length) return P;
+  const gaps = G.map((g, i) => ((G[(i + 1) % G.length].s - g.s + line.length) % line.length) || line.length);
+  const avg = line.length / G.length, uniform = Math.max(...gaps) - Math.min(...gaps) <= Math.max(10 * tol, 0.01 * avg);
+  if (uniform && dup.length === 1) {
+    const n = G.length + 1, s0 = G[0].s;
+    G.forEach((g, i) => { const s = wrapS(line, s0 + (i * line.length) / n); g.items.forEach((q) => { q.s = s; }); });
+    const s = wrapS(line, s0 + (G.length * line.length) / n);
+    dup[0].extra.forEach((q) => { q.s = s; });
+  } else {
+    for (const d of dup) {
+      const S = G.flatMap((g) => g.items.length ? [g.items[0].s] : []).sort((a, b) => a - b);
+      let best = { gap: -1, s: 0 };
+      for (let i = 0; i < S.length; i++) {
+        const gap = ((S[(i + 1) % S.length] - S[i] + line.length) % line.length) || line.length;
+        if (gap > best.gap) best = { gap, s: wrapS(line, S[i] + gap / 2) };
+      }
+      const moved = d.extra; d.extra = [];
+      moved.forEach((q) => { q.s = best.s; });
+      G.push({ s: best.s, items: moved, extra: [] });
+    }
+  }
+  return G.flatMap((g) => [...g.items, ...g.extra]).sort((a, b) => a.s - b.s || a.w - b.w || a.dz - b.dz);
+}
 // rows 2 → 같은 s 에 w = −δ, +δ 두 개(순서: s 오름차순, 각 s 에서 −δ → +δ). 번호 = 이 순서.
 // adjust = ledAdjust.items(validAdjust) | null — 그 번호의 LED 를 s+ds 에 다시 놓고 관측 방향 d 로 +dz(spec m3-cad-ui §4a)
 // positions = [{s, w}] 이 있으면(자동설계 ② 배치 Solver 결과) 개수·피치·열 대신 그 위치 그대로
 export function manualLeds(line, { count, pitch = 0, side = 'direct', pcb, rows = 1, rowGap = 0, positions = null }, rt = null, adjust = null) {
   if (pcb.kind === 'depth' && !(pcb.depth > 0)) throw new Error('PCB 깊이는 0 보다 커야 함');
   const ws = rowOffsets(rows, rows === 2 ? clampRowGap(line, rowGap) : 0), d = line.frame.d;
-  const SW = Array.isArray(positions) && positions.length ? positions.map((q) => [q.s, q.w ?? 0]) : ledSPositions(line, count, pitch).flatMap((s) => ws.map((w) => [s, w]));
+  const SW = Array.isArray(positions) && positions.length ? normalizeLedPositions(line, positions).map((q) => [q.s, q.w]) : ledSPositions(line, count, pitch).flatMap((s) => ws.map((w) => [s, w]));
   return SW.map(([s, w], i) => {
     const it = adjust?.[i];
     if (!it || (!it.ds && !it.dz)) return ledAtS(line, s, { side, pcb }, rt, w);

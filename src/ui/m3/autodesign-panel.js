@@ -313,8 +313,9 @@ export const limitText = (reason) => {
   while (t.endsWith(')') && n(')') > n('(')) t = t.slice(0, -1).trimEnd();
   return t;
 };
-// 고정된 Milky 다시 맞춤(2026-11-07) — 위치·높이·형상이 바뀌면 전에 맞춘 Milky 가 더는 최적이 아님. 이번에 Milky 를 안 돌리고 그것들을 돌릴 때 Milky 도 함께
-export function retuneMilky(stages, locked, milkyOk) { return !!(milkyOk && locked?.milky && !stages.milky && (stages.leds || stages.height || stages.shape)); }
+// 결과에는 사용자가 실제로 돌린 묶음도 별도 기록한다. 위치는 내부적으로 LED 배치·높이 두 단계라
+// 어느 한쪽만 실행돼도 결과 카드에서 '안 돌림'으로 보이지 않게 한다. 복사본을 만들어 실행 중 객체 변경의 영향도 막는다.
+export function resultStageFlags(stages = {}) { const out = { ...stages }; out.position = !!(out.position || out.leds || out.height); return out; }
 // 폭 미달 + '1열만' = 2열 배치를 시도하라는 안내(2026-11-07) — 위치를 돌렸을 때만
 export function oneRowHint(r) { const w = r.best?.Uwid, t = r.targets?.wid; return r.oneRow && r.stages?.leds && Number.isFinite(w) && t != null && w < t ? `💡 폭 균일도 미달 — 설계 인자에서 '1열만(재료비↓)'을 끄면 2열 배치도 찾아 봅니다(LED 개수·재료비 늘 수 있음)` : ''; }
 // 케이스 면 추천(2026-11-07) — ④ 최적화는 없앴지만 하우징 면 처리를 한 단계 올리면 나아지는지는 알려 줌(설계 값은 안 바꿈, 바꾸는 건 사용자가 부품 속성에서).
@@ -421,7 +422,7 @@ function factorBoxesHtml(x, effects, locked = {}, only = null) {
 // 참고 한 줄씩(최대 3, 길면 …) — 접지 않고 바로
 function notesLines(r) {
   const n = [
-    oneRowHint(r), r.milkyRetuned ? '고정했던 Milky 도 위치·형상에 맞춰 다시 맞춤' : '', r.shapeNote ? `형상 그대로: ${r.shapeNote}` : '', shapeMissText(r),
+    oneRowHint(r), r.shapeNote ? `형상 그대로: ${r.shapeNote}` : '', shapeMissText(r),
     r.lowered ? loweredText(r.lowered, r.unchanged) : '', !r.feasible && r.peek ? peekText(r.peek) : '',
   ].filter(Boolean).slice(0, 3).map((t) => `<div class="rs-note">💡 ${clip(String(t).replace(/^💡\s*/, ''), 70)}</div>`);
   const ch = caseHintText(r) ? `<button type="button" class="rs-note m3-rhint" data-ad="casePart" data-v="${r.hint.finish.part}" title="${esc(caseHintText(r))}">${clip(caseHintText(r).replace(/^💡\s*/, '💡 '), 72)} ▸</button>` : '';
@@ -450,7 +451,6 @@ function notesHtml(r) {
   const n = [
     caseHintText(r) ? `<button type="button" class="m3-rlim m3-rhint" data-ad="casePart" data-v="${r.hint.finish.part}" title="케이스 부품 속성 열기 — 면 처리는 직접 바꿈">${esc(caseHintText(r))} ▸</button>` : '',
     oneRowHint(r) ? `<div class="m3-rlim">${esc(oneRowHint(r))}</div>` : '',
-    r.milkyRetuned ? '<div class="m3-rlim">💡 고정했던 Milky 도 위치·형상에 맞춰 다시 맞춤</div>' : '',
     r.shapeNote ? `<div class="m3-rlim">💡 형상 그대로: ${esc(r.shapeNote)}</div>` : '',
     shapeMissText(r) ? `<div class="m3-rlim">${esc(shapeMissText(r))}</div>` : '',
     r.lowered ? `<div class="m3-rlim">${esc(loweredText(r.lowered, r.unchanged))}</div>` : '',
