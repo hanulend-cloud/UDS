@@ -866,3 +866,7 @@ done();
   const ok = treeHasCtx('obs') && t1[0]?.k === 'obsShow' && t1[0].label === '관측면 감추기' && t0[0]?.label === '관측면 보이기'
     && v1[0]?.k === 'obsShow' && v1[0].label === '관측면 감추기' && v0.some((x) => x.k === 'obsShow' && x.label === '관측면 보이기') && !vn.some((x) => x.k === 'obsShow');
   console.log(ok ? 'PASS 관측면 우클릭: 트리 · 3D 에서 보이기/감추기' : (process.exitCode = 1, `FAIL 관측면 우클릭 ${JSON.stringify([t1, t0, v1, v0, vn])}`)); }
+{ // three.js 는 불투명 목록을 먼저, 투명 목록을 나중에 그린다 — 색지도가 불투명 목록이면 renderOrder 와 상관없이 투명 부품(확산판)이 위를 덮어 분포가 안 보임
+  const { readFileSync } = await import('node:fs'), view = readFileSync(new URL('../src/ui/mech3d-view.js', import.meta.url), 'utf8');
+  const mat = view.match(/obsMesh = new THREE\.Mesh\(g, new THREE\.MeshBasicMaterial\(\{([^}]*)\}/)?.[1] ?? '';
+  console.log(/transparent:\s*true/.test(mat) ? 'PASS 관측면 색지도: 투명 부품 위에 그림' : (process.exitCode = 1, `FAIL 관측면 색지도 재질 ${mat}`)); }

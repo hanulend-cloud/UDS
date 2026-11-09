@@ -505,7 +505,8 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
       g.setAttribute('position', new THREE.BufferAttribute(geom.positions, 3));
       g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(geom.positions.length).fill(0.45), 3));
       g.setIndex(new THREE.BufferAttribute(geom.triangles, 1));
-      obsMesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, clippingPlanes: clip, depthTest: false, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
+      // transparent: three.js 는 투명 목록을 불투명 목록 뒤에 그리므로, 불투명이면 renderOrder 와 상관없이 투명 부품(확산판)이 색지도를 덮는다
+      obsMesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, clippingPlanes: clip, transparent: true, depthTest: false, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
       obsMesh.renderOrder = 2.5;
       obsDir = geom.dir ?? null; liftObs(); obsMesh.visible = obsShow;
       scene.add(obsMesh);
