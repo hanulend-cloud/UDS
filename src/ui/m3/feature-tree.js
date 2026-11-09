@@ -124,8 +124,9 @@ export function lightCtxItems(M, S, id, { excluded = false, closed = false } = {
   }
   return out;
 }
-export const treeHasCtx = (id) => id.startsWith('part:') || id.startsWith('group:') || id.startsWith('led:') || id === 'light' || id === 'leds' || id === 'pcbs';   // 우클릭 메뉴가 열리는 행
+export const treeHasCtx = (id) => id.startsWith('part:') || id.startsWith('group:') || id.startsWith('led:') || id === 'light' || id === 'leds' || id === 'pcbs' || id === 'obs';   // 우클릭 메뉴가 열리는 행
 export function treeCtxItems(M, S, id, opt = {}) {
+  if (id === 'obs') return [{ k: 'obsShow', label: opt.obsOn === false ? '관측면 보이기' : '관측면 감추기' }];   // 관측면 표시 켜기/끄기(2026-11-08)
   if (id === 'pcbs') {
     const ids = M.parts.map((p, i) => (p.role === 'pcb' ? i : -1)).filter((i) => i >= 0), sp = stepPcb(M.light), out = [{ k: 'pcbClick', label: 'PCB 수동 선택 — 3D 에서 클릭' }];
     if (!ids.length && !sp) return out;
@@ -148,8 +149,9 @@ export function treeCtxItems(M, S, id, opt = {}) {
   return out;
 }
 // 3D 우클릭 메뉴 항목(순수, 2026-11-02) — part = 누른 기구 부품 | null, isLed = LED 를 누름, selPart = 트리에서 고른 부품(숨겨져 있으면 [다시 보기])
-export function viewCtxItems({ part = null, isLed = false, ledRank = null, selPart = null, multi = [], hidden = [], hideLeds = false, hiddenLeds = [], hidePcb = false, names = [], untrace = null }) {
+export function viewCtxItems({ part = null, isLed = false, ledRank = null, selPart = null, multi = [], hidden = [], hideLeds = false, hiddenLeds = [], hidePcb = false, names = [], untrace = null, obsHit = false, obsOn = true }) {
   const out = [], nm = (i) => names[i] ?? `부품 ${i + 1}`;
+  if (obsHit && obsOn) out.push({ k: 'obsShow', label: '관측면 감추기' });   // 관측면 위 우클릭(2026-11-08)
   if (part != null) {
     if (multi.length > 1 && multi.includes(part)) out.push({ k: 'hideSel', label: `선택한 부품 ${multi.length}개 숨기기` });
     else out.push({ k: 'hide', label: `${nm(part)} 숨기기` });
@@ -161,6 +163,7 @@ export function viewCtxItems({ part = null, isLed = false, ledRank = null, selPa
   if (selPart != null && hidden.includes(selPart) && selPart !== part) out.push({ k: 'show', label: `${nm(selPart)} 다시 보기` });
   if (hideLeds && !isLed) out.push({ k: 'led', label: 'LED 다시 보기' });
   const cnt = [hidden.length ? `부품 ${hidden.length}개` : '', hiddenLeds.length ? `LED ${hiddenLeds.length}개` : ''].filter(Boolean).join(' · ');
+  if (!obsOn) out.push({ k: 'obsShow', label: '관측면 보이기' });
   if (hidden.length || hideLeds || hiddenLeds.length || hidePcb) out.push({ k: 'all', label: `숨긴 것 모두 보기${cnt ? ` (${cnt})` : ''}` });
   return out;
 }
@@ -236,7 +239,7 @@ export function renderFeatureTree(el, M, S, h, lay, leds) {
       const id = n.dataset.node; if (!treeHasCtx(id)) return;
       e.preventDefault();
       B.h?.onCtxSelect?.(id);
-      const items = treeCtxItems(B.M, B.S, id, { excluded: n.classList.contains('untr'), closed: n.querySelector('[data-fold]')?.getAttribute('aria-expanded') === 'false' }); if (!items.length) return;
+      const items = treeCtxItems(B.M, B.S, id, { obsOn: B.h?.obsOn?.() !== false, excluded: n.classList.contains('untr'), closed: n.querySelector('[data-fold]')?.getAttribute('aria-expanded') === 'false' }); if (!items.length) return;
       showCtxMenu(el.ownerDocument, e.clientX, e.clientY, items, (k) => {
         if (k === 'rename') { const lb = [...el.querySelectorAll('[data-node]')].find((x) => x.dataset.node === id)?.querySelector('[data-lbl]'); if (lb) startRename(lb); }
         else if (k === 'eye') B.h?.onEye?.(id, false);

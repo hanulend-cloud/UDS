@@ -112,7 +112,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     return e;
   }
   const fatMats = new Set();   // 굵은 선 재질 — 창 크기가 바뀌면 resolution 갱신
-  let pathGroup = null, pathItems = [], obsUi = null;   // 광경로 그룹 · 화면 크기 맞춤 항목 · 관측면 표시(render 가 쓰므로 위에 선언)
+  let pathGroup = null, pathItems = [], obsUi = null, obsFillMesh = null;   // 광경로 그룹 · 화면 크기 맞춤 항목 · 관측면 표시(render 가 쓰므로 위에 선언)
   let looks = [];   // 부품별 색·투명도(없으면 종류 기본값)
   let meshes = [], partsRef = [], kinds = [], sel = null, obsSet = new Set(), overlay = null, obsMesh = null, markers = null, coneMeshes = [];
 
@@ -426,6 +426,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     const ob = obsOutline(oFaces);
     if (ob) overlay.add(ob);
     const of = obsFill(oFaces, xray ? 0.4 : obsMesh ? 0.12 : 0.3);
+    obsFillMesh = of;   // 클릭 판정용(앞 부품에 가려도 관측면을 선택)
     if (of) overlay.add(of);
     const oa = obsShow ? over.obsArrow : null;
     obsUi = null;
@@ -554,6 +555,11 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   let down = null;
   canvas.addEventListener('pointerdown', (e) => { if (e.button === 0 && e.isPrimary) down = [e.clientX, e.clientY]; });
   canvas.addEventListener('pointercancel', () => { down = null; });
+  // 관측면은 가려도 보이게 그리므로(앞 부품 위에 덧그림) 클릭도 앞 부품을 뚫고 잡는다 — 관측면 채움(양면)과 광선 교차(단면에 잘린 쪽 제외)
+  const obsHitOf = () => {
+    if (!obsShow || !obsFillMesh) return null;
+    return ray.intersectObject(obsFillMesh, false).find((x) => !clip.length || clip[0].distanceToPoint(x.point) >= 0) ?? null;
+  };
   // 우클릭(끌지 않음) → onContext({ part, led, x, y }) — 우클릭 끌기는 화면 이동(OrbitControls)이라 메뉴 없음
   let rdown = null;
   canvas.addEventListener('pointerdown', (e) => { if (e.button === 2) rdown = [e.clientX, e.clientY]; });
@@ -565,7 +571,8 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
     const ch = ray.intersectObjects([...coneMeshes].reverse(), false)[0], led = ch ? ch.object.userData.nums[Math.floor(ch.faceIndex / CONE_SEG)] : null;
     const hits = ray.intersectObjects(meshes.filter((m) => m.visible), false), h = clip.length ? hits.find((x) => clip[0].distanceToPoint(x.point) >= 0) : hits[0];
-    onContext({ part: h ? h.object.userData.part : null, led, x: e.clientX, y: e.clientY });
+    const hp = h ? h.object.userData.part : null;
+    onContext({ obs: !ch && !!obsHitOf(), part: hp, face: hp != null ? partsRef[hp]?.faceIds?.[h.faceIndex] ?? null : null, led, x: e.clientX, y: e.clientY });
   });
   canvas.addEventListener('pointerup', (e) => {
     if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 4) { down = null; return; }
@@ -576,6 +583,8 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     // 빛 원뿔(위에 그려짐)이 먼저 — 선택 모드가 아닐 때만. 선택 원뿔을 앞에 둔다
     const ch = pickable ? null : ray.intersectObjects([...coneMeshes].reverse(), false)[0];
     if (ch) { onPick({ part: null, face: null, led: ch.object.userData.nums[Math.floor(ch.faceIndex / CONE_SEG)] }); return; }
+    const add = e.shiftKey || e.ctrlKey || e.metaKey;   // Shift(Ctrl)+클릭 = 여러 개 고르기(끌면 화면 이동) — 2026-11-06
+    if (!pickable && !add && obsHitOf()) { onPick({ obs: true }); return; }   // 관측면 클릭 = 관측면 선택(앞 부품에 가려도)
     const hits = ray.intersectObjects(meshes.filter((m) => m.visible && (!pickable || pickable(m.userData.part))), false);
     const h = clip.length ? hits.find((x) => clip[0].distanceToPoint(x.point) >= 0) : hits[0];
     // 선택 모드(pickable 지정)에서는 클릭 광선도 넘긴다 — 빈 곳 클릭이어도 { part: null, face: null, ray } (가까운 LED 맞춤용)
@@ -584,7 +593,6 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     const H = canvas.clientHeight || 400;
     const wpp = camera.isOrthographicCamera ? (ortho.top - ortho.bottom) / ortho.zoom / H
       : (2 * (h ? h.distance : Math.max(camera.near, controls.target.clone().sub(ray.ray.origin).dot(ray.ray.direction))) * Math.tan((camera.fov * Math.PI) / 360)) / H;
-    const add = e.shiftKey || e.ctrlKey || e.metaKey;   // Shift(Ctrl)+클릭 = 여러 개 고르기(끌면 화면 이동) — 2026-11-06
     if (!h) { onPick(pickable ? { part: null, face: null, ray: rr, worldPerPixel: wpp, add } : null); return; }
     const part = h.object.userData.part;
     onPick({ part, face: partsRef[part].faceIds[h.faceIndex], ray: rr, worldPerPixel: wpp, add });

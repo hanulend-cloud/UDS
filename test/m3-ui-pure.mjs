@@ -855,3 +855,11 @@ done();
   ok(parts.length === 2 && parts.every((s) => gl(s, 'h') >= 2 && gl(s, 'v') >= 2), `두 그래프 모두 가로·세로 안내선: ${parts.map((s) => `${gl(s, 'h')}/${gl(s, 'v')}`)}`);
   ok(/text-anchor="middle">[0-9,]+만</.test(svg), '세로 안내선 눈금 = 광선 수');
   ok(simCaption(H, 0.01, {}, 'done') === '광선 400만 / 총 400만', '광선 수 글'); }
+{ // 관측면 우클릭(2026-11-08): 트리 '관측면' 행 · 3D 관측면 위 → 보이기/감추기
+  const { treeCtxItems, treeHasCtx, viewCtxItems } = await import('../src/ui/m3/feature-tree.js');
+  const M = { parts: [{}, {}] };
+  const t1 = treeCtxItems(M, {}, 'obs', { obsOn: true }), t0 = treeCtxItems(M, {}, 'obs', { obsOn: false });
+  const v1 = viewCtxItems({ part: 1, obsHit: true, obsOn: true }), v0 = viewCtxItems({ part: null, obsOn: false }), vn = viewCtxItems({ part: 1, obsHit: false, obsOn: true });
+  const ok = treeHasCtx('obs') && t1[0]?.k === 'obsShow' && t1[0].label === '관측면 감추기' && t0[0]?.label === '관측면 보이기'
+    && v1[0]?.k === 'obsShow' && v1[0].label === '관측면 감추기' && v0.some((x) => x.k === 'obsShow' && x.label === '관측면 보이기') && !vn.some((x) => x.k === 'obsShow');
+  console.log(ok ? 'PASS 관측면 우클릭: 트리 · 3D 에서 보이기/감추기' : (process.exitCode = 1, `FAIL 관측면 우클릭 ${JSON.stringify([t1, t0, v1, v0, vn])}`)); }

@@ -1548,19 +1548,20 @@ function groupSelected() {
   let gid = null; st.update('meta', (m) => { const r = makeGroup(m.groups, ps); m.groups = r.groups; gid = r.id; });
   st.update('session', (_, x) => { x.multi = []; x.node = `group:${gid}`; x.sel = null; x.fold = { ...x.fold, [gid]: false, parts: false }; });
 }
-function onViewContext({ part, led, x, y }) {
+function onViewContext({ obs = false, part, face, led, x, y }) {
   const st = A.store, M = st.mspec, nMech = getMech3d().parts.length;
   if (st.session.pick) return;
+  if (obs) { part = null; led = null; if (st.session.node !== 'obs') st.update('session', (_, q) => { q.multi = []; q.node = 'obs'; q.sel = null; q.ledSel = null; }); }   // 관측면 위(앞 부품에 가려도) = 관측면 메뉴
   const mech = part != null && part < nMech ? part : null, isLed = led != null || (part != null && part >= nMech);
   if (mech != null && st.session.node !== `part:${mech}` && !(st.session.multi ?? []).includes(`part:${mech}`)) st.update('session', (_, q) => { q.multi = []; q.node = `part:${mech}`; q.sel = { part: mech, face: null }; q.ledSel = null; });
   const S = st.session, sel = S.node?.startsWith('part:') ? +S.node.slice(5) : null, multi = (S.multi ?? []).filter((q) => q.startsWith('part:')).map((q) => +q.slice(5));
   const LS = ledsNow(), rows = ledRows(LS), ln = isLed ? ledOfHit({ part, led }, nMech, LS.lay) : null;
   const utIds = mech == null ? [] : multi.length > 1 && multi.includes(mech) ? multi : [mech];
   const ut = untraceItem(M, utIds);
-  const items = viewCtxItems({ untrace: ut, part: mech, isLed, ledRank: rows.find((r) => r.n === ln)?.rank ?? null, selPart: sel, multi, hidden: S.hidden ?? [], hideLeds: !!S.hideLeds, hidePcb: !!S.hidePcb, hiddenLeds: S.hiddenLeds ?? [], names: M.parts.map((p) => p.name) });
+  const items = viewCtxItems({ untrace: ut, part: mech, isLed, ledRank: rows.find((r) => r.n === ln)?.rank ?? null, selPart: sel, multi, hidden: S.hidden ?? [], hideLeds: !!S.hideLeds, hidePcb: !!S.hidePcb, hiddenLeds: S.hiddenLeds ?? [], names: M.parts.map((p) => p.name), obsOn: obsOn(), obsHit: obs || mech != null && (M.observe?.faces ?? []).some((f) => f.part === mech && f.face === face) });
   if (!items.length) return;
   if (mech != null && multi.length > 1 && multi.includes(mech)) items.unshift({ k: 'group', label: `선택한 부품 ${multi.length}개로 새 그룹` });
-  showCtxMenu(document, x, y, items, (k) => (k === 'group' ? groupSelected() : k === 'untrace' ? setUntrace(ut) : st.update('view', (m, q) => {
+  showCtxMenu(document, x, y, items, (k) => (k === 'obsShow' ? setObsOn(!obsOn()) : k === 'group' ? groupSelected() : k === 'untrace' ? setUntrace(ut) : st.update('view', (m, q) => {
     const n = m.parts.length, tv = (id, only = false) => Object.assign(q, toggleVisibility(id, only, n, q.hidden, q.hideLeds));
     if (k === 'hide') tv(`part:${mech}`);
     else if (k === 'show') tv(`part:${sel}`);
@@ -1575,6 +1576,7 @@ function onViewContext({ part, led, x, y }) {
 function onPick(s) {
   const st = A.store, M = st.mspec, S = st.session, nMech = getMech3d().parts.length, pick = S.pick;
   const say = (t) => st.update('session', (_, x) => { x.status = t; });
+  if (!pick && s?.obs) { st.update('session', (_, x) => { const again = x.node === 'obs'; x.node = again ? 'parts' : 'obs'; x.sel = null; x.multi = []; x.ledSel = null; }); return; }   // 관측면 클릭 = 관측면 선택 · 다시 클릭 = 해제
   if (!pick && s) {   // LED 몸체·빛 원뿔 클릭 = LED 선택(spec §4a)
     const n = ledOfHit(s, nMech, M.light.kind === 'step' ? L.stepLayout(M, S.line) : null);
     if (n != null) { st.update('session', (_, x) => { x.ledSel = n; x.node = 'leds'; x.sel = null; }); return; }
@@ -2056,7 +2058,9 @@ function renderAll(tag = 'all') {
       if (id === x.node || (x.multi ?? []).includes(id)) return;
       x.multi = []; x.node = id; x.sel = id.startsWith('part:') ? { part: +id.slice(5), face: null } : null;
     }),
+    obsOn: () => obsOn(),
     onTreeAct: (k) => {   // 우클릭 메뉴: 새 그룹(선택한 부품들) · 그룹에서 빼기 · 그룹 해제 · 광원 지정
+      if (k === 'obsShow') { setObsOn(!obsOn()); return; }
       if (k === 'ledAuto') { propHandlers().onMechAuto(); return; }
       if (k === 'ledClick') { propHandlers().onLightKind('click'); return; }
       if (k === 'pcbOff') { st.update('light', (m) => { setPcbOff(m, !pcbAllOff(m)); }); return; }
