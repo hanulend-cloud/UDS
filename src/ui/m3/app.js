@@ -1657,7 +1657,7 @@ function propHandlers() {
     onFinish: (i, face, f) => st.update('material', (m, x) => {
       const r = partFinishEdit(m.parts[i], face, f, reflCat());
       m.parts[i] = r.part;
-      if (r.clamped) x.status = `소재 상한(${Math.round(r.max * 100)}%) 초과 — 특수 표면처리는 기구 최적화 ④ 에서 허용`;
+      if (r.clamped) x.status = r.adjustable ? `반사율은 최대 ${Math.round(r.max * 100)}% — ${Math.round(r.max * 100)}% 로 맞췄습니다` : `소재 상한(${Math.round(r.max * 100)}%) 초과 — 특수 표면처리는 기구 최적화 ④ 에서 허용`;
     }),
     // 측정값으로 반사 소재 추가(spec P4 §2.3e) — 사용자 항목 등록 후 이 부품에 적용. f = 양식 문자열(% 단위) → 오류 문구 | 없음
     onReflAdd: (i, f) => {

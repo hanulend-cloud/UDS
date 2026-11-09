@@ -28,10 +28,10 @@ const lab = (f) => `${f.kind === 'metal' ? 'M' : f.kind === 'whiteDiffuse' ? 'W'
   ok(t.length === 7 && t[0] === -0.1 && t.includes(0) && t.at(-1) === 6, `한쪽이 짧아도 양쪽 끝 포함: ${t}`); }
 // ④ 소재별 반사율 상한(spec P4 §2.3d)
 { const C = DEFAULT_FINISH_CATALOG, ids = C.map((e) => e.id).join();
-  ok(ids === 'abs-white,pc-white,pbt-white,pc-hr,al-raw,pp-white,pom-white,pa-white,si-white,pet-white,paint-white,abs-gray,abs-black,al-polish,sus,coat-white,coat-metal', `기본 카탈로그 id: ${ids}`);
+  ok(ids === 'abs-white,pc-white,pbt-white,pc-hr,al-raw,pp-white,pom-white,pa-white,si-white,pet-white,paint-white,abs-gray,abs-black,al-polish,sus,diffuse-adj,coat-white,coat-metal', `기본 카탈로그 id: ${ids}`);
   const pc = C.find((e) => e.id === 'pc-white'), cm = C.find((e) => e.id === 'coat-metal');
   ok(pc.kind === 'whiteDiffuse' && pc.R === 0.85 && pc.max === 0.9 && !pc.special && cm.special && cm.kind === 'metal' && cm.max === 0.95 && cm.R == null, '표 값(백색 PC 85/90 · 증착 특수 95)');
-  ok(catalogOf({}).every((e, k) => e.max === C[k].max) && catalogOf(null).length === 17 && catalogOf(null).every((e) => e.status === 'example'), 'DB 없음 → 기본');
+  ok(catalogOf({}).every((e, k) => e.max === C[k].max) && catalogOf(null).length === 18 && catalogOf(null).every((e) => e.status === 'example'), 'DB 없음 → 기본');
   const o = catalogOf([{ id: 'u1', name: '사내', kind: 'whiteDiffuse', status: 'measured', R: 0.95, Rmax: 0.9, samples: [{ R: 0.9 }], origin: 'user' }, { id: 's', name: 's', kind: 'metal', status: 'example', R: null, Rmax: 0.95, special: true, samples: [] }]);
   ok(o.length === 2 && o[0].R === 0.9 && o[0].max === 0.9 && o[0].nSamples === 1 && o[0].origin === 'user' && o[1].special && o[1].R === null && o[1].origin === 'base', `DB 항목 → 행(R ≤ 상한): ${JSON.stringify(o)}`); }
 { const C = DEFAULT_FINISH_CATALOG, W = (R) => ({ kind: 'whiteDiffuse', R });
@@ -72,4 +72,15 @@ const lab = (f) => `${f.kind === 'metal' ? 'M' : f.kind === 'whiteDiffuse' ? 'W'
   ok(r6.clamped && r6.max === 0.97 && r6.part.coating === 'coat-white', '특수 처리 부품 → 그 상한');
   const r7 = partFinishEdit(cq, null, { kind: 'metal', R: 0.88 }, C);
   ok(!('coating' in r7.part), '종류를 바꾸면 특수 표시 해제'); }
+{ // 반사율 조정 확산 반사면 — 소재 이름을 고른 뒤 설계자가 반사율을 직접 정함(0~99%)
+  const C2 = catalogOf(null), A = C2.find((e) => e.id === 'diffuse-adj');
+  ok(A && A.kind === 'whiteDiffuse' && A.R === 0.85 && A.max === 0.99 && A.adjustable === true && !A.special, `조정 항목: ${JSON.stringify(A)}`);
+  ok(catalogOf([{ id: 'diffuse-adj', name: 'x', kind: 'whiteDiffuse', status: 'example', R: 0.85, Rmax: 0.99, adjustable: true, samples: [] }])[0].adjustable === true, 'DB 항목의 조정 표시 유지');
+  const p = setReflMaterial({ material: { kind: 'opaque' } }, 'diffuse-adj', C2);
+  ok(p.reflMaterial === 'diffuse-adj' && p.finish.kind === 'whiteDiffuse' && p.finish.R === 0.85, '고르면 처음 값 85%');
+  const r1 = partFinishEdit(p, null, { kind: 'whiteDiffuse', R: 0.423 }, C2);
+  ok(!r1.clamped && r1.part.finish.R === 0.423, '범위 안 값은 그대로');
+  const r2 = partFinishEdit(p, null, { kind: 'whiteDiffuse', R: 1 }, C2);
+  ok(r2.clamped && r2.part.finish.R === 0.99 && r2.adjustable === true, '100% → 99% 로 맞추고 조정 항목임을 알림');
+  ok(partFinishEdit({ reflMaterial: 'pc-white', finish: { kind: 'whiteDiffuse', R: 0.85 } }, null, { kind: 'whiteDiffuse', R: 1 }, C2).adjustable === false, '다른 소재는 조정 항목 아님'); }
 done();

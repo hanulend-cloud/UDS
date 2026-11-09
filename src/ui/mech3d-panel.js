@@ -79,7 +79,10 @@ export function materialPickHtml(p, groups) {
 function basicMaterialHtml(p, dbList, catalog, sel = {}) {
   const mat = p.material, groups = materialGroups({ milky: dbList, clear: sel.clearList ?? [], refl: catalog });
   const milky = mat.kind === 'milky' ? `<div class="m3-row"><label>확산 정도</label><input type="number" min="0" max="10" step="0.1" value="${esc(mat.milky)}" data-m3-mat="milky" aria-label="Milky 값"> <span class="mut">${+mat.milky > 0 ? '' : '<b>지금 투명</b> · '}Milky · 0 = 투명 · 높을수록 고르게 · 어두워짐</span></div>` : '';
-  return `<div class="m3-sub">소재</div><div class="m3-row"><label>소재 이름</label>${materialPickHtml(p, groups)}</div>${milky}
+  // 반사율 조정 확산 반사면 — 이 소재만 관리자가 아니어도 반사율을 직접 정함
+  const adj = mat.kind === 'opaque' ? catalog.find((e) => e.id === p.reflMaterial && e.adjustable) : null;
+  const adjR = adj && p.finish?.R != null ? `<div class="m3-row"><label>반사율</label><input type="number" min="0" max="${esc(pct(adj.max))}" step="0.1" value="${esc(pct(p.finish.R))}" data-m3-finishr="part" aria-label="반사율 %"> % <span class="mut">0~${esc(pct(adj.max))}%</span></div>` : '';
+  return `<div class="m3-sub">소재</div><div class="m3-row"><label>소재 이름</label>${materialPickHtml(p, groups)}</div>${milky}${adjR}
     <div class="m3-row mut m3-matsum">${esc(materialSummary(p, { milky: dbList, refl: catalog, thick: sel?.meshInfo?.size ? Math.min(...sel.meshInfo.size) : null }))}</div>
     ${sel.admin ? `<div class="m3-admin"><div class="m3-sub">관리자 · 물성 직접 조정</div>${adminMaterialHtml(p, catalog)}</div>` : ''}`;
 }
@@ -93,6 +96,7 @@ function adminMaterialHtml(p, catalog) {
       return `<div class="m3-row"><label>투과율</label><input type="number" min="1" max="100" step="0.1" value="${esc(pct(mat.T))}" data-m3-mat="T" aria-label="투과율 %">% <span class="mut">두께</span><input type="number" min="0.1" step="0.1" value="${esc(mat.tRef)}" data-m3-mat="tRef" aria-label="투과율을 잰 두께 mm"> mm</div>${mat.kind === 'whiteTrans' ? `<div class="m3-row"><label>수지</label>${resinSel(mat.resin)}</div>` : ''}`;
     case 'opaque': {
       const f = p.finish, fk = f ? FINISH_KINDS[f.kind] : null, lim = finishLimit(p, catalog);
+      if (lim?.entry.adjustable) return '<div class="mut">반사율은 위 소재 칸에서 조정</div>';
       return fk?.hasR ? `<div class="m3-row"><label>반사율</label><input type="number" min="0" max="100" step="1" value="${esc(pct(f.R))}" data-m3-finishr="part" aria-label="반사율 %">%${lim && f.kind === lim.kind ? ` <span class="mut">상한 ${pct(lim.max)}%</span>` : ''}</div>` : `<div class="mut">${esc(fk?.label ?? '')} — 반사율 없음</div>`;
     }
     default: return '';

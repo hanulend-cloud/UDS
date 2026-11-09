@@ -296,6 +296,12 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
     && !html.includes('data-m3-sec=') && !html.includes('data-m3-xflock') && !html.includes('data-m3-refladd') && !html.includes('data-m3-kind') && !html.includes('가장 가까운') && !html.includes('LED까지'), '기본 탭(소재·표면 상태만): 소재 이름 고르기 · 물성 한 줄(읽기 전용) · 위치·크기 · LED 까지 거리 + 경고');
   renderPartProps(el, P, { ...sel, admin: true }, [], {});
   ok(html.includes('data-m3-finishr="part"') && html.includes('상한 90%') && html.includes('관리자'), '관리자 모드: 숫자 물성 칸(반사율·상한)');
+  { // 반사율 조정 확산 반사면 — 관리자가 아니어도 기본 탭에 반사율 칸 1개, 관리자 모드에서도 중복 없음
+    const Q = { ...M, parts: [M.parts[0], { ...M.parts[1], reflMaterial: 'diffuse-adj', finish: { kind: 'whiteDiffuse', R: 0.725 } }] }, n = () => (html.match(/data-m3-finishr="part"/g) ?? []).length;
+    renderPartProps(el, Q, sel, [], {});
+    ok(n() === 1 && /value="opaque:diffuse-adj" selected/.test(html) && html.includes('value="72.5"') && html.includes('max="99"') && html.includes('step="0.1"'), '조정 항목: 기본 탭에 반사율 칸(0~99%, 0.1 단위)');
+    renderPartProps(el, Q, { ...sel, admin: true }, [], {});
+    ok(n() === 1, '조정 항목: 관리자 모드에서도 반사율 칸 1개'); }
   setPartTab('detail'); renderPartProps(el, P, sel, [], {});
   ok(html.includes('data-m3-xf="c0"') && html.includes('data-m3-xf="z2"') && html.includes('data-m3-xflock') && html.includes('LED까지 <b class="led">1.5 mm</b>') && !html.includes('data-m3-sec="xf"') && !html.includes('data-m3-sec="finish"') && html.includes('data-m3-sec="contact"') && !html.includes('data-m3-finish'), '상세 탭: 위치·크기 · 접촉면(표면 상태는 기본 탭)');
   ok(html.includes('>부품 2 · ') || html.includes(`>${P.parts[1].name} · `), '제목 = 이름 · 크기');

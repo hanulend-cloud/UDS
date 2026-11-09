@@ -16,6 +16,7 @@
   { "id": "abs-black", "name": "흑색 ABS·PC", "kind": "whiteDiffuse", "status": "example", "R": 0.05, "Rmax": 0.06, "samples": [] },
   { "id": "al-polish", "name": "알루미늄 연마(경면)", "kind": "metal", "status": "example", "R": 0.88, "Rmax": 0.91, "samples": [] },
   { "id": "sus", "name": "스테인리스(SUS304)", "kind": "metal", "status": "example", "R": 0.6, "Rmax": 0.65, "samples": [] },
+  { "id": "diffuse-adj", "name": "확산 반사면 (반사율 조정)", "kind": "whiteDiffuse", "status": "example", "R": 0.85, "Rmax": 0.99, "adjustable": true, "samples": [] },
   { "id": "coat-white", "name": "고반사 백색 도장·반사 시트", "short": "고반사 도장", "kind": "whiteDiffuse", "status": "example", "R": null, "Rmax": 0.97, "special": true, "samples": [] },
   { "id": "coat-metal", "name": "은·알루미늄 증착", "short": "금속 증착", "kind": "metal", "status": "example", "R": null, "Rmax": 0.95, "special": true, "samples": [] }
  ]

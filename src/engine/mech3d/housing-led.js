@@ -30,6 +30,7 @@ export const DEFAULT_FINISH_CATALOG = [
   { id: 'abs-black', name: '흑색 ABS·PC', kind: 'whiteDiffuse', R: 0.05, max: 0.06 },
   { id: 'al-polish', name: '알루미늄 연마(경면)', kind: 'metal', R: 0.88, max: 0.91 },
   { id: 'sus', name: '스테인리스(SUS304)', kind: 'metal', R: 0.6, max: 0.65 },
+  { id: 'diffuse-adj', name: '확산 반사면 (반사율 조정)', kind: 'whiteDiffuse', R: 0.85, max: 0.99, adjustable: true },   // 설계자가 기본 탭에서 반사율을 직접 정함. 상한 99%: 실제 백색 반사재 최고 수준, 100% 면 광선이 흡수 없이 계속 튐
   { id: 'coat-white', name: '고반사 백색 도장·반사 시트', short: '고반사 도장', kind: 'whiteDiffuse', R: null, max: 0.97, special: true },
   { id: 'coat-metal', name: '은·알루미늄 증착', short: '금속 증착', kind: 'metal', R: null, max: 0.95, special: true },
 ];
@@ -39,7 +40,7 @@ export function catalogOf(src) {
   const list = Array.isArray(src) ? src : typeof src?.list === 'function' ? src.list() : null;
   if (!list) return DEFAULT_FINISH_CATALOG.map((e) => ({ ...e, special: !!e.special, status: 'example', nSamples: 0, origin: 'base' }));
   return list.map((e) => ({ id: e.id, name: e.name, ...(e.short ? { short: e.short } : {}), kind: e.kind, R: e.special || e.R == null ? null : Math.min(e.R, e.Rmax), max: e.Rmax,
-    special: !!e.special, status: e.status, nSamples: e.samples?.length ?? 0, origin: e.origin ?? 'base' }));
+    special: !!e.special, ...(e.adjustable ? { adjustable: true } : {}), status: e.status, nSamples: e.samples?.length ?? 0, origin: e.origin ?? 'base' }));
 }
 // ④ 후보 — 소재 종류 등급 중 R ≤ 상한 + 현재 + (허용 시) 특수 처리(상한 R, special · coating = id; 소재로 닿는 값이면 뺌). 소재 미지정 = finishOptions(호환)
 export function finishCandidatesFor({ catalog = DEFAULT_FINISH_CATALOG, materialId, current, allowSpecial = false } = {}) {
@@ -72,7 +73,7 @@ export function partFinishEdit(part, face, f, catalog = DEFAULT_FINISH_CATALOG) 
   const lim = finishLimit(q, catalog), clamped = !!(lim && f && f.R != null && f.kind === lim.kind && f.R > lim.max + 1e-9);
   const g = clamped ? { ...f, R: lim.max } : f;
   q = face == null ? { ...q, finish: g && { ...g } } : { ...q, faceFinish: (() => { const ff = { ...q.faceFinish }; if (g == null) delete ff[face]; else ff[face] = { ...g }; return ff; })() };
-  return { part: q, clamped, max: lim?.max ?? null };
+  return { part: q, clamped, max: lim?.max ?? null, adjustable: !!lim?.entry.adjustable };
 }
 // 간섭 없이 갈 수 있는 거리(up = 관측 방향 +, down = −) − 여유. 막힘 없음(Infinity) → max 로 자름
 export function ledHeightRange({ up, down, margin = 0.3, max = 10 }) {
