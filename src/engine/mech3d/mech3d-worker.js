@@ -6,6 +6,7 @@ import { readStepParts, stepProfile, BIG_MESH, mergeMeshes } from '../shape/step
 import { splitTransfer, planSplit, splitRough, splitFine } from '../shape/step-split.js';
 import { stepRootEstimate, stepRootProfile } from '../shape/step-roots.js';
 import { cutStep } from '../shape/step-cut.js';
+import { readStepPartsFast, shouldUseFastStep, FAST_BIG_MESH } from '../shape/fast-step-import.js';
 import { prepScene, prepTransfer } from './scene-prep.js';
 
 const meshBufs = (m) => [m.positions.buffer, m.triangles.buffer, m.faceIds.buffer];
@@ -105,9 +106,22 @@ self.onmessage = async (ev) => {
     const go = (k) => { const n = performance.now(); tm[cur] = n - t0; t0 = n; cur = k; self.postMessage({ key: k }); };
     const post = (msg, tr = []) => self.postMessage(msg, tr);
     // 잘라 읽기(조각마다 변환이 끝나는 대로 미리보기) · 자를 수 없어 한 번에 읽을 때만 루트 하나 = 미리보기 건너뜀(stepRootProfile — 변환이 끝나야 보이므로 메시를 두 번 만들 이유 없음)
-    const K = ev.data.noSplit ? 1 : splitWorkers(baseProfile, self.navigator ?? {});
     let profile = baseProfile, parts = null, info = { workers: 1, roots: rootsEst || null, noSplit: !!ev.data.noSplit };
-    const pieces = K >= 2 ? (() => { go('read'); self.postMessage({ key: 'read', text: '부품 단위로 자르는 중' }); try { return cutStep(text, K); } catch (e) { console.warn('[불러오기] 자르기 실패', e); return null; } })() : null;
+    // 30MB 이상은 OCCT 8 SIMD 빌드로 전체를 한 번만 변환한다. 기존 OCCT 7.6 분할 경로보다 90MB급 조립품에서 훨씬 빠르며,
+    // 지원하지 않는 STEP 변형이나 초기화 오류가 나면 아래 기존 경로로 자동 복귀한다.
+    if (shouldUseFastStep(ev.data.bytes ?? text.length)) {
+      self.postMessage({ key: 'oc', text: '대용량 고속 엔진 준비' });
+      try {
+        parts = await readStepPartsFast(text, { onStage: go, onPart: (i, n) => self.postMessage({ key: 'mesh', frac: i / n, text: `부품 ${i}/${n} · 고속 엔진` }) });
+        info = { workers: 1, fast: true, roots: rootsEst || null, noSplit: !!ev.data.noSplit };
+      } catch (e) {
+        console.warn('[불러오기] 고속 경로 실패 — 기존 엔진으로', e);
+        self.postMessage({ key: 'oc', text: '고속 엔진 호환 안 됨 — 기존 엔진으로 다시 읽는 중' });
+        info.fastError = String(e?.message ?? e);
+      }
+    }
+    const K = parts || ev.data.noSplit ? 1 : splitWorkers(baseProfile, self.navigator ?? {});
+    const pieces = !parts && K >= 2 ? (() => { go('read'); self.postMessage({ key: 'read', text: '부품 단위로 자르는 중' }); try { return cutStep(text, K); } catch (e) { console.warn('[불러오기] 자르기 실패', e); return null; } })() : null;
     if (pieces?.length >= 2) {   // 잘라 읽기 — 실패하면(중첩 Worker 미지원·메모리 등) 한 번에 읽기로
       try { const r = await splitLoad(pieces, profile, !!ev.data.early, go, post); parts = r.parts; info = { workers: pieces.length, cut: true, slow: r.slow, roots: rootsEst || r.roots }; }
       catch (e) { console.warn('[불러오기] 나눠 읽기 실패 — 한 번에 읽기로', e); self.postMessage({ key: 'read', text: '나눠 읽기 실패 — 한 번에 읽는 중' }); }
@@ -126,8 +140,9 @@ self.onmessage = async (ev) => {
     const nT = parts.reduce((s, p) => s + p.triangles.length / 3, 0);
     go('prep');
     self.postMessage({ key: 'prep', frac: 0, text: `부품 ${parts.length}개 · 삼각형 ${Math.round(nT / 1000)}천 개` });
-    const r = prepScene(parts, { contacts: true, ...(profile.big ? { chord: BIG_MESH.linDefl } : {}) });   // 무거운 준비는 여기서(화면 스레드 멈춤 방지). 메시를 완화하면 접촉 판정 현 오차도 같이
+    const relaxed = info.fast ? FAST_BIG_MESH : profile.big ? BIG_MESH : null;
+    const r = prepScene(parts, { contacts: true, ...(relaxed ? { chord: relaxed.linDefl } : {}) });   // 무거운 준비는 여기서(화면 스레드 멈춤 방지). 메시를 완화하면 접촉 판정 현 오차도 같이
     tm.prep = performance.now() - t0;
-    self.postMessage({ parts: r.parts, prep: r, timing: tm, relaxed: profile.big ? BIG_MESH : null, info }, prepTransfer(r));
+    self.postMessage({ parts: r.parts, prep: r, timing: tm, relaxed, info }, prepTransfer(r));
   } catch (e) { self.postMessage({ error: String(e?.message ?? e) }); }
 };
