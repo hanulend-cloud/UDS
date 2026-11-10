@@ -38,5 +38,18 @@ const P = (material, finish, extra = {}) => ({ material, finish, ...extra });
   for (const c of tints) { const [r, g, b] = rgb(c); ok(b >= Math.max(r, g) - 10, '불투명 + 면 처리 — 남색 계열이 남음(조금만 물듦)'); }
   const tb = rgb(lineLook(P({ kind: 'clear', T: 0.9 }, { kind: 'metal', R: 0.8 }))); ok(tb[2] > tb[0], '투명 + 경면 — 여전히 파랑 계열');
   ok(lineLook(P({ kind: 'opaque' }, null, { role: 'pcb' })) !== base, 'PCB 는 따로'); }
+// 소재 구분(2026-11-10): 불투명 = 회색, 투명 = 파랑, Milky = 분홍. 값이 어떻든 서로 색 계열이 겹치지 않게
+{ const rgb = (c) => [(c >> 16) & 255, (c >> 8) & 255, c & 255], chroma = (c) => Math.max(...rgb(c)) - Math.min(...rgb(c));
+  const milky = [0, 2, 5, 8, 10].map((v) => partLook(P({ kind: 'milky', milky: v })).color);
+  const clear = [0.3, 0.6, 0.89, 1].map((T) => partLook(P({ kind: 'clear', T })).color);
+  const O = { kind: 'opaque' }, opaque = [partLook(P(O, { kind: 'whiteDiffuse', R: 0.05 })), partLook(P(O, { kind: 'whiteDiffuse', R: 0.5 })), partLook(P(O, { kind: 'whiteDiffuse', R: 0.99 })), partLook(P(O, { kind: 'metal', R: 0.9 })), partLook(P(O, { kind: 'black', R: 0.05 })), partLook(P(O, { kind: 'gloss' }))].map((x) => x.color);
+  ok(milky.every((c) => { const [r, g, b] = rgb(c); return r - g >= 50 && b > g; }), 'Milky = 분홍 계열(모든 농도)');
+  ok(clear.every((c) => { const [r, g, b] = rgb(c); return b - r >= 80 && b >= g; }), '투명 = 파랑 계열(모든 투과율)');
+  ok(opaque.every((c) => chroma(c) <= 40), '불투명 = 회색 계열(모든 면 처리)');
+  ok(opaque.every((c) => lum(c) <= 200), '불투명이 밝은 배경·Milky 처럼 희게 보이지 않음');
+  const dist = (a, b) => Math.hypot(...rgb(a).map((v, i) => v - rgb(b)[i]));
+  const min = (A, B) => Math.min(...A.flatMap((a) => B.map((b) => dist(a, b))));
+  ok(min(milky, clear) >= 100 && min(milky, opaque) >= 70 && min(clear, opaque) >= 70, `세 소재 색 거리: ${min(milky, clear).toFixed(0)} / ${min(milky, opaque).toFixed(0)} / ${min(clear, opaque).toFixed(0)}`);
+  ok(partLook(P({ kind: 'clear', T: 0.89 })).opacity >= 0.28, '기본 투명 소재도 흐려서 안 보이지 않음'); }
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
 console.log('all ok');
