@@ -1,5 +1,5 @@
 // 3D 부품 색(2026-11-05) — 투명도·소재·면 처리에 따라 약간씩 달라 구분되게
-import { partLook, lineLook } from '../src/ui/m3/part-look.js';
+import { partLook, lineLook, partOpacity } from '../src/ui/m3/part-look.js';
 let fails = 0;
 const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok', m); };
 const lum = (c) => 0.3 * ((c >> 16) & 255) + 0.6 * ((c >> 8) & 255) + 0.1 * (c & 255);
@@ -51,5 +51,16 @@ const P = (material, finish, extra = {}) => ({ material, finish, ...extra });
   const min = (A, B) => Math.min(...A.flatMap((a) => B.map((b) => dist(a, b))));
   ok(min(milky, clear) >= 100 && min(milky, opaque) >= 70 && min(clear, opaque) >= 70, `세 소재 색 거리: ${min(milky, clear).toFixed(0)} / ${min(milky, opaque).toFixed(0)} / ${min(clear, opaque).toFixed(0)}`);
   ok(partLook(P({ kind: 'clear', T: 0.89 })).opacity >= 0.28, '기본 투명 소재도 흐려서 안 보이지 않음'); }
+// 일반 = 불투명, 투시 = 전체 반투명(2026-11-10) — 두 보기가 확실히 달라야 함
+{ const op0s = { milky: 0.75, clear: 0.31, opaque: 1, pcb: 1 };
+  for (const [kind, op0] of Object.entries(op0s)) {
+    ok(partOpacity({ kind, op0 }) === 1, `일반 보기: ${kind} 불투명`);
+    ok(partOpacity({ kind, op0, xray: true }) <= 0.16, `투시: ${kind} 반투명`);
+  }
+  ok(partOpacity({ kind: 'led', op0: 1, xray: true }) === 0.55, '투시: LED 는 더 잘 보이게');
+  ok(partOpacity({ kind: 'opaque', op0: 1, ghost: true }) === 0.15, 'LED 선택 중 기구물은 일반 보기에서도 반투명');
+  ok(partOpacity({ kind: 'clear', op0: 0.31, dim: true }) === 0.12, '추적 제외 부품은 흐리게');
+  ok(partOpacity({ kind: 'clear', op0: 0.31, xray: true, picked: true }) === 0.45, '투시: 선택 부품은 잘 보이게');
+  ok(partOpacity({ kind: 'clear', op0: 0.31, ghost: true, picked: true }) === 0.15, '투시 대상 부품은 선택돼도 흐리게'); }
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
 console.log('all ok');

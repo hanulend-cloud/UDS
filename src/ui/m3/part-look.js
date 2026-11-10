@@ -27,6 +27,16 @@ export function partLook(p) {
   return { color, opacity };
 }
 
+// 화면 불투명도(2026-11-10) — 일반 보기 = 소재와 상관없이 불투명, 투시 = 전체 반투명. op0 = partLook 불투명도(투시·흐림의 상한)
+// ghost = LED 고르는 동안 가리는 기구물, dim = 추적 제외 부품, picked = 선택 부품(투시에서도 잘 보이게)
+export function partOpacity({ kind, op0 = 1, xray = false, ghost = false, dim = false, picked = false }) {
+  let op = ghost ? Math.min(0.15, op0) : 1;
+  if (xray) op = kind === 'led' ? 0.55 : Math.min(op, op0, 0.16);
+  if (dim) op = Math.min(op, 0.12);
+  if (picked && !ghost) op = Math.max(op, xray ? 0.45 : 0.7);
+  return op;
+}
+
 // 선 보기 색(2026-11-08) — 투명 = 파랑, 반투명(Milky·백색 투과) = 빨강, 불투명 = 남색, PCB = 짙은 초록.
 // 면 처리는 살짝 물들임: 경면 = 주황, 백색 = 노랑, 흑색 = 초록(광택·없음 = 그대로)
 const LINE_TINT = { metal: 0xf08a24, whiteDiffuse: 0xe6c619, black: 0x2fa84a };

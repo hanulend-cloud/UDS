@@ -3,6 +3,7 @@
 // 클릭(드래그 아님) → onPick({ part, face, ray:{o,d}, worldPerPixel }) 또는 onPick(null)(선택 모드에선 { part:null, face:null, ray }).
 // 회전·이동·확대는 TrackballControls(Z 위): 드래그 회전, 휠 확대, 우클릭·Shift/Ctrl 드래그 이동.
 import * as THREE from 'three';
+import { partOpacity } from './m3/part-look.js';
 import { srgbColorsToLinear } from './m3/colormap.js';
 import { coneDims } from './m3/cone-dims.js';
 import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
@@ -149,10 +150,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
       for (let j = 0; j < 3; j++) col.setXYZ(T[t * 3 + j], c.r, c.g, c.b);
     }
     col.needsUpdate = true;
-    let op = ghost?.(i) ? Math.min(0.15, op0) : op0;   // 투시: LED 선택 중 기구물 반투명
-    if (xray) op = kinds[i] === 'led' ? 0.55 : Math.min(op, 0.16);
-    if (dim?.(i)) op = Math.min(op, 0.12);   // 추적 제외 부품: 아주 흐리게(남아 있지만 빛 계산엔 없음)   // 투시 보기: 전체 반투명 — 속 구조·광경로를 봄
-    if (picked && !ghost?.(i)) op = Math.max(op, xray ? 0.45 : 0.7);   // 선택 부품: 투명 소재여도 잘 보이게
+    const op = partOpacity({ kind: kinds[i], op0, xray, ghost: !!ghost?.(i), dim: !!dim?.(i), picked });
     m.material = partMat(op); m.renderOrder = m.material.transparent ? 1 : 0;
     if (lines) {
       const e = edgeOf(m); e.visible = true;
