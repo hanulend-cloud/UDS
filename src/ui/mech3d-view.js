@@ -49,9 +49,17 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   controls.staticMoving = true;          // 놓으면 바로 멈춤(관성 없음)
   controls.keys = ['', '', ''];          // A·S·D 로 모드가 바뀌지 않게(앱 단축키와 겹침)
   // Trackball 은 update() 를 프레임마다 불러야 움직임 — 누르는 동안(+휠 뒤 잠깐)만 돌림
+  // 조작 중(드래그·휠)에는 화소 밀도를 1로 낮춰 그린다 — 고DPI 화면에서 전체 장면을 매 프레임 2~3배 픽셀로 그리던 것이 버벅임의 원인(2026-11-10). 멈추면 원래 밀도로 되돌림
+  let lowRes = false;
+  const setLowRes = (on) => {
+    if (lowRes === on) return false;
+    lowRes = on;
+    renderer.setPixelRatio(on ? Math.min(window.devicePixelRatio || 1, 1) : window.devicePixelRatio || 1);
+    return true;
+  };
   let spin = 0, spinUntil = 0;
-  const tick = () => { controls.update(); if (spinUntil === Infinity || performance.now() < spinUntil) spin = requestAnimationFrame(tick); else spin = 0; };
-  const wake = (ms) => { spinUntil = ms === Infinity ? Infinity : Math.max(spinUntil === Infinity ? 0 : spinUntil, performance.now() + ms); if (!spin) spin = requestAnimationFrame(tick); };
+  const tick = () => { controls.update(); if (spinUntil === Infinity || performance.now() < spinUntil) spin = requestAnimationFrame(tick); else { spin = 0; if (setLowRes(false)) render(); } };
+  const wake = (ms) => { setLowRes(true); spinUntil = ms === Infinity ? Infinity : Math.max(spinUntil === Infinity ? 0 : spinUntil, performance.now() + ms); if (!spin) spin = requestAnimationFrame(tick); };
   controls.addEventListener('start', () => wake(Infinity));
   controls.addEventListener('end', () => { spinUntil = 0; wake(300); });
   canvas.addEventListener('wheel', () => wake(300), { passive: true });
@@ -127,7 +135,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     if (canvas.clientWidth === 0) return;
     if (pendingFit) { pendingFit = false; setView(viewName); return; }   // 숨김 중 미룬 맞춤 — setView 가 resize 를 다시 부른다
     const dpr = window.devicePixelRatio || 1;
-    renderer.setPixelRatio(dpr); if (gz) gz.r.setPixelRatio(dpr);
+    renderer.setPixelRatio(lowRes ? Math.min(dpr, 1) : dpr); if (gz) gz.r.setPixelRatio(dpr);
     const w = canvas.clientWidth, h = canvas.clientHeight || 400, a = w / h, half = orthoHalf / Math.min(1, a);
     renderer.setSize(w, h, false);
     controls.handleResize();   // Trackball 은 화면 크기로 마우스 이동량을 잼
