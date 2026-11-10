@@ -1,5 +1,5 @@
 // 3D 기구 소재·면 처리 카탈로그: node test/mech3d-materials.mjs
-import { PART_KINDS, FINISH_KINDS, defaultPart, setPartMaterial, setPartFinish, resolveFinish, partIndex, validatePart } from '../src/engine/mech3d/materials.js';
+import { PART_KINDS, FINISH_KINDS, finishKindsFor, defaultPart, setPartMaterial, setPartFinish, resolveFinish, partIndex, validatePart } from '../src/engine/mech3d/materials.js';
 import { ok, done } from './mech3d-util.mjs';
 
 const p0 = defaultPart(0, '부품 1', 100);
@@ -8,6 +8,9 @@ ok(Object.keys(PART_KINDS).join() === 'milky,clear,whiteTrans,opaque', '부품 �
 ok(Object.keys(FINISH_KINDS).join() === 'gloss,whiteDiffuse,metal,black', '면 처리 4종(1단계)');
 
 const m = setPartMaterial(p0, 'milky');
+for (const k of ['milky', 'clear']) ok(finishKindsFor({ kind: k }).gloss.label === 'Fresnel (굴절률)' && setPartMaterial(p0, k).finish.kind === 'gloss', `${k}: 기본 표면 = Fresnel`);
+ok(finishKindsFor({ kind: 'opaque' }).gloss.label === '광택' && FINISH_KINDS.gloss.label === '광택', '불투명 = 빛이 못 들어가므로 Fresnel 없음(광택 유지)');
+ok(Object.keys(finishKindsFor({ kind: 'milky' })).join() === 'gloss,whiteDiffuse,metal,black', '투과 부품도 코팅 선택은 그대로');
 ok(m.material.kind === 'milky' && m.material.milky === 5 && m.material.dbId === '' && m.finish.kind === 'gloss', 'Milky 선택 → 면 처리 기본 광택');
 ok(p0.material.kind === 'opaque', '원본 불변(새 객체 반환)');
 ok(partIndex(m.material) === 1.586 && partIndex(setPartMaterial(p0, 'clear').material) === 1.586 && partIndex(p0.material) === null, '굴절률: PC 1.586, 불투명 null');

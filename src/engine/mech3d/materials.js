@@ -81,6 +81,9 @@ export const FINISH_KINDS = {
   black: { label: '흑색', hasR: true, R: 0.05 },
 };
 
+// 빛이 들어가는 부품(Milky·투명·반투과)의 'gloss' = Fresnel 표면: 코팅 없이 양쪽 굴절률로 반사·투과 비율이 정해짐(mc3d·gpu-trace 의 fresnel 분기). 불투명 부품은 투과가 없어 '광택' 그대로
+export const finishKindsFor = (material) => (material?.kind === 'opaque' ? FINISH_KINDS : { ...FINISH_KINDS, gloss: { ...FINISH_KINDS.gloss, label: 'Fresnel (굴절률)' } });
+
 // T: 기준 두께 tRef(mm)에서의 투과율(0~1). milky: 0~10, dbId: 실측소재 DB id('' = 추상 Milky)
 export function defaultMaterial(kind) {
   switch (kind) {
@@ -98,7 +101,7 @@ export function defaultFinish(kind, R) {
   return f.hasR ? { kind, R: R ?? f.R } : { kind };
 }
 
-// 소재를 고르면 따라오는 면 처리 기본값: 불투명 = 백색 확산 반사, 그 외(빛이 들어가는 소재) = 광택
+// 소재를 고르면 따라오는 면 처리 기본값: 불투명 = 백색 확산 반사, 그 외(빛이 들어가는 소재) = Fresnel 표면(gloss)
 export function finishForMaterial(material) {
   return material.kind === 'opaque' ? defaultFinish('whiteDiffuse') : defaultFinish('gloss');
 }

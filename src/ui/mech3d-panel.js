@@ -1,6 +1,6 @@
 // 3D 기구 — 부품 속성(소재·면 처리·선택 면 덮어쓰기) · 접촉면 편집기 (spec 2026-10-14 §3, 2026-10-15 m3-cad-ui: 피처 트리 노드별).
 // 상태는 갖지 않는다: m = spec.mech3d, sel = { part, face|null }, dbList = 실측소재 DB 목록, h = 이벤트 처리기.
-import { FINISH_KINDS, CLEAR_BASE, resolveFinish } from '../engine/mech3d/materials.js';
+import { FINISH_KINDS, finishKindsFor, CLEAR_BASE, resolveFinish } from '../engine/mech3d/materials.js';
 import { bounds, meshVolume } from '../engine/mech3d/mesh.js';
 import { DEFAULT_FINISH_CATALOG, finishLimit } from '../engine/mech3d/housing-led.js';
 import { MEAS_CONDS, reflStatusText, REFLECT_KINDS } from '../model/reflect-db.js';
@@ -29,11 +29,11 @@ const pct = (x) => Math.round(x * 1000) / 10;
 const opts = (obj, cur) => Object.entries(obj).map(([k, v]) => `<option value="${k}" ${k === cur ? 'selected' : ''}>${esc(v.label ?? k)}</option>`).join('');
 
 // lim = 반사율 상한 { kind, max, entry } | null — 같은 종류일 때 R 칸 옆에 표시
-function finishRow(f, scope, allowInherit, lim = null) {
-  const k = f ? FINISH_KINDS[f.kind] : null, limTxt = lim && k?.hasR && f.kind === lim.kind ? ` <span class="mut">${lim.entry.special ? '특수 처리' : '소재'} 상한 ${pct(lim.max)}%</span>` : '';
+function finishRow(f, scope, allowInherit, lim = null, material = null) {
+  const kinds = finishKindsFor(material), k = f ? kinds[f.kind] : null, limTxt = lim && k?.hasR && f.kind === lim.kind ? ` <span class="mut">${lim.entry.special ? '특수 처리' : '소재'} 상한 ${pct(lim.max)}%</span>` : '';
   return `<div class="m3-row"><label>${scope === 'face' ? '이 면' : '부품 전체'}</label><select data-m3-finish="${scope}" aria-label="${scope === 'face' ? '선택한 면' : '부품 기본'} 면 처리 종류">
-      ${allowInherit ? `<option value="" ${f ? '' : 'selected'}>부품 기본 따름</option>` : ''}${opts(FINISH_KINDS, f?.kind)}</select>
-    ${k?.hasR ? `반사율 <input type="number" min="0" max="100" step="1" value="${esc(pct(f.R))}" data-m3-finishr="${scope}" aria-label="반사율 %">%${limTxt}` : ''}</div>`;
+      ${allowInherit ? `<option value="" ${f ? '' : 'selected'}>부품 기본 따름</option>` : ''}${opts(kinds, f?.kind)}</select>
+    ${k?.hasR ? `반사율 <input type="number" min="0" max="100" step="1" value="${esc(pct(f.R))}" data-m3-finishr="${scope}" aria-label="반사율 %">%${limTxt}` : f?.kind === 'gloss' && material?.kind !== 'opaque' ? '<span class="mut">굴절률로 투과·반사 비율이 정해짐</span>' : ''}</div>`;
 }
 
 // 수지(바탕 소재) 고르기 — 굴절률을 함께 보임
@@ -189,9 +189,9 @@ export function pcbRCardHtml(p) {
 function partEditor(p, sel, dbList) {
   const face = sel.face, cat = sel.catalog ?? DEFAULT_FINISH_CATALOG, lim = finishLimit(p, cat), opaque = p.material.kind === 'opaque', tab = PART_TAB;
   // 면 처리(상세): 불투명 + 반사 소재 지정 → 종류는 소재가 정함 · 미지정 → 종류만 · 투과 부품 → 종류·반사율
-  const partFin = !opaque ? finishRow(p.finish, 'part', false, lim)
+  const partFin = !opaque ? finishRow(p.finish, 'part', false, lim, p.material)
     : p.reflMaterial ? '<div class="m3-row"><label>부품 전체</label><span class="mut">표면 종류는 반사 소재가 정함</span></div>' : `<div class="m3-row"><label>부품 전체</label><select data-m3-finish="part" aria-label="부품 기본 면 처리 종류">${opts(FINISH_KINDS, p.finish?.kind)}</select></div>`;
-  const faceRow = face != null ? `<div class="m3-row"><span class="mut">선택한 면 #${face}${p.faceFinish[face] ? ' · 덮어씀' : ''}</span></div>${finishRow(p.faceFinish[face] ?? null, 'face', true, lim)}` : '';
+  const faceRow = face != null ? `<div class="m3-row"><span class="mut">선택한 면 #${face}${p.faceFinish[face] ? ' · 덮어씀' : ''}</span></div>${finishRow(p.faceFinish[face] ?? null, 'face', true, lim, p.material)}` : '';
   const nOver = Object.keys(p.faceFinish ?? {}).length;
   const dSum = p.shapeMod ? '형상 변경됨' : '';
   const tabs = `<div class="m3-tabs" role="tablist" aria-label="부품 속성">
