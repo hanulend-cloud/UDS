@@ -28,6 +28,13 @@ export function setMech3dMesh(name, rawParts, pre = null) {
   scene = raw;
   return scene;
 }
+// 도면 추가(Import) — 원본 부품 뒤에 붙임(기존 부품 번호 유지). 반환: 추가된 첫 부품 번호. 뒤이어 applyPartMods 로 기존 수정을 다시 반영
+export function appendMech3dMesh(addParts) {
+  const base = raw.parts.length, name = raw.name;
+  raw = buildSceneMesh(name, [...raw.parts, ...addParts]); raw.raw = raw; xkey = '';
+  scene = raw;
+  return base;
+}
 // 현재 장면(부품 크기·위치 조절 반영). scene.raw = 원본 장면(같은 기구인지 비교용)
 export function getMech3d() { return scene; }
 export function clearMech3d() { scene = raw = null; xkey = ''; pmemo = []; }
@@ -79,6 +86,13 @@ export function redetectContacts(old = [], changedPart = null) {
     }
   }
   return [...keep, ...found].sort((a, b) => a.a - b.a || a.b - b.b || a.faceA - b.faceA || a.faceB - b.faceB);
+}
+
+// 도면 추가 뒤 접촉면 — 기존 목록은 그대로, 기존↔새 부품 쌍만 찾음. pre = 새 파일 안의 접촉면(새 파일 번호, Worker 결과). 없으면 새 부품끼리도 찾음
+export function contactsWithAdded(old = [], base, pre = null, opts = {}) {
+  const inner = (pre ?? []).map((c) => ({ ...c, a: c.a + base, b: c.b + base, mode: 'contact' }));
+  const found = findContacts(scene.parts, { ...opts, pair: (a, b) => b >= base && (!pre || a < base) }).map((c) => ({ ...c, mode: 'contact' }));
+  return [...old, ...inner, ...found].sort((a, b) => a.a - b.a || a.b - b.b || a.faceA - b.faceA || a.faceB - b.faceB);
 }
 
 // 새로 불러온 기구의 사용자 지정 초기값(spec.mech3d)

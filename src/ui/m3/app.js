@@ -114,6 +114,7 @@ export function command(id) {
     case 'calc': h.onToggleCalc(); break;
     case 'auto': adSetOpen(true); break;
     case 'export-mech': exportMechStep(); break;
+    case 'export-led': exportLedStep(); break;
     case 'undo': histStep('undo'); break;
     case 'redo': histStep('redo'); break;
     default: return false;
@@ -125,21 +126,34 @@ export const canRedo = () => !!A?.hist?.canRedo();
 export const theme = () => { try { return localStorage.getItem('uds.m3.theme') === 'dark' ? 'dark' : 'light'; } catch { return 'light'; } };
 // 3D 기구 STEP 내보내기 — 지금 부품 메쉬(크기·위치·형상 수정 반영)를 부품마다 솔리드로(삼각형 근사 — 수정 안 한 부품은 원본 STEP 이 더 정확)
 let mechStepBusy = false;
+const stepBase = (n, d) => String(n ?? d).replace(/\.(stp|step)$/i, '').replace(/[/\\:*?"<>|]/g, '_');
 function exportMechStep() {
   const rt = getMech3d();
-  if (!rt || mechStepBusy) return;
-  const nTri = rt.parts.reduce((t, p) => t + p.triangles.length / 3, 0), name = String(A.store.mspec.name ?? 'mech').replace(/\.(stp|step)$/i, '').replace(/[/\\:*?"<>|]/g, '_');
+  if (!rt) return;
+  exportParts(rt.parts, '3D 기구', stepBase(A.store.mspec.name, 'mech'));
+}
+// LED STEP Export — 지금 배치(옮기기·개수 편집 반영)의 PCB·LED 를 도면 좌표 그대로
+export const canExportLed = () => !!A && A.store.mspec.light.kind === 'step' && !!getLedMesh();
+function exportLedStep() {
+  if (!canExportLed()) return;
+  const M = A.store.mspec, parts = L.stepLayout(M, A.store.session.line)?.parts?.filter(Boolean) ?? [];
+  if (!parts.length) { setStatus('내보낼 LED 가 없음'); return; }
+  exportParts(parts, 'LED', `${stepBase(M.light.step?.name, 'led')}-layout`);
+}
+function exportParts(parts, label, name) {
+  if (mechStepBusy) return;
+  const nTri = parts.reduce((t, p) => t + p.triangles.length / 3, 0);
   const w = new Worker(new URL('../../export/assembly-step-worker.js', import.meta.url), { type: 'module' });
   mechStepBusy = true;
   const end = () => { w.terminate(); mechStepBusy = false; };
-  setStatus(`3D 기구 STEP 생성 중… 부품 ${rt.parts.length}개 · 삼각형 ${nTri}개${nTri > 60000 ? ' — 많아서 오래 걸릴 수 있음' : ''}`);
+  setStatus(`${label} STEP 생성 중… 부품 ${parts.length}개 · 삼각형 ${nTri}개${nTri > 60000 ? ' — 많아서 오래 걸릴 수 있음' : ''}`);
   w.onmessage = (ev) => {
-    if (ev.data.type === 'done') { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([ev.data.stepText], { type: 'application/step' })); a.download = `${name}-uds.stp`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); setStatus('3D 기구 STEP 내보내기 완료 (수정 반영 · 삼각형 근사)'); }
+    if (ev.data.type === 'done') { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([ev.data.stepText], { type: 'application/step' })); a.download = `${name}-uds.stp`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); setStatus(`${label} STEP 내보내기 완료 (수정 반영 · 삼각형 근사)`); }
     else setStatus(`STEP 실패: ${ev.data.message}`);
     end();
   };
   w.onerror = (e) => { setStatus(`STEP 실패: ${e.message ?? e}`); end(); };
-  w.postMessage({ meshes: rt.parts.map((p) => ({ positions: p.positions, triangles: p.triangles })) });
+  w.postMessage({ meshes: parts.map((p) => ({ positions: p.positions, triangles: p.triangles })) });
 }
 // 제목 옆 계산 장치 표시 — GPU 사용 중 / CPU 만(GPU 없음·실패). g = pool.gpu(): null = 확인 중
 function gpuBadge(g) {

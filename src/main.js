@@ -24,8 +24,8 @@ import { drawIso } from './ui/iso.js';
 import { drawPlan } from './ui/plan.js';
 import { drawHeatmap } from './ui/heatmap.js';
 import { buildLevels, updateLevels, renderVerdict, drawProfiles } from './ui/analysis.js';
-import { setMech3dMesh, getMech3d, initialMech3dSpec, saveMech3dIDB, loadMech3dIDB, loadLedIDB, getLedMesh, applyPartMods, redetectContacts } from './engine/mech3d/runtime.js';
-import { matchesPending, restorePending } from './engine/mech3d/restore.js';
+import { setMech3dMesh, appendMech3dMesh, contactsWithAdded, getMech3d, initialMech3dSpec, saveMech3dIDB, loadMech3dIDB, loadLedIDB, getLedMesh, applyPartMods, redetectContacts } from './engine/mech3d/runtime.js';
+import { matchesPending, restorePending, appendPartsSpec, sourcesOf, restoreStep } from './engine/mech3d/restore.js';
 import { bounds } from './engine/mech3d/mesh.js';
 import { migrateMech3d } from './engine/mech3d/defs.js';
 import * as m3app from './ui/m3/app.js';
@@ -257,9 +257,9 @@ function pickExample(list) {
   });
 }
 const GUIDE = `사용 순서 (3D 기구 설계)
-1. 파일 › 3D 기구 STEP 불러오기 — 케이스·도광판·커버 등 모든 부품
+1. 파일 › 3D 기구 STEP Import — 케이스·도광판·커버 등 모든 부품(도면이 열려 있으면 그 도면에 추가)
 2. 왼쪽 트리에서 부품을 골라 소재(Milky·투명·불투명)와 반사 소재를 정함
-3. 파일 › LED STEP 불러오기 → LED 하나의 발광면 클릭(편집 › LED 발광면 지정)
+3. 파일 › LED STEP Import → LED 하나의 발광면 클릭(편집 › LED 발광면 지정)
 4. 편집 › 관측면 지정 → 빛을 보는 면 클릭 — 계산이 시작됨
 5. 계산 › 기구 최적화 — 바꿀 항목을 체크하고 실행 → 결과 비교 후 [적용]
 6. 파일 › 다른 이름으로 저장 — 고른 파일에 이후 변경이 실시간 저장됨(되돌리기 Ctrl+Z)`;
@@ -289,10 +289,12 @@ function setupMenubar() {
       { id: 'save-json', label: '프로젝트 저장', key: 'Ctrl+S' },
       { id: 'save-as', label: '다른 이름으로 저장…', key: 'Ctrl+Shift+S' },
       '-',
-      { id: 'import-mech', label: '3D 기구 STEP 불러오기…' },
-      { id: 'import-mech-whole', label: '3D 기구 STEP 나누지 않고 읽기(느림)…' },
-      { id: 'import-led', label: 'LED STEP 불러오기…', enabled: m3 },
-      { id: 'export-mech', label: '3D 기구 STEP 내보내기 (수정 반영)', enabled: m3 },
+      { id: 'import-mech', label: '3D 기구 STEP Import…' },
+      { id: 'import-mech-whole', label: '3D 기구 STEP Import, 나누지 않고 읽기(느림)…', hidden: () => !isAdmin() },
+      { id: 'import-led', label: 'LED STEP Import…', enabled: m3 },
+      '-',
+      { id: 'export-mech', label: '3D 기구 STEP Export (수정 반영)', enabled: m3 },
+      { id: 'export-led', label: 'LED STEP Export (현재 배치)', enabled: () => m3app.canExportLed() },
       '-',
       { id: 'mat-export', label: '소재·표면 DB 내보내기 (JSON)', enabled: isAdmin },
       { id: 'mat-import', label: '소재·표면 DB 불러오기…', enabled: isAdmin },
@@ -387,7 +389,7 @@ function renderPendingBanner() {
   const el = $('#m3-pending'), P = spec.mech3dPending;
   el.hidden = !P;
   if (!P) return;
-  el.querySelector('[data-name]').textContent = P.name ? ` (${P.name} · 부품 ${P.parts?.length ?? 0}개)` : '';
+  el.querySelector('[data-name]').textContent = P.name ? ` (${sourcesOf(P).map((s) => s.name).join(' → ')} · 부품 ${P.parts?.length ?? 0}개)` : '';
   el.querySelector('[data-reload]').onclick = () => $('#file-mech3d').click();
   el.querySelector('[data-drop]').onclick = () => {
     if (!confirm('저장된 3D 설정(소재·관측면·LED·목표 등)을 버릴까요? 되돌릴 수 없습니다.')) return;
@@ -422,9 +424,12 @@ async function loadSampleProject(ask = true, url = 'data/projects/v3.json') {
 // 오래 걸린 불러오기 안내(2026-11-06) — 형상 변환이 2분을 넘고 나눠 읽지 못했으면 CAD 에서 줄이는 방법을 알려 줌
 const slowTip = (tm, info) => ((tm?.transfer ?? 0) > 120000 && !info?.cut
   ? ' · 빨리 열려면 CAD 에서 빛과 무관한 부품(나사·보스·브래킷 등)을 빼고 내보내세요(부품이 하나로 합쳐진 파일은 나눠 읽을 수 없음). 같은 파일은 다음부터 저장본으로 바로 열림' : '');
-let nextNoSplit = false;
+let nextNoSplit = false, restoring = null;   // restoring = { pend, parts } 여러 파일 프로젝트 복원 중 지금까지 읽은 부품
 function importMech3d(file, onDone = null, { noSplit = false } = {}) {
   const say = (t) => { if (m3app.isMounted()) m3app.setStatus(t); else $('#timing').textContent = t; };
+  const adding = !!spec.mech3d && !!getMech3d();   // 도면이 열려 있으면 그 도면에 추가(교체 없음 — 다른 도면은 새 프로젝트에서)
+  if (adding && m3app.isRefining()) { say('정밀 메시를 만드는 중입니다 — 끝난 뒤 Import 하세요'); return; }
+  if (adding && sourcesOf(spec.mech3d).some((s) => s.name === file.name) && !confirm(`${file.name} 은(는) 이미 이 도면에 있습니다. 같은 부품이 겹칠 수 있습니다. 그래도 추가할까요?`)) return;
   say(`${file.name} 읽는 중…`);
   // 2 MB 이상 = 불러오기 화면(진행률·경과 시간·취소·저해상도 미리보기). 작은 파일은 금방 끝나 깜빡이기만 함
   let w = null, ov = null;
@@ -434,7 +439,7 @@ function importMech3d(file, onDone = null, { noSplit = false } = {}) {
     const ck = stepCacheKey(file), hit = cacheWorthy(file) && !noSplit ? await stepCacheGet(ck) : null, text = hit?.prep ? null : await file.text();
     w = new Worker(new URL('./engine/mech3d/mech3d-worker.js', import.meta.url), { type: 'module' });
     // 거친 메시로 먼저 열기(2026-11-06): 새 도면(복원할 저장 설정 없음)일 때만 — 복원은 부품 크기 비교가 거친 메시로 틀릴 수 있어 정밀 메시를 기다림
-    const pend0 = spec.mech3dPending ?? (spec.mech3d && !getMech3d() ? spec.mech3d : null), early = !!ov && !pend0 && !hit;
+    const pend0 = spec.mech3dPending ?? (spec.mech3d && !getMech3d() ? spec.mech3d : null), early = !!ov && !pend0 && !hit && !adding;
     let opened = false, lastSay = 0;
     w.onmessage = async (m0) => {
       const m = m0;
@@ -456,7 +461,7 @@ function importMech3d(file, onDone = null, { noSplit = false } = {}) {
       w.terminate();
       if (m.data.error) { ov?.close(); if (opened) m3app.setRefining(false); say(`불러오기 실패: ${m.data.error}${opened ? ' — 지금 화면은 거친 메시라 계산하지 않음. 다시 불러오세요' : ''}`); return; }
       const info = m.data.info ?? {};
-      const after = () => `${m.data.relaxed ? ` · 큰 파일이라 메시 간격을 ${m.data.relaxed.linDefl} mm 로 넓힘(곡면 값이 조금 달라질 수 있음)` : ''}${info.cached ? ` · 저장해 둔 변환 결과로 엶${m.data.timing ? `(처음 불러올 때 ${stepTimingText(m.data.timing)})` : ''}` : `${ov ? ` · 걸린 시간: ${stepTimingText(m.data.timing)}` : ''}${info.cut ? ` · 부품 단위 ${info.workers}조각으로 나눠 읽음(모양이 이상하면 파일 › 3D 기구 STEP 나누지 않고 읽기)` : info.noSplit ? ' · 나누지 않고 읽음' : ''}${info.roots && cacheWorthy(file) ? ` · STEP 부품(루트) ${info.roots}개` : ''}${info.slow?.ms > 5000 ? ` · 가장 오래 걸린 부품 변환 ${stepTimingText({ transfer: info.slow.ms }).replace('형상 변환 ', '')}` : ''}${slowTip(m.data.timing, info)}`}`;
+      const after = () => `${m.data.relaxed ? ` · 큰 파일이라 메시 간격을 ${m.data.relaxed.linDefl} mm 로 넓힘(곡면 값이 조금 달라질 수 있음)` : ''}${info.cached ? ` · 저장해 둔 변환 결과로 엶${m.data.timing ? `(처음 불러올 때 ${stepTimingText(m.data.timing)})` : ''}` : `${ov ? ` · 걸린 시간: ${stepTimingText(m.data.timing)}` : ''}${info.cut ? ` · 부품 단위 ${info.workers}조각으로 나눠 읽음(모양이 이상하면 관리자 모드의 파일 › 3D 기구 STEP Import, 나누지 않고 읽기)` : info.noSplit ? ' · 나누지 않고 읽음' : ''}${info.roots && cacheWorthy(file) ? ` · STEP 부품(루트) ${info.roots}개` : ''}${info.slow?.ms > 5000 ? ` · 가장 오래 걸린 부품 변환 ${stepTimingText({ transfer: info.slow.ms }).replace('형상 변환 ', '')}` : ''}${slowTip(m.data.timing, info)}`}`;
       // 다음에 같은 파일을 바로 열 수 있게 저장(큰 파일만) — 화면 준비와 따로
       const keep = () => { if (!info.cached && cacheWorthy(file) && m.data.prep?.bvh) stepCachePut(ck, { prep: m.data.prep, relaxed: m.data.relaxed ?? null, timing: m.data.timing ?? null, info }).catch(() => {}); };
       const tris = () => { const n = m.data.parts.reduce((s, p) => s + p.triangles.length / 3, 0); return n >= 1e4 ? `${Math.round(n / 1e4)}만` : `${Math.max(1, Math.round(n / 1e3))}천`; };   // 작은 도면이 '0만' 으로 보이지 않게
@@ -473,16 +478,48 @@ function importMech3d(file, onDone = null, { noSplit = false } = {}) {
         return;
       }
       ov?.stage('prep', 1, '화면 준비'); await new Promise((r) => setTimeout(r, 50));   // 아래 화면 준비 전에 100% 근처를 그릴 틈
+      if (adding) {   // 열린 도면에 추가 — 기존 부품 번호·지정 유지, LED 자동 인식 없음(지정한 광원이 말없이 바뀌지 않게)
+        try {
+          const M = spec.mech3d;
+          m3app.unmount();
+          const base = appendMech3dMesh(m.data.parts);
+          appendPartsSpec(M, partInfo(m.data.parts), file.name);
+          applyPartMods(M.parts);
+          M.contacts = contactsWithAdded(M.contacts, base, m.data.prep?.contacts ?? null, m.data.relaxed ? { chord: m.data.relaxed.linDefl } : {});
+          spec.mode = 'mech3d';
+          tabLock.write('mech3dIDB', () => saveMech3dIDB().catch(() => {})); keep();
+          persist(); applyMode(); onDone?.();
+          for (let i = 0; i < 200 && !m3app.isMounted(); i++) await new Promise((r) => setTimeout(r, 50));
+          m3app.setStatus(`추가함: ${file.name} · 부품 ${m.data.parts.length}개(부품 ${base + 1}번부터) · 전체 ${M.parts.length}개 · 접촉면 ${M.contacts.length}개 — 새 부품의 소재를 정하세요. LED 면 광원에서 직접 지정${after()}`);
+          ov?.close();
+        } catch (e) { ov?.close(); say(`추가 실패: ${e.message ?? e}`); }
+        return;
+      }
       try {
         // 저장된 3D 설정(메쉬 없음 — 보관분, 또는 평판 모드로 나간 뒤 새로고침해 메쉬 미적재)이 있으면: 같은 기구 = 복원, 다르면 물어봄(취소 = 보관 유지·불러오기 중단)
-        const pend = spec.mech3dPending ?? (spec.mech3d && !getMech3d() ? spec.mech3d : null), same = !!pend && matchesPending(pend, partInfo(m.data.parts));
+        const pend = spec.mech3dPending ?? (spec.mech3d && !getMech3d() ? spec.mech3d : null);
+        let parts = m.data.parts, prep = m.data.prep, sceneName = file.name;
+        // Import 로 합친 프로젝트 — 저장 순서대로 파일을 다시 받아 모두 모이면 복원
+        if (pend && sourcesOf(pend).length > 1) {
+          const srcs = sourcesOf(pend);
+          if (restoring?.pend !== pend) restoring = { pend, parts: [] };
+          const st = restoreStep(pend, partInfo(restoring.parts), partInfo(parts));
+          if (st.status === 'more') {
+            restoring.parts.push(...parts); ov?.close();
+            const t = `${file.name} 읽음 (${st.k}/${st.n}) — 다음 파일을 Import 하세요: ${st.next}`; say(t); $('#m3-start-msg').textContent = t;
+            return;
+          }
+          if (st.status === 'done') { parts = [...restoring.parts, ...parts]; prep = null; sceneName = srcs[0].name; }
+          restoring = null;
+        }
+        const same = !!pend && matchesPending(pend, partInfo(parts));
         if (pend && !same && !confirm(`${file.name}: 저장된 3D 설정${pend.name ? `(${pend.name})` : ''}과 부품 구성이 다릅니다. 새 기구로 시작할까요?
 (취소 = 저장된 설정을 그대로 두고 불러오기 중단)`)) {
           ov?.close(); say('불러오기 취소 — 저장된 3D 설정은 그대로 보관됨'); return;
         }
         m3app.unmount();
-        setMech3dMesh(file.name, m.data.parts, m.data.prep);   // BVH·합친 메쉬·접촉면은 Worker 가 만들어 옴
-        let ms = initialMech3dSpec(m.data.prep?.contacts ?? null), restored = same ? restorePending(pend, ms) : null;
+        setMech3dMesh(sceneName, parts, prep);   // BVH·합친 메쉬·접촉면은 Worker 가 만들어 옴
+        let ms = initialMech3dSpec(prep?.contacts ?? null), restored = same ? restorePending(pend, ms) : null;
         if (restored) {
           ms = restored;
           if (applyPartMods(ms.parts)) ms.contacts = redetectContacts([...(pend.contacts ?? []), ...ms.contacts]);   // 크기·위치·형상 변경 반영 후 접촉면 재검출(같은 면 키 mode 유지)
@@ -494,7 +531,7 @@ function importMech3d(file, onDone = null, { noSplit = false } = {}) {
         if (!restored) for (let i = 0; i < 200 && !m3app.isMounted(); i++) await new Promise((r) => setTimeout(r, 50));   // mount 는 비동기
         const nLed = restored ? null : m3app.autoMechLight();   // 새 기구: 반복되는 작은 부품(LED)을 광원으로 자동 지정
         m3app.setStatus(restored
-          ? `복원함: 저장된 3D 설정 — ${file.name} · 부품 ${ms.parts.length}개 · 접촉면 ${ms.contacts.length}개${pend.name && pend.name !== file.name ? ` (저장 이름 ${pend.name})` : ''}${after()}`
+          ? `복원함: 저장된 3D 설정 — ${sceneName} · 부품 ${ms.parts.length}개 · 접촉면 ${ms.contacts.length}개${pend.name && pend.name !== sceneName ? ` (저장 이름 ${pend.name})` : ''}${after()}`
           : `불러옴: ${file.name} · 부품 ${m.data.parts.length}개 · 삼각형 ${tris()} 개 · 접촉면 ${ms.contacts.length}개${nLed ? ` · LED ${nLed}개 자동 인식(틀리면 광원에서 다시 지정)${m3app.pcbNote()}` : ''} — 다음: 왼쪽 부품 리스트에서 확산판·도광판의 소재(Milky·투명)를 정하고 ① LED 지정${after()}`);
         ov?.close();
       } catch (e) { ov?.close(); say(`불러오기 실패: ${e.message ?? e}`); }

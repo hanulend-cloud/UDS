@@ -46,12 +46,12 @@ function clipArea(poly, clip) {
 const overlaps = (A, B, m) => A[0] - m <= B[3] && B[0] - m <= A[3] && A[1] - m <= B[4] && B[1] - m <= A[4] && A[2] - m <= B[5] && B[2] - m <= A[5];
 
 // parts: [{ positions, triangles, faceIds, bvh? }] → [{ a, faceA, b, faceB, area(mm²) }] (a < b)
-export function findContacts(parts, { gap = 0.02, chord = 0.02 } = {}) {
+export function findContacts(parts, { gap = 0.02, chord = 0.02, pair = null } = {}) {   // pair(a, b) = 이 쌍만 검사(도면 추가 때 기존 쌍을 다시 계산하지 않음)
   const bvhs = parts.map((p) => p.bvh ?? buildBvh(p.positions, p.triangles));
   const bb = parts.map((p) => bounds(p.positions));
   const acc = new Map(), cand = [];
   for (let a = 0; a < parts.length; a++) for (let b = a + 1; b < parts.length; b++) {
-    if (!overlaps(bb[a], bb[b], gap)) continue;
+    if ((pair && !pair(a, b)) || !overlaps(bb[a], bb[b], gap)) continue;
     const A = parts[a], B = parts[b];
     for (let t = 0; t < A.triangles.length / 3; t++) {
       const fa = triFrame(A.positions, A.triangles, t);

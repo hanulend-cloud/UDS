@@ -1,11 +1,11 @@
 // 상단 메뉴 막대(파일·편집·보기·계산·설정·도움말) — 정의 → 드롭다운.
-// menus = [{ label, items: [{ id, label, key?, enabled?(), checked?() } | '-'] }], run(id) = 항목 실행.
+// menus = [{ label, items: [{ id, label, key?, enabled?(), checked?(), hidden?() } | '-'] }], run(id) = 항목 실행.
 // 클릭으로 열고, 열린 동안 다른 메뉴 제목에 올리면 그 메뉴로 바뀜 · 바깥 클릭·Esc·항목 실행 = 닫힘. 열 때마다 enabled/checked 를 다시 계산
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 export function menuHtml(menus, open = -1) {
   return menus.map((m, i) => {
-    const drop = i !== open ? '' : `<div class="mb-drop" role="menu">${m.items.map((it) => (it === '-' ? '<div class="mb-sep" role="separator"></div>'
+    const drop = i !== open ? '' : `<div class="mb-drop" role="menu">${m.items.filter((it) => it === '-' || !it.hidden?.()).map((it) => (it === '-' ? '<div class="mb-sep" role="separator"></div>'
       : `<button type="button" role="menuitem" class="mb-item" data-cmd="${esc(it.id)}"${it.enabled && !it.enabled() ? ' disabled' : ''}><span class="mb-chk">${it.checked?.() ? '✓' : ''}</span><span class="mb-lbl">${esc(it.label)}</span>${it.key ? `<span class="mb-key">${esc(it.key)}</span>` : ''}</button>`)).join('')}</div>`;
     return `<div class="mb-menu${i === open ? ' open' : ''}"><button type="button" class="mb-top" data-mb="${i}" aria-haspopup="menu" aria-expanded="${i === open}">${esc(m.label)}</button>${drop}</div>`;
   }).join('');
