@@ -17,6 +17,8 @@ export function matchesPending(pending, meshParts) {
   });
 }
 
+// 빈 새 프로젝트(도면 없이 작업 화면) — 첫 Import 가 도면을 엶
+export const isBlankMech3d = (M) => Array.isArray(M?.parts) && M.parts.length === 0;
 // Import 로 합친 도면의 파일 목록. 칸이 없으면(파일 하나) 파일 하나로 봄
 export const sourcesOf = (M) => (Array.isArray(M?.sources) && M.sources.length ? M.sources : [{ name: M?.name ?? '', parts: M?.parts?.length ?? 0 }]);
 // 도면 추가 — added = [{ volume, size }]. 기존 부품은 건드리지 않고 뒤에 기본값으로

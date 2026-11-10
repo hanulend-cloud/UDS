@@ -1121,7 +1121,7 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 .m3-map-eq { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; white-space: nowrap; }
 
 /* 시작 화면 — 기존 파일 / 예제 두 갈래(2026-11-05) */
-.m3-start-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 8px; }
+.m3-start-two { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 8px; }
 .m3-start-opt { display: flex; flex-direction: column; gap: 6px; justify-content: center; text-align: left; min-height: 104px; padding: 16px; border: 1px solid #c9d2e0; border-radius: 8px; background: #f7f9fc; color: #3b4658; cursor: pointer; font: inherit; font-size: 13px; }
 .m3-start-opt b { font-size: 16px; color: #1f6fd1; }
 .m3-start-opt:hover, .m3-start-opt:focus-within, .m3-start-opt:focus-visible { border-color: #1f6fd1; background: #e4effc; }

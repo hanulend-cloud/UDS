@@ -24,8 +24,8 @@ import { drawIso } from './ui/iso.js';
 import { drawPlan } from './ui/plan.js';
 import { drawHeatmap } from './ui/heatmap.js';
 import { buildLevels, updateLevels, renderVerdict, drawProfiles } from './ui/analysis.js';
-import { setMech3dMesh, appendMech3dMesh, contactsWithAdded, getMech3d, initialMech3dSpec, saveMech3dIDB, loadMech3dIDB, loadLedIDB, getLedMesh, applyPartMods, redetectContacts } from './engine/mech3d/runtime.js';
-import { matchesPending, restorePending, appendPartsSpec, sourcesOf, restoreStep } from './engine/mech3d/restore.js';
+import { setMech3dMesh, setBlankMech3d, appendMech3dMesh, contactsWithAdded, getMech3d, initialMech3dSpec, saveMech3dIDB, loadMech3dIDB, loadLedIDB, getLedMesh, applyPartMods, redetectContacts } from './engine/mech3d/runtime.js';
+import { matchesPending, restorePending, appendPartsSpec, sourcesOf, restoreStep, isBlankMech3d } from './engine/mech3d/restore.js';
 import { bounds } from './engine/mech3d/mesh.js';
 import { migrateMech3d } from './engine/mech3d/defs.js';
 import * as m3app from './ui/m3/app.js';
@@ -132,6 +132,7 @@ function buildForm() {
     form.appendChild(grp);
   }
   $('#btn-sample-project').onclick = () => openSampleMenu();
+  $('#btn-blank-project').onclick = () => openBlankProject();
   $('#file-mech3d-start').onchange = (e) => { const f = e.target.files?.[0]; if (f && /\.json$/i.test(f.name)) { importJson(e); return; } if (f) importMech3d(f); e.target.value = ''; };   // 시작 화면 = 프로젝트·STEP 모두
   $('#file-materials').onchange = (e) => { const f = e.target.files?.[0]; if (f) importMaterials(f); e.target.value = ''; };
   $('#file-mech3d').onchange = (e) => { const f = e.target.files?.[0], noSplit = nextNoSplit; nextNoSplit = false; if (f) importMech3d(f, null, { noSplit }); e.target.value = ''; };
@@ -225,6 +226,13 @@ const NO_SERVER = '프로그램 서버에 연결되지 않습니다 — serve.py
 async function newProject() {
   if (!confirm('지금 프로젝트를 닫고 빈 화면에서 새로 시작할까요?\n(파일로 저장하지 않은 작업은 사라집니다 — 먼저 [파일 › 다른 이름으로 저장] 권장)')) return;
   projFile?.clear(); m3app.unmount(); spec.mech3d = null; spec.mech3dPending = null; spec.mode = 'mech3d'; persist(); applyMode(); $('#m3-start-msg').textContent = '';   // 예제를 자동으로 열지 않음 — 시작 화면에서 고름(2026-11-05)
+}
+// 시작 화면의 [새 프로젝트] — 도면 없는 작업 화면. 첫 Import 가 도면을 엶
+function openBlankProject() {
+  if (spec.mech3dPending && !confirm('보관 중인 3D 설정이 있습니다. 버리고 새 프로젝트를 시작할까요?')) return;
+  projFile?.clear(); m3app.unmount();
+  spec.mech3d = setBlankMech3d().spec; spec.mech3dPending = null; spec.mode = 'mech3d';
+  persist(); applyMode(); $('#m3-start-msg').textContent = '';
 }
 // 메뉴·시작 화면의 [예제 불러오기…] — examples/index.json 목록에서 골라 엶(2026-11-07). 지금 프로젝트를 닫으므로 확인 후. 목록·예제를 못 받으면 지금 프로젝트를 닫지 않음
 async function openSampleMenu() {
@@ -427,7 +435,7 @@ const slowTip = (tm, info) => ((tm?.transfer ?? 0) > 120000 && !info?.cut
 let nextNoSplit = false, restoring = null;   // restoring = { pend, parts } 여러 파일 프로젝트 복원 중 지금까지 읽은 부품
 function importMech3d(file, onDone = null, { noSplit = false } = {}) {
   const say = (t) => { if (m3app.isMounted()) m3app.setStatus(t); else $('#timing').textContent = t; };
-  const adding = !!spec.mech3d && !!getMech3d();   // 도면이 열려 있으면 그 도면에 추가(교체 없음 — 다른 도면은 새 프로젝트에서)
+  const adding = !!spec.mech3d?.parts?.length && !!getMech3d();   // 도면이 열려 있으면 그 도면에 추가(교체 없음 — 다른 도면은 새 프로젝트에서)
   if (adding && m3app.isRefining()) { say('정밀 메시를 만드는 중입니다 — 끝난 뒤 Import 하세요'); return; }
   if (adding && sourcesOf(spec.mech3d).some((s) => s.name === file.name) && !confirm(`${file.name} 은(는) 이미 이 도면에 있습니다. 같은 부품이 겹칠 수 있습니다. 그래도 추가할까요?`)) return;
   say(`${file.name} 읽는 중…`);
@@ -908,7 +916,8 @@ function downloadJson(text, name) {
 function applyProjectText(text) {
   spec = JSON.parse(text); migrate(spec);
   // 지금 메쉬와 다른 기구면 버리지 않고 보관(안내 띠) — 같은 기구 STEP 을 다시 불러오면 복원
-  if (spec.mech3d && !(getMech3d() && matchesPending(spec.mech3d, partInfo(getMech3d().raw.parts)))) shelveMech3d();
+  if (isBlankMech3d(spec.mech3d)) setBlankMech3d();
+  else if (spec.mech3d && !(getMech3d() && matchesPending(spec.mech3d, partInfo(getMech3d().raw.parts)))) shelveMech3d();
   persist(); mount(); m3app.unmount(); applyMode(); schedule();
 }
 function importJson(e) {   // 파일 API 가 없는 브라우저 — 이름만 표시, 저장은 다운로드
@@ -1061,7 +1070,8 @@ if (spec.body.shape.source === 'step' && !(await loadBodyIDB({ flipZ: spec.body.
   spec.body.shape = structuredClone(DEFAULT_SPEC.body.shape);
 }
 // 3D 기구 복원(IndexedDB) — 메쉬가 없으면 설정은 보관(mech3dPending, 안내 띠)하고 평판 모드로
-if (spec.mode === 'mech3d' && spec.mech3d && !(await loadMech3dIDB())) { shelveMech3d(); persist(); }
+if (isBlankMech3d(spec.mech3d)) setBlankMech3d();
+else if (spec.mode === 'mech3d' && spec.mech3d && !(await loadMech3dIDB())) { shelveMech3d(); persist(); }
 if (spec.mech3d?.light?.step) await loadLedIDB();   // 검증은 m3app.mount 에서
 // 평판 계산 Worker — 평판 모드로 시작할 때만 지금 만든다(3D 모드면 평판 계산이 처음 필요할 때 run() 이 만든다)
 if (spec.mode !== 'mech3d') startSolver();

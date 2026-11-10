@@ -1,6 +1,6 @@
 // 3D 기구 STEP Import — 열린 도면 뒤에 부품 추가, 기존 지정 유지, 여러 파일 프로젝트 복원: node test/mech3d-append.mjs
-import { setMech3dMesh, appendMech3dMesh, contactsWithAdded, initialMech3dSpec, getMech3d, applyPartMods } from '../src/engine/mech3d/runtime.js';
-import { appendPartsSpec, sourcesOf, restoreStep } from '../src/engine/mech3d/restore.js';
+import { setMech3dMesh, setBlankMech3d, appendMech3dMesh, contactsWithAdded, initialMech3dSpec, getMech3d, applyPartMods } from '../src/engine/mech3d/runtime.js';
+import { appendPartsSpec, sourcesOf, restoreStep, isBlankMech3d } from '../src/engine/mech3d/restore.js';
 import { ok, done } from './mech3d-util.mjs';
 
 // 바깥 법선 육면체(면 번호 6개)
@@ -52,4 +52,9 @@ ok(restoreStep(P, two, two).status === 'done', '마지막 파일 일치 → 복�
 ok(restoreStep(P, [], [info(A())]).status === 'mismatch', '부품 수가 다르면 불일치');
 ok(restoreStep(P, two, [{ volume: 5, size: [1, 1, 1] }, two[0]]).status === 'mismatch', '모양이 다르면 불일치');
 ok(restoreStep({ parts: P.parts.slice(0, 2) }, [], two).status === 'done', '파일 하나 프로젝트는 바로 복원');
+
+// 빈 새 프로젝트 — 도면 없이 작업 화면
+const blank = setBlankMech3d();
+ok(blank.parts.length === 0 && getMech3d().combined.partOf.length === 0 && blank.name === '새 프로젝트', '빈 장면: 부품 0개');
+ok(isBlankMech3d(blank.spec) && blank.spec.contacts.length === 0 && blank.spec.light.kind === 'none' && !isBlankMech3d(M), '빈 설정: 부품 없음, 광원 없음');
 done();

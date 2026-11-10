@@ -110,6 +110,12 @@ export function initialMech3dSpec(contacts = null) {
   };
 }
 
+// 빈 새 프로젝트 — 부품 0개 장면과 기본 설정. 저장소에는 넣지 않음(새로고침·프로젝트 열기 때 여기서 다시 만듦)
+export function setBlankMech3d() {
+  const s = setMech3dMesh('새 프로젝트', []);
+  return { name: s.name, parts: s.parts, spec: initialMech3dSpec([]) };
+}
+
 // ---- IndexedDB 보관(브라우저 전용) — L3 몸체와 같은 DB, 다른 키 ----
 const DB = 'uds-shape', STORE = 'body', KEY = 'mech3d';
 function idb() {
