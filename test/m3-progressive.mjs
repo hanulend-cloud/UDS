@@ -1,5 +1,5 @@
 // 점진 계산 제어기(가짜 Worker 포트 + Worker 모의 동등성): node test/m3-progressive.mjs
-import { createProgressive, chunkSeed, photometry, requiredFlux, photonCap } from '../src/ui/m3/progressive.js';
+import { createProgressive, chunkSeed, photometry, requiredFlux, photonCap, nextProgress, fmtProg } from '../src/ui/m3/progressive.js';
 import { runJob } from '../src/engine/mech3d/job.js';
 import { makeChunkHost } from '../src/engine/mech3d/chunk-host.js';
 import { lightData } from '../src/engine/mech3d/line.js';
@@ -10,6 +10,21 @@ import { fakeTimers, settle } from './m3-timers.mjs';
 import { ok, done } from './mech3d-util.mjs';
 
 ok(photonCap('low') === 1.6e9 && photonCap() === 1.6e9 && photonCap('mid') === 3.2e9 && photonCap('high') === 6.4e9, '광선 한도: ±30° 기준 16억 × 화질(저 1 · 중 2 · 고 4)');
+
+// 표시 진행률(2026-11-11) — 브라우저에서 잰 실제 순서(광선 만, 오차 %): 오차 추정이 흔들려도 되돌아가지 않음
+{ const seq = [[144, 2.7], [161, 2.56], [207, 2.31], [213, 2.3], [251, 2.14], [267, 2.14], [309, 1.95], [319, 2.0], [362, 1.85], [371, 1.93], [421, 1.63], [457, 1.57]];
+  let p = null, down = 0; const vals = [];
+  for (const [ph, n] of seq) { const q = nextProgress(p, ph * 1e4, n / 100, 0.015); if (p && q.pct < p.pct) down++; p = q; vals.push(q.pct); }
+  ok(down === 0 && vals.at(-1) > vals[0] + 40, `오차가 흔들려도 진행률은 오르기만 함: ${vals.map((v) => v.toFixed(1)).join(' ')}`);
+  ok(vals.at(-1) < 100, '끝나기 전에는 100% 가 아님');
+  // 목표 근처: 판정 오차가 1.5% → 0.5% 로 조여도(필요 광선 9배) 떨어지지 않고 이어서 오름
+  const a = nextProgress(p, 480e4, 1.44 / 100, 0.005), b = nextProgress(a, 600e4, 1.3 / 100, 0.005), c = nextProgress(b, 1200e4, 0.95 / 100, 0.005);
+  ok(a.pct >= p.pct && b.pct > a.pct && c.pct > b.pct, `목표 근처로 조여도 안 떨어짐: ${p.pct.toFixed(1)} → ${a.pct.toFixed(1)} → ${b.pct.toFixed(1)} → ${c.pct.toFixed(1)}`);
+  // 목표 오차에 닿았는데 아직 완료 전이어도 멈춘 값 100 을 넘지 않음
+  let z = null; for (let k = 1; k <= 50; k++) z = nextProgress(z, k * 1e6, 0.001, 0.015);
+  ok(z.pct <= 99.9, `계속 돌아도 완료 전 상한 99.9 (${z.pct})`);
+  ok(nextProgress(null, 0, null, 0.015) === null && nextProgress(p, 1e6, NaN, 0.015) === p, '오차가 아직 없으면 그대로');
+  ok(fmtProg(44) === '44.0' && fmtProg(12.34) === '12.3' && fmtProg(99.99) === '99.9' && fmtProg(100) === '100.0' && fmtProg(NaN) === '0.0', '진행률 표시: 0.1% 단위 내림'); }
 
 // 합성 집계 격자: s 4칸 × w 2칸, 모두 유효·면적 1mm²
 const G = { ns: 4, nw: 2, ds: 1, cell: 1, w0: -1, valid: new Uint8Array(8).fill(1), area: new Float64Array(8).fill(1), L: 4, closed: false, winS: 2 };
@@ -68,6 +83,7 @@ const OPT = { chunkN: 1000, fixedChunk: true, bins: 10, debounceMs: 500, tickMs:
   const nScene = scenes(p).length, nCh = chunks(p).length;
   P.setJudge({ obs: { ...obs, targetLen: 0.9 } });
   const j = P.snapshot();
+  ok(j.progress === 100, `완료 = 진행률 100 (${j.progress})`);
   ok(j.state === 'done' && j.stats.passLen === false && j.photons === s.photons && scenes(p).length === nScene && chunks(p).length === nCh, '목표 0.9: 판정만 다시(불합격), 계산·장면 그대로');
   ok(j.photometry.lum === null && Math.abs(photometry(G, j.sum, j.ledger).eff - j.photometry.eff) < 1e-15, '광속 0 → 휘도 없음(상대값), 효율 = Σ출사/방출');
   P.setJudge({ fluxLm: 10 });

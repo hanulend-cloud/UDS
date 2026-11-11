@@ -29,9 +29,25 @@ export function requiredFlux(ph, targetLum) {
 }
 
 // job = { sceneKey, scene:{ mechParts, mspec, ledParts, lineData, G, obs, emitters }, G, obs, nLeds, fluxLm } 또는 그것을 돌려주는 함수(준비 안 됨 = null)
+// 표시 진행률(2026-11-11) — 되돌아가지 않는 % . 예전엔 (목표/오차)² 를 그대로 보여 줘서, 배치 10개로 잰 오차가 흔들릴 때마다 숫자가 내려갔고
+// 목표 근처로 판정 오차가 조여지면(1.5 → 0.5%, 필요 광선 9배) 크게 떨어졌음. 필요 광선을 평활해서 광선 수 ÷ 필요 광선으로 재고,
+// 판정 오차가 바뀌면 지금 % 에서 이어 가며, 90% 위는 천천히 올라 끝나기 전(99.9)에 멈추지 않게 함. 판정·계산 중단과 무관(표시 전용)
+export function nextProgress(p, photons, noise, goal) {
+  if (!(photons > 0) || !(noise > 0) || !(goal > 0)) return p;
+  const needNow = photons * (noise / goal) ** 2;
+  let q = p ?? { pct: 0, need: needNow, goal, base: 0, start: 0 };
+  if (q.goal !== goal) q = { ...q, need: q.need * (q.goal / goal) ** 2, goal, base: q.pct, start: photons };
+  const need = q.need + 0.25 * (needNow - q.need);
+  const raw = need > q.start ? q.base + ((100 - q.base) * (photons - q.start)) / (need - q.start) : 100;
+  const soft = raw > 90 ? 90 + 10 * (1 - Math.exp(-(raw - 90) / 10)) : raw;
+  return { ...q, need, pct: Math.min(99.9, Math.max(q.pct, soft)) };
+}
+// 진행률 글(0~100 → 소수 한 자리, 0.1% 단위 내림 — 끝나기 전에 100.0 으로 보이지 않게)
+export const fmtProg = (v) => (Number.isFinite(v) ? (Math.floor(v * 10 + 1e-9) / 10).toFixed(1) : '0.0');
 // 광선 한도(2026-11-11) — 보는 각도 ±30° 기준 16억(±90° 때 4억의 4배) × 화질(칸이 많을수록 더)
 export const photonCap = (quality) => 1.6e9 * ({ mid: 2, high: 4 }[quality] ?? 1);
 export function createProgressive({ ports, timers = globalThis, onUpdate = () => {}, opts = {} }) {
+  let prog = null;   // 표시 진행률(nextProgress)
   const o = { ...PROG_DEFAULTS, ...opts };
   const cap = () => job?.maxPhotons ?? o.maxPhotons;   // 계산 한도 — 작업(화질)별, 없으면 기본
   let gen = 0, state = 'idle', reason = null, error = null, job = null, pendingJob = null, debounce = null, ticker = null;
@@ -43,7 +59,7 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
   const now = () => (typeof timers.now === 'function' ? timers.now() : globalThis.performance?.now?.() ?? Date.now());
   resetAcc();
 
-  function resetAcc() { bins = Array.from({ length: o.bins }, () => null); binIssued = new Float64Array(o.bins); ledger = ledger0(); leak = {}; paths = {}; nextChunk = 0; issued = 0; retry = []; nMin = Infinity; nMax = 0; doneChunks = 0; photons = 0; ignored = 0; snap = null; early = false; }
+  function resetAcc() { prog = null; bins = Array.from({ length: o.bins }, () => null); binIssued = new Float64Array(o.bins); ledger = ledger0(); leak = {}; paths = {}; nextChunk = 0; issued = 0; retry = []; nMin = Infinity; nMax = 0; doneChunks = 0; photons = 0; ignored = 0; snap = null; early = false; }
   function stopTick() { if (ticker != null) { timers.clearInterval(ticker); ticker = null; } }
   function startTick() { stopTick(); ticker = timers.setInterval(onTick, o.tickMs); }
   const emit = () => { if (!disposed) onUpdate(snapshot()); };
@@ -182,6 +198,7 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
     if (!job) return;
     snap = compute();
     const rn = snap.stats?.relNoise;
+    if (state === 'running') prog = nextProgress(prog, photons, rn, goal());
     if (state === 'running' && doneChunks >= o.bins && rn != null && rn <= goal()) { finish('converged'); return; }
     emit();
   }
@@ -208,7 +225,7 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
       snap = compute();
       const rn = snap.stats?.relNoise;
       if (state === 'done' && reason === 'converged' && rn != null && rn > goal() && photons < cap()) {
-        state = 'running'; reason = null; startTick(); emit(); pumpAll(gen); return;
+        prog = null; state = 'running'; reason = null; startTick(); emit(); pumpAll(gen); return;   // 사용자가 목표를 바꿔 다시 계산 — 진행률도 새로
       }
     }
     emit();
@@ -224,7 +241,7 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
   // 주의: bins[].acc 는 내부 누적 배열을 그대로 넘긴다(복사 비용 회피) — 소비자는 읽기만 하고 바꾸면 안 된다.
   function snapshot() {
     return {
-      state, stopped, reason, error, photons, chunks: doneChunks, ignored, sceneKey: job?.sceneKey ?? null,
+      state, stopped, reason, error, photons, progress: state === 'done' ? 100 : prog?.pct ?? 0, chunks: doneChunks, ignored, sceneKey: job?.sceneKey ?? null,
       stats: snap?.stats ?? null, sum: snap?.sum ?? null, photometry: snap?.photometry ?? null,
       ledger: { ...ledger }, leak: { ...leak }, paths: { ...paths }, bins: bins.map((b) => b && { acc: b.acc, n: b.n, photons: b.photons }),
       G: job?.G ?? null, obs: job?.obs ?? null, targetNoise: goal(),

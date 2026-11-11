@@ -549,8 +549,8 @@ ok(judgeText(0.3, 0.8, null, 0.2).cls === 'busy' && /판정 보류/.test(judgeTe
     ok(factorChartSvg(S, S.before, 300, 250).includes('od-sim2 one') && !factorChartSvg(S, S.before, 600, 150).includes('od-sim2 one'), '좁으면 위아래로'); }
   { const { clampLeft } = await import('../src/ui/m3/pane-split.js');
     ok(clampLeft(500, 1000) === 500 && clampLeft(100, 1000) === 300 && clampLeft(950, 1000) === 680 && clampLeft(500, 500) === 300 && !(clampLeft(NaN, 1000) >= 0), `좌우 경계 제한: 왼쪽 ≥ 300 · 오른쪽 ≥ 320`); }
-  const m = monitorHtml(S, 65); ok(m.includes('<b>44%</b>') && m.includes('width:44%') && m.includes('진행 01:05') && /role="progressbar"[^>]*aria-valuenow="44"/.test(m) && m.indexOf('44%') < m.indexOf('om-steps'), '맨 위 진행 막대 % · aria');
-  ok(monitorHtml({ ...S, ended: true, endSec: 5 }, 5).includes('<b>100%</b>'), '끝나면 100%');
+  const m = monitorHtml(S, 65); ok(m.includes('<b>44.0%</b>') && m.includes('width:44.0%') && m.includes('진행 01:05') && /role="progressbar"[^>]*aria-valuenow="44.0"/.test(m) && m.indexOf('44.0%') < m.indexOf('om-steps'), '맨 위 진행 막대 % · aria');
+  ok(monitorHtml({ ...S, ended: true, endSec: 5 }, 5).includes('<b>100.0%</b>'), '끝나면 100.0%');
 }
 { // 설계 인자 상자 · 현재안 %
   const { factorBoardHtml, monitorHtml, STAGES } = await import('../src/ui/m3/opt-dash.js');
@@ -558,7 +558,7 @@ ok(judgeText(0.3, 0.8, null, 0.2).cls === 'busy' && /판정 보류/.test(judgeTe
   const h = factorBoardHtml({ tgLen: 0.8, tgWid: 0.8, tiles }, { locked: { position: {} }, on: {} }, (k) => ({ on: k === 'shape', box: `<input type="checkbox" data-ad="${k}">`, opt: '', why: '' }));
   ok((h.match(/class="fb-card[ "]/g) ?? []).length === 3 && (h.match(/class="fb-head"/g) ?? []).length === 3 && h.includes('st-lock') && h.includes('st-run') && h.includes('st-done') && h.indexOf('fb-head') < h.indexOf('fb-in') && (h.match(/class="fb-sw"/g) ?? []).length === 2, '세 항목 같은 상자 · 상태 표시');
   const m = monitorHtml({ tgLen: 0.8, tgWid: 0.8, seq: [], before: {}, tiles, curFrac: 0.37 }, 3); ok(m.includes('<b>현재안</b><span>37%</span>'), '현재안 계산 %');
-  const v = monitorHtml({ tgLen: 0.8, tgWid: 0.8, seq: [{ k: 'milky', Ulen: 0.7, Uwid: 0.7 }], before: {}, tiles, verFrac: 0.5 }, 3); ok(v.includes('<b>검증</b><span>50%</span>'), '검증 %');
+  const v = monitorHtml({ tgLen: 0.8, tgWid: 0.8, seq: [{ k: 'milky', Ulen: 0.7, Uwid: 0.7 }], before: {}, tiles, verFrac: 0.5 }, 3); ok(v.includes('<b>검증</b><span>50.0%</span>'), '검증 %');
 }
 { // 추적 중 진행 알림
   const R = (await import('../src/ui/m3/autodesign-run.js')).createAdRunner({ ports: [{ send: async (m) => (m.type === 'scene' ? { ready: true } : { acc: new Float64Array(4).fill(1), cnt: new Uint32Array(4), ledger: { emitted: 1, escaped: 0, absSurf: 0, absVol: 0, lost: 0, rrLoss: 0, rrGain: 0 }, ms: 1 }) }] }); const seen = []; await R.trace({ sceneKey: 'pg', scene: { G: { ns: 2, nw: 2 } } }, { N: 40000, chunkN: 10000, batches: 2, onProgress: (f) => seen.push(f) });
@@ -653,7 +653,7 @@ done();
   // 흐름 4 광분포 시뮬레이션 → 5 기구 최적화: 계산 중 % · 완료 통과/미달 · 미달이면 5 '필요' · 최적화 진행 중
   const M = { observe: { targetLen: 0.8, targetWid: 0.8, targetNoise: 0.01 } }, st = (a, b) => ({ Ulen: a, Uwid: b });
   const r1 = flowState({ state: 'running', stats: { relNoise: 0.02 } }, st(0.58, 0.64), M), r2 = flowState({ state: 'done' }, st(0.58, 0.64), M), r3 = flowState({ state: 'done' }, st(0.85, 0.9), M), r4 = flowState({ state: 'done' }, st(0.58, 0.64), M, { running: true });
-  console.log(r1.sim.text === '계산 중 25% · 58.0% / 64.0%' && r1.opt.text === '시뮬레이션 뒤' && r2.sim.cls === 'bad' && r2.sim.done && r2.opt.cls === 'need' && r3.sim.cls === 'ok' && r3.opt.done && r4.opt.text === '진행 중' && flowState(null, null, M).sim.text === '–'
+  console.log(r1.sim.text === '계산 중 25.0% · 58.0% / 64.0%' && r1.opt.text === '시뮬레이션 뒤' && r2.sim.cls === 'bad' && r2.sim.done && r2.opt.cls === 'need' && r3.sim.cls === 'ok' && r3.opt.done && r4.opt.text === '진행 중' && flowState(null, null, M).sim.text === '–'
     ? 'PASS 흐름 4 광분포 시뮬레이션 · 5 기구 최적화 상태' : (process.exitCode = 1, `FAIL 흐름 ${JSON.stringify([r1, r2, r3, r4])}`)); }
 { // 3D 보기 상태(2026-11-05): 같은 도면이면 유지 — 최적화 시작·취소·적용·되돌리기에도 숨긴 부품이 풀리지 않게. 다른 도면만 초기화
   const { viewKeep } = await import('../src/ui/m3/feature-tree.js'), a = {}, b = {};
@@ -764,7 +764,7 @@ done();
   const S = { tgLen: 0.8, tgWid: 0.8, t0: 0, tiles: { position: { status: 'done', frac: 1, evals: [{ label: '1열 17개', Ulen: 0.84, Uwid: 0.81 }] }, housing: { status: 'off', evals: [] }, shape: { status: 'run', frac: 0.46, evals: [] }, milky: { status: 'off', evals: [] } },
     seq: [{ k: 'position', label: '1열 17개', Ulen: 0.84, Uwid: 0.81 }], before: { Ulen: 0.55, Uwid: 0.62 }, log: [{ sec: 92, k: 'position', label: '1열 17개', Ulen: 0.84, Uwid: 0.81 }], locked: { milky: true } };
   const m = monitorHtml(S, 130);
-  const okMon = m.indexOf('① 위치') < m.indexOf('② 형상') && m.includes('46%') && /고정/.test(m) && m.includes('84.0%') && m.includes('▲29.0%p') && m.includes('1열 17개') && m.includes('od-plot');
+  const okMon = m.indexOf('① 위치') < m.indexOf('② 형상') && m.includes('46.0%') && /고정/.test(m) && m.includes('84.0%') && m.includes('▲29.0%p') && m.includes('1열 17개') && m.includes('od-plot');
   console.log(order === 'position,shape,milky' && okLock && okMon ? 'PASS 기구 최적화 창: 계산 순서 · 고정 항목 · 모니터(진행 줄·지표·기록)' : (process.exitCode = 1, `FAIL 최적화 창: ${order} lock ${okLock} mon ${okMon}`)); }
 { // 트리 우클릭 메뉴(2026-10-30): 고른 부품 수에 맞는 항목 · 그룹에서 빼기 · Shift 범위 선택
   const { treeCtxItems, removeFromGroups, rangeSelect } = await import('../src/ui/m3/feature-tree.js');

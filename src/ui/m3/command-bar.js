@@ -1,4 +1,5 @@
 import { judgeStats, fmtJudge } from '../../engine/mech3d/tally.js';
+import { fmtProg } from './progressive.js';
 // 명령 막대 — ① LED 지정 ② 관측면 지정 ③ 목표 설정(사용 순서). 나머지는 상단 메뉴
 // h = { onLed(), onObs(), onTarget() }
 // 사용 순서대로 ① LED 지정 → ② 관측면 지정 → ③ 목표 설정(2026-10-27). 끝난 단계는 ✓. 계산 제어는 오른쪽 위 '광분포 시뮬레이션' 카드로 옮김
@@ -15,7 +16,7 @@ export function flowState(calc, stats, M, ad = {}) {
   const J = has ? judgeStats(stats, O).all : '', pass = J === 'ok';
   const res = has ? `${pc(stats.Ulen, O.targetLen)} / ${pc(stats.Uwid, O.targetWid)}` : '';
   const running = st === 'running' || st === 'pending' || st === 'starting', done = st === 'done';
-  const sim = running ? { text: `계산 중 ${Number.isFinite(rn) && rn > 0 ? Math.round(Math.min(1, (tn / rn) ** 2) * 100) : 0}%${res ? ` · ${res}` : ''}`, cls: 'run', done: false }
+  const sim = running ? { text: `계산 중 ${fmtProg(calc?.progress ?? (Number.isFinite(rn) && rn > 0 ? Math.min(1, (tn / rn) ** 2) * 100 : 0))}%${res ? ` · ${res}` : ''}`, cls: 'run', done: false }
     : st === 'paused' ? { text: `${calc?.stopped ? '중지됨' : '일시정지'}${res ? ` · ${res}` : ''}`, cls: '', done: false }
     : done && has ? { text: `${res} ${pass ? '목표 통과' : J === 'near' ? '목표 근처' : '목표 미달'}`, cls: pass ? 'ok' : J === 'near' ? 'near' : 'bad', done: true }
     : { text: '–', cls: '', done: false };

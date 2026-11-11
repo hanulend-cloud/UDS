@@ -1,5 +1,5 @@
 import { shapeLayout } from './map-shape.js';
-import { requiredFlux } from './progressive.js';
+import { requiredFlux, fmtProg } from './progressive.js';
 import { mountSplit, mountHeightHandle } from './pane-split.js';
 import { clampRect, fitRect, dragBy, raiseWin, mountResizers, COLLAPSED_W } from './monitor.js';
 import { simPct } from './opt-dash.js';
@@ -638,10 +638,10 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     const s = big.el.querySelector('[data-big-q]');
     if (document.activeElement !== s) s.value = last?.observe?.quality ?? 'low';
     const su = big.el.querySelector('[data-big-sum]'), st0 = last?.snap?.stats, O = last?.observe, u = (t, v, g) => `<b class="${Number.isFinite(v) && Number.isFinite(g) ? (v + 1e-9 >= g ? 'ok' : 'bad') : ''}">${t} ${Number.isFinite(v) ? v.toFixed(2) : '–'}</b>`;
-    const pr = last?.snap?.state === 'done' ? 100 : simPct(st0?.relNoise, last?.snap?.targetNoise ?? 0.01);
+    const pr = last?.snap?.state === 'done' ? 100 : last?.snap?.progress ?? simPct(st0?.relNoise, last?.snap?.targetNoise ?? 0.01);
     setStepMark(big.el.querySelector('[data-big-step]'), 4, last?.snap?.state === 'done');
     setCtl(big.el.querySelector('[data-big-ctl]'), simCtl(last?.snap, calcBusy()), (k) => onCalc?.(k));
-    if (su) su.innerHTML = `<b>진행 ${pr.toFixed(0)}%</b> ${!st0 || st0.empty || st0.relNoise > 0.05 ? '' : `${u('길이', st0.Ulen, O?.targetLen)} ${u('폭', st0.Uwid, O?.targetWid)}`}`;   // 접었을 때 보이는 현재 결과(계산 초반 값은 노이즈가라 숨김)
+    if (su) su.innerHTML = `<b>진행 ${fmtProg(pr)}%</b> ${!st0 || st0.empty || st0.relNoise > 0.05 ? '' : `${u('길이', st0.Ulen, O?.targetLen)} ${u('폭', st0.Uwid, O?.targetWid)}`}`;   // 접었을 때 보이는 현재 결과(계산 초반 값은 노이즈가라 숨김)
   };
   // onclick 대입(addEventListener 아님) — 패널을 다시 만들면(새 도면·프로젝트) 앞 패널의 처리를 대체. 쌓이면 큰 창이 2개 열리고 아래 창은 이전 계산 데이터였음
   el.onclick = (e) => { const b = e.target.closest('[data-zoom]'); if (b) openBig(); };

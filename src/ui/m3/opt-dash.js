@@ -1,4 +1,5 @@
 import { fmtJudge, fmtTg, fmtDp, flU } from '../../engine/mech3d/tally.js';
+import { fmtProg } from './progressive.js';
 import { judgeStats, uVerdict } from '../../engine/mech3d/tally.js';
 // 아래 칸 대시보드 — ① 기구 최적화 진행(6 항목 타일) ② 시뮬레이션 진행현황(수렴 그래프).
 // 최적화: app.js 의 기구 최적화 io 가 progress(stage, frac, text) · evals(stage, [{label, Ulen, Uwid, ok, why}]) 를 부른다.
@@ -42,7 +43,7 @@ export function factorBoardHtml(S, nw = {}, cfg = null, res = null) {
     const c = cfg?.(k), t = S?.tiles?.[k], on = c ? !!c.on : t ? t.status !== 'off' : !!nw.on?.[k];
     const ev = (t?.evals ?? []).filter((e) => e.ok !== false && Number.isFinite(e.Ulen)); let b = null;
     for (const e of ev) if (!b || scoreOf(e, tl, tw) > scoreOf(b, tl, tw)) b = e;
-    const [chipC, chipT] = t && t.status !== 'off' ? { wait: ['st-wait', '대기'], run: ['st-run', `진행 ${Math.round(t.frac * 100)}%`], done: ['st-done', '✓ 완료'] }[t.status] : on ? ['st-on', '켜짐'] : ['st-off', '꺼짐'];
+    const [chipC, chipT] = t && t.status !== 'off' ? { wait: ['st-wait', '대기'], run: ['st-run', `진행 ${fmtProg(t.frac * 100)}%`], done: ['st-done', '✓ 완료'] }[t.status] : on ? ['st-on', '켜짐'] : ['st-off', '꺼짐'];
     const txt = `지금 ${nowTxt}${b ? ` → ${b.label} (${fmtJudge(b.Ulen)}/${fmtJudge(b.Uwid)})` : ''}`;
     const box = c?.box ? `<label class="fb-sw" title="${esc(c.why || '최적화에 사용')}">${c.box}</label>` : '<span class="fb-sw"></span>';
     return `<div class="fb-card${on ? ' fb-on' : ' fb-off'}${t?.status === 'run' ? ' fb-run' : ''}" style="--fb:${FB_COL[k]}" title="${esc(txt)}">${head(box, chipC, chipT)}<div class="fb-in"><div class="fb-val"><span class="mut">지금</span> ${esc(nowTxt)}</div>${c?.opt ? `<div class="fb-opt">${c.opt}</div>` : ''}</div></div>`;
@@ -117,11 +118,11 @@ export function monitorHtml(S, sec = 0, { chart = true } = {}) {
   for (const [k, name] of STAGES) {
     const t = S.tiles[k];
     if (S.locked?.[k] && t.status === 'off') steps.push(step('lock', name, '고정 ✓'));
-    else if (t.status === 'run') steps.push(step('run', name, `${Math.round(t.frac * 100)}%`));
+    else if (t.status === 'run') steps.push(step('run', name, `${fmtProg(t.frac * 100)}%`));
     else if (t.status === 'done') steps.push(step('done', name, `✓${uv(stageBest(t, tl, tw))}`));
     else if (t.status === 'wait') steps.push(step('wait', name, '대기'));
   }
-  steps.push(S.ended != null ? step('done', '검증', '✓') : busy && S.verFrac != null ? step('run', '검증', `${Math.round(S.verFrac * 100)}%`) : step('wait', '검증', ''));
+  steps.push(S.ended != null ? step('done', '검증', '✓') : busy && S.verFrac != null ? step('run', '검증', `${fmtProg(S.verFrac * 100)}%`) : step('wait', '검증', ''));
   const b0 = S.before ?? {};
   const kpi = (label, tg, v, v0) => {
     const pass = Number.isFinite(v) && Number.isFinite(tg) ? (v + 1e-9 >= tg ? 'ok' : 'bad') : '';
@@ -139,7 +140,7 @@ export function monitorHtml(S, sec = 0, { chart = true } = {}) {
   const say = busy ? `<p><b>지금</b> ${esc(doing)}</p>`
     : S.stopped ? '<p><b>중지했습니다.</b> 찾던 안은 설계에 반영되지 않았습니다.</p>'
     : '';
-  const pct = S.ended != null ? 100 : Math.round(Math.max(0, Math.min(1, S.overall ?? 0)) * 100);
+  const pct = fmtProg(S.ended != null ? 100 : Math.max(0, Math.min(1, S.overall ?? 0)) * 100);
   return `<div class="om-kpi">${kpi('길이 균일도', tl, cur?.Ulen ?? b0.Ulen, b0.Ulen)}${kpi('폭 균일도', tw, cur?.Uwid ?? b0.Uwid, b0.Uwid)}${effK}</div>
     <div class="od-pct om-pct"><b>${pct}%</b><div class="od-bar od-bar-big" role="progressbar" aria-label="기구 최적화 진행" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div><span class="mut od-simst">${busy ? `${S.pauseAt ? '일시정지' : '진행'} ${mmss(sec)}` : S.stopped ? '중지됨' : `끝남 ${mmss((S.endSec ?? sec))}`} · 후보 ${nEval}개</span></div>
     <div class="om-steps">${steps.join('<i class="om-ar">→</i>')}</div>
@@ -155,7 +156,7 @@ export function optMatrixHtml(S) {
   const rows = STAGES.flatMap(([k, name]) => {
     const t = S.tiles[k], locked = S.locked?.[k] && t.status === 'off';
     if (t.status === 'off' && !locked) return [];
-    const st = locked ? '고정' : t.status === 'run' ? `진행 ${Math.round(t.frac * 100)}%` : t.status === 'done' ? '완료' : '대기';
+    const st = locked ? '고정' : t.status === 'run' ? `진행 ${fmtProg(t.frac * 100)}%` : t.status === 'done' ? '완료' : '대기';
     const e = stageBest(t, tl, tw);
     return [row(name, st, t.evals.length || '–', e)];
   });
@@ -335,8 +336,9 @@ export function createSimDash(el, { onCtl = null } = {}) {
   let busy = false;   // 기구 최적화 중(점진 계산 일시정지)
   let diag = null;   // 빛 도달 진단(관측면 도달 < 1%)
   let mini = null;   // 광분포 시뮬레이션 창 안의 진행 현황 칸
+  let prog;   // 점진 계산의 표시 진행률(되돌아가지 않음)
   function sample(snap, targetNoise, observe, nm = names, nMech = nm.length, adBusy = false, skip = []) {
-    busy = adBusy; tgt = targetNoise ?? tgt; obs = observe ?? obs; state = snap?.state ?? ''; reason = snap?.reason ?? ''; stopped = !!snap?.stopped; names = nm; P = topPaths(snap?.paths, nMech, 3, skip);
+    prog = snap?.progress; busy = adBusy; tgt = targetNoise ?? tgt; obs = observe ?? obs; state = snap?.state ?? ''; reason = snap?.reason ?? ''; stopped = !!snap?.stopped; names = nm; P = topPaths(snap?.paths, nMech, 3, skip);
     const ph = snap?.photons ?? 0, st = snap?.stats;
     diag = ph >= 50000 ? reachDiag(snap?.ledger, snap?.leak, nm) : null;
     if (!st || st.empty || !ph) { if (!ph) H = []; draw(); return; }
@@ -347,7 +349,7 @@ export function createSimDash(el, { onCtl = null } = {}) {
   }
   function draw() { if (raf) return; raf = setTimeout(() => { raf = 0; render(); }, 40); }   // setTimeout: 화면이 숨겨져도(다른 탭) 갱신 — rAF 는 멈춤
   function render() {
-    const last = H[H.length - 1], pct = state === 'done' ? 100 : last ? simPct(last.noise, tgt) : 0;
+    const last = H[H.length - 1], pct = state === 'done' ? 100 : Number.isFinite(prog) ? prog : last ? simPct(last.noise, tgt) : 0, pctT = fmtProg(pct);
     const plot = el.querySelector('.od-simplot'), svg = simPlotSvg(H, tgt, obs, plot?.clientWidth || 300, plot?.clientHeight || 70);
     const row = simCaption(H, tgt, obs, state);
     const sTxt = { running: '계산 중', paused: stopped ? '중지됨' : '일시정지', done: reason === 'adopted' ? '완료 — 기구 최적화 최종 판정 값' : reason === 'converged' ? '완료 — 목표 정확도 도달' : '계산 한도 도달 — 정확도 미달', pending: '대기', starting: '장면 준비' }[state] ?? state ?? '';
@@ -363,13 +365,13 @@ export function createSimDash(el, { onCtl = null } = {}) {
     { const n = el.querySelector('[data-s="st"]'); if (n) n.title = n.textContent; }   // 좁은 칸에서 … 로 잘려도 전체 문구를 볼 수 있게
     setStepMark(el.querySelector('[data-s="step"]'), 4, state === 'done');
     setCtl(el.querySelector('[data-sim-ctl]'), simCtl({ state, stopped }, busy), (k) => onCtl?.(k));
-    set('pct', `${pct.toFixed(0)}%`); el.querySelector('[data-s="bar"]').style.width = `${pct.toFixed(0)}%`;
+    set('pct', `${pctT}%`); el.querySelector('[data-s="bar"]').style.width = `${pctT}%`;
     set('row', row);
     const dg = el.querySelector('[data-s="diag"]'); if (dg) { dg.hidden = !diag; set('diag', diag?.html ?? ''); }
     set('svg', svg);
     if (mini) {
       const pl = mini.querySelector('.od-simplot'), w = Math.max(240, pl?.clientWidth || mini.clientWidth), ph = pl?.clientHeight || 130;   // 칸 크기로 그림 — 그림은 칸을 밀지 않음(.od-sim2 절대 위치)
-      mini.innerHTML = `<div class="od-pct"><b>${pct.toFixed(0)}%</b><div class="od-bar od-bar-big"><i style="width:${pct.toFixed(0)}%"></i></div><span class="od-simcap od-capr">${row}</span></div><div class="od-simplot">${simPlotSvg(H, tgt, obs, w, ph)}</div>`;   // 광선 수 = 진행 막대 오른쪽(그래프 위 줄을 비워 그래프를 크게, 2026-11-08)
+      mini.innerHTML = `<div class="od-pct"><b>${pctT}%</b><div class="od-bar od-bar-big"><i style="width:${pctT}%"></i></div><span class="od-simcap od-capr">${row}</span></div><div class="od-simplot">${simPlotSvg(H, tgt, obs, w, ph)}</div>`;   // 광선 수 = 진행 막대 오른쪽(그래프 위 줄을 비워 그래프를 크게, 2026-11-08)
     }
     // 접힌 줄에는 주 광경로 한 줄 요약, 펼치면 광경로 목록
     set('sum', P.length ? `광경로 <span class="mut">${(P[0].share * 100).toFixed(0)}% ${esc(pathText(P[0], names))}</span>` : '광경로');

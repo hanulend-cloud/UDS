@@ -19,7 +19,7 @@ import { isUntraced, tracedParts } from '../../engine/mech3d/scene3d.js';
 import { bounds } from '../../engine/mech3d/mesh.js';
 import { runGeomChecks, checkInterference, boxTravel, checkLeak } from '../../engine/mech3d/checks.js';
 import { createStore, PHYSICS, GEOM_CHECK, PERSIST_TAGS } from './store.js';
-import { createProgressive, photonCap } from './progressive.js';
+import { createProgressive, photonCap, fmtProg } from './progressive.js';
 import { createPool } from './pool.js';
 import * as L from './leds.js';
 import { buildObsOverlay, cellColors, extractFaces } from './colormap.js';
@@ -734,8 +734,8 @@ function monitorSummary() {
   const st0 = A.ad, av0 = adAvail(A.store.mspec), nSel = AD_ITEMS.filter(([, , ks]) => ks.some((k) => st0?.sel?.[k] && av0[k]?.ok)).length, block = adBlock();
   monitor.setCtl(optCtl({ running: !!st0?.running, paused: !!st0?.paused, canRun: !block && nSel > 0, hasResult: !!st0?.result, why: block || '펼쳐서 최적화할 항목을 체크하세요' }), adCtl);
   const st = A.ad, M = A.store.mspec, cell = (t, v, g) => `<b class="${Number.isFinite(v) && Number.isFinite(g) ? (v + 1e-9 >= g ? 'ok' : 'bad') : ''}">${t} ${fmtJudge(v)}</b>`;   // 판정 값 = 내림(결과 창과 같게)
-  if (st?.running) { monitor.setSummary(`<b>${st.paused ? '일시정지' : '진행'} ${Math.round((st.running.frac ?? 0) * 100)}%</b>`); return; }
-  const b = st?.result?.best, sn = A.prog?.snapshot(), s = sn?.stats, calc = ['running', 'pending', 'starting'].includes(sn?.state) ? `<b>계산 ${Math.round(simPct(s?.relNoise, sn.targetNoise))}%</b> ` : '';
+  if (st?.running) { monitor.setSummary(`<b>${st.paused ? '일시정지' : '진행'} ${fmtProg((st.running.frac ?? 0) * 100)}%</b>`); return; }
+  const b = st?.result?.best, sn = A.prog?.snapshot(), s = sn?.stats, calc = ['running', 'pending', 'starting'].includes(sn?.state) ? `<b>계산 ${fmtProg(sn.progress ?? simPct(s?.relNoise, sn.targetNoise))}%</b> ` : '';
   if (!b && (!s || s.empty || s.relNoise > 0.05)) { monitor.setSummary(`<b>실행 전</b> ${calc || `<span>${!A.store.session.line ? '관측면 지정 전' : sn?.state === 'paused' ? '계산 일시정지' : '계산 대기'}</span>`}`); return; }   // 초반 값은 노이즈 · 계산하지 않을 때 '계산 중' 으로 보이던 것(2026-11-07)
   const U = b ? [b.Ulen, b.Uwid] : [s.Ulen, s.Uwid];
   monitor.setSummary(`${b ? '<b>진행 100%</b> <span>후보</span> ' : `<b>실행 전</b> ${calc}`}${cell('길이', U[0], M.observe.targetLen)} ${cell('폭', U[1], M.observe.targetWid)}`);
