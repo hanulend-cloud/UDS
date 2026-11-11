@@ -85,6 +85,13 @@ ok(needText({ total: 123.2, perLed: 0.5 }) === '필요 광속 LED당 0.50 lm · 
   ok(needShort({ total: 14.9, perLed: 0.351 }) === 'LED당 0.36 lm 필요' && needShort(null) === '', `결과 카드용 짧은 글: ${needShort({ total: 14.9, perLed: 0.351 })}`);
   const h = obsNeedHtml({ targetLum: 1000 }, ph);
   ok(/필요 광속 LED당 [0-9.]+ lm · 총 [0-9.]+ lm/.test(h) && obsNeedHtml({ targetLum: null }, ph) === '' && /계산 뒤/.test(obsNeedHtml({ targetLum: 1000 }, null)), `목표 칸 아래 필요 광속: ${h}`); }
+// LED 광속 옆 예상 휘도(2026-11-11) — 입력한 lm 으로 바로(계산 다시 안 함). 필요 광속과 같은 식의 정방향
+{ const { ledLumHtml } = await import('../src/ui/mech3d-light-panel.js'), { lumFor, requiredFlux } = await import('../src/ui/m3/progressive.js');
+  const ph = { eff: 0.2, effLum: 0.02, area: 1000, nLeds: 10 }, n = requiredFlux(ph, 1000);
+  ok(Math.abs(lumFor(ph, n.perLed) - 1000) < 1e-6 && lumFor(ph, 0) === null && lumFor(null, 5) === null, `예상 휘도 = 필요 광속의 역 (${lumFor(ph, n.perLed)})`);
+  const a = ledLumHtml({ fluxLm: 2 * n.perLed }, ph, 1000), b = ledLumHtml({ fluxLm: 0.5 * n.perLed }, ph, 1000);
+  ok(/예상 휘도 <b>2000 cd\/m²<\/b>/.test(a) && /목표 1000/.test(a) && /class="ok"/.test(a) && /class="bad"/.test(b), `예상 휘도 · 목표 비교: ${a} / ${b}`);
+  ok(/상대값/.test(ledLumHtml({ fluxLm: 0 }, ph, 1000)) && /계산 뒤/.test(ledLumHtml({ fluxLm: 3 }, null, null)) && !/목표/.test(ledLumHtml({ fluxLm: 3 }, ph, null)), '광속 0 = 상대값 · 계산 전 = 안내 · 목표 없으면 비교 없음'); }
 { const css = (await import('fs')).readFileSync('styles.css', 'utf8');
   ok(/\.m3-res \.m3-m \.s\.m3-need\s*\{[^}]*display:\s*block/.test(css), '넓은 화면에서도 결과 카드의 필요 광속 줄은 보임'); }
 { const { leakText } = await import('../src/ui/m3/status-bar.js');

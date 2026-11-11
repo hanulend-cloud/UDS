@@ -20,7 +20,7 @@ export function renderPropertyPanel(el, M, S, ui, h) {
   }
   switch (id) {
     case 'light': case 'leds':   // 광원 = LED 지정만, LED = 사양만
-      renderLedProps(el, M, { pickOnly: id === 'light', pick: S.pick, ledInfo: S.ledInfo, line: S.line, lay: ui.lay ?? null, led: ui.led ?? null, ledList: ui.ledList ?? [], ledGap: ui.ledGap, ledChange: ui.ledChange ?? null }, h); return;
+      renderLedProps(el, M, { pickOnly: id === 'light', photometry: S.calc?.photometry ?? null, pick: S.pick, ledInfo: S.ledInfo, line: S.line, lay: ui.lay ?? null, led: ui.led ?? null, ledList: ui.ledList ?? [], ledGap: ui.ledGap, ledChange: ui.ledChange ?? null }, h); return;
     case 'pcbs': renderPcbProps(el, M, { pick: S.pick }, h); return;
     case 'obs': renderObserveProps(el, M, { pick: S.pick, lineInfo: ui.lineInfo, lineErr: S.lineErr, auto: ui.auto, dir: ui.dir, result: S.calc?.stats ?? null, photometry: S.calc?.photometry ?? null, line: S.line ?? null }, h); return;
     case 'contacts': renderContactsProps(el, M, h); return;

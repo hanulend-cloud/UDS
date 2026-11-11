@@ -18,8 +18,12 @@ export function photometry(G, sum, ledger, { fluxLm = 0, nLeds = 0 } = {}) {
   for (let k = 0; k < sum.length; k++) { tot += sum[k]; area += G.area[k]; }
   const eff = ledger.emitted > 0 ? tot / ledger.emitted : NaN;
   const effLum = ledger.emitted > 0 ? (ledger.lumEsc ?? 0) / ledger.emitted : NaN;
-  const lum = fluxLm > 0 && nLeds > 0 && area > 0 && Number.isFinite(effLum) ? (fluxLm * nLeds * effLum) / (area * 1e-6 * Math.PI * LUM_S2) : null;
-  return { eff, effLum, lum, area, nLeds };
+  return { eff, effLum, lum: lumFor({ effLum, area, nLeds }, fluxLm), area, nLeds };
+}
+// LED 1개 광속 → 예상 평균 휘도(cd/m², 정면 ±10°) — 계산 결과의 광 효율로 바로(휘도는 광속에 정비례). 표시 전용
+export function lumFor(ph, fluxLm) {
+  if (!(fluxLm > 0) || !(ph?.nLeds > 0) || !(ph.area > 0) || !Number.isFinite(ph.effLum)) return null;
+  return (fluxLm * ph.nLeds * ph.effLum) / (ph.area * 1e-6 * Math.PI * LUM_S2);
 }
 // 필요 광속(2026-11-11) — 휘도 식의 역산. 휘도는 광속에 정비례하고 광 효율은 광속과 무관하므로 계산 1회 결과로 바로 구함. 표시 전용(판정과 무관)
 export function requiredFlux(ph, targetLum) {

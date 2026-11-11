@@ -1,5 +1,5 @@
 import { pcbNames, pcbAllOff } from '../engine/mech3d/materials.js';
-import { requiredFlux, needText } from './m3/progressive.js';
+import { requiredFlux, needText, lumFor } from './m3/progressive.js';
 // 3D 기구 — 광원 · LED · 관측면 · 목표 속성 편집기 (spec 2026-10-14 §4·§5, 2026-10-15 m3-cad-ui §2). 상태 없음.
 // P3 의 renderLightPanel 을 피처 트리 노드별로 나눴다. 계산 버튼·결과 표시는 자동 점진 계산(결과 패널·상태 띠)으로 옮김.
 import { ledDeltaText, pitchText } from './m3/led-change.js';
@@ -128,7 +128,7 @@ function ledNodeBodyHtml(m, ui, adv = false, showBeam = false, noSize = false) {
     ${adv && !showBeam ? '' : `<div class="m3-row"><label>배광</label><select data-lp-spec="model"><option value="lambertian" ${sel(L.spec.model, 'lambertian')}>램버시안</option><option value="gaussian" ${sel(L.spec.model, 'gaussian')}>가우시안</option></select>
       지향각<input type="number" min="10" max="180" step="5" value="${L.spec.beam}" data-lp-spec="beam">°</div>`}
     ${noSize ? '' : ledSizeRow(L)}
-    ${adv ? '' : `<div class="m3-row"><label>광속</label><input type="number" min="0" step="1" value="${L.spec.fluxLm ?? 0}" data-lp-spec="fluxLm"> lm/개 <span class="mut">0 = 상대값(최대 대비 %)</span></div>`}
+    ${adv ? '' : `<div class="m3-row"><label>광속</label><input type="number" min="0" step="1" value="${L.spec.fluxLm ?? 0}" data-lp-spec="fluxLm"> lm/개 <span data-lp-lum>${ledLumHtml(L.spec, ui.photometry ?? null, m.observe?.targetLum)}</span></div>`}
     ${L.kind === 'step' ? '' : pcbRRow(L, 'PCB 반사율')}`;   // 도면 광원의 PCB = 기구 부품(부품 속성에서)
 }
 // 원설계 대비 변경(순수, 2026-11-02) — 위치·개수가 바뀌면 눈에 띄게. c = ledChange 결과 | null(비교 기준 없음)
@@ -168,7 +168,7 @@ function ledTabHtml(m, ui, tab) {
       ${ledListHtml(ui, canDel)}
       ${ui.led ? ledMoveHtml(ui.led) : '<div class="m3-row mut">줄을 누르면 3D 에 표시되고 옮길 수 있음 · 3D 에서 LED 를 눌러도 됨</div>'}</div>
     <div class="m3-card"><div class="m3-sub">밝기·높이 <span class="mut">(모든 LED)</span></div>
-      <div class="m3-row"><label>밝기</label><input type="number" min="0" step="1" value="${L.spec.fluxLm ?? 0}" data-lp-spec="fluxLm" aria-label="LED 1개 광속 lm"> lm/개 <span class="mut">0 = 상대값(%)</span></div>
+      <div class="m3-row"><label>밝기</label><input type="number" min="0" step="1" value="${L.spec.fluxLm ?? 0}" data-lp-spec="fluxLm" aria-label="LED 1개 광속 lm"> lm/개 <span data-lp-lum>${ledLumHtml(L.spec, ui.photometry ?? null, m.observe?.targetLum)}</span></div>
       <div class="m3-row"><label>커버까지</label><input type="number" min="0" step="0.1" value="${numIn(gap, 1)}" data-lp-dist${dis ? ' disabled' : ''} aria-label="LED 에서 커버까지 거리 mm"> mm <span class="mut">${dis || '가장 가까운 LED 기준'}</span></div></div>
     ${ledNodeBodyHtml(m, ui, true, true, true)}`;
   // LED 위치·개수가 바뀌었으면 기본 탭에도 늘 보임(바뀐 것을 놓치지 않게)
@@ -244,6 +244,19 @@ export function renderLedProps(el, m, ui, h) {
   }
 }
 
+// LED 광속 옆 예상 휘도(2026-11-11) — 입력한 lm 과 지금 설계의 광 효율로(계산 다시 안 함). 목표가 있으면 비교
+export function ledLumHtml(spec, ph, targetLum) {
+  const f = spec?.fluxLm ?? 0;
+  if (!(f > 0)) return '<span class="mut">0 = 상대값(%)</span>';
+  const v = lumFor(ph, f);
+  if (v == null) return '<span class="mut">예상 휘도 — 시뮬레이션 계산 뒤 표시</span>';
+  const li = Math.floor(v + 1e-9), ti = targetLum > 0 ? Math.floor(targetLum + 1e-9) : null;
+  return `→ 예상 휘도 <b>${li} cd/m²</b>${ti == null ? '' : ` <span class="${li >= ti ? 'ok' : 'bad'}">(목표 ${ti} ${li >= ti ? '✓' : '✕'})</span>`} <span class="mut">정면 ±10°</span>`;
+}
+// 계산이 진행되는 동안 예상 휘도만 새 값으로(속성 창 전체를 다시 그리지 않음)
+export function refreshLedLum(el, m, ph) {
+  for (const c of el?.querySelectorAll?.('[data-lp-lum]') ?? []) { const h = ledLumHtml(m.light.spec, ph, m.observe?.targetLum); if (c.innerHTML !== h) c.innerHTML = h; }
+}
 // 밝기 목표 아래 필요 광속 줄(2026-11-11) — 결과 카드는 좁은 화면 배치에서 잘 안 보여 목표를 넣는 자리에도 보여 줌
 export function obsNeedHtml(O, ph) {
   if (!(O?.targetLum > 0)) return '';
