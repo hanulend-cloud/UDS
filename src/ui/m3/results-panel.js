@@ -1,5 +1,5 @@
 import { shapeLayout } from './map-shape.js';
-import { requiredFlux, fmtProg } from './progressive.js';
+import { requiredFlux, fmtProg, needText, needShort } from './progressive.js';
 import { mountSplit, mountHeightHandle } from './pane-split.js';
 import { clampRect, fitRect, dragBy, raiseWin, mountResizers, COLLAPSED_W } from './monitor.js';
 import { simPct } from './opt-dash.js';
@@ -24,9 +24,7 @@ export function judgeText(v, tg, se = null, relNoise = null) {
   const ok = Math.floor(v * 100 + 1e-9) >= Math.floor(tg * 100 + 1e-9), gap = Math.max(1, Math.floor(tg * 100 + 1e-9) * 10 - fl1000(v));   // 판정 규칙은 그대로(1% 단위 내림 비교) · 미달 폭은 0.1%p
   return { cls: ok ? 'ok' : 'bad', text: `목표 ${fmtTg(Math.floor(tg * 100 + 1e-9) / 100)} · ${ok ? '합격' : `미달 −${(gap / 10).toFixed(1)}%p`}` };
 }
-// 필요 광속 글(2026-11-11) — 목표에 모자라지 않게 올림
-const ceilLm = (v) => (v >= 100 ? String(Math.ceil(v - 1e-9)) : v >= 10 ? (Math.ceil(v * 10 - 1e-9) / 10).toFixed(1) : (Math.ceil(v * 100 - 1e-9) / 100).toFixed(2));
-export const needText = (n) => (n ? `필요 광속 총 ${ceilLm(n.total)} lm · LED당 ${ceilLm(n.perLed)} lm` : '');
+export { needText } from './progressive.js';
 // 평균 광량 카드: 광속이 있으면 cd/m²(목표 대비), 없으면 상대값(길이 프로파일 평균/최대)
 export function lumCard(st, ph, targetLum) {
   if (ph?.lum != null && Number.isFinite(ph.lum)) {
@@ -486,7 +484,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     <div class="m3-msg" data-r="msg" hidden></div>
     <div class="m3-blk"><div class="m3-t"><b class="m3-tt">2D 광량 분포 <i class="m3-info" data-r="mapsub" tabindex="0">ⓘ</i></b><span><label class="m3-map-eq" title="가로세로를 같은 축척으로 — 끄면 좁은 폭을 늘려 보여 줌"><input type="checkbox" data-r="mapEq"> 실제 비율</label> <select data-r="quality" title="2D 분포·1D 프로파일 칸 크기(정사각) — 저 1.5 mm(빠름) · 중 1.0 mm(광선 ≈2배) · 고 0.5 mm(광선 ≈4배) · 짧거나 좁은 면은 그 방향만 더 잘게" aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>  <button type="button" class="m3-zoom" data-zoom="map" title="큰 창으로 보기" aria-label="2D 광량 분포 확대">⤢</button></span></div>
       <div class="m3-withm"><canvas class="m3-g" data-r="map" width="600" height="200"></canvas>
-        <div class="m3-m"><div class="l">평균 광량</div><div class="v" data-r="avg" title="cd/m² 값은 보는 각도 설정과 상관없이 정면 ±10° 안의 평균 휘도">–</div><div class="s" data-r="avgs"></div><div class="s" data-r="need" title="정면 ±10° 기준: 목표 휘도 × 관측면적 × π × sin²10° ÷ ±10° 안 광 효율"></div>${gaugeHtml('avgg')}
+        <div class="m3-m"><div class="l">평균 광량</div><div class="v" data-r="avg" title="cd/m² 값은 보는 각도 설정과 상관없이 정면 ±10° 안의 평균 휘도">–</div><div class="s" data-r="avgs"></div><div class="s m3-need" data-r="need"></div>${gaugeHtml('avgg')}
           <div class="l" style="margin-top:6px">광 효율</div><div class="v sm" data-r="eff">–</div><div class="s">관측면 원뿔 안 / LED 총 방출</div><button type="button" class="m3-leak" data-r="leak" hidden title="누르면 3D 에서 가장 많이 새는 면을 강조"></button></div></div></div>
     <div class="m3-blk"><div class="m3-t"><b class="m3-tt">길이 방향 1D 프로파일 <i class="m3-info" data-r="psub" tabindex="0">ⓘ</i></b><span><button type="button" class="m3-zoom" data-zoom="prof" title="큰 창으로 보기" aria-label="길이 프로파일 확대">⤢</button></span></div>
       <div class="m3-withm"><canvas class="m3-g" data-r="prof" width="600" height="150"></canvas>
@@ -711,7 +709,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     }
     const lc = lumCard(st, snap.photometry, observe.targetLum);
     q('avg').textContent = lc.value; q('avgs').textContent = lc.sub; q('avg').className = `v ${lc.pass == null ? '' : lc.pass ? 'ok' : 'bad'}`;
-    q('need').textContent = needText(requiredFlux(snap.photometry, observe.targetLum));
+    { const n = requiredFlux(snap.photometry, observe.targetLum); q('need').textContent = needShort(n); q('need').title = n ? `${needText(n)} — 정면 ±10° 기준: 목표 휘도 × 관측면적 × π × sin²10° ÷ ±10° 안 광 효율` : ''; }
     q('avgg').hidden = lc.ratio == null;
     if (lc.ratio != null) fill(q('avgg'), lc.ratio * 50, lc.pass, 50);   // 목표 = 가운데, 목표의 2배 = 가득
     const eff = snap.photometry?.eff;

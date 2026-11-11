@@ -29,6 +29,10 @@ export function requiredFlux(ph, targetLum) {
 }
 
 // job = { sceneKey, scene:{ mechParts, mspec, ledParts, lineData, G, obs, emitters }, G, obs, nLeds, fluxLm } 또는 그것을 돌려주는 함수(준비 안 됨 = null)
+// 필요 광속 글(2026-11-11) — 모자라지 않게 올림. LED 1개당이 먼저(사용자가 고르는 값)
+const ceilLm = (v) => (v >= 100 ? String(Math.ceil(v - 1e-9)) : v >= 10 ? (Math.ceil(v * 10 - 1e-9) / 10).toFixed(1) : (Math.ceil(v * 100 - 1e-9) / 100).toFixed(2));
+export const needText = (n) => (n ? `필요 광속 LED당 ${ceilLm(n.perLed)} lm · 총 ${ceilLm(n.total)} lm` : '');
+export const needShort = (n) => (n ? `LED당 ${ceilLm(n.perLed)} lm 필요` : '');   // 좁은 결과 카드용
 // 표시 진행률(2026-11-11) — 되돌아가지 않는 % . 예전엔 (목표/오차)² 를 그대로 보여 줘서, 배치 10개로 잰 오차가 흔들릴 때마다 숫자가 내려갔고
 // 목표 근처로 판정 오차가 조여지면(1.5 → 0.5%, 필요 광선 9배) 크게 떨어졌음. 필요 광선을 평활해서 광선 수 ÷ 필요 광선으로 재고,
 // 판정 오차가 바뀌면 지금 % 에서 이어 가며, 90% 위는 천천히 올라 끝나기 전(99.9)에 멈추지 않게 함. 판정·계산 중단과 무관(표시 전용)

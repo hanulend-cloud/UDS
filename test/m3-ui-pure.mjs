@@ -78,8 +78,15 @@ ok(fmtU(0.7999) === '79.9%' && fmtU(0.92) === '92.0%' && fmtU(0.29) === '29.0%' 
 { const st = { profile: Float64Array.from([1, 0.5]) }, a = lumCard(st, { lum: 999.7 }, 1000), e = lumCard({ profile: Float64Array.from([NaN, NaN]) }, null, null);
   ok(a.value === '999 cd/m²' && a.pass === false && a.sub.endsWith('미달 −1') && e.value === '–', `광량 내림·빈 프로파일: ${a.value} ${a.sub} / ${e.value}`); }
 // 필요 광속 표시(2026-11-11): 모자라지 않게 올림
-ok(needText({ total: 19.41, perLed: 1.941 }) === '필요 광속 총 19.5 lm · LED당 1.95 lm', `필요 광속 올림: ${needText({ total: 19.41, perLed: 1.941 })}`);
-ok(needText({ total: 123.2, perLed: 0.5 }) === '필요 광속 총 124 lm · LED당 0.50 lm' && needText(null) === '', '필요 광속 자릿수 · 없으면 빈칸');
+ok(needText({ total: 19.41, perLed: 1.941 }) === '필요 광속 LED당 1.95 lm · 총 19.5 lm', `필요 광속 올림(LED당 먼저): ${needText({ total: 19.41, perLed: 1.941 })}`);
+ok(needText({ total: 123.2, perLed: 0.5 }) === '필요 광속 LED당 0.50 lm · 총 124 lm' && needText(null) === '', '필요 광속 자릿수 · 없으면 빈칸');
+{ const { needShort } = await import('../src/ui/m3/progressive.js'), { obsNeedHtml } = await import('../src/ui/mech3d-light-panel.js');
+  const ph = { eff: 0.2, effLum: 0.02, area: 1000, nLeds: 10 };
+  ok(needShort({ total: 14.9, perLed: 0.351 }) === 'LED당 0.36 lm 필요' && needShort(null) === '', `결과 카드용 짧은 글: ${needShort({ total: 14.9, perLed: 0.351 })}`);
+  const h = obsNeedHtml({ targetLum: 1000 }, ph);
+  ok(/필요 광속 LED당 [0-9.]+ lm · 총 [0-9.]+ lm/.test(h) && obsNeedHtml({ targetLum: null }, ph) === '' && /계산 뒤/.test(obsNeedHtml({ targetLum: 1000 }, null)), `목표 칸 아래 필요 광속: ${h}`); }
+{ const css = (await import('fs')).readFileSync('styles.css', 'utf8');
+  ok(/\.m3-res \.m3-m \.s\.m3-need\s*\{[^}]*display:\s*block/.test(css), '넓은 화면에서도 결과 카드의 필요 광속 줄은 보임'); }
 { const { leakText } = await import('../src/ui/m3/status-bar.js');
   ok(checkLabels({ wall: { status: 'warn', min: 0.7996 } })[1].text === '살두께 0.79 mm' && leakText({ status: 'warn', ratio: 0.2004, worst: { part: 1, face: 5, ratio: 0.12 } }, ['케이스', '확산판']) === '새는 빛 21% · 주로 확산판 면 #5 12%'
     && leakText({ status: 'ok', ratio: 0.07, worst: { part: -1, face: -1, ratio: 0.07 } }) === '새는 빛 7% · 주로 틈으로 바로 7%' && leakText({ status: 'na' }) === '', '살두께 내림 · 새는 빛 문구(올림, 가장 많이 새는 면)'); }

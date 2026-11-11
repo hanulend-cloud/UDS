@@ -453,7 +453,7 @@ function onCalc(snap) {
   if (A.adMode === 'set' && !A.ad?.running && monitor?.isOpen?.()) { const t = performance.now(); if (!(t - (A.nowT ?? 0) < 500) || snap.state === 'done') { A.nowT = t; renderAuto(); } }   // 설정 화면의 '지금' 카드 = 계산 갱신을 따라감(0.5초마다, 끝나면 바로)
   paintObs(snap);
   A.cmd.update(S, M, snap.stats ?? null);
-  if (S.node === 'obs') refreshObsNow($('#m3-props'), M, snap.stats ?? null);   // ③ 목표 표 '지금' 칸
+  if (S.node === 'obs') refreshObsNow($('#m3-props'), M, snap.stats ?? null, snap.photometry ?? null);   // ③ 목표 표 '지금' 칸
   renderStatus();
 }
 // 관측면 색지도: 격자가 바뀌면 덧그림 메쉬를 다시 만들고, 갱신마다 색만 바꾼다

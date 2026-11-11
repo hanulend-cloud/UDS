@@ -1,4 +1,5 @@
 import { pcbNames, pcbAllOff } from '../engine/mech3d/materials.js';
+import { requiredFlux, needText } from './m3/progressive.js';
 // 3D 기구 — 광원 · LED · 관측면 · 목표 속성 편집기 (spec 2026-10-14 §4·§5, 2026-10-15 m3-cad-ui §2). 상태 없음.
 // P3 의 renderLightPanel 을 피처 트리 노드별로 나눴다. 계산 버튼·결과 표시는 자동 점진 계산(결과 패널·상태 띠)으로 옮김.
 import { ledDeltaText, pitchText } from './m3/led-change.js';
@@ -243,15 +244,21 @@ export function renderLedProps(el, m, ui, h) {
   }
 }
 
+// 밝기 목표 아래 필요 광속 줄(2026-11-11) — 결과 카드는 좁은 화면 배치에서 잘 안 보여 목표를 넣는 자리에도 보여 줌
+export function obsNeedHtml(O, ph) {
+  if (!(O?.targetLum > 0)) return '';
+  const t = needText(requiredFlux(ph, O.targetLum));
+  return t ? `<b>${t}</b> <span class="mut">(정면 ±10° · 지금 설계 기준)</span>` : '<span class="mut">필요 광속 — 시뮬레이션 계산 뒤 표시</span>';
+}
 // 관측면 노드: 면 클릭(추가/제거) · 라인 인식 결과 · 관측 방향 · 원뿔 · 집계 격자 · 가장자리 제외
 // ui = { pick, lineInfo, lineErr, auto:{cellS,cellW,winS}|null, dir }, h = { onPick, onClearObs(), onRetryLine(), onObsDir(v|null), onObs(key, v|null) }
 // ③ 목표 표의 '지금' 칸만 새 계산값으로(2026-11-07) — 속성 창 전체를 다시 그리지 않음(입력 중인 목표 칸·스크롤 유지).
 // 전에는 창을 연 순간의 값에 멈춰 결과 창과 달랐음. 반환 = 바꾼 칸 수
-export function refreshObsNow(el, m, stats) {
+export function refreshObsNow(el, m, stats, photometry = null) {
   const cells = el?.querySelectorAll?.('[data-lp-now]') ?? [];
   if (!cells.length) return 0;
   const tmp = el.ownerDocument.createElement('div');
-  renderObserveProps(tmp, m, { result: stats ?? null }, {});
+  renderObserveProps(tmp, m, { result: stats ?? null, photometry }, {});
   let n = 0;
   for (const c of cells) { const f = tmp.querySelector(`[data-lp-now="${c.dataset.lpNow}"]`); if (f && c.innerHTML !== f.innerHTML) { c.innerHTML = f.innerHTML; n++; } }
   return n;
@@ -274,7 +281,8 @@ export function renderObserveProps(el, m, ui, h) {
         <tr><th>길이 균일도</th><td><input type="number" min="0" max="100" step="1" value="${+(O.targetLen * 100).toFixed(1)}" data-lp-tgt="targetLen" data-lp-pct aria-label="길이 균일도 목표 %">%</td><td data-lp-now="len">${pass(R?.Ulen, O.targetLen, R?.seLen)}${verdict(R?.Ulen, O.targetLen, R?.seLen)}</td></tr>
         <tr><th>폭 균일도</th><td><input type="number" min="0" max="100" step="1" value="${+(O.targetWid * 100).toFixed(1)}" data-lp-tgt="targetWid" data-lp-pct aria-label="폭 균일도 목표 %">%</td><td data-lp-now="wid">${pass(R?.Uwid, O.targetWid, R?.seWid)}${verdict(R?.Uwid, O.targetWid, R?.seWid)}</td></tr></table>
       <div class="m3-row mut">균일도 = 가장 어두운 곳 ÷ 가장 밝은 곳 (1 = 완전히 고름)</div>
-      <div class="m3-row"><label>밝기 목표</label><input type="number" min="0" step="10" value="${O.targetLum ?? ''}" placeholder="없음" data-lp-tgt="targetLum" data-lp-auto aria-label="평균 휘도 목표 cd/m²"> cd/m² <span class="mut">선택 · 결과에 필요 광속 표시 · 합격 판정은 LED 밝기(lm) 입력 시</span></div></div>`;
+      <div class="m3-row"><label>밝기 목표</label><input type="number" min="0" step="10" value="${O.targetLum ?? ''}" placeholder="없음" data-lp-tgt="targetLum" data-lp-auto aria-label="평균 휘도 목표 cd/m²"> cd/m² <span class="mut">선택 · 합격 판정은 LED 밝기(lm) 입력 시</span></div>
+      <div class="m3-row" data-lp-now="need">${obsNeedHtml(O, ui.photometry ?? null)}</div></div>`;
   // 상세 탭: 보는 방향 · 보는 범위 · 계산 · 설계 점검 기준(라인 상태·다시 인식은 기본 탭)
   const detail = `${nF ? `<div class="m3-card"><div class="m3-sub">보는 방향 <span class="mut">${O.dir ? '(직접 지정)' : '(자동 = 면에 수직)'}</span></div>
       <div class="m3-row">x<input type="number" step="0.1" value="${numIn(ui.dir?.[0], 3)}" data-lp-dir="0"> y<input type="number" step="0.1" value="${numIn(ui.dir?.[1], 3)}" data-lp-dir="1"> z<input type="number" step="0.1" value="${numIn(ui.dir?.[2], 3)}" data-lp-dir="2"> ${O.dir ? '<button data-lp-dirauto>자동으로</button>' : ''}</div></div>` : ''}

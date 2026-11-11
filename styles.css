@@ -650,6 +650,8 @@ header:has(.mb-drop) { z-index: 80; }   /* 메뉴를 펼치면 떠 있는 창 �
 @media (min-width: 1025px) {
   .m3-res .m3-m { padding: 3px 6px; justify-content: flex-start; }
   .m3-res .m3-m .s { display: none; }   /* 한 화면에 맞추려고 보조 설명은 숨김(마우스를 올리면 그래프에서 값 읽기) */
+  .m3-res .m3-m .s.m3-need { display: block; color: var(--m3-fg, inherit); font-weight: 600; }   /* 필요 광속은 숨기지 않음(2026-11-11) — 밝기 목표를 넣었을 때만 글이 있음 */
+  .m3-res .m3-m .s.m3-need:empty { display: none; }
   .m3-res .m3-m .l { font-size: 10.5px; }
   .m3-res .m3-t { margin-bottom: 2px; }
   .m3-res .m3-withm { grid-template-columns: minmax(0, 1fr) 96px; gap: 6px; }
