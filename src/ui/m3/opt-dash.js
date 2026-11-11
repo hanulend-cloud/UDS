@@ -10,6 +10,19 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 // 계산 순서대로(엔진: 위치 → 케이스 면 → 형상 → Milky, 2026-10-30) — 번호도 이 순서
 export const STAGES = [['position', '① 위치'], ['shape', '② 형상'], ['milky', '③ 확산도(Milky)']];   // 케이스 면은 부품 속성에서 직접(2026-11-05)
 // 기구 최적화 진행 단계 이름 → 타일(LED 배치·높이 = ② 기구 위치). 현재안·기준·검증 = 타일 없음(머리 줄 문구로만)
+// 진행 상태 갱신(순수, 2026-11-11) — 전체·단계 % 는 내려가지 않음. 끝난 항목을 다시 돌릴 때만 새로 시작
+export function applyProgress(S, stage, frac, text, overall) {
+  if (Number.isFinite(overall)) S.overall = Math.max(S.overall ?? 0, overall);
+  if (stage === 'current') S.curFrac = Math.max(S.curFrac ?? 0, frac ?? 0); else if (stage === 'verify') S.verFrac = Math.max(S.verFrac ?? 0, frac ?? 0);
+  const k = tileOf(stage);
+  if (!k) { S.note = text ?? ''; return; }   // 현재안·검증 = 머리 줄 문구
+  const t = S.tiles[k], f = Math.max(0, Math.min(1, frac ?? 0)); S.note = '';
+  if (S.cur && S.cur !== k && S.tiles[S.cur].status === 'run') S.tiles[S.cur].status = 'done';
+  t.frac = t.status === 'run' ? Math.max(t.frac ?? 0, f) : f;
+  S.cur = k; t.status = 'run'; t.text = text ?? '';
+}
+// 긴 계산 한 번이 올리는 진행 비율 — 현재안은 거의 끝까지, 검증은 재확인이 여러 번일 수 있어 남은 구간의 일부만(되돌지 않으니 먼저 다 쓰면 멈춰 보임)
+export const traceFrac = (stage, frac, f) => frac + (1 - frac) * f * (stage === 'verify' ? 0.1 : 0.95);
 export const tileOf = (stage) => (stage === 'milky' || stage === 'shape' || stage === 'housing' ? stage : stage === 'leds' || stage === 'height' ? 'position' : null);
 const f2 = (v) => (Number.isFinite(v) ? v.toFixed(2) : '–');
 
@@ -205,14 +218,8 @@ export function createOptDash(el, h = {}) {
   // 보완 실행 — 새로 켠 항목을 '대기' 로(기존 결과는 남김)
   function addStages(stages, note = '') { if (!S) return; for (const [k] of STAGES) if (stages[k] && S.tiles[k].status === 'off') S.tiles[k].status = 'wait'; S.note = note; draw(); }
   function progress(stage, frac, text, overall) {
-    if (S && Number.isFinite(overall)) S.overall = overall;
     if (!S) return;
-    if (stage === 'current') S.curFrac = frac; else if (stage === 'verify') S.verFrac = frac;
-    const k = tileOf(stage);
-    if (!k) { S.note = text ?? ''; draw(); return; }   // 현재안·검증 = 머리 줄 문구
-    const t = S.tiles[k]; S.note = '';
-    if (S.cur && S.cur !== k && S.tiles[S.cur].status === 'run') S.tiles[S.cur].status = 'done';
-    S.cur = k; t.status = 'run'; t.frac = Math.max(0, Math.min(1, frac ?? 0)); t.text = text ?? '';
+    applyProgress(S, stage, frac, text, overall);
     draw();
   }
   function evals(stage, list) { if (!S) return; const k = tileOf(stage); if (!k) { S.verify = list[list.length - 1] ?? S.verify; draw(); return; } const t = S.tiles[k]; t.evals.push(...list); for (const e of list) { const q = { ...e, k }; S.seq.push(q); if (q.ok !== false && !q.est && Number.isFinite(q.Ulen) && (!S.bestE || scoreOf(q, S.tgLen, S.tgWid) > scoreOf(S.bestE, S.tgLen, S.tgWid))) { S.bestE = q; S.log.push({ sec: (performance.now() - S.t0) / 1000, k, label: q.label, Ulen: q.Ulen, Uwid: q.Uwid }); } } if (t.status === 'off' || t.status === 'wait') t.status = 'run'; draw(); }

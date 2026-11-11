@@ -1,5 +1,5 @@
 // P4 단계 실행기(가짜 io): node test/mech3d-autodesign.mjs
-import { lateralCoarse, lateralFine, pickLateral, runAutoDesign, shapeScore, halving, smoothU, halvingTotal, sameDesign, screenShapeVars, shapeTotal, pickVariant, refineShapeCurve, refineShapeField, fieldError, fieldResponse, ledPhase, shapeModes, foldMap, solveBox, solveShapeModes, curveDirection, shapeSize } from '../src/engine/mech3d/autodesign.js';
+import { LADDER_MS, lateralCoarse, lateralFine, pickLateral, runAutoDesign, shapeScore, halving, smoothU, halvingTotal, sameDesign, screenShapeVars, shapeTotal, pickVariant, refineShapeCurve, refineShapeField, fieldError, fieldResponse, ledPhase, shapeModes, foldMap, solveBox, solveShapeModes, curveDirection, shapeSize } from '../src/engine/mech3d/autodesign.js';
 import { shapeVarRanges, gridCandidates, curveAt } from '../src/engine/mech3d/shape-opt.js';
 import { candidateGrid } from '../src/engine/mech3d/basis.js';
 import { milkyRows } from '../src/engine/mech3d/milky-search.js';
@@ -371,7 +371,7 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   const run = async (Ufn, cur = { milky: 1, count: 5, pitch: 0, rows: 1 }, curU = 0.5, nMax = 30) => { const seen = []; const r = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0.5 }, current: cur, G, line, nMax, rowsOptions: [1] },
     { basis: async () => B, progress() {}, cancelled: () => false, verify: async (d) => { if (d === undefined || d.positions == null) return { stats: st(curU, 0.9), eff: 0.5 }; seen.push(d.positions.length); return { stats: Ufn(d.positions.length), eff: 0.5 }; } }); return { r, seen }; };
   const a = await run((n) => st(n >= 10 ? 0.82 : 0.6 + n * 0.01, 0.9));
-  ok(a.r.feasible && a.r.best.positions.length === 10 && new Set(a.r.best.positions.map((q) => q.w)).size === 1 && a.seen.at(-1) === 10 && a.seen.every((n, i) => !i || n > a.seen[i - 1]), `미달 → 하나씩 늘려 10개에서 통과 (재확인 ${a.seen.join('→')})`);
+  ok(a.r.feasible && a.r.best.positions.length === 10 && new Set(a.r.best.positions.map((q) => q.w)).size === 1 && a.seen.includes(9) && a.seen.includes(10), `미달 → 넓혀 찾고 좁혀서 10개에서 통과 (재확인 ${a.seen.join('→')})`);
   const b = await run((n) => st(0.9, 0.4));   // 폭 부족 = 개수로 안 오름 → 두 번 만에 멈추고 적은 쪽 · 한계 문구
   ok(!b.r.feasible && /한계: 폭 방향 확산 부족/.test(b.r.reason) && b.r.best.positions.length === Math.min(...b.seen), `폭 부족: ${b.seen.join('→')} — 나아지지 않으니 가장 적은 ${b.r.best.positions?.length}개`);
   const down = await run((n) => st(n >= 3 ? 0.85 : 0.6, 0.9));   // 후보 추정은 많게 잡았지만 3개면 충분 → 줄여서 확인
@@ -385,7 +385,10 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   const seen = [], cur = { milky: 1, count: 5, pitch: 0, rows: 1 };
   const r0 = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0.95 }, current: cur, G, line, nMax: 40, rowsOptions: [1] }, { basis: async () => ({ cand, maps, emitted: 1, gaps: [], sMargin: 0 }), progress() {}, cancelled: () => false,
     verify: async (d) => { if (!d.positions) return { stats: st(0.7, 0.6), eff: 0.5 }; seen.push(d.positions.length); return { stats: st(d.positions.length >= seen[0] + 2 ? 0.82 : 0.75, 0.61), eff: 0.5 }; } });
-  ok(!r0.unchanged && !r0.feasible && r0.best.positions.length === seen[0] + 2 && seen.length === 3 && /길이 목표는 LED \d+개로 통과/.test(r0.reason) && /한계: 폭 방향 확산 부족/.test(r0.reason), `폭 한계: ${seen.join('→')} 에서 길이 통과 · ${r0.reason}`);
+  { const seen2 = [], r2 = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0.95 }, current: cur, G, line, nMax: 40, rowsOptions: [1] }, { basis: async () => ({ cand, maps, emitted: 1, gaps: [], sMargin: 0 }), progress() {}, cancelled: () => false,
+      verify: async (d) => { if (!d.positions) return { stats: st(0.7, 0.6), eff: 0.5 }; const n = d.positions.length; seen2.push(n); return { stats: st(n >= seen2[0] + 2 ? 0.8 + 0.02 * (n - seen2[0] - 2) : 0.75, 0.61), eff: 0.5 }; } });
+    ok(r2.best.positions.length === seen2[0] + 2, `폭 한계: 길이를 통과하는 가장 적은 개수 (${seen2.join('→')} → ${r2.best.positions.length}개)`); }
+  ok(!r0.unchanged && !r0.feasible && r0.best.positions.length === seen[0] + 2 && seen.length === 4 && /길이 목표는 LED \d+개로 통과/.test(r0.reason) && /한계: 폭 방향 확산 부족/.test(r0.reason), `폭 한계: ${seen.join('→')} 에서 길이 통과 · ${r0.reason}`);
 }
 { // ② 1열만(cfg.rowsOptions [1], 재료비) — 2열이 더 나아도 1열 배치만
   const G = { ns: 100, nw: 1, ds: 1, cell: 1, w0: -0.5, L: 100, closed: false, winS: 10, area: new Float64Array(100).fill(1), valid: new Uint8Array(100).fill(1) }, line = { length: 100, closed: false };
@@ -581,6 +584,18 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   ok(seen.length > 0 && seen.every((n) => n >= 5), `먼 미달: Milky 탐색은 지금 개수 이상에서만 (${[...new Set(seen)]})`);
   ok(vs.every((n) => n >= 5), `먼 미달: 개수를 줄여 재확인하지 않음 (${[...new Set(vs)]})`);
   ok(r.best.count >= 5 && r.best.milky > 2, `먼 미달: 지금보다 좋은 Milky 를 고르고 LED 는 유지 (${r.best.count}개 · Milky ${r.best.milky})`);
+}
+
+{ // LED 늘려 목표까지(2026-11-11): 하나씩이 아니라 간격을 넓혀 찾고, 통과하면 가장 적은 개수로 좁힘
+  const line = { length: 100, closed: true }, nw = 2, ns = 100, nCell = ns * nw;
+  const G2 = { ns, nw, ds: 1, cell: 1, w0: -1, L: 100, closed: true, winS: 10, area: new Float64Array(nCell).fill(1), valid: new Uint8Array(nCell).fill(1) };
+  const cand = candidateGrid(line, { sStep: 2 });
+  const maps = cand.map(() => { const a = new Float32Array(nCell).fill(1); a[100] = 0; a[101] = 0; return a; });   // 어두운 칸이 있어 배치 추정은 늘 미달
+  const vs = [], io = { basis: async () => ({ cand, maps, emitted: 1 }), verify: async (d) => { vs.push(d.count); return { stats: st(0.04 * d.count, 0.9), eff: 0.5 }; }, progress() {}, cancelled: () => false };
+  const r = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0.8 }, current: { milky: 2, count: 5, pitch: 0, rows: 1, rowGap: 0 }, G: G2, line, nMax: 50, rowsOptions: [1] }, io);
+  ok(r.best.count === 20, `목표에 닿는 가장 적은 개수: ${r.best.count}개`);
+  ok(vs.length <= 12, `하나씩 재지 않음: 재확인 ${vs.length}회 (${vs})`);
+  ok(LADDER_MS >= 600000, '늘리기 시간 한도 10분 이상');
 }
 
 done();

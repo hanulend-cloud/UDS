@@ -126,6 +126,14 @@ ok(judgeText(0.8004, 0.8009).cls === 'ok' && judgeText(0.7999, 0.8).cls === 'bad
       ok(/data-ad="casePart" data-v="0"/.test(resultLineHtml({ best: { Ulen: 0.8, Uwid: 0.45 }, cur: {}, targets: {}, stages: { milky: true }, hint: h(0.81, 0.52) })), '추천 줄 = 누르면 케이스 부품으로'); }
     { const { resultStageFlags, factorResult } = await import('../src/ui/m3/autodesign-panel.js');
       const stages = resultStageFlags({ leds: true, height: false, milky: false });
+      { const { applyProgress, traceFrac } = await import('../src/ui/m3/opt-dash.js'), T = () => ({ status: 'wait', frac: 0, evals: [] }), S = { tiles: { position: T(), shape: T(), milky: T() } };
+        applyProgress(S, 'verify', 0.9, '', 0.95); applyProgress(S, 'verify', 0.33, '', 0.86);
+        ok(S.verFrac === 0.9 && S.overall === 0.95, `최적화 진행률: 검증 단계가 내려가지 않음 (${S.verFrac} / ${S.overall})`);
+        applyProgress(S, 'leds', 0.8, ''); applyProgress(S, 'height', 0.1, '');
+        ok(S.tiles.position.frac === 0.8, `같은 항목 안에서 내려가지 않음 (${S.tiles.position.frac})`);
+        S.tiles.position.status = 'done'; applyProgress(S, 'leds', 0.1, '');
+        ok(S.tiles.position.frac === 0.1, '끝난 항목을 다시 돌리면 새로 시작');
+        ok(traceFrac('current', 0, 1) > 0.9 && traceFrac('verify', 0.5, 1) <= 0.55, '검증 재계산 한 번은 남은 구간의 일부만 올림'); }
       { const q = factorResult({ cur: { count: 10 }, best: { count: 10, wCenter: 3 }, stages }, null, {}, 'position'); ok(q.chip === '바뀜' && /폭 위치 \+3/.test(q.body), `LED 폭 이동도 결과에 표시: ${q.chip} ${q.body}`); }
       ok(stages.position && stages.leds && !stages.milky && factorResult({ cur: { count: 5 }, best: { count: 5 }, stages }, null, {}, 'position').chip === '그대로', '위치 실행은 결과에 별도 기록 · 체크 해제한 Milky 는 실행 안 함');
       const b1 = { best: { Ulen: 0.85, Uwid: 0.4 }, cur: { Ulen: 0.6, Uwid: 0.3 }, targets: { len: 0.8, wid: 0.7 }, feasible: false, stages: { leds: true } };

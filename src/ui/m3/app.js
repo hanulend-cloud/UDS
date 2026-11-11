@@ -26,7 +26,7 @@ import { buildObsOverlay, cellColors, extractFaces } from './colormap.js';
 import { mountCommandBar } from './command-bar.js';
 import { renderFeatureTree, toggleVisibility, viewKeep, togglePcb, makeGroup, ungroup, groupMembers, rangeSelect, obsFacesAfterClick, removeFromGroups, viewCtxItems, showCtxMenu, toggleLed, ledFoldDefault, untraceItem } from './feature-tree.js';
 import { mountSplitter, mountDockSplitter, mountFacSplitter } from './splitter.js';
-import { createOptDash, createSimDash, simPct } from './opt-dash.js';
+import { createOptDash, createSimDash, simPct, traceFrac } from './opt-dash.js';
 import { geomQuery, geomLimit, geomClash } from './geom-client.js';
 import { renderPropertyPanel } from './property-panel.js';
 import { optCtl, rerunAsk } from './run-ctl.js';
@@ -1124,7 +1124,7 @@ async function adRun(opt = {}) {
   let shapeI = 0, shapeScr = 0, shapeTot = 1;
   const progress = (stage, frac, text) => {   // 전체 진행률(단계 무게) + 남은 시간
     if (A !== a || R.stopped) return;
-    const f = overallFrac(stages, stage, frac), eta = /몇 분/.test(text) ? '' : etaText(R.now() - t0, f);
+    const f = Math.max(st.running?.frac ?? 0, overallFrac(stages, stage, frac)), eta = /몇 분/.test(text) ? '' : etaText(R.now() - t0, f);
     const tx = opt.added?.length ? `보완 ${opt.step ?? ''} (${opt.added.join(' + ')}) · ${text}` : text;
     A.optDash?.progress(stage, frac, tx, f);
     st.running = { frac: f, text: eta ? `${tx} · ${eta}` : tx }; renderAuto();
@@ -1135,7 +1135,7 @@ async function adRun(opt = {}) {
   const traceTick = (f) => {
     if (!lastP || (lastP.stage !== 'current' && lastP.stage !== 'verify') || R.now() - lastTick < 300) return;
     lastTick = R.now();
-    const v = lastP.frac + (1 - lastP.frac) * f * 0.95;
+    const v = traceFrac(lastP.stage, lastP.frac, f);
     if (overallFrac(stages, lastP.stage, v) >= (st.running?.frac ?? 0)) progress(lastP.stage, v, lastP.text);
   };
   const io = {

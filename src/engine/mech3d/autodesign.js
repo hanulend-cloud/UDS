@@ -479,7 +479,7 @@ export function pickLateral(res, obs) {
   return least(okR.filter((x) => sc(x) >= sc(top) - SCORE_EPS));
 }
 // 정밀 재계산이 미달일 때 1열 개수를 하나씩 늘리는 한도 — 시간 · 나아짐이 이만큼도 없으면 두 번 만에 멈춤(폭 부족은 개수로 안 올라감)
-export const LADDER_MS = 150000, LADDER_GAIN = 0.005;
+export const LADDER_MS = 600000, LADDER_GAIN = 0.005;
 export async function runAutoDesign(cfg, io) {
   const { stages, obs } = cfg, steps = [], sCap = Math.min(cfg.milkyMax ?? MILKY_OPT_MAX, MILKY_OPT_MAX), mCap = sCap;
   let d = { ...cfg.current }, feasible = true, reason = '', hint = null, peek = null, shapeNote = null, ledAlts = null, ledMore = null, ledLimit = null, ledRows = 1, lateralLayout = null;
@@ -707,7 +707,8 @@ export async function runAutoDesign(cfg, io) {
     if (!lowered) return judge(cfg.current, v);
     return cfg.screenGrid ? { ...await io.verify(cfg.current, { noise: obs.targetNoise ?? 0.01, from: v, screen: true, maxMs: FAR_MS, rough: true }), sharp: true } : v;   // 상한 초과 현재안은 더 정밀하게 재지 않음
   };
-  if (sameDesign(d, cfg.current)) {
+  // 현재안이 미달이고 LED 를 늘려 볼 수 있으면 아래 늘리기까지 감(2026-11-11)
+  if (sameDesign(d, cfg.current) && !(ledMore && margin(currentVerified.stats, obs) < 0)) {
     currentVerified = await judgeCurrent(currentVerified);
     if (stop()) return { cancelled: true };   // 현재안이 최선 — 현재안이 목표 미달이면 이유를 비워 두지 않음
     const okCur = margin(currentVerified.stats, obs) >= 0, cs = currentVerified.stats;
@@ -734,18 +735,33 @@ export async function runAutoDesign(cfg, io) {
     let more = false;
     if (ledMore && !tried.some((t) => mgOf(t) >= 0)) {
       const cap = mgFix(currentVerified.stats) >= 0 ? Math.min(cfg.nMax, totalLeds(cfg.current) - 1) : cfg.nMax, t0 = clock();
-      let n = upTo(Math.max(...tried.map((t) => totalLeds(t.design))) + 1), top = Math.max(...tried.map(mgOf)), stall = 0;
-      for (; n <= cap && stall < 2 && clock() - t0 < (cfg.ladderMs ?? LADDER_MS); n += ledRows) {
-        if (stop()) return { cancelled: true };
+      // 간격을 넓혀 목표를 찾고(1·2·4·8…), 통과하면 그 사이를 반씩 좁혀 가장 적은 개수로(2026-11-11) — 하나씩은 시간 한도에 먼저 걸려 목표까지 못 갔음
+      const limitMs = cfg.ladderMs ?? LADDER_MS, inTime = () => clock() - t0 < limitMs;
+      const tryN = async (n) => {
         const L = ledMore(n);
-        if (L && !await clashes({ ...d, ...L })) {
-          io.progress?.('verify', 0.5, `목표 미달 — LED ${n}개로 늘려 재확인`);
-          const e = { ...d, ...L }, v = await io.verify(e);
-          tried.push({ design: e, verified: v }); more = true;
-          const mg = margin(v.stats, obs);
-          if (mg >= 0) break;
-          stall = mg - top < LADDER_GAIN ? stall + 1 : 0; top = Math.max(top, mg);
-        }
+        if (!L || await clashes({ ...d, ...L })) return null;
+        io.progress?.('verify', Math.min(0.85, 0.3 + (0.55 * (clock() - t0)) / limitMs), `목표 미달 — LED ${n}개로 늘려 재확인`);
+        const e = { ...d, ...L }, v = await io.verify(e);
+        tried.push({ design: e, verified: v }); more = true;
+        return mgFix(v.stats);   // 폭이 어떤 개수로도 못 닿으면(ledLimit) 길이로 판정
+      };
+      let lo = Math.max(...tried.map((t) => totalLeds(t.design))), n = upTo(lo + 1), top = Math.max(...tried.map(mgOf)), stall = 0, step = ledRows, hi = null;
+      while (n <= cap && stall < 2 && inTime()) {
+        if (stop()) return { cancelled: true };
+        const mg = await tryN(n);
+        if (mg == null) { n += ledRows; continue; }
+        if (mg >= 0) { hi = n; break; }
+        stall = mg - top < LADDER_GAIN ? stall + 1 : 0; top = Math.max(top, mg); lo = n;
+        if (n === cap) break;
+        step *= 2; n = Math.min(downTo(cap), n + step);
+        if (n <= lo) break;
+      }
+      while (hi != null && hi - lo > ledRows && inTime()) {
+        if (stop()) return { cancelled: true };
+        const mid = upTo(Math.floor((lo + hi) / 2));
+        if (mid <= lo || mid >= hi) break;
+        const mg = await tryN(mid);
+        if (mg != null && mg >= 0) hi = mid; else lo = mid;
       }
     }
     // 후보 추정은 노이즈로 개수를 많이 잡기 쉬움 — 적은 쪽도 정밀 재계산으로 확인(최종 목표 = LED 를 많이 쓰지 않음). 통과면 통과하는 동안, 못 닿으면 나빠지지 않는 동안 줄임
@@ -781,7 +797,8 @@ export async function runAutoDesign(cfg, io) {
         if (margin(t.verified.stats, obs) >= 0) break;
       }
     }
-    const sharp = tried.filter((t) => t.verified.sharp), pick0 = fewestPass() ?? (sharp.length ? sharp.reduce((a, b) => (mgOf(b) > mgOf(a) + SCORE_EPS ? b : a)) : more ? near() : tried.reduce((a, b) => (scV(b.verified) > scV(a.verified) ? b : a)));
+    const sharp = tried.filter((t) => t.verified.sharp), fewestFix = () => { const P = ledLimit ? tried.filter((t) => mgOf(t) >= 0) : []; return P.length ? P.reduce((a, b) => (totalLeds(b.design) < totalLeds(a.design) ? b : a)) : null; };   // 폭이 개수로 안 오르면 길이를 통과하는 가장 적은 개수(2026-11-11)
+    const pick0 = fewestPass() ?? fewestFix() ?? (sharp.length ? sharp.reduce((a, b) => (mgOf(b) > mgOf(a) + SCORE_EPS ? b : a)) : more ? near() : tried.reduce((a, b) => (scV(b.verified) > scV(a.verified) ? b : a)));
     let pick = pick0;
     if (cfg.screenGrid && ledMore) {   // 최적화 격자 통과안이 화면 격자에서 조금 미달이면 LED 를 늘려 화면 격자로 확인(최대 SHARPEN_MAX 개)
       pick.verified = await judge(pick.design, pick.verified);
