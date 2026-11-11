@@ -66,6 +66,9 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
     pendingJob = null; pendingSeed = null;
     if (!j) { state = 'idle'; reason = 'notReady'; emit(); return; }
     job = j; state = 'starting'; emit();
+    // 청크 제한 시간은 도면 크기에 맞춘다(2026-11-11) — 삼각형 20만 개마다 기본 시간만큼 더 줌(상한 5분). 큰 도면은 한 청크가 정상적으로도 30초를 넘김
+    const tris = (a) => (a ?? []).reduce((s, p) => s + (p.triangles?.length ?? 0) / 3, 0);
+    chunkLimit = Math.min(300000, o.chunkTimeoutMs * Math.max(1, (tris(j.scene?.mechParts) + tris(j.scene?.ledParts)) / 200000));
     size.fill(o.minChunk);
     // 포트마다 따로: 장면이 준비되는 대로 그 포트의 청크를 시작(느린 Worker 가 다른 Worker 를 붙잡지 않음)
     await Promise.all(ports.map(async (p, k) => {
@@ -81,12 +84,15 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
     }));
   }
   function fail(g, e) { if (g !== gen) return; stopTick(); state = 'error'; error = String(e?.message ?? e); emit(); }
+  let chunkLimit = o.chunkTimeoutMs;   // 이번 도면의 청크 제한 시간(begin 에서 정함)
   function pumpAll(g) { ports.forEach((_, k) => { if (ready[k] === g && busy[k] !== g) pump(k, g); }); }
   // 다음 청크 크기 — 잰 계산 시간(Worker 의 r.ms, 없으면 왕복 시간)으로 ≈chunkMs 분량
   // GPU 포트(응답 gpu:true)는 한 번에 많이 보낼수록 빠름(청크마다 광원 표본·되읽기 비용) — 목표 시간 ×3, 상한 ×20
   function adapt(k, N, ms, gpu = false) {
     if (o.fixedChunk || !(ms > 0)) return;
-    size[k] = Math.max(o.minChunk, Math.min(o.maxChunk * (gpu ? 20 : 1), Math.round((N / ms) * o.chunkMs * (gpu ? 3 : 1))));
+    // 한 번에 두 배를 넘겨 키우지 않는다 — 짧게 잰 속도로 갑자기 크게 잡으면 한 청크가 제한 시간을 넘김(2026-11-11)
+    const grow = gpu ? Infinity : Math.max(o.minChunk, size[k] * 2);
+    size[k] = Math.max(o.minChunk, Math.min(o.maxChunk * (gpu ? 20 : 1), grow, Math.round((N / ms) * o.chunkMs * (gpu ? 3 : 1))));
   }
   // 포트 하나에 청크를 하나씩 보낸다(응답이 오면 다음 — Worker 에 청크를 쌓지 않아 새 장면은 진행 중 청크 1개만 기다림)
   async function pump(k, g) {
@@ -99,7 +105,7 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
         else { c = nextChunk++; N = Math.min(o.fixedChunk ? o.chunkN : size[k], cap() - issued); issued += N; b = pickBin(c); binIssued[b] += N; }
         let r;
         const t0 = now();
-        try { r = await send(ports[k], { type: 'chunk', sceneKey: job.sceneKey, seed: chunkSeed(o.seedBase, c), N }, o.chunkTimeoutMs); } catch (e) { fail(g, e); return; }
+        try { r = await send(ports[k], { type: 'chunk', sceneKey: job.sceneKey, seed: chunkSeed(o.seedBase, c), N }, chunkLimit); } catch (e) { fail(g, e); return; }
         if (g !== gen) return;   // 그사이 다시 시작·취소됨 — 버림
         if (r.stale || r.sceneKey !== job.sceneKey) {
           retry.push({ c, N, b });

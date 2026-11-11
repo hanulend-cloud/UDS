@@ -194,14 +194,16 @@ const perPhoton = (s) => Array.from(s.sum, (v) => v / (s.photons / 25000));   //
   const ns = chunks(slow).map((m) => m.N), nf = chunks(fast).map((m) => m.N);
   ok(ns[0] === 1000 && nf[0] === 1000, `첫 청크 1,000 광자 (느림 ${ns[0]}, 빠름 ${nf[0]})`);
   ok(ns.slice(1).every((n) => n === 1000), `느린 포트(1.3/ms × 500ms = 650 → 하한 1,000): ${ns.slice(0, 4).join(',')}`);
-  ok(nf[1] === 20000 && nf.slice(1).every((n) => n === 20000), `빠른 포트 40/ms × 500ms = 20,000: ${nf.slice(0, 4).join(',')}`);
+  ok(nf[1] === 2000 && nf.includes(20000) && nf.every((n) => n <= 20000), `빠른 포트: 두 배씩 늘어 목표 20,000 까지(증가 상한, 2026-11-11) — ${nf.slice(0, 7).join(',')}`);
   const all = [...chunks(slow), ...chunks(fast)].map((m) => m.seed).sort((a, b) => a - b);
   ok(all.every((v, i) => v === chunkSeed(1, i)), '시드는 청크 번호 순 — 빈틈·중복 없음');
   P.cancel();
   const T2 = fakeTimers(), huge = mcPort(T2, 1000);
   const Q = createProgressive({ ports: [huge], timers: T2, opts: { bins: 10, debounceMs: 500, maxPhotons: 1e9, targetNoise: 1e-9 } });
   Q.restart(job(1)); await T2.advance(500 + 200);
-  ok(chunks(huge)[1].N === 50000, `상한 50,000 (${chunks(huge)[1].N})`);
+  ok(chunks(huge)[1].N === 2000, `청크 두 번째는 두 배(2,000): ${chunks(huge)[1].N}`);
+  await T2.advance(200000);
+  ok(Math.max(...chunks(huge).map((m) => m.N)) === 50000, `상한 50,000 (최대 ${Math.max(...chunks(huge).map((m) => m.N))})`);
   Q.cancel();
 }
 {   // 첫 지표: 작은 첫 청크라 1초 안에(속도 1,300 광자/초 Worker 2개)

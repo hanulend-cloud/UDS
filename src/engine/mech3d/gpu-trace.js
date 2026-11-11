@@ -448,7 +448,8 @@ export async function createGpuTracer() {
         if (dead) throw new Error('GPU 장치를 잃음');
         const ms = performance.now() - ts;
         base += n;
-        if (n >= slice) slice = slice0 = Math.max(1024, Math.min(1 << 20, Math.round(n * targetMs / Math.max(1, ms))));   // 다 찬 슬라이스로만 잼
+        // 다 찬 슬라이스로만 잼. 한 번에 두 배를 넘기지 않고 6만 5천 광자를 넘기지 않는다 — 크게 잡은 한 번의 실행이 Windows GPU 감시 시간(약 2초)을 넘기면 드라이버가 장치를 멈춤(DXGI_ERROR_DEVICE_HUNG, 2026-11-11)
+        if (n >= slice) slice = slice0 = Math.max(1024, Math.min(slice * 2, 1 << 16, Math.round(n * targetMs / Math.max(1, ms))));
       }
       await guarded(rb.mapAsync(GPUMapMode.READ));
       const rec = new Float32Array(rb.getMappedRange().slice(0));
