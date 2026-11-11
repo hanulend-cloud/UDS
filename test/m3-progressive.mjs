@@ -1,5 +1,5 @@
 // 점진 계산 제어기(가짜 Worker 포트 + Worker 모의 동등성): node test/m3-progressive.mjs
-import { createProgressive, chunkSeed, photometry } from '../src/ui/m3/progressive.js';
+import { createProgressive, chunkSeed, photometry, requiredFlux } from '../src/ui/m3/progressive.js';
 import { runJob } from '../src/engine/mech3d/job.js';
 import { makeChunkHost } from '../src/engine/mech3d/chunk-host.js';
 import { lightData } from '../src/engine/mech3d/line.js';
@@ -72,6 +72,12 @@ const OPT = { chunkN: 1000, fixedChunk: true, bins: 10, debounceMs: 500, tickMs:
   const L = P.snapshot().photometry;
   ok(L.lum > 0 && Math.abs(L.lum - (10 * 2 * L.eff) / (8e-6 * Math.PI)) < 1e-9 * L.lum, `광속 10 lm × 2개: 휘도 ${L.lum.toFixed(0)} cd/m² = Φ·eff/(A·π)`);
   ok(Math.abs(photometry(G, j.sum, j.ledger, { fluxLm: 10, nLeds: 2, cone: 30 }).lum - 4 * L.lum) < 1e-9 * L.lum, '원뿔 30°: sin²30° = 1/4 → 휘도 4배');
+  // 필요 광속(2026-11-11) — 휘도 식의 역산. 광속을 안 넣어도(광 효율만으로) 구함
+  for (const cone of [90, 30, 10]) { const a = photometry(G, j.sum, j.ledger, { fluxLm: 10, nLeds: 2, cone }), n = requiredFlux(a, a.lum);
+    ok(Math.abs(n.total - 20) < 1e-9 && Math.abs(n.perLed - 10) < 1e-9, `필요 광속 역산 ±${cone}°: 총 ${n.total} lm · LED당 ${n.perLed} lm`); }
+  { const a = photometry(G, j.sum, j.ledger, { fluxLm: 0, nLeds: 2, cone: 90 }), n = requiredFlux(a, 1000);
+    ok(a.lum === null && Math.abs(n.total - (1000 * 8e-6 * Math.PI) / a.eff) < 1e-9 * n.total && Math.abs(n.perLed - n.total / 2) < 1e-12, '광속 입력 없이도 목표 휘도로 필요 광속 계산'); }
+  ok(requiredFlux(L, 0) === null && requiredFlux(L, null) === null && requiredFlux(null, 1000) === null && requiredFlux({ ...L, eff: 0 }, 1000) === null && requiredFlux({ ...L, nLeds: 0 }, 1000) === null, '목표 없음·효율 0·LED 0 → 필요 광속 없음');
   P.setJudge({ targetNoise: 1e-6 });
   ok(P.snapshot().state === 'running', '노이즈 목표를 현재 노이즈보다 낮추면 계산 재개');
   P.cancel();

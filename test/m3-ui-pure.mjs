@@ -1,6 +1,6 @@
 // CAD UI 순수 도우미(DOM 없이): node test/m3-ui-pure.mjs
 import { treeNodes, partBadge, renderFeatureTree, treeHtml, toggleVisibility, esc as escT } from '../src/ui/m3/feature-tree.js';
-import { judgeText, lumCard, fmtU, buildLut, NO_DATA_RGB, DEFAULT_GUIDE } from '../src/ui/m3/results-panel.js';
+import { judgeText, lumCard, needText, fmtU, buildLut, NO_DATA_RGB, DEFAULT_GUIDE } from '../src/ui/m3/results-panel.js';
 import { checkLabels, statusWord, statusIcon, checkAria, isActivateKey, esc as escS } from '../src/ui/m3/status-bar.js';
 import { ramp, NO_DATA } from '../src/ui/m3/colormap.js';
 import { defaultLight, defaultObserve, defaultChecks } from '../src/engine/mech3d/defs.js';
@@ -77,6 +77,9 @@ ok(fmtU(0.7999) === '79.9%' && fmtU(0.92) === '92.0%' && fmtU(0.29) === '29.0%' 
   && judgeText(0.7999, 0.8).text === '목표 80% · 미달 −0.1%p', `U 표시 내림 · 미달 폭: ${fmtU(0.7999)} / ${judgeText(0.7999, 0.8).text}`);
 { const st = { profile: Float64Array.from([1, 0.5]) }, a = lumCard(st, { lum: 999.7 }, 1000), e = lumCard({ profile: Float64Array.from([NaN, NaN]) }, null, null);
   ok(a.value === '999 cd/m²' && a.pass === false && a.sub.endsWith('미달 −1') && e.value === '–', `광량 내림·빈 프로파일: ${a.value} ${a.sub} / ${e.value}`); }
+// 필요 광속 표시(2026-11-11): 모자라지 않게 올림
+ok(needText({ total: 19.41, perLed: 1.941 }) === '필요 광속 총 19.5 lm · LED당 1.95 lm', `필요 광속 올림: ${needText({ total: 19.41, perLed: 1.941 })}`);
+ok(needText({ total: 123.2, perLed: 0.5 }) === '필요 광속 총 124 lm · LED당 0.50 lm' && needText(null) === '', '필요 광속 자릿수 · 없으면 빈칸');
 { const { leakText } = await import('../src/ui/m3/status-bar.js');
   ok(checkLabels({ wall: { status: 'warn', min: 0.7996 } })[1].text === '살두께 0.79 mm' && leakText({ status: 'warn', ratio: 0.2004, worst: { part: 1, face: 5, ratio: 0.12 } }, ['케이스', '확산판']) === '새는 빛 21% · 주로 확산판 면 #5 12%'
     && leakText({ status: 'ok', ratio: 0.07, worst: { part: -1, face: -1, ratio: 0.07 } }) === '새는 빛 7% · 주로 틈으로 바로 7%' && leakText({ status: 'na' }) === '', '살두께 내림 · 새는 빛 문구(올림, 가장 많이 새는 면)'); }

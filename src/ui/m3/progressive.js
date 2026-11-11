@@ -17,7 +17,13 @@ export function photometry(G, sum, ledger, { fluxLm = 0, nLeds = 0, cone = 90 } 
   const eff = ledger.emitted > 0 ? tot / ledger.emitted : NaN;
   const s2 = Math.sin((Math.min(90, cone) * Math.PI) / 180) ** 2;
   const lum = fluxLm > 0 && nLeds > 0 && area > 0 && Number.isFinite(eff) ? (fluxLm * nLeds * eff) / (area * 1e-6 * Math.PI * s2) : null;
-  return { eff, lum, area };
+  return { eff, lum, area, nLeds, s2 };
+}
+// 필요 광속(2026-11-11) — 휘도 식의 역산. 휘도는 광속에 정비례하고 광 효율은 광속과 무관하므로 계산 1회 결과로 바로 구함. 표시 전용(판정과 무관)
+export function requiredFlux(ph, targetLum) {
+  if (!(targetLum > 0) || !(ph?.eff > 0) || !(ph.area > 0) || !(ph.nLeds > 0) || !(ph.s2 > 0)) return null;
+  const total = (targetLum * ph.area * 1e-6 * Math.PI * ph.s2) / ph.eff;
+  return { total, perLed: total / ph.nLeds };
 }
 
 // job = { sceneKey, scene:{ mechParts, mspec, ledParts, lineData, G, obs, emitters }, G, obs, nLeds, fluxLm } 또는 그것을 돌려주는 함수(준비 안 됨 = null)
