@@ -6,7 +6,7 @@ const lum = (c) => 0.3 * ((c >> 16) & 255) + 0.6 * ((c >> 8) & 255) + 0.1 * (c &
 const P = (material, finish, extra = {}) => ({ material, finish, ...extra });
 
 { const a = partLook(P({ kind: 'milky', milky: 1 })), b = partLook(P({ kind: 'milky', milky: 8 }));
-  ok(b.opacity > a.opacity && lum(b.color) > lum(a.color), 'Milky 높을수록 더 불투명하고 희게');
+  ok(b.opacity > a.opacity && lum(b.color) < lum(a.color), 'Milky 낮을수록 연하고 투명하게, 높을수록 선명·불투명(2026-11-11)');
   ok(partLook(P({ kind: 'milky', dbId: 'x' })).opacity > 0, '실측소재(값 없음)도 색이 나옴'); }
 { const a = partLook(P({ kind: 'clear', T: 0.6 })), b = partLook(P({ kind: 'clear', T: 0.95 }));
   ok(b.opacity < a.opacity && a.color !== b.color, '투과율 높을수록 더 투명');
@@ -54,7 +54,7 @@ const P = (material, finish, extra = {}) => ({ material, finish, ...extra });
 // 일반 = 불투명, 투시 = 전체 반투명(2026-11-10) — 두 보기가 확실히 달라야 함
 { const op0s = { milky: 0.75, clear: 0.31, opaque: 1, pcb: 1 };
   for (const [kind, op0] of Object.entries(op0s)) {
-    ok(partOpacity({ kind, op0 }) === 1, `일반 보기: ${kind} 불투명`);
+    ok(partOpacity({ kind, op0 }) === (kind === 'milky' ? op0 : 1), `일반 보기: ${kind} ${kind === 'milky' ? 'partLook 투명도 유지(2026-11-11)' : '불투명'}`);
     ok(partOpacity({ kind, op0, xray: true }) <= 0.16, `투시: ${kind} 반투명`);
   }
   ok(partOpacity({ kind: 'led', op0: 1, xray: true }) === 0.55, '투시: LED 는 더 잘 보이게');

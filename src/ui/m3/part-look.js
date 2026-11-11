@@ -18,7 +18,8 @@ export function partLook(p) {
   const m = p?.material ?? {}, f = p?.finish;
   let color, opacity;
   switch (m.kind) {
-    case 'milky': { const k = clamp01(m.milky / 10, 0.5); color = mix(0xe0488e, 0xff9cc6, k); opacity = 0.55 + 0.4 * k; break; }
+    // 확산(Milky, 2026-11-11): 값이 낮을수록 연하고 투명하게, 높을수록 선명한 진분홍으로 불투명하게
+    case 'milky': { const k = clamp01(m.milky / 10, 0.5); color = mix(0xffc8e4, 0xff1e7f, k); opacity = 0.5 + 0.4 * k; break; }
     case 'clear': { const T = clamp01(m.T, 0.9); color = mix(0x0f6fe8, 0x2f9bff, T); opacity = 0.62 - 0.35 * T; break; }
     case 'whiteTrans': { const T = clamp01(m.T, 0.1); color = mix(0xf2efe6, 0xe9dfbd, T); opacity = 0.98 - 0.5 * T; break; }
     default: return { color: finishColor(f), opacity: 1 };
@@ -30,7 +31,8 @@ export function partLook(p) {
 // 화면 불투명도(2026-11-10) — 일반 보기 = 소재와 상관없이 불투명, 투시 = 전체 반투명. op0 = partLook 불투명도(투시·흐림의 상한)
 // ghost = LED 고르는 동안 가리는 기구물, dim = 추적 제외 부품, picked = 선택 부품(투시에서도 잘 보이게)
 export function partOpacity({ kind, op0 = 1, xray = false, ghost = false, dim = false, picked = false }) {
-  let op = ghost ? Math.min(0.15, op0) : 1;
+  // 확산 소재는 일반 보기에서도 partLook 의 투명도를 쓴다(2026-11-11) — 나머지 소재는 여전히 불투명
+  let op = ghost ? Math.min(0.15, op0) : kind === 'milky' ? op0 : 1;
   if (xray) op = kind === 'led' ? 0.55 : Math.min(op, op0, 0.16);
   if (dim) op = Math.min(op, 0.12);
   if (picked && !ghost) op = Math.max(op, xray ? 0.45 : 0.7);
