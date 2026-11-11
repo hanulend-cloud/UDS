@@ -35,7 +35,7 @@ ok(thrown, 'step 인데 LED 메쉬가 없으면 오류');
 ms.light = { ...ms.light, kind: 'step', step: { name: 'led', offset: [0, 0, 0], rot: [0, 0, 0], ref: { part: ref, face: refFace }, leds, pcb, emitters: em } };
 // 관측면 = 커버(부품 1) 윗면: 법선 +z 이고 z 최대인 면
 const coverTop = (() => { const m = mech[1]; let best = -1, z = -Infinity; for (let t = 0; t < m.triangles.length / 3; t++) { const z3 = [0, 1, 2].map((k) => m.positions[m.triangles[t * 3 + k] * 3 + 2]); if (Math.max(...z3) - Math.min(...z3) > 1e-6) continue; if (z3[0] > z) { z = z3[0]; best = m.faceIds[t]; } } return best; })();
-ms.observe = { ...ms.observe, faces: [{ part: 1, face: coverTop }] };
+ms.observe = { ...ms.observe, cone: 90, faces: [{ part: 1, face: coverTop }] };
 const dir = obsDirection(mech, ms.observe.faces), line = recognizeLine(mech, ms.observe.faces, dir);
 ok(line.kind === 'line' && Math.abs(line.length - 116) <= 0.2 && Math.abs(line.width - 16) <= 0.2, `관측 라인: ${line.kind} ${line.length.toFixed(2)}×${line.width.toFixed(2)}`);
 const S = composeScene({ rt: getMech3d(), mspec: ms, ledParts, table, db: null, line });

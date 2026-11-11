@@ -4,7 +4,7 @@ import { ok, done } from './mech3d-util.mjs';
 
 ok(defaultLight().spec.fluxLm === 0, 'LED 광속 기본 0(상대값)');
 const o = defaultObserve();
-ok(o.targetLum === null && o.targetNoise === 0.01 && o.cone === 90, `관측 기본: 목표 휘도 없음, 노이즈 목표 1%, 원뿔 90° (${JSON.stringify(o)})`);
+ok(o.targetLum === null && o.targetNoise === 0.01 && o.cone === 30, `관측 기본: 목표 휘도 없음, 노이즈 목표 1%, 원뿔 30° (${JSON.stringify(o)})`);
 ok(JSON.stringify(defaultChecks()) === '{"minWall":0.8,"minReach":0.5,"maxLeak":0.2}', '점검 기준 기본값');
 const old = {
   light: { kind: 'none', solder: '백색', spec: { model: 'lambertian', beam: 120, sizeX: 2, sizeY: 2 }, step: null, manual: { pcb: { kind: 'depth', depth: 10 }, count: 10, pitch: 0, side: 'direct' } },
@@ -13,6 +13,7 @@ const old = {
 migrateMech3d(old);
 ok(old.light.spec.fluxLm === 0 && old.observe.targetNoise === 0.01 && old.observe.targetLum === null && old.observe.targetLen === 0.7 && old.observe.cone === 30 && old.checks.minWall === 0.8,
   'P3 저장값 보정: 새 필드만 채우고 기존 값 유지');
+{ const k = { light: old.light, observe: { faces: [], cone: 90 } }; migrateMech3d(k); ok(k.observe.cone === 90, '기본 각도가 바뀌어도 저장된 ±90° 프로젝트는 그대로'); }
 {   // 보정 방어: spec 없음, 잘못된 광속
   const a = { light: { kind: 'none', solder: '백색' }, observe: {} }; migrateMech3d(a);
   ok(a.light.spec.model === 'lambertian' && a.light.spec.fluxLm === 0, 'light.spec 없는 저장값 → 기본 spec');

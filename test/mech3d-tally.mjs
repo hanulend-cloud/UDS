@@ -1,5 +1,5 @@
 // 관측 집계: node test/mech3d-tally.mjs
-import { fmtJudge, nearTarget, judgeNoise, JUDGE_NOISE, tallyGeometry, makeAccumulator, tallyStats, windowProfile, autoCells } from '../src/engine/mech3d/tally.js';
+import { LUM_CONE, fmtJudge, nearTarget, judgeNoise, JUDGE_NOISE, tallyGeometry, makeAccumulator, tallyStats, windowProfile, autoCells } from '../src/engine/mech3d/tally.js';
 import { recognizeLine, lightData, lineFromData } from '../src/engine/mech3d/line.js';
 import { rng } from '../src/engine/l2/mc-slab.js';
 import { runMC3D } from '../src/engine/mech3d/mc3d.js';
@@ -37,6 +37,21 @@ ok(Math.abs(S.Ulen - want) < 0.01, `길이 방향 U ${S.Ulen.toFixed(4)} (해석
     a.onEscape(...p, 1, k);
   }
   ok(a.accAll.reduce((x, y) => x + y, 0) === 4, '원통 관측면: 앞·뒤·좌·우 전체 출사 집계');
+}
+{   // 휘도 집계 ±10°(2026-11-11) — 판정 각도와 따로, 제외 구역은 뺌
+  const at = (deg) => [Math.sin(deg * Math.PI / 180), 0, Math.cos(deg * Math.PI / 180)], sum = (v) => v.reduce((x, y) => x + y, 0);
+  const shoot = (a, k, deg, y = 3, face = 1) => { const d = at(deg); a.onExit(0, face, 50, y, 2, ...d, 1, k); return a.onEscape(50, y, 3, ...d, 1, k); };
+  const a = makeAccumulator(G, line, { ...obs, cone: 90 });
+  shoot(a, 1, 5); shoot(a, 2, 20);
+  ok(LUM_CONE === 10 && a.lumEsc === 1 && sum(a.acc) === 2, `판정 ±90°: 5°·20° 모두 판정에, 휘도에는 5°만 (${a.lumEsc} / ${sum(a.acc)})`);
+  const b = makeAccumulator(G, line, { ...obs, cone: 5 }), got = shoot(b, 1, 8);
+  ok(!got && b.lumEsc === 1 && sum(b.acc) === 0 && sum(b.accAll) === 0, '판정 ±5°보다 넓은 8°: 판정에는 없고 휘도에는 들어감');
+  const c = makeAccumulator(G, line, { ...obs, cone: 90 });
+  shoot(c, 1, 5, 0.1);
+  ok(c.lumEsc === 0 && sum(c.accAll) === 1 && sum(c.acc) === 0, '가장자리 제외 구역: 휘도에 안 셈(면적과 같은 규칙)');
+  const e = makeAccumulator(G, line, { ...obs, cone: 90 });
+  shoot(e, 1, 5, 3, 0);
+  ok(e.lumEsc === 0, '관측면 아닌 면: 휘도에 안 셈');
 }
 
 ok(S.Uwid > 0.7 && S.Uwid <= 1, `폭 방향 최저 U ${S.Uwid.toFixed(3)} @ s=${S.sWorst.toFixed(1)}mm (균일 + 셀 노이즈)`);

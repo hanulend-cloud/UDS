@@ -85,35 +85,41 @@ export function tallyGeometry(line, obs) {
   return { ns, nw, ds, cell, w0, valid, area, validAll, areaAll, L, closed: line.closed, winS: obs.winS ?? Math.max(5, L / 10), pix: { x0: R.x0, y0: R.y0, cell: R.cell, nx: R.nx, ny: R.ny }, pixOk, pixAll: R.mask };
 }
 
+// 휘도(cd/m²)·필요 광속을 재는 각도(2026-11-11, 사용자 확정) — 판정·2D 외관의 보는 각도(obs.cone)와 따로 항상 ±10°
+export const LUM_CONE = 10;
+
 // rw = { C: rwCoeffs 결과 } | null — 있으면 관측 셀에 집계되는 탈출마다 Milky 격자 j 별 가중 w·f_j 도 더한다(acc 와 같은 셀 배열을 격자 수만큼 이어 붙임)
 // virtual = 관측 부품이 빛 계산에서 빠짐(2026-11-05) — 면을 지나는 출사가 없으니 탈출 광선이 관측 평면을 지나는 점에서 잼(관측면 위치는 라인 인식 값 그대로)
 export function makeAccumulator(G, line, obs, rw = null, { virtual = false } = {}) {
   const nP = line.frame.d, hP = virtual ? (([a, b, c]) => a * nP[0] + b * nP[1] + c * nP[2])(line.to3D(0, 0, 0)) : 0;
-  const faces = new Set(obs.faces.map((f) => `${f.part}|${f.face}`)), d = obs.dir ?? line.frame.d, cosC = Math.cos(((obs.cone ?? 10) * Math.PI) / 180);
+  const faces = new Set(obs.faces.map((f) => `${f.part}|${f.face}`)), d = obs.dir ?? line.frame.d, cosC = Math.cos(((obs.cone ?? 10) * Math.PI) / 180), cosL = Math.cos((LUM_CONE * Math.PI) / 180);
   const R = G.pix, nCell = G.ns * G.nw, acc = new Float64Array(nCell), accAll = new Float64Array(nCell), cnt = new Uint32Array(nCell);
   const C = rw?.C ?? null, nJ = C ? C.n : 0, racc = C ? new Float64Array(nJ * nCell) : null, sf = C ? new Float64Array(nJ) : null, sf2 = C ? new Float64Array(nJ) : null;
-  let lx = 0, ly = 0, lz = 0, has = false, lp = -1, nRw = 0;
-  const inCone = (x, y, z, dx, dy, dz) => { const q = obs.localDir && line.normalAt ? line.normalAt([x, y, z]) : d; return dx * q[0] + dy * q[1] + dz * q[2] >= cosC; };
+  let lx = 0, ly = 0, lz = 0, has = false, lp = -1, nRw = 0, lumEsc = 0;
+  const cosTo = (x, y, z, dx, dy, dz) => { const q = obs.localDir && line.normalAt ? line.normalAt([x, y, z]) : d; return dx * q[0] + dy * q[1] + dz * q[2]; };
   const acc_ = {
     acc, accAll, cnt,
     get rw() { return C ? { acc: racc, sf, sf2, n: nRw } : null; },
+    get lumEsc() { return lumEsc; },   // 관측면(제외 구역 뺌)에서 ±LUM_CONE 안으로 나간 광량
     // p = 광자 번호(runMC3D 가 마지막 인자로 전달). 탈출 광자가 마지막 출사 광자와 같을 때만 집계 — 흡수·소실된 광자의 낡은 출사점을 쓰지 않는다.
     onExit(part, face, x, y, z, dx, dy, dz, w, p) { has = faces.has(`${part}|${face}`); lx = x; ly = y; lz = z; lp = p; },
     onEscape(x, y, z, dx, dy, dz, w, p, tL = 0, tK = 0) {   // tL/tK 는 runMC3D 의 track 옵션이 줌 — rw 인데 track 없으면 모든 f = 1
       if (!has || lp !== p) {
         if (!virtual) return;
         const dn = dx * nP[0] + dy * nP[1] + dz * nP[2];
-        if (!(dn > 1e-9) || !inCone(x, y, z, dx, dy, dz)) return;
+        const c = cosTo(x, y, z, dx, dy, dz), inO = c >= cosC, inL = c >= cosL;
+        if (!(dn > 1e-9) || !(inO || inL)) return;
         const t = (hP - (x * nP[0] + y * nP[1] + z * nP[2])) / dn;
-        return t >= -1e-6 ? add(x + t * dx, y + t * dy, z + t * dz, w, tL, tK) : undefined;
+        return t >= -1e-6 ? add(x + t * dx, y + t * dy, z + t * dz, w, tL, tK, inO, inL) : undefined;
       }
       has = false;
-      if (!inCone(lx, ly, lz, dx, dy, dz)) return;
-      return add(lx, ly, lz, w, tL, tK);   // 집계했으면 true(광경로 집계용)
+      const c = cosTo(lx, ly, lz, dx, dy, dz), inO = c >= cosC, inL = c >= cosL;
+      if (!inO && !inL) return;
+      return add(lx, ly, lz, w, tL, tK, inO, inL);   // 판정에 집계했으면 true(광경로 집계용)
     },
   };
   // 점 → (s,w) 칸에 더함. 점을 래스터 픽셀 중심으로 맞춘 뒤 분류 — 면적(area)을 픽셀 단위로 센 것과 같은 이산화라서 편향이 없다.
-  function add(lx, ly, lz, w, tL, tK) {
+  function add(lx, ly, lz, w, tL, tK, inO, inL) {   // inO = 판정 각도 안, inL = 휘도 각도 안
     let counted = false;
     {
       const [qx, qy] = line.to2D([lx, ly, lz]), pi = Math.floor((qx - R.x0) / R.cell), pj = Math.floor((qy - R.y0) / R.cell);
@@ -126,8 +132,10 @@ export function makeAccumulator(G, line, obs, rw = null, { virtual = false } = {
       const j = Math.floor((ww - G.w0) / G.cell);
       if (j < 0 || j >= G.nw) return;
       const k = i * G.nw + j;
-      accAll[k] += w;
+      if (inO) accAll[k] += w;
       if (!G.pixOk[pk]) return;   // 면적(area)과 같은 규칙 — 제외 구역 광자는 판정에 세지 않음(면 전체 accAll 에만)
+      if (inL) lumEsc += w;
+      if (!inO) return;
       acc[k] += w; cnt[k]++;
       counted = true;
       if (C) {

@@ -13,7 +13,7 @@ import { ok, done } from './mech3d-util.mjs';
 const G = { ns: 4, nw: 2, ds: 1, cell: 1, w0: -1, valid: new Uint8Array(8).fill(1), area: new Float64Array(8).fill(1), L: 4, closed: false, winS: 2 };
 const obs = { faces: [], cone: 90, targetLen: 0.8, targetWid: 0.8 };
 const job = (k) => ({ sceneKey: `s${k}`, scene: { tag: k }, G, obs, nLeds: 2, fluxLm: 0 });
-const LED = { emitted: 1, escaped: 0.5, absSurf: 0.5, absVol: 0, lost: 0, rrLoss: 0, rrGain: 0 };
+const LED = { lumEsc: 0.02, emitted: 1, escaped: 0.5, absSurf: 0.5, absVol: 0, lost: 0, rrLoss: 0, rrGain: 0 };
 // 응답: 첫 s 칸(셀 0,1) = 0.85, 나머지 1 — 시드마다 ±0.2% 흔들림 → 길이 균일도 ≈ 0.85, 노이즈 ≪ 2%
 const make = (msg) => ({ sceneKey: msg.sceneKey, acc: Float64Array.from({ length: 8 }, (_, k) => (k < 2 ? 0.85 : 1) * (1 + 0.002 * Math.sin(msg.seed * 7 + k))), cnt: new Uint32Array(8).fill(10), ledger: { ...LED }, leak: { '0|0': 0.1 } });
 // 수동 포트: 청크 응답을 시험이 직접 보냄
@@ -70,14 +70,15 @@ const OPT = { chunkN: 1000, fixedChunk: true, bins: 10, debounceMs: 500, tickMs:
   ok(j.photometry.lum === null && Math.abs(photometry(G, j.sum, j.ledger).eff - j.photometry.eff) < 1e-15, '광속 0 → 휘도 없음(상대값), 효율 = Σ출사/방출');
   P.setJudge({ fluxLm: 10 });
   const L = P.snapshot().photometry;
-  ok(L.lum > 0 && Math.abs(L.lum - (10 * 2 * L.eff) / (8e-6 * Math.PI)) < 1e-9 * L.lum, `광속 10 lm × 2개: 휘도 ${L.lum.toFixed(0)} cd/m² = Φ·eff/(A·π)`);
-  ok(Math.abs(photometry(G, j.sum, j.ledger, { fluxLm: 10, nLeds: 2, cone: 30 }).lum - 4 * L.lum) < 1e-9 * L.lum, '원뿔 30°: sin²30° = 1/4 → 휘도 4배');
+  const S10 = Math.sin(Math.PI / 18) ** 2;
+  ok(L.lum > 0 && Math.abs(L.effLum - 0.02) < 1e-12 && Math.abs(L.lum - (10 * 2 * L.effLum) / (8e-6 * Math.PI * S10)) < 1e-9 * L.lum, `광속 10 lm × 2개: 휘도 ${L.lum.toFixed(0)} cd/m² = Φ·eff(±10°)/(A·π·sin²10°)`);
+  ok(Number.isFinite(L.eff) && L.eff !== L.effLum, '광 효율 카드(판정 각도)와 휘도 효율(±10°)은 따로');
   // 필요 광속(2026-11-11) — 휘도 식의 역산. 광속을 안 넣어도(광 효율만으로) 구함
-  for (const cone of [90, 30, 10]) { const a = photometry(G, j.sum, j.ledger, { fluxLm: 10, nLeds: 2, cone }), n = requiredFlux(a, a.lum);
-    ok(Math.abs(n.total - 20) < 1e-9 && Math.abs(n.perLed - 10) < 1e-9, `필요 광속 역산 ±${cone}°: 총 ${n.total} lm · LED당 ${n.perLed} lm`); }
-  { const a = photometry(G, j.sum, j.ledger, { fluxLm: 0, nLeds: 2, cone: 90 }), n = requiredFlux(a, 1000);
-    ok(a.lum === null && Math.abs(n.total - (1000 * 8e-6 * Math.PI) / a.eff) < 1e-9 * n.total && Math.abs(n.perLed - n.total / 2) < 1e-12, '광속 입력 없이도 목표 휘도로 필요 광속 계산'); }
-  ok(requiredFlux(L, 0) === null && requiredFlux(L, null) === null && requiredFlux(null, 1000) === null && requiredFlux({ ...L, eff: 0 }, 1000) === null && requiredFlux({ ...L, nLeds: 0 }, 1000) === null, '목표 없음·효율 0·LED 0 → 필요 광속 없음');
+  { const a = photometry(G, j.sum, j.ledger, { fluxLm: 10, nLeds: 2 }), n = requiredFlux(a, a.lum);
+    ok(Math.abs(n.total - 20) < 1e-9 && Math.abs(n.perLed - 10) < 1e-9, `필요 광속 역산: 총 ${n.total} lm · LED당 ${n.perLed} lm`); }
+  { const a = photometry(G, j.sum, j.ledger, { fluxLm: 0, nLeds: 2 }), n = requiredFlux(a, 1000);
+    ok(a.lum === null && Math.abs(n.total - (1000 * 8e-6 * Math.PI * S10) / a.effLum) < 1e-9 * n.total && Math.abs(n.perLed - n.total / 2) < 1e-12, '광속 입력 없이도 목표 휘도로 필요 광속 계산'); }
+  ok(requiredFlux(L, 0) === null && requiredFlux(L, null) === null && requiredFlux(null, 1000) === null && requiredFlux({ ...L, effLum: 0 }, 1000) === null && requiredFlux({ ...L, nLeds: 0 }, 1000) === null, '목표 없음·효율 0·LED 0 → 필요 광속 없음');
   P.setJudge({ targetNoise: 1e-6 });
   ok(P.snapshot().state === 'running', '노이즈 목표를 현재 노이즈보다 낮추면 계산 재개');
   P.cancel();
@@ -123,6 +124,7 @@ const OPT = { chunkN: 1000, fixedChunk: true, bins: 10, debounceMs: 500, tickMs:
   ok(s.stats.Ulen === ref.Ulen && s.stats.Uwid === ref.Uwid && s.stats.relNoise === ref.relNoise && s.stats.sWorst === ref.sWorst,
     `판정 일치: 길이 균일도 ${ref.Ulen.toFixed(4)}, 폭 균일도 ${ref.Uwid?.toFixed(4)}, 노이즈 ${(ref.relNoise * 100).toFixed(2)}%`);
   ok(Object.keys(J.ledger).every((k) => Math.abs(s.ledger[k] - J.ledger[k]) <= 1e-12 * Math.max(1, J.ledger[k])), '원장 합 일치(도착 순서 차이만)');
+  ok(s.ledger.lumEsc > 0 && s.ledger.lumEsc <= s.ledger.escaped, `실제 추적 청크가 ±10° 휘도 광량을 돌려줌 (${s.ledger.lumEsc})`);
 }
 {   // 응답 없는 포트 → 제한 시간 뒤 error (장면 · 청크)
   const T = fakeTimers(), hung = { log: [], send(m) { this.log.push(m); return new Promise(() => {}); } };

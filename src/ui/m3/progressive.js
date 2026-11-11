@@ -4,25 +4,27 @@
 // 적응형에서는 청크 c ≥ bins 를 보낸 광자가 가장 적은 배치에 넣는다(크기가 제각각이어도 배치 무게가 고르게).
 // 청크 크기: 기본은 적응형 — 포트마다 minChunk 로 시작해 잰 속도로 다음 청크를 ≈chunkMs 분량으로(minChunk~maxChunk).
 //   fixedChunk: true 면 chunkN 고정(runJob 과 비트 일치 시험용).
-import { tallyStats, judgeNoise } from '../../engine/mech3d/tally.js';
+import { tallyStats, judgeNoise, LUM_CONE } from '../../engine/mech3d/tally.js';
 
 export const PROG_DEFAULTS = { chunkN: 25000, fixedChunk: false, minChunk: 1000, maxChunk: 50000, chunkMs: 500, bins: 10, targetNoise: 0.02, maxPhotons: 1e8, debounceMs: 500, tickMs: 1000, seedBase: 1, maxIgnored: 16, sceneTimeoutMs: 60000, chunkTimeoutMs: 30000 };
 export const chunkSeed = (seedBase, c) => seedBase * 7919 + c;
-const ledger0 = () => ({ emitted: 0, escaped: 0, absSurf: 0, absVol: 0, lost: 0, rrLoss: 0, rrGain: 0 });
+const ledger0 = () => ({ lumEsc: 0, emitted: 0, escaped: 0, absSurf: 0, absVol: 0, lost: 0, rrLoss: 0, rrGain: 0 });
 
-// 광 효율·휘도 — eff = Σ관측면 원뿔 안 출사 / 방출, 휘도 = fluxLm·nLeds·eff / (A[m²]·π·sin²cone) (Lambert 가정, cone 90° = spec 식)
-export function photometry(G, sum, ledger, { fluxLm = 0, nLeds = 0, cone = 90 } = {}) {
+// 광 효율·휘도 — eff = Σ관측면 원뿔(보는 각도) 안 출사 / 방출. 휘도는 보는 각도와 따로 항상 ±LUM_CONE(2026-11-11):
+// effLum = ±10° 안 출사 / 방출, 휘도 = fluxLm·nLeds·effLum / (A[m²]·π·sin²10°) — 그 각도 안 평균 휘도
+const LUM_S2 = Math.sin((LUM_CONE * Math.PI) / 180) ** 2;
+export function photometry(G, sum, ledger, { fluxLm = 0, nLeds = 0 } = {}) {
   let tot = 0, area = 0;
   for (let k = 0; k < sum.length; k++) { tot += sum[k]; area += G.area[k]; }
   const eff = ledger.emitted > 0 ? tot / ledger.emitted : NaN;
-  const s2 = Math.sin((Math.min(90, cone) * Math.PI) / 180) ** 2;
-  const lum = fluxLm > 0 && nLeds > 0 && area > 0 && Number.isFinite(eff) ? (fluxLm * nLeds * eff) / (area * 1e-6 * Math.PI * s2) : null;
-  return { eff, lum, area, nLeds, s2 };
+  const effLum = ledger.emitted > 0 ? (ledger.lumEsc ?? 0) / ledger.emitted : NaN;
+  const lum = fluxLm > 0 && nLeds > 0 && area > 0 && Number.isFinite(effLum) ? (fluxLm * nLeds * effLum) / (area * 1e-6 * Math.PI * LUM_S2) : null;
+  return { eff, effLum, lum, area, nLeds };
 }
 // 필요 광속(2026-11-11) — 휘도 식의 역산. 휘도는 광속에 정비례하고 광 효율은 광속과 무관하므로 계산 1회 결과로 바로 구함. 표시 전용(판정과 무관)
 export function requiredFlux(ph, targetLum) {
-  if (!(targetLum > 0) || !(ph?.eff > 0) || !(ph.area > 0) || !(ph.nLeds > 0) || !(ph.s2 > 0)) return null;
-  const total = (targetLum * ph.area * 1e-6 * Math.PI * ph.s2) / ph.eff;
+  if (!(targetLum > 0) || !(ph?.effLum > 0) || !(ph.area > 0) || !(ph.nLeds > 0)) return null;
+  const total = (targetLum * ph.area * 1e-6 * Math.PI * LUM_S2) / ph.effLum;
   return { total, perLed: total / ph.nLeds };
 }
 
@@ -171,7 +173,7 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
     if (job.G.validAll) { const all = filled.map((B) => norm(B, B.accAll)), m = new Float64Array(job.G.ns * job.G.nw); for (let k = 0; k < m.length; k++) if (job.G.validAll[k]) { let v = 0; for (const a of all) v += a[k]; m[k] = v / all.length / job.G.areaAll[k]; } stats.mapAll = m; }
     const sum = new Float64Array(job.G.ns * job.G.nw);
     for (const B of filled) for (let k = 0; k < sum.length; k++) sum[k] += B.acc[k];
-    return { stats, sum, photometry: photometry(job.G, sum, ledger, { fluxLm: job.fluxLm ?? 0, nLeds: job.nLeds ?? 0, cone: job.obs.cone ?? 90 }) };
+    return { stats, sum, photometry: photometry(job.G, sum, ledger, { fluxLm: job.fluxLm ?? 0, nLeds: job.nLeds ?? 0 }) };
   }
   const goal = () => (job?.obs ? judgeNoise(snap?.stats, job.obs, o.targetNoise) : o.targetNoise);   // 목표 바로 아래면 더 낮은 노이즈까지
   function onTick() {
