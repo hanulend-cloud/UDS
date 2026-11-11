@@ -821,6 +821,12 @@ done();
   const { toCsv } = await import('../src/ui/m3/results-panel.js');
   const c = toCsv('# 이름 a,b\ns\t값\t\n1.5\t"x"\t2.00');
   console.log(c === '"# 이름 a,b"\r\ns,값,\r\n1.5,"""x""",2.00' ? 'PASS CSV 변환' : (process.exitCode = 1, `FAIL CSV 변환 ${JSON.stringify(c)}`)); }
+{ // 부품 리스트(2026-11-11): 소재 칸만 3D 색 배경, 이름은 그대로 · 계산 제외는 색 없이 흐리게(k-off)
+  const { treeHtml } = await import('../src/ui/m3/feature-tree.js'), { defaultLight, defaultObserve } = await import('../src/engine/mech3d/defs.js');
+  const M = { parts: [{ name: 'A', material: { kind: 'milky', milky: 2 } }, { name: 'B', material: { kind: 'milky', milky: 2 }, untrace: true }], light: defaultLight(), observe: defaultObserve(), groups: [] };
+  const h = treeHtml(M, { node: null, line: null }), a = h.match(/data-node="part:0">.*?<\/div>/s)?.[0] ?? '', b = h.match(/data-node="part:1">.*?<\/div>/s)?.[0] ?? '';
+  ok(/class="m3-badge k-milky" style="background:#[0-9a-f]{6};color:#[0-9a-f]{6}"/.test(a) && !/m3-lbl"[^>]*style/.test(a), `소재 칸만 3D 색: ${a.slice(-120)}`);
+  ok(/class="m3-badge k-off"/.test(b) && !/m3-badge[^>]*style=/.test(b), `계산 제외 = 색 없이 흐리게: ${b.slice(-90)}`); }
 { // 3D 우클릭 메뉴(2026-11-02): 부품 숨기기·이 부품만·숨긴 것 다시 보기 · LED · 여러 개 선택
   const { viewCtxItems } = await import('../src/ui/m3/feature-tree.js');
   const names = ['A', 'B', 'C'], k = (o) => viewCtxItems({ names, ...o }).map((x) => x.k).join();

@@ -2,6 +2,7 @@
 // 노드 id: 'parts' | 'part:i' | 'light' | 'leds' | 'obs' | 'contacts'. 클릭 → h.onNode(id)
 import { pcbAllOff } from '../../engine/mech3d/materials.js';
 import { PART_KINDS } from '../../engine/mech3d/materials.js';
+import { badgeStyle } from './part-look.js';
 
 export const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 const LINE_KIND = { line: '직선', circle: '원', path: '곡선' };
@@ -34,7 +35,7 @@ export function treeNodes(M, S, lay, leds = []) {
   if (lightFree.length) { const g = { id: '_light', name: '광원으로 옮긴 부품', parts: lightFree, auto: true }; G.push(g); for (const i of lightFree) gOf.set(i, g); }
   const shown = new Set();
   // 도면에서 광원으로 옮긴 부품 = '→ 광원'(보기는 광원 그룹이 함) · 추적 제외 = '제외 ·' 접두
-  const partNode = (p, i, depth) => node(`part:${i}`, p.name, p.role === 'light' ? '→ 광원' : `${p.untrace ? '제외 · ' : ''}${p.shapeMod ? '형상 변경 · ' : ''}${partBadge(p)}`, true, p.role === 'light' ? 'led' : p.untrace ? 'off' : p.material.kind, p.role === 'light' ? undefined : hid.has(i) ? 'off' : 'on', { depth, strike: !!p.untrace });   // 빛 계산 제외 = 취소선
+  const partNode = (p, i, depth) => node(`part:${i}`, p.name, p.role === 'light' ? '→ 광원' : `${p.untrace ? '제외 · ' : ''}${p.shapeMod ? '형상 변경 · ' : ''}${partBadge(p)}`, true, p.role === 'light' ? 'led' : p.untrace ? 'off' : p.material.kind, p.role === 'light' ? undefined : hid.has(i) ? 'off' : 'on', { depth, strike: !!p.untrace, bstyle: badgeStyle(p) });   // 빛 계산 제외 = 취소선
   if (!fold('parts')) M.parts.forEach((p, i) => {
     if (p.role === 'pcb') return;   // PCB 는 아래 PCB 메뉴에
     const g = gOf.get(i);
@@ -204,7 +205,7 @@ const renamable = (n) => n.id.startsWith('part:') || (n.id.startsWith('group:') 
 export function treeHead() {   // 그룹 단추는 우클릭 메뉴로 옮김(2026-10-30)
   return '<div class="m3-h" title="클릭 = 속성 편집 · Ctrl+클릭 = 여러 개 · Shift+클릭 = 범위 · 우클릭 = 그룹 만들기·해제·이름 바꾸기">부품 리스트 <span class="mut m3-tree-tip">우클릭 = 그룹</span></div>';
 }
-export const treeHtml = (M, S, lay, leds) => `${treeHead(M, S)}${treeNodes(M, S, lay, leds).map((n) => `<div class="m3-node ${n.chg ? 'chg ' : ''}${n.child ? 'child' : ''} d${n.depth ?? 0}${n.id.startsWith('group:') ? ' grp' : ''} ${n.sel ? 'sel' : ''} ${n.eye === 'off' ? 'hid' : ''}${n.strike ? ' untr' : ''}${n.top ? ' m3-top' : ''}" role="button" tabindex="0"${n.sel ? ' aria-current="true"' : ''} data-node="${esc(n.id)}">${caret(n)}${eyeHtml(n)}<span class="m3-lbl"${renamable(n) ? ' data-lbl title="더블클릭: 이름 바꾸기"' : ''}>${esc(n.label)}</span> <span class="${n.child && !n.id.startsWith('group:') ? `m3-badge k-${esc(n.kind)}` : 'b'}">${esc(n.badge)}</span></div>`).join('')}`;
+export const treeHtml = (M, S, lay, leds) => `${treeHead(M, S)}${treeNodes(M, S, lay, leds).map((n) => `<div class="m3-node ${n.chg ? 'chg ' : ''}${n.child ? 'child' : ''} d${n.depth ?? 0}${n.id.startsWith('group:') ? ' grp' : ''} ${n.sel ? 'sel' : ''} ${n.eye === 'off' ? 'hid' : ''}${n.strike ? ' untr' : ''}${n.top ? ' m3-top' : ''}" role="button" tabindex="0"${n.sel ? ' aria-current="true"' : ''} data-node="${esc(n.id)}">${caret(n)}${eyeHtml(n)}<span class="m3-lbl"${renamable(n) ? ' data-lbl title="더블클릭: 이름 바꾸기"' : ''}>${esc(n.label)}</span> <span class="${n.child && !n.id.startsWith('group:') ? `m3-badge k-${esc(n.kind)}` : 'b'}"${n.bstyle ? ` style="background:${n.bstyle.bg};color:${n.bstyle.fg}"` : ''}>${esc(n.badge)}</span></div>`).join('')}`;
 // 작은 우클릭 메뉴(화면 고정 위치) — 바깥 클릭·Esc·창 벗어남 = 닫기
 export function showCtxMenu(doc, x, y, items, onPick, host = doc.body) {   // host = 테마 변수를 물려받을 곳
   doc.querySelector('.m3-ctx')?.remove();

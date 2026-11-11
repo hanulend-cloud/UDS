@@ -28,6 +28,13 @@ export function partLook(p) {
   return { color, opacity };
 }
 
+// 부품 리스트 소재 칸 색(2026-11-11) — 3D 와 같은 색(partLook) 배경 + 읽히는 글자색. 계산 제외·광원으로 옮긴 부품 = null(색 없음 → 흐리게)
+export function badgeStyle(p) {
+  if (p?.untrace || p?.role === 'light') return null;
+  const c = partLook(p).color, l = 0.3 * ((c >> 16) & 255) + 0.6 * ((c >> 8) & 255) + 0.1 * (c & 255);
+  return { bg: '#' + c.toString(16).padStart(6, '0'), fg: l > 150 ? '#1d2430' : '#ffffff' };
+}
+
 // 화면 불투명도(2026-11-10) — 일반 보기 = 소재와 상관없이 불투명, 투시 = 전체 반투명. op0 = partLook 불투명도(투시·흐림의 상한)
 // ghost = LED 고르는 동안 가리는 기구물, dim = 추적 제외 부품, picked = 선택 부품(투시에서도 잘 보이게)
 export function partOpacity({ kind, op0 = 1, xray = false, ghost = false, dim = false, picked = false }) {

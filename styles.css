@@ -333,6 +333,7 @@ main:has(#mech3d-wrap:not([hidden])) { grid-template-rows: minmax(0, 1fr); }
 .m3-node.untr .m3-lbl, .m3-title.m3-untr { text-decoration: line-through; }
 .m3-node:not(.child) .m3-eye { order: 9; font-size: 11px; }
 .m3-badge { margin-left: auto; font-size: 10px; padding: 1px 5px; border-radius: 4px; background: #e9ecf2; color: #3c4455; }
+.m3-badge.k-off { background: transparent !important; color: var(--m3-mut) !important; border: 1px dashed currentColor; opacity: .7; }   /* 빛 계산 제외(2026-11-11) — 색 없이 흐리게 */
 .m3-badge.k-milky { background: #e3edf6; } .m3-badge.k-clear { background: #dcefff; color: #0d4b85; } .m3-badge.k-led { background: #fff1cc; color: #7a5a12; }
 .m3-vp { position: relative; background: #e6e9ee; min-height: 0; overflow: hidden; }
 .m3-vp[data-theme="dark"] { background: #141a26; }

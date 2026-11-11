@@ -1,5 +1,5 @@
 // 3D 부품 색(2026-11-05) — 투명도·소재·면 처리에 따라 약간씩 달라 구분되게
-import { partLook, lineLook, partOpacity } from '../src/ui/m3/part-look.js';
+import { partLook, lineLook, partOpacity, badgeStyle } from '../src/ui/m3/part-look.js';
 let fails = 0;
 const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok', m); };
 const lum = (c) => 0.3 * ((c >> 16) & 255) + 0.6 * ((c >> 8) & 255) + 0.1 * (c & 255);
@@ -62,5 +62,12 @@ const P = (material, finish, extra = {}) => ({ material, finish, ...extra });
   ok(partOpacity({ kind: 'clear', op0: 0.31, dim: true }) === 0.12, '추적 제외 부품은 흐리게');
   ok(partOpacity({ kind: 'clear', op0: 0.31, xray: true, picked: true }) === 0.45, '투시: 선택 부품은 잘 보이게');
   ok(partOpacity({ kind: 'clear', op0: 0.31, ghost: true, picked: true }) === 0.15, '투시 대상 부품은 선택돼도 흐리게'); }
+// 부품 리스트 소재 칸 색(2026-11-11) = 3D 색과 같음 · 글자는 배경에 맞춰 읽히게 · 계산 제외 = 색 없음
+{ const hex = (c) => '#' + c.toString(16).padStart(6, '0');
+  const parts = [{ material: { kind: 'milky', milky: 2 } }, { material: { kind: 'clear', T: 0.89 } }, { material: { kind: 'opaque' }, finish: { kind: 'whiteDiffuse', R: 0.85 } }, { role: 'pcb', material: { kind: 'opaque' } }];
+  ok(parts.every((p) => badgeStyle(p)?.bg === hex(partLook(p).color)), `소재 칸 배경 = 3D 색 (${parts.map((p) => badgeStyle(p).bg)})`);
+  const L = (h) => { const c = parseInt(h.slice(1), 16); return lum(c); };
+  ok(parts.every((p) => { const s = badgeStyle(p); return (L(s.bg) > 150) === (s.fg === '#1d2430'); }), '밝은 배경 = 어두운 글자, 어두운 배경 = 흰 글자');
+  ok(badgeStyle({ material: { kind: 'milky', milky: 2 }, untrace: true }) === null && badgeStyle({ role: 'light', material: { kind: 'opaque' } }) === null, '계산 제외·광원으로 옮긴 부품 = 색 없음'); }
 if (fails) { console.log(`${fails} FAILED`); process.exit(1); }
 console.log('all ok');
