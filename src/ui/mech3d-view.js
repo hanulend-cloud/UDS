@@ -114,11 +114,15 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   controls.addEventListener('start', () => wake(Infinity));
   controls.addEventListener('end', () => { spinUntil = 0; wake(300); });
   canvas.addEventListener('wheel', () => wake(300), { passive: true });
-  // Shift/Ctrl + 왼쪽 드래그 = 화면 이동 — Trackball 은 mouseButtons 값을 동작이 아니라
-  // 실제 event.button 번호로 비교하므로, 수정키를 누른 왼쪽 버튼이 PAN 분기로 가게 LEFT/RIGHT 번호를 맞바꾼다.
+  // Shift/Ctrl + 왼쪽 드래그 = 화면 이동, Shift/Ctrl + 오른쪽 드래그 = 위로 확대·아래로 축소(2026-11-11)
+  // Trackball 은 mouseButtons 값을 동작이 아니라 실제 event.button 번호로 비교하므로(LEFT → MIDDLE → RIGHT 순),
+  // 수정키가 눌린 버튼이 원하는 분기로 가게 번호를 바꾼다. 오른쪽+수정키는 MIDDLE(휠 확대 분기)에 2번 버튼을 연결한다.
   canvas.addEventListener('pointerdown', (e) => {
-    const panWithLeft = e.button === THREE.MOUSE.LEFT && (e.shiftKey || e.ctrlKey);
+    const mod = e.shiftKey || e.ctrlKey;
+    const panWithLeft = e.button === THREE.MOUSE.LEFT && mod;
+    const zoomWithRight = e.button === THREE.MOUSE.RIGHT && mod;
     controls.mouseButtons.LEFT = panWithLeft ? THREE.MOUSE.RIGHT : THREE.MOUSE.LEFT;
+    controls.mouseButtons.MIDDLE = zoomWithRight ? THREE.MOUSE.RIGHT : THREE.MOUSE.MIDDLE;
     controls.mouseButtons.RIGHT = panWithLeft ? THREE.MOUSE.LEFT : THREE.MOUSE.RIGHT;
   }, { capture: true });
   // 부품 재질은 투명도별로 공유(2026-11-06) — 부품마다 따로 만들면 큰 도면(부품 4500개)의 첫 그리기에서 재질 준비만 4.7초 걸려 화면이 멈췄음
