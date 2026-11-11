@@ -513,7 +513,9 @@ function renderMarkers() {
   if (spi >= 0 && rt?.parts[spi]) out.push({ type: 'tris', positions: rt.parts[spi].positions, triangles: rt.parts[spi].triangles, color: 0xa855f7, opacity: 0.35 });
   // 원설계 LED 위치 = 회색 고리(바뀌었을 때만) — 지금 LED 와 견주어 변경이 3D 에서 보이게(2026-11-02)
   const chgM = ledChangeNow();
-  if (chgM?.changed && !A.store.session.hideLeds) for (const o of chgM.orig) out.push({ type: 'ring', pos: o.pos, color: 0x9aa7b8, size: 6 });
+  // 고리 지름 = LED 발광면 크기(mm), 선은 얇게(2026-11-11)
+  const ledDia = Math.max(M.light.spec.sizeX ?? 2, M.light.spec.sizeY ?? 2);
+  if (chgM?.changed && !A.store.session.hideLeds) for (const o of chgM.orig) out.push({ type: 'ring', pos: o.pos, color: 0x9aa7b8, dia: ledDia, thin: true });
   const hidP = new Set(A.store.session.hidden ?? []);
   for (const c of C.clash?.items ?? []) {   // 부품끼리 겹친 부위 = 빨간 면 + 가장 깊은 곳 빨간 원(둘 다 숨긴 쌍은 뺌)
     if (hidP.has(c.a) && hidP.has(c.b)) continue;

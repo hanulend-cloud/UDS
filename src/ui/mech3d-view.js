@@ -604,13 +604,15 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   // 설계 점검 표식: ring(원, 화면을 향함) · line(거리선) · tris(새는 면 강조). 깊이 무시(가려도 보임).
   // 단면 평면(clip)은 일부러 적용하지 않는다 — 잘린 쪽에 있는 문제 위치도 보여야 하므로
   const ringTex = new Map();
-  function ringTexture(color) {
-    if (!ringTex.has(color)) {
+  // lw = 선 굵기(텍스처 px, 기본 7). 얇은 고리(원설계 LED 위치 등)는 작은 값을 씀(2026-11-11)
+  function ringTexture(color, lw = 7) {
+    const key = `${color}|${lw}`;
+    if (!ringTex.has(key)) {
       const cv = document.createElement('canvas'); cv.width = cv.height = 64;
-      const x = cv.getContext('2d'); x.strokeStyle = `#${color.toString(16).padStart(6, '0')}`; x.lineWidth = 7; x.beginPath(); x.arc(32, 32, 26, 0, 2 * Math.PI); x.stroke();
-      ringTex.set(color, new THREE.CanvasTexture(cv));
+      const x = cv.getContext('2d'); x.strokeStyle = `#${color.toString(16).padStart(6, '0')}`; x.lineWidth = lw; x.beginPath(); x.arc(32, 32, 26, 0, 2 * Math.PI); x.stroke();
+      ringTex.set(key, new THREE.CanvasTexture(cv));
     }
-    return ringTex.get(color);
+    return ringTex.get(key);
   }
   function setCheckMarkers(list) {
     // Sprite 기하는 three 가 공유하므로 버리지 않는다(재질만 — 원 텍스처는 ringTex 캐시가 유지)
@@ -619,8 +621,9 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     for (const m of list ?? []) {
       let o;
       if (m.type === 'ring') {
-        o = new THREE.Sprite(new THREE.SpriteMaterial({ map: ringTexture(m.color), depthTest: false, transparent: true }));
-        const s = (model.r * 0.04 * (m.size ?? 12)) / 12; o.scale.set(s, s, s); o.position.set(...m.pos);
+        o = new THREE.Sprite(new THREE.SpriteMaterial({ map: ringTexture(m.color, m.thin ? 2.5 : 7), depthTest: false, transparent: true }));
+        // dia = 지름(mm, LED 발광면 크기) — 고리 바깥 지름이 그 크기가 되도록(텍스처 원은 가장자리까지 0.92 쯤)
+        const s = m.dia > 0 ? m.dia / 0.92 : (model.r * 0.04 * (m.size ?? 12)) / 12; o.scale.set(s, s, s); o.position.set(...m.pos);
       } else if (m.type === 'line') {
         const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(Float32Array.from([...m.a, ...m.b]), 3));
         o = new THREE.Line(g, new THREE.LineBasicMaterial({ color: m.color, depthTest: false }));
