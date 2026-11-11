@@ -522,10 +522,14 @@ function renderMarkers() {
   }
   for (const it of C.interference?.items ?? []) out.push({ type: 'ring', pos: it.pos, color: it.kind === 'potted' ? 0xffa000 : 0xff3b30, size: size('interference') });   // 포팅 LED(투과 부품 안) = 주황 경고
   const hidA = new Set(A.store.session.hiddenLeds ?? []), emA = hidA.size ? ledsNow().em : [];
-  for (const it of C.reach?.items ?? []) {
+  // 방향 화살표는 LED 마다 항상 그린다(2026-11-11) — 설계 점검을 아직 안 했거나 축 광선이 몸체에 먼저 막혀 닿는 거리가 없어도 방향은 보이게.
+  // 길이는 닿는 거리가 있으면 그 기준, 없으면 빛 원뿔 길이(4)
+  const arrowItems = C.reach?.items?.length ? C.reach.items : ledsNow().em.map((e, i) => ({ led: i, pos: e.pos, axis: e.axis, dist: null }));
+  for (const it of arrowItems) {
     const col = 0x4cd964;   // LED 방향 화살표만(도달 경고 고리는 뺌 — 직진만 봐서 도광 구조에서 잘못 경고, 2026-10-29)
     // LED 방향 = 화살표, 빛 원뿔(len = min(4, 0.4·간격))보다 1.6배 길게 — 단 닿는 면을 넘지 않게(간격의 90%). LED 를 끄면(hideLeds) 함께 숨김
-    if (it.dist != null && !A.store.session.hideLeds && !hidA.has(emA[it.led]?.led ?? it.led)) out.push({ type: 'arrow', pos: it.pos, axis: it.axis, len: Math.min(1.6 * Math.min(4, 0.4 * it.dist), 0.9 * it.dist), color: col });
+    const len = it.dist != null ? Math.min(1.6 * Math.min(4, 0.4 * it.dist), 0.9 * it.dist) : 4;
+    if (!A.store.session.hideLeds && !hidA.has(emA[it.led]?.led ?? it.led)) out.push({ type: 'arrow', pos: it.pos, axis: it.axis, len, color: col });
   }
   if (C.wall?.pos && (C.wall.status === 'warn' || f === 'wall')) out.push({ type: 'ring', pos: C.wall.pos, color: 0xffa000, size: size('wall') });
   const w = C.leak?.worst;
@@ -565,12 +569,16 @@ function selGeom(i) {
   if (g && g.rt === rt && g.i === i && g.lp === lp && g.ek === ek && g.xk === xk) return g.r;   // r = null: 계산 중
   const ask = { rt, i, lp, ek, xk, r: null };
   A.geom = ask;
-  geomQuery({ cur: rt.parts, raw: rt.raw.parts, led: lp, i, xf: M.parts[i].xform ?? null, emitters: em, limEmitters: stp ? em : [] }).then((r) => {
+  // 화면을 먼저 그린 뒤 요청한다(2026-11-11) — 장면 부품을 Worker 로 올리는 복사(큰 도면은 수백 MB)가 같은 작업 안에서 돌면 하이라이트가 그 뒤에야 보임
+  requestAnimationFrame(() => setTimeout(() => {
     if (!A || A.geom !== ask) return;
-    if (r.stale) { A.geom = null; renderAll('geom'); return; }   // 그사이 장면이 바뀜 — 다시 요청
-    ask.r = r.error ? { error: r.error } : r;
-    renderAll('geom');
-  });
+    geomQuery({ cur: rt.parts, raw: rt.raw.parts, led: lp, i, xf: M.parts[i].xform ?? null, emitters: em, limEmitters: stp ? em : [] }).then((r) => {
+      if (!A || A.geom !== ask) return;
+      if (r.stale) { A.geom = null; renderAll('geom'); return; }   // 그사이 장면이 바뀜 — 다시 요청
+      ask.r = r.error ? { error: r.error } : r;
+      renderAll('geom');
+    });
+  }, 0));
   return null;
 }
 // 선택 부품의 크기·위치 — 원본 외곽(바로 계산) + 가능 범위(Worker 결과 · 없으면 null = 입력 제한 없이). 표시·입력 제한용으로 여유 TOL 을 뺀다
@@ -2148,7 +2156,7 @@ function renderView() {
   v.setOverlay({ obsFaces: M.observe.faces, line3d: null, cones, coneSel: pv ? null : S.ledSel, obsArrow: obsArrow(M, S.line, cur) });
   // 선택 모드: LED 발광면/제외 → LED STEP 부품만 클릭되고 기구물은 투시, 관측면·PCB 면 → 기구 부품만 클릭
   const nM = cur.parts.length, led = S.pick === 'led' || S.pick === 'ledx', mech = S.pick === 'obs' || S.pick === 'pcb' || S.pick === 'mled';
-  v.setPickMode(led ? (i) => i >= nM : mech ? (i) => i < nM : null, led ? (i) => i < nM : null);
+  v.setPickMode(led ? (i) => i >= nM : mech ? (i) => i < nM : null, led ? (i) => i < nM : null, S.pick === 'obs');   // 관측면 고를 때만 면 경계 안내선
   if (v.viewName() !== S.view) v.setView(S.view);
   if (v.xray?.() !== xrayOn()) v.setXray(xrayOn());
   if (v.lines?.() !== linesOn()) v.setLines(linesOn());

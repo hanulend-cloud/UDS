@@ -7,6 +7,7 @@ import { partOpacity } from './m3/part-look.js';
 import { srgbColorsToLinear } from './m3/colormap.js';
 import { coneDims } from './m3/cone-dims.js';
 import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
+import { intersectRay } from '../engine/mech3d/bvh.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
@@ -93,7 +94,8 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     }
     if (lines) return;
     if (proxyDirty) buildProxies();
-    const extra = [pathGroup, overlay, markers, obsMesh, selOutline, ...meshes.map((m) => m.userData.edges)];
+    // 관측면(테두리·화살표·글씨·색지도)과 LED 원뿔은 조작 중에도 그대로 둔다(2026-11-11) — 면 수가 적은 덧그림이라 부담이 작음. 그 밖의 덧그림만 숨김
+    const extra = [pathGroup, markers, selOutline, guide, ...meshes.map((m) => m.userData.edges)];
     moveHidden = extra.filter((o) => o?.visible);
     for (const o of moveHidden) o.visible = false;
     for (const m of meshes) m.layers.set(1);
@@ -202,9 +204,13 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     const base = new THREE.Color(looks[i]?.color ?? KIND_COLOR[kinds[i]]), op0 = looks[i]?.opacity ?? KIND_OPACITY[kinds[i]];
     const picked = sel?.part === i || multiSel.has(i), partCol = picked ? (kinds[i] === 'led' ? LED_SEL : base.clone().lerp(SEL_TINT, 0.6)) : base;
     const T = p.triangles;
+    // 이 부품의 관측면 면 번호를 한 번만 모아 둔다 — 삼각형마다 문자열 키를 만들면 큰 도면에서 느림(2026-11-11)
+    const obsF = new Set();
+    for (const k of obsSet) { const sep = k.indexOf('|'); if (+k.slice(0, sep) === i) obsF.add(+k.slice(sep + 1)); }
+    const selFace = sel?.part === i ? sel.face : undefined;
     for (let t = 0; t < T.length / 3; t++) {
-      const isSel = sel?.part === i && sel.face === p.faceIds[t];
-      const c = isSel ? FACE_COLOR : obsSet.has(`${i}|${p.faceIds[t]}`) ? OBS_COLOR : partCol;
+      const isSel = selFace !== undefined && selFace === p.faceIds[t];
+      const c = isSel ? FACE_COLOR : obsF.has(p.faceIds[t]) ? OBS_COLOR : partCol;
       for (let j = 0; j < 3; j++) col.setXYZ(T[t * 3 + j], c.r, c.g, c.b);
     }
     col.needsUpdate = true;
@@ -228,7 +234,10 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     camera.position.copy(c).addScaledVector(d, dist);
     camera.near = Math.max(1e-3, r / 100); camera.far = dist + r * 100;
     if (camera.isOrthographicCamera) { orthoHalf = r * 1.1; camera.zoom = 1; }
-    controls.object = camera; controls.target.copy(c); camera.up.set(0, 0, 1); camera.lookAt(c);   // 자유 회전으로 기울어진 위쪽을 Z 로 되돌림
+    // 위·아래 평면 보기는 시선이 Z 축과 거의 평행해서 Z 를 위쪽으로 쓰면 화면 세로축이 없어져 상하 이동이 0 이 됨 → 이때만 Y 를 위쪽으로(2026-11-11)
+    const flat = Math.abs(d.z) > 0.99;
+    controls.object = camera; controls.target.copy(c); camera.up.set(...(flat ? [0, 1, 0] : [0, 0, 1])); camera.lookAt(c);   // 자유 회전으로 기울어진 위쪽을 Z 로 되돌림
+
     controls.minDistance = r * 0.02;
     fitDepth(); camera.updateProjectionMatrix();   // resize() 가 숨김으로 건너뛰어도 near/far·zoom 반영
     if (canvas.clientWidth === 0) pendingFit = true;   // 가로세로비를 모름 → 첫 표시 때 다시 맞춤
@@ -283,6 +292,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
       return m;
     });
     meshes.forEach((_, i) => colorize(i));
+    rebuildGuides();   // 부품이 바뀌었으므로 면 경계 안내선도 다시
     updateOutline();   // 메쉬가 새로 만들어졌으므로 선택 외곽선도 다시
     const box = new THREE.Box3(); meshes.forEach((m) => box.expandByObject(m));
     model = { c: box.getCenter(new THREE.Vector3()), r: box.getSize(new THREE.Vector3()).length() / 2 || 10 };
@@ -512,20 +522,30 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   }
   // 선택 강조: 색 강조 + 밝은 외곽선(다른 부품에 가려도 보이게 깊이 검사 끔)
   let selOutline = null;
+  // 선택 외곽선(2026-11-11): 모서리 계산(EdgesGeometry)은 큰 부품에서 수 초 걸려서 — 부품별로 캐시하고, 하이라이트를 먼저 그린 뒤에 만든다
+  const edgeCache = new WeakMap();
+  let outlineReq = 0;
   function updateOutline() {
-    if (selOutline) { scene.remove(selOutline); selOutline.geometry.dispose(); selOutline.material.dispose(); selOutline = null; }
-    const m = sel?.part != null ? meshes[sel.part] : null;
-    if (m && !m.visible) return;   // 숨긴 부품은 외곽선도 감춤
-    if (!m) return;
-    selOutline = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry, 25), new THREE.LineBasicMaterial({ color: 0xffb020, depthTest: false, transparent: true, opacity: 0.95 }));
-    selOutline.renderOrder = 3;
-    scene.add(selOutline);
+    if (selOutline) { scene.remove(selOutline); selOutline.material.dispose(); selOutline = null; }   // 모서리 기하는 캐시가 가짐 — 여기서 버리지 않음
+    const id = ++outlineReq;
+    requestAnimationFrame(() => setTimeout(() => {
+      if (id !== outlineReq || selOutline) return;
+      const m = sel?.part != null ? meshes[sel.part] : null;
+      if (!m || !m.visible) return;   // 숨긴 부품은 외곽선도 감춤
+      let eg = edgeCache.get(m.geometry);
+      if (!eg) { eg = new THREE.EdgesGeometry(m.geometry, 25); edgeCache.set(m.geometry, eg); }
+      selOutline = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color: 0xffb020, depthTest: false, transparent: true, opacity: 0.95 }));
+      selOutline.renderOrder = 3;
+      scene.add(selOutline); render();
+    }, 0));
   }
   let multiSel = new Set();   // 함께 고른 부품(Shift+클릭) — 같은 색으로 강조
   function setSelection(s, multi = []) {
-    const prevPart = sel?.part;
+    const prevPart = sel?.part, prevMulti = multiSel;
     sel = s; multiSel = new Set(multi);
-    meshes.forEach((_, i) => colorize(i));
+    // 선택이 바뀐 부품만 다시 칠한다(2026-11-11) — 예전엔 화면을 다시 그릴 때마다 전체 부품(삼각형 수백만 개)을 훑어 클릭·갱신이 느렸음
+    const touched = new Set([prevPart, sel?.part, ...prevMulti, ...multiSel]);
+    for (const i of touched) if (i != null && i >= 0 && i < meshes.length) colorize(i);
     if (prevPart !== sel?.part || !selOutline !== !sel) updateOutline();
     render();
   }
@@ -535,10 +555,11 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   function setHidden(hiddenOf) {
     hiddenFn = hiddenOf;
     meshes.forEach((m, i) => { m.visible = !hiddenFn?.(i); });
-    proxyDirty = true;
+    proxyDirty = true; rebuildGuides();
     updateOutline(); render();
   }
-  function setPickMode(pickableFn, ghostFn) { pickable = pickableFn; ghost = ghostFn; meshes.forEach((_, i) => colorize(i)); render(); }
+  // guides = 관측면 고르는 중에만 면 경계 안내선을 보임(2026-11-11)
+  function setPickMode(pickableFn, ghostFn, guides = false) { pickable = pickableFn; ghost = ghostFn; showGuides = !!guides && !!pickableFn; rebuildGuides(); meshes.forEach((_, i) => colorize(i)); render(); }
 
   // 단면: sec = { axis:'x'|'y'|'z', pos } | null
   function setSection(sec) {
@@ -617,6 +638,65 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     scene.add(markers); render();
   }
 
+  // 관측면 선택 안내선(2026-11-11): 같은 부품 안에서 면 번호가 바뀌는 경계를 가는 선으로 표시 — 관측면을 고르는 중에만
+  let showGuides = false, guide = null;
+  const guideMat = new THREE.LineBasicMaterial({ color: 0x5b6472, transparent: true, opacity: 0.45, depthTest: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  const segCache = new WeakMap();
+  function faceBoundarySegs(p) {
+    let s = segCache.get(p);
+    if (s) return s;
+    const T = p.triangles, P = p.positions, F = p.faceIds, nv = P.length / 3, nt = T.length / 3;
+    // 위치가 같은 꼭짓점은 하나로 본다(면마다 따로 잡힌 경계 꼭짓점도 이어져야 면 번호 차이를 찾을 수 있음)
+    const canon = new Int32Array(nv), rep = [], byPos = new Map();
+    for (let v = 0; v < nv; v++) {
+      const k = `${Math.round(P[3 * v] * 1e3)},${Math.round(P[3 * v + 1] * 1e3)},${Math.round(P[3 * v + 2] * 1e3)}`;
+      let c = byPos.get(k);
+      if (c === undefined) { c = rep.length; byPos.set(k, c); rep.push(v); }
+      canon[v] = c;
+    }
+    const nc = rep.length, edge = new Map(), pairs = [];
+    for (let t = 0; t < nt; t++) {
+      const f = F[t];
+      for (let e = 0; e < 3; e++) {
+        const a = canon[T[3 * t + e]], b = canon[T[3 * t + ((e + 1) % 3)]];
+        if (a === b) continue;
+        const k = a < b ? a * nc + b : b * nc + a, g = edge.get(k);
+        if (g === undefined) edge.set(k, f);   // 첫 번째 면
+        else { if (g !== -1 && g !== f) pairs.push(a, b); edge.set(k, -1); }   // 두 번째 면이 다르면 경계
+      }
+    }
+    s = new Float32Array(pairs.length * 3);
+    for (let i = 0; i < pairs.length; i++) { const v = rep[pairs[i]]; s[3 * i] = P[3 * v]; s[3 * i + 1] = P[3 * v + 1]; s[3 * i + 2] = P[3 * v + 2]; }
+    segCache.set(p, s);
+    return s;
+  }
+  function rebuildGuides() {
+    if (guide) { scene.remove(guide); guide.geometry.dispose(); guide = null; }
+    if (!showGuides) return;
+    const list = meshes.filter((m) => m.visible).map((m) => faceBoundarySegs(partsRef[m.userData.part]));
+    const n = list.reduce((a, s) => a + s.length, 0);
+    if (!n) return;
+    const all = new Float32Array(n);
+    let o = 0; for (const s of list) { all.set(s, o); o += s.length; }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(all, 3));
+    guide = new THREE.LineSegments(g, guideMat); guide.renderOrder = 2; scene.add(guide);
+  }
+  // 부품 맞힘 판정 — 부품마다 BVH 로 가장 가까운 면을 찾는다(삼각형 전수 검사보다 빠름). 단면을 쓰거나 BVH 가 없으면 three 광선 검사로 대신
+  function pickPart(filter) {
+    if (clip.length || !meshes.every((m) => partsRef[m.userData.part]?.bvh)) {
+      const hits = ray.intersectObjects(meshes.filter((m) => m.visible && (!filter || filter(m.userData.part))), false);
+      const h = clip.length ? hits.find((x) => clip[0].distanceToPoint(x.point) >= 0) : hits[0];
+      return h ? { part: h.object.userData.part, tri: h.faceIndex, t: h.distance } : null;
+    }
+    const o = ray.ray.origin, d = ray.ray.direction;
+    let best = null;
+    for (const m of meshes) {
+      if (!m.visible || (filter && !filter(m.userData.part))) continue;
+      const hit = intersectRay(partsRef[m.userData.part].bvh, o.x, o.y, o.z, d.x, d.y, d.z);
+      if (hit && (!best || hit.t < best.t)) best = { part: m.userData.part, tri: hit.tri, t: hit.t };
+    }
+    return best;
+  }
   const ray = new THREE.Raycaster();
   ray.layers.enableAll();   // 조작 중 부품 메쉬는 그리기 전용 레이어(1)로 옮겨 두므로, 클릭 판정은 모든 레이어를 본다
   let down = null;
@@ -636,10 +716,11 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     rdown = null;
     const r = canvas.getBoundingClientRect();
     ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
-    const ch = ray.intersectObjects([...coneMeshes].reverse(), false)[0], led = ch ? ch.object.userData.nums[Math.floor(ch.faceIndex / CONE_SEG)] : null;
-    const hits = ray.intersectObjects(meshes.filter((m) => m.visible), false), h = clip.length ? hits.find((x) => clip[0].distanceToPoint(x.point) >= 0) : hits[0];
-    const hp = h ? h.object.userData.part : null;
-    onContext({ obs: !ch && !!obsHitOf(), part: hp, face: hp != null ? partsRef[hp]?.faceIds?.[h.faceIndex] ?? null : null, led, x: e.clientX, y: e.clientY });
+    // 원뿔과 부품 중 더 가까운 쪽 — 왼쪽 클릭 판정과 같은 규칙(2026-11-11)
+    const pp = pickPart(null), cone = ray.intersectObjects([...coneMeshes].reverse(), false)[0], ch = cone && (!pp || cone.distance <= pp.t) ? cone : null;
+    const led = ch ? ch.object.userData.nums[Math.floor(ch.faceIndex / CONE_SEG)] : null;
+    const hp = pp ? pp.part : null;
+    onContext({ obs: !ch && !!obsHitOf(), part: hp, face: hp != null ? partsRef[hp]?.faceIds?.[pp.tri] ?? null : null, led, x: e.clientX, y: e.clientY });
   });
   canvas.addEventListener('pointerup', (e) => {
     if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 4) { down = null; return; }
@@ -648,21 +729,20 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
     // 단면 중이면 잘려 안 보이는 쪽(평면 거리 < 0)의 교차는 건너뛰고 다음 교차를 쓴다(Raycaster 는 clipping 을 모름)
     // 빛 원뿔(위에 그려짐)이 먼저 — 선택 모드가 아닐 때만. 선택 원뿔을 앞에 둔다
+    // 원뿔과 부품 중 더 가까운 쪽을 고른다(2026-11-11) — 원뿔이 부품 뒤에 있으면 앞 부품이 잡힌다(예전엔 원뿔이 무조건 먼저라 LED 가 자주 잡혔음)
+    const pp = pickPart(pickable ? (i) => pickable(i) : null);
     const ch = pickable ? null : ray.intersectObjects([...coneMeshes].reverse(), false)[0];
-    if (ch) { onPick({ part: null, face: null, led: ch.object.userData.nums[Math.floor(ch.faceIndex / CONE_SEG)] }); return; }
+    if (ch && (!pp || ch.distance <= pp.t)) { onPick({ part: null, face: null, led: ch.object.userData.nums[Math.floor(ch.faceIndex / CONE_SEG)] }); return; }
     const add = e.shiftKey || e.ctrlKey || e.metaKey;   // Shift(Ctrl)+클릭 = 여러 개 고르기(끌면 화면 이동) — 2026-11-06
     if (!pickable && !add && obsHitOf()) { onPick({ obs: true }); return; }   // 관측면 클릭 = 관측면 선택(앞 부품에 가려도)
-    const hits = ray.intersectObjects(meshes.filter((m) => m.visible && (!pickable || pickable(m.userData.part))), false);
-    const h = clip.length ? hits.find((x) => clip[0].distanceToPoint(x.point) >= 0) : hits[0];
     // 선택 모드(pickable 지정)에서는 클릭 광선도 넘긴다 — 빈 곳 클릭이어도 { part: null, face: null, ray } (가까운 LED 맞춤용)
     const rr = { o: ray.ray.origin.toArray(), d: ray.ray.direction.toArray() };
     // 클릭 깊이의 화소당 mm(LED 맞춤 반경용) — 정투영은 깊이와 무관
     const H = canvas.clientHeight || 400;
     const wpp = camera.isOrthographicCamera ? (ortho.top - ortho.bottom) / ortho.zoom / H
-      : (2 * (h ? h.distance : Math.max(camera.near, controls.target.clone().sub(ray.ray.origin).dot(ray.ray.direction))) * Math.tan((camera.fov * Math.PI) / 360)) / H;
-    if (!h) { onPick(pickable ? { part: null, face: null, ray: rr, worldPerPixel: wpp, add } : null); return; }
-    const part = h.object.userData.part;
-    onPick({ part, face: partsRef[part].faceIds[h.faceIndex], ray: rr, worldPerPixel: wpp, add });
+      : (2 * (pp ? pp.t : Math.max(camera.near, controls.target.clone().sub(ray.ray.origin).dot(ray.ray.direction))) * Math.tan((camera.fov * Math.PI) / 360)) / H;
+    if (!pp) { onPick(pickable ? { part: null, face: null, ray: rr, worldPerPixel: wpp, add } : null); return; }
+    onPick({ part: pp.part, face: partsRef[pp.part].faceIds[pp.tri], ray: rr, worldPerPixel: wpp, add });
   });
 
   // 다 쓴 보기(불러오기 미리보기)의 그래픽 메모리를 돌려줌 — 큰 도면에서 3D 문맥 두 개가 메모리를 나눠 쓰지 않게
