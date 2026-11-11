@@ -29,6 +29,8 @@ export function requiredFlux(ph, targetLum) {
 }
 
 // job = { sceneKey, scene:{ mechParts, mspec, ledParts, lineData, G, obs, emitters }, G, obs, nLeds, fluxLm } 또는 그것을 돌려주는 함수(준비 안 됨 = null)
+// 광선 한도(2026-11-11) — 보는 각도 ±30° 기준 16억(±90° 때 4억의 4배) × 화질(칸이 많을수록 더)
+export const photonCap = (quality) => 1.6e9 * ({ mid: 2, high: 4 }[quality] ?? 1);
 export function createProgressive({ ports, timers = globalThis, onUpdate = () => {}, opts = {} }) {
   const o = { ...PROG_DEFAULTS, ...opts };
   const cap = () => job?.maxPhotons ?? o.maxPhotons;   // 계산 한도 — 작업(화질)별, 없으면 기본

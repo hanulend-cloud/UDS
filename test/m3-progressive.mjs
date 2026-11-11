@@ -1,5 +1,5 @@
 // 점진 계산 제어기(가짜 Worker 포트 + Worker 모의 동등성): node test/m3-progressive.mjs
-import { createProgressive, chunkSeed, photometry, requiredFlux } from '../src/ui/m3/progressive.js';
+import { createProgressive, chunkSeed, photometry, requiredFlux, photonCap } from '../src/ui/m3/progressive.js';
 import { runJob } from '../src/engine/mech3d/job.js';
 import { makeChunkHost } from '../src/engine/mech3d/chunk-host.js';
 import { lightData } from '../src/engine/mech3d/line.js';
@@ -8,6 +8,8 @@ import { loadTable } from './l2-util.mjs';
 import { plateFixture } from './m3-fixture.mjs';
 import { fakeTimers, settle } from './m3-timers.mjs';
 import { ok, done } from './mech3d-util.mjs';
+
+ok(photonCap('low') === 1.6e9 && photonCap() === 1.6e9 && photonCap('mid') === 3.2e9 && photonCap('high') === 6.4e9, '광선 한도: ±30° 기준 16억 × 화질(저 1 · 중 2 · 고 4)');
 
 // 합성 집계 격자: s 4칸 × w 2칸, 모두 유효·면적 1mm²
 const G = { ns: 4, nw: 2, ds: 1, cell: 1, w0: -1, valid: new Uint8Array(8).fill(1), area: new Float64Array(8).fill(1), L: 4, closed: false, winS: 2 };

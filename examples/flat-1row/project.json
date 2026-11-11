@@ -357,7 +357,7 @@
    "targetLen": 0.8,
    "targetWid": 0.8,
    "targetLum": null,
-   "targetNoise": 0.01
+   "targetNoise": 0.015
   },
   "checks": {
    "minWall": 0.8,
