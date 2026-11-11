@@ -486,7 +486,9 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   ok(r.feasible && r.verified.stats.Ulen === 0.81 && calls.filter((c) => c[1]).length === 1 && calls.filter((c) => c[1])[0][1] === 0.005, `1% 0.79 → 0.5% 0.81 = 통과 (${JSON.stringify(calls)})`);
   calls.length = 0;
   const r2 = await runAutoDesign({ stages: { milky: true }, obs: obs2, current: { milky: 1 }, milkyMax: 3 }, io(0.795));
-  ok(!r2.feasible && r2.verified.stats.Ulen === 0.795 && /0\.79|0\.80/.test(r2.reason), `0.5% 에서도 미달이면 미달 — ${r2.reason}`);
+  ok(!r2.feasible && r2.verified.stats.Ulen === 0.795 && /길이 균일도 79\.5%/.test(r2.reason), `0.5% 에서도 미달이면 미달 — ${r2.reason}`);
+  // 회귀: 정밀 재계산 값으로 바꿀 때 '%' 를 남겨 '폭 균일도 85.0%% · 폭 균일도 90.0%' 처럼 두 번 나오던 문제(2026-11-11)
+  ok(!/%%/.test(r2.reason) && (r2.reason.match(/폭 균일도/g) || []).length === 1 && /길이 균일도 79\.5% · 폭 균일도 85\.0% —/.test(r2.reason) && !/90\.0%/.test(r2.reason), `균일도 값은 한 번만(%% 없음) — ${r2.reason}`);
 }
 { // 폭 위치: 2 mm 로 훑고 최고 위치의 ±1 mm 만 더(2026-11-03)
   const cs = [0, -1, -2, -3, -4, -5, -6, 1, 2];
