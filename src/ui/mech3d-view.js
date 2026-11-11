@@ -51,10 +51,59 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   // Trackball 은 update() 를 프레임마다 불러야 움직임 — 누르는 동안(+휠 뒤 잠깐)만 돌림
   // 조작 중(드래그·휠)에는 화소 밀도를 1로 낮춰 그린다 — 고DPI 화면에서 전체 장면을 매 프레임 2~3배 픽셀로 그리던 것이 버벅임의 원인(2026-11-10). 멈추면 원래 밀도로 되돌림
   let lowRes = false;
+  // 조작 중에는 선·화살표·글씨·외곽선 같은 덧그림도 잠깐 숨긴다(부품이 많은 도면에서 그리기 호출을 줄임) — 멈추면 그대로 되돌림(2026-11-11)
+  // 같은 재질 부품을 한 덩어리로 묶은 조작용 메쉬(proxies) — 조작 중에만 보이고, 부품 메쉬는 레이어 1로 옮겨 그리기만 막는다(클릭 판정은 그대로)
+  // 색·숨김·재질이 바뀌면 proxyDirty 로 표시해 다음 조작 때 다시 묶음
+  let proxies = [], proxyDirty = true;
+  const dropProxies = () => { for (const p of proxies) { scene.remove(p); p.geometry.dispose(); } proxies = []; };
+  function buildProxies() {
+    dropProxies();
+    const groups = new Map();
+    for (const m of meshes) { if (!m.visible) continue; if (!groups.has(m.material)) groups.set(m.material, []); groups.get(m.material).push(m); }
+    for (const [mat, list] of groups) {
+      let nv = 0, ni = 0;
+      for (const m of list) { nv += m.geometry.getAttribute('position').count; ni += m.geometry.index.count; }
+      const pos = new Float32Array(nv * 3), nrm = new Float32Array(nv * 3), col = new Float32Array(nv * 3), idx = new Uint32Array(ni);
+      let vo = 0, io = 0;
+      for (const m of list) {
+        const g = m.geometry, P = g.getAttribute('position').array, N = g.getAttribute('normal').array, C = g.getAttribute('color').array, I = g.index.array;
+        pos.set(P, vo * 3); nrm.set(N, vo * 3); col.set(C, vo * 3);   // 법선을 빠뜨리면 빛이 0으로 계산돼 어둡게 보인다
+        for (let j = 0; j < I.length; j++) idx[io + j] = I[j] + vo;
+        vo += P.length / 3; io += I.length;
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+      g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      g.setIndex(new THREE.BufferAttribute(idx, 1));
+      const p = new THREE.Mesh(g, mat); p.renderOrder = list[0].renderOrder; p.visible = false;
+      scene.add(p); proxies.push(p);
+    }
+    proxyDirty = false;
+  }
+  // 조작 중에는 선·화살표·글씨·외곽선 같은 덧그림을 잠깐 숨기고 묶음 메쉬를 보인다. 선 보기(면이 감춰진 상태)는 그대로 둔다. 멈추면 전부 되돌림(2026-11-11)
+  let moveHidden = [];
+  const setMoveHidden = (on) => {
+    if (!on) {
+      for (const o of moveHidden) o.visible = true;
+      moveHidden = [];
+      for (const p of proxies) p.visible = false;
+      for (const m of meshes) m.layers.set(0);
+      return;
+    }
+    if (lines) return;
+    if (proxyDirty) buildProxies();
+    const extra = [pathGroup, overlay, markers, obsMesh, selOutline, ...meshes.map((m) => m.userData.edges)];
+    moveHidden = extra.filter((o) => o?.visible);
+    for (const o of moveHidden) o.visible = false;
+    for (const m of meshes) m.layers.set(1);
+    for (const p of proxies) p.visible = true;
+  };
   const setLowRes = (on) => {
     if (lowRes === on) return false;
     lowRes = on;
     renderer.setPixelRatio(on ? Math.min(window.devicePixelRatio || 1, 1) : window.devicePixelRatio || 1);
+    setMoveHidden(on);
     return true;
   };
   let spin = 0, spinUntil = 0;
@@ -148,6 +197,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   new ResizeObserver(resize).observe(canvas);
 
   function colorize(i) {
+    proxyDirty = true;
     const m = meshes[i], p = partsRef[i], col = m.geometry.getAttribute('color');
     const base = new THREE.Color(looks[i]?.color ?? KIND_COLOR[kinds[i]]), op0 = looks[i]?.opacity ?? KIND_OPACITY[kinds[i]];
     const picked = sel?.part === i || multiSel.has(i), partCol = picked ? (kinds[i] === 'led' ? LED_SEL : base.clone().lerp(SEL_TINT, 0.6)) : base;
@@ -218,6 +268,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   // parts: 런타임 scene.parts, kindsOf: 부품별 소재 종류 배열, keepCamera: 카메라를 다시 맞추지 않음(LED 위치 보정 등)
   function setParts(parts, kindsOf, { keepCamera = false, looks: lookOf = [] } = {}) {
     for (const m of meshes) { scene.remove(m); m.geometry.dispose(); m.userData.edges?.geometry.dispose(); m.userData.edges?.material.dispose(); }   // 재질은 공유 — 버리지 않음
+    dropProxies(); proxyDirty = true;
     partsRef = parts; kinds = kindsOf.slice(); looks = lookOf;
     meshes = parts.map((p, i) => {
       const g = new THREE.BufferGeometry();
@@ -484,6 +535,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   function setHidden(hiddenOf) {
     hiddenFn = hiddenOf;
     meshes.forEach((m, i) => { m.visible = !hiddenFn?.(i); });
+    proxyDirty = true;
     updateOutline(); render();
   }
   function setPickMode(pickableFn, ghostFn) { pickable = pickableFn; ghost = ghostFn; meshes.forEach((_, i) => colorize(i)); render(); }
@@ -566,6 +618,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   }
 
   const ray = new THREE.Raycaster();
+  ray.layers.enableAll();   // 조작 중 부품 메쉬는 그리기 전용 레이어(1)로 옮겨 두므로, 클릭 판정은 모든 레이어를 본다
   let down = null;
   canvas.addEventListener('pointerdown', (e) => { if (e.button === 0 && e.isPrimary) down = [e.clientX, e.clientY]; });
   canvas.addEventListener('pointercancel', () => { down = null; });
@@ -613,6 +666,6 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   });
 
   // 다 쓴 보기(불러오기 미리보기)의 그래픽 메모리를 돌려줌 — 큰 도면에서 3D 문맥 두 개가 메모리를 나눠 쓰지 않게
-  function dispose() { for (const m of meshes) { scene.remove(m); m.geometry.dispose(); } meshes = []; for (const m of partMats.values()) m.dispose(); partMats.clear(); renderer.dispose(); renderer.forceContextLoss(); }
+  function dispose() { dropProxies(); for (const m of meshes) { scene.remove(m); m.geometry.dispose(); } meshes = []; for (const m of partMats.values()) m.dispose(); partMats.clear(); renderer.dispose(); renderer.forceContextLoss(); }
   return { dispose, setTheme, theme: () => theme, setLightPaths, setXray, xray: () => xray, setLines, lines: () => lines, setObsShow, obsShow: () => obsShow, setDim, setParts, setKinds, setHidden, setSelection, setOverlay, setPickMode, render, setView, fit, fitAll, viewName: () => viewName, setSection, setObsSurface, setObsColors, setCheckMarkers };
 }
