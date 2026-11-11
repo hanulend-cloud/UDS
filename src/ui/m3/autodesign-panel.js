@@ -403,7 +403,7 @@ export function factorResult(x, effects, locked = {}, k) {
 function factorBoxesHtml(x, effects, locked = {}, only = null) {
   const c = x.cur ?? {}, b = x.best ?? {}, ran = (k) => STAGE_KEY[k].some((q) => x.stages?.[q]);
   const val = {
-    position: [ledShort(c, x.stepLeds), x.best?.stepOrig === true ? ledShort(c, x.stepLeds) : ledShort(b, x.stepLeds), x.height && nz(x.height.dz) ? `높이 ${sg(x.height.dz)}mm` : ''],
+    position: [ledShort(c, x.stepLeds), x.best?.stepOrig === true ? ledShort(c, x.stepLeds) : ledShort(b, x.stepLeds), [x.height && nz(x.height.dz) ? `높이 ${sg(x.height.dz)}mm` : '', nz(b.wCenter) ? `폭 위치 ${sg(b.wCenter)}mm` : ''].filter(Boolean).join(' · ')],
     shape: [c.shape ? shapeText(c.shape) : '원본', x.shape ? shapeText(x.shape) : c.shape ? shapeText(c.shape) : '원본', ''],
     milky: [Number.isFinite(c.milky) ? f2(c.milky) : '–', Number.isFinite(b.milky) ? f2(b.milky) : '–', ''],
   };

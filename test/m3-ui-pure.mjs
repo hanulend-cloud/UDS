@@ -126,6 +126,7 @@ ok(judgeText(0.8004, 0.8009).cls === 'ok' && judgeText(0.7999, 0.8).cls === 'bad
       ok(/data-ad="casePart" data-v="0"/.test(resultLineHtml({ best: { Ulen: 0.8, Uwid: 0.45 }, cur: {}, targets: {}, stages: { milky: true }, hint: h(0.81, 0.52) })), '추천 줄 = 누르면 케이스 부품으로'); }
     { const { resultStageFlags, factorResult } = await import('../src/ui/m3/autodesign-panel.js');
       const stages = resultStageFlags({ leds: true, height: false, milky: false });
+      { const q = factorResult({ cur: { count: 10 }, best: { count: 10, wCenter: 3 }, stages }, null, {}, 'position'); ok(q.chip === '바뀜' && /폭 위치 \+3/.test(q.body), `LED 폭 이동도 결과에 표시: ${q.chip} ${q.body}`); }
       ok(stages.position && stages.leds && !stages.milky && factorResult({ cur: { count: 5 }, best: { count: 5 }, stages }, null, {}, 'position').chip === '그대로', '위치 실행은 결과에 별도 기록 · 체크 해제한 Milky 는 실행 안 함');
       const b1 = { best: { Ulen: 0.85, Uwid: 0.4 }, cur: { Ulen: 0.6, Uwid: 0.3 }, targets: { len: 0.8, wid: 0.7 }, feasible: false, stages: { leds: true } };
       ok(/2열/.test(resultLineHtml({ ...b1, oneRow: true })) && !/2열 배치를 시도/.test(resultLineHtml({ ...b1, oneRow: false })) && !/2열 배치를 시도/.test(resultLineHtml({ ...b1, oneRow: true, best: { ...b1.best, Uwid: 0.75 } })) && !/2열 배치를 시도/.test(resultLineHtml({ ...b1, oneRow: true, stages: { milky: true } })), '폭 미달 + 1열만 = 2열 안내'); }

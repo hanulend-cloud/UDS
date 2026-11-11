@@ -568,4 +568,19 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   const U2 = (d) => (d.rows === 2 ? st(d.count === 1 ? 0.79 : 0.7, 0.85) : st(0.95, 0.75));
   const c = await run(U2, (d) => (d.rows === 2 && d.count === 1 ? 1 : 0));
   ok(!(c.r.best.rows === 2 && c.r.best.count === 1), `처음 안이 겹치면 고르지 않음 → ${c.r.best.rows}열 × ${c.r.best.count}`); }
+{ // 목표에서 먼 미달(2026-11-11, 링 ±30°): 배치 추정이 모두 0 근처면 '적은 개수'로 LED 를 줄이지 않고 지금 개수로 Milky 를 찾음
+  const line = { length: 100, closed: true }, nw = 2, ns = 100, nCell = ns * nw;
+  const G2 = { ns, nw, ds: 1, cell: 1, w0: -1, L: 100, closed: true, winS: 10, area: new Float64Array(nCell).fill(1), valid: new Uint8Array(nCell).fill(1) };
+  const cand = candidateGrid(line, { sStep: 2 });
+  const maps = cand.map(({ s }) => { const a = new Float32Array(nCell); for (let i = 0; i < ns; i++) { const x = Math.abs(i + 0.5 - s), dd = Math.min(x, 100 - x), v = Math.exp(-(dd * dd) / 2); a[2 * i] = v; a[2 * i + 1] = 0.5 * v; } return a; });
+  const U = (d) => 0.005 * (d.count ?? 0) + 0.01 * (d.milky ?? 0), seen = [], vs = [];
+  const io = { basis: async () => ({ cand, maps, emitted: 1 }),
+    milkyRows: async (d, ms) => { seen.push(d.count); return ms.map((m) => { const u = U({ ...d, milky: m }); return { milky: m, Ulen: u, Uwid: 0.5, eff: 0.5, ess: 1, trusted: true, margin: u - 0.8 }; }); },
+    verify: async (d) => { vs.push(d.count); return { stats: st(U(d), 0.5), eff: 0.5 }; }, progress() {}, cancelled: () => false };
+  const r = await runAutoDesign({ stages: { leds: true, milky: true }, obs: { targetLen: 0.8, targetWid: 0.95 }, current: { milky: 2, count: 5, pitch: 0, rows: 1, rowGap: 0 }, milkyMax: 5, G: G2, line, nMax: 6, rowsOptions: [1], ladderMs: 60000 }, io);
+  ok(seen.length > 0 && seen.every((n) => n >= 5), `먼 미달: Milky 탐색은 지금 개수 이상에서만 (${[...new Set(seen)]})`);
+  ok(vs.every((n) => n >= 5), `먼 미달: 개수를 줄여 재확인하지 않음 (${[...new Set(vs)]})`);
+  ok(r.best.count >= 5 && r.best.milky > 2, `먼 미달: 지금보다 좋은 Milky 를 고르고 LED 는 유지 (${r.best.count}개 · Milky ${r.best.milky})`);
+}
+
 done();

@@ -535,14 +535,16 @@ export async function runAutoDesign(cfg, io) {
     const lay = (e) => two
       ? { count: e.n, pitch: e.pitch, rows: e.rows, rowGap: e.rowGap, positions: e.positions?.length ? e.positions : null, layoutKind: e.kind, layoutText: e.positions?.length ? layoutText(e) : null }
       : { count: e.n, pitch: e.pitch, rows: 1, rowGap: 0, positions: null, layoutKind: null, layoutText: null };
-    d = { ...d, ...lay(r), stepVirt: !!cfg.stepMode };
-    ledAlts = (two ? r.alts ?? [] : ledAlternatives(r, false)).map(lay);   // cfg.stepMode = LED STEP(② 는 기준 LED 복사 배치를 점수 매김)
-    if (lateralLayout) ledAlts = [lateralLayout, ...ledAlts.filter((x) => JSON.stringify(x.positions) !== JSON.stringify(lateralLayout.positions))];   // 폭 이동만으로 통과한 현재 배치를 후속 Solver가 덮지 않게 정밀 재확인 후보로 보존
+    // 먼 미달이면 LED 를 줄이지 않음(2026-11-11) — 모든 배치 추정이 0 근처면(링 ±30°) '차이가 작으면 적은 개수' 규칙이 1개를 골라, 뒤의 Milky 탐색까지 그 1개 기준으로 돌고 전부 버려졌음
+    const keepCount = !r.feasible && !!r.stats && r.stats.Ulen - obs.targetLen < -FAR_MARGIN && totalLeds(lay(r)) < totalLeds(cfg.current);
+    d = !keepCount ? { ...d, ...lay(r), stepVirt: !!cfg.stepMode } : lateralLayout ? { ...d, ...lateralLayout, stepVirt: !!cfg.stepMode } : d;
+    ledAlts = keepCount ? [] : (two ? r.alts ?? [] : ledAlternatives(r, false)).map(lay);   // cfg.stepMode = LED STEP(② 는 기준 LED 복사 배치를 점수 매김)
+    if (lateralLayout && !keepCount) ledAlts = [lateralLayout, ...ledAlts.filter((x) => JSON.stringify(x.positions) !== JSON.stringify(lateralLayout.positions))];   // 폭 이동만으로 통과한 현재 배치를 후속 Solver가 덮지 않게 정밀 재확인 후보로 보존
     ledLimit = limit ?? null;
     // 개수 늘리기·줄이기 = 고른 안과 같은 열 수·열 간격(n = 총수, 열 수의 배수만)
     ledRows = two ? r.rows ?? 1 : 1;
     if (atCount) { const g0 = r.rowGap ?? 0; ledMore = (n) => { if (n % ledRows) return null; const e = atCount(n / ledRows, ledRows, g0); return e?.positions?.length ? lay(e) : null; }; }
-    if (!r.feasible) { feasible = false; reason = r.reason; }
+    if (!r.feasible) { feasible = false; reason = keepCount ? `배치를 바꿔도 목표에서 멀어 LED ${totalLeds(cfg.current)}개를 유지 — Milky·형상으로 보완하세요` : r.reason; }
   }
   const evalV = (cands, N, ms) => io.evalVariants(d, cands, N, ms), uText = (s) => `길이 균일도 ${fmtJudge(s.Ulen, obs.targetLen)}${s.Uwid == null ? '' : ` · 폭 균일도 ${fmtJudge(s.Uwid, obs.targetWid)}`}`;
   if (stages.height && cfg.heightRange) {   // ⑤ LED 높이 — 후보 { dz }(0 = 현재), 점수 최고
@@ -750,7 +752,7 @@ export async function runAutoDesign(cfg, io) {
     if (ledMore && !tried.slice(1).some((t) => mgOf(t) >= 0)) {
       const t0 = clock(), best0 = Math.max(...tried.map(mgOf)), passed = best0 >= 0;
       let n = downTo(Math.min(...tried.map((t) => totalLeds(t.design))) - 1);
-      for (; n >= ledRows && clock() - t0 < (cfg.ladderMs ?? LADDER_MS); n -= ledRows) {
+      for (; (passed || best0 >= -FAR_MARGIN) && n >= ledRows && clock() - t0 < (cfg.ladderMs ?? LADDER_MS); n -= ledRows) {   // 목표에서 멀면 줄여도 나빠지는 줄 모름(모두 0 근처)
         if (stop()) return { cancelled: true };
         const L = ledMore(n);
         if (!L) break;
@@ -769,7 +771,7 @@ export async function runAutoDesign(cfg, io) {
     }
     steps.push({ stage: 'ledsVerify', tried });
     const fewestPass = () => { const P = tried.filter((t) => margin(t.verified.stats, obs) >= 0); return P.length ? P.reduce((a, b) => (totalLeds(b.design) < totalLeds(a.design) ? b : a)) : null; };   // 통과안 선택은 ledLimit과 무관하게 길이·폭 목표를 모두 만족해야 함
-    const near = () => { const top = Math.max(...tried.map(mgOf)); return tried.filter((t) => mgOf(t) >= top - SCORE_EPS).reduce((a, b) => (totalLeds(b.design) < totalLeds(a.design) ? b : a)); };   // 못 닿으면 가장 가까운 안 — 차이가 노이즈 수준이면 적은 개수
+    const near = () => { const top = Math.max(...tried.map(mgOf)); return tried.filter((t) => mgOf(t) >= top - (top < -FAR_MARGIN ? 1e-9 : SCORE_EPS)).reduce((a, b) => (totalLeds(b.design) < totalLeds(a.design) ? b : a)); };   // 못 닿으면 가장 가까운 안 — 차이가 노이즈 수준이면 적은 개수
     // 1% 로는 미달이어도 근처 후보는 노이즈로 낮게 나온 것일 수 있음 — 적은 개수부터 최대 3개를 0.5% 로 재서 처음 통과한 안
     if (!fewestPass()) {
       const pool = tried.filter((t) => nearTarget(t.verified.stats, obs)).sort((a, b) => totalLeds(a.design) - totalLeds(b.design)).slice(0, SHARPEN_MAX);
