@@ -1252,7 +1252,7 @@ async function adRun(opt = {}) {
       const scr = screen && !lowQ, gridK = scr && !from?.screen ? Math.max(G.ds / Gs.ds, G.cell / Gs.cell) : 1, capN = photonCap(scr ? obsS.quality : 'low'), sig = JSON.stringify(d), resume = noise ? resumable(from, sig, scr) : null;   // 같은 설계·격자를 더 정밀하게 잴 때는 앞 계산에 이어서(N = 전체 광자 수)
       const eff0 = currentVerified?.eff ?? snap0.photometry?.eff, r = await R.trace(adJob(Md, parts, scr ? ctxS : ctx), noise ? { N: Math.ceil(Math.min(capN, 1.1 * gridK * (from?.photons ?? 5e7) * ((from?.stats?.relNoise ?? 0.01) / noise) ** 2)), maxMs, minN: rough ? 2e5 : 1.5e6, chunkN: 2e5, batches: 10, keepRaw: true, resume, onProgress: traceTick } : { N: Math.ceil(Math.min(1.5e7, 5e6 * Math.max(1, 0.5 / (eff0 > 0 ? eff0 : 0.5)))), maxMs: estimate ? 8000 : d.shape?.kF ? 60000 : 45000, minN: rough || estimate ? 2e5 : 1.5e6, batches: 10, keepRaw: true, onProgress: traceTick });   // 효율이 낮으면 관측면에 닿는 빛이 적어 광자를 더. 실측: 20 초(노이즈 2%) 판정 0.73~0.76 vs 수렴값 0.78~0.79 — 노이즈가 칸 최소·최대를 벌려 낮게 나오므로 시간을 늘림(2026-11-03). 입광면 보정 메쉬는 추적이 느려 같은 시간이면 노이즈가 커져 현재안과 공정하게 비교가 안 됨 → 시간 더
       const stt = scr ? tallyStats(Gs, r.batches, obsS) : tallyStats(G, r.batches, obs);
-      A.optDash?.evals('final', [{ label: verifyLabel(d), Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty }]);
+      A.optDash?.evals('final', [{ label: verifyLabel(d), Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty, est: estimate || rough }]);   // 그래프 네모 점(짧은 추정 = 속 빈 네모)
       return { stats: stt, eff: adEff(r), photons: r.photons, screen: scr, sig, raw: scr || lowQ ? r.kept : null };
     },
     clash: stp ? (d) => designClash(d, ctx, M0, rt, line) : null,   // 최종 판정 LED 늘리기·줄이기에서 부품과 겹치는 안 건너뜀(2026-11-07)

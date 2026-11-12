@@ -1095,3 +1095,16 @@ done();
   okG(notes.length >= 3 && notes.every((n) => n.length <= 42) && /광 효율 −4\.4%p/.test(vis(h)) && /어두워짐/.test(h) && !/어두워짐/.test(vis(h)), `참고 줄 = 짧게(≤42자) · 긴 글은 마우스: ${notes.join(' | ')}`);
   okG(/한계: 폭 방향/.test(vis(h)) && !/가장자리 감쇠/.test(vis(h)) && !/골라서/.test(vis(h)) && /data-ad="toSet"/.test(h), `판정 한계 짧게 · 지난 후보 머리 설명 숨김 · [설정 바꾸기]: ${vis(h).slice(0, 120)}`);
 }
+{ // 기구 최적화 그래프 = 정밀 검증 결과(최종안·대안 — 지난 후보 표의 값)도 실시간으로(2026-11-13 사용자: 표에 있던 값이 그래프엔 없음)
+  const okV = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
+  const { pushEvals, factorChartSvg, monitorHtml, STAGES } = await import('../src/ui/m3/opt-dash.js');
+  const S = { tgLen: 0.8, tgWid: 0.8, before: { Ulen: 0.3, Uwid: 0.3 }, tiles: Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', evals: [] }])), seq: [], log: [] };
+  pushEvals(S, 'milky', [{ label: 'Milky 2', Ulen: 0.5, Uwid: 0.4 }]);
+  pushEvals(S, 'final', [{ label: 'LED 8개', Ulen: 0.72, Uwid: 0.61 }]);
+  pushEvals(S, 'final', [{ label: 'LED 10개', Ulen: 0.81, Uwid: 0.8, est: true }]);
+  okV(S.seq.length === 3 && S.seq[1].k === 'verify' && S.seq[1].vf && S.verify.label === 'LED 10개' && S.tiles.milky.evals.length === 1, '검증 결과도 그래프 순서(seq)에 들어감 · 마지막 검증값 그대로');
+  const g = factorChartSvg(S, S.before, 600, 170);
+  okV((g.match(/class="od-vf/g) ?? []).length === 4 && /검증/.test(g) && /LED 8개 · 길이 72\.0%/.test(g), '그래프에 검증 점(길이·폭) · 검증 띠 · 마우스 값');
+  const m = monitorHtml({ ...S, tiles: { ...S.tiles, milky: { status: 'run', frac: 0.5, evals: S.tiles.milky.evals } } }, 5);
+  okV(/≈50\.0%/.test(m) && !/81\.0%/.test(m), '진행 지표(지금까지 최고)는 그대로 — 검증 점은 그래프에만');
+}
