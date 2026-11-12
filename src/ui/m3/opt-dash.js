@@ -15,14 +15,18 @@ export function applyProgress(S, stage, frac, text, overall) {
   if (Number.isFinite(overall)) S.overall = Math.max(S.overall ?? 0, overall);
   if (stage === 'current') S.curFrac = Math.max(S.curFrac ?? 0, frac ?? 0); else if (stage === 'verify') S.verFrac = Math.max(S.verFrac ?? 0, frac ?? 0);
   const k = tileOf(stage);
-  if (!k) { S.note = text ?? ''; return; }   // 현재안·검증 = 머리 줄 문구
+  if (!k) {   // 현재안·검증 = 머리 줄 문구. 최종 판정으로 넘어가면 앞 항목은 끝난 것(97% 로 남아 미완료처럼 보이던 것, 2026-11-12)
+    if (stage === 'verify' && S.cur && S.tiles[S.cur]?.status === 'run') { S.tiles[S.cur].status = 'done'; S.tiles[S.cur].frac = 1; }
+    S.note = text ?? ''; return;
+  }
   const t = S.tiles[k], f = Math.max(0, Math.min(1, frac ?? 0)); S.note = '';
   if (S.cur && S.cur !== k && S.tiles[S.cur].status === 'run') S.tiles[S.cur].status = 'done';
   t.frac = t.status === 'run' ? Math.max(t.frac ?? 0, f) : f;
   S.cur = k; t.status = 'run'; t.text = text ?? '';
 }
-// 긴 계산 한 번이 올리는 진행 비율 — 현재안은 거의 끝까지, 검증은 재확인이 여러 번일 수 있어 남은 구간의 일부만(되돌지 않으니 먼저 다 쓰면 멈춰 보임)
-export const traceFrac = (stage, frac, f) => frac + (1 - frac) * f * (stage === 'verify' ? 0.1 : 0.95);
+// 긴 계산 한 번이 올리는 진행 비율 — 현재안은 거의 끝까지, 검증은 재확인이 여러 번일 수 있어 남은 구간의 60%(되돌지 않으니 자리는 남김).
+// 예전 10% 는 몇 분 걸리는 최종 판정 동안 '검증 91%' 에서 멈춰 보였음(2026-11-12 평가)
+export const traceFrac = (stage, frac, f) => frac + (1 - frac) * f * (stage === 'verify' ? 0.6 : 0.95);
 export const tileOf = (stage) => (stage === 'milky' || stage === 'shape' || stage === 'housing' ? stage : stage === 'leds' || stage === 'height' ? 'position' : null);
 const f2 = (v) => (Number.isFinite(v) ? v.toFixed(2) : '–');
 
@@ -339,7 +343,7 @@ export function simCaption(H, tgt, obs, state) {
 // 시뮬레이션 상태 글(순수) — 카드·아래 상태줄 공용
 export function simStateText(state, reason = '', stopped = false, busy = false) {
   if (busy) return '기구 최적화 중 — 일시정지(끝나면 이어서)';
-  return { running: '계산 중', paused: stopped ? '중지됨' : '일시정지', done: reason === 'adopted' ? '완료 — 기구 최적화 최종 판정 값' : reason === 'converged' ? '완료 — 목표 정확도 도달' : '계산 한도 도달 — 정확도 미달', pending: '대기', starting: '장면 준비' }[state] ?? state ?? '';
+  return { running: '계산 중', paused: stopped ? '중지됨' : '일시정지', done: reason === 'adopted' ? '계산 완료 — 기구 최적화 최종 판정 값' : reason === 'converged' ? '계산 완료 — 노이즈 충분히 작음' : '계산 한도 도달 — 노이즈가 아직 큼', pending: '대기', starting: '장면 준비' }[state] ?? state ?? '';
 }
 // 오른쪽 맨 위 카드(항상 보임) — onCtl(k) = 실행·일시정지·중지. 광경로 목록은 접는 칸
 // bar = 아래 상태줄 칸(2026-11-12 화면 다시 그리기 6단계): 있으면 실행·일시정지·중지 · 진행률 · 광선 수 · 상태 글을 그 줄에 그리고,

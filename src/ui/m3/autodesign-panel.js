@@ -21,8 +21,8 @@ export const nextFinish = (cur, pool = FINISH_GRADES) => {
   const same = pool.filter((x) => x.kind === kind && x.R > R + 1e-9).sort((a, b) => a.R - b.R);
   return same.find((x) => x.R >= R + 0.1 - 1e-9) ?? same.at(-1) ?? null;
 };
-// 전체 진행률 — 단계 무게(현재안 5 · ② 35 · ⑤ 20 · ④ 20 · ① 35 · ③ 50 · 최종 10)를 켠 단계로 정규화. 순서 = 실행 순서
-const STAGE_W = [['current', 15], ['leds', 35], ['height', 20], ['housing', 20], ['shape', 50], ['milky', 35], ['verify', 10]];   // 엔진 실행 순서와 같게
+// 전체 진행률 — 단계 무게(현재안 15 · ② 35 · ⑤ 20 · ④ 20 · ③ 50 · ① 35 · 최종 35)를 켠 단계로 정규화. 순서 = 실행 순서
+const STAGE_W = [['current', 15], ['leds', 35], ['height', 20], ['housing', 20], ['shape', 50], ['milky', 35], ['verify', 35]];   // 엔진 실행 순서와 같게 · 최종 판정(화면 화질, 몇 분) = 35(예전 10 — 98% 에서 몇 분 멈춰 보였음, 2026-11-12)
 export function overallFrac(stages, stage, frac) {
   const on = ([k]) => k === 'current' || k === 'verify' || !!stages?.[k];
   const ws = STAGE_W.filter(on), total = ws.reduce((s, [, w]) => s + w, 0), i = ws.findIndex(([k]) => k === stage);

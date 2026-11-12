@@ -151,7 +151,9 @@ ok(judgeText(0.8004, 0.8009).cls === 'ok' && judgeText(0.7999, 0.8).cls === 'bad
         ok(S.tiles.position.frac === 0.8, `같은 항목 안에서 내려가지 않음 (${S.tiles.position.frac})`);
         S.tiles.position.status = 'done'; applyProgress(S, 'leds', 0.1, '');
         ok(S.tiles.position.frac === 0.1, '끝난 항목을 다시 돌리면 새로 시작');
-        ok(traceFrac('current', 0, 1) > 0.9 && traceFrac('verify', 0.5, 1) <= 0.55, '검증 재계산 한 번은 남은 구간의 일부만 올림'); }
+        ok(traceFrac('current', 0, 1) > 0.9 && traceFrac('verify', 0.5, 1) >= 0.75 && traceFrac('verify', 0.5, 1) < 0.9, '검증 긴 계산 한 번 = 남은 구간의 60%(멈춰 보이지 않게 · 재확인 자리는 남김)');
+        { const S2 = { tiles: { position: T(), shape: T(), milky: T() } }; applyProgress(S2, 'milky', 0.97, ''); applyProgress(S2, 'verify', 0, '최종안 정밀 재계산');
+          ok(S2.tiles.milky.status === 'done' && S2.tiles.milky.frac === 1, `최종 판정으로 넘어가면 앞 항목 = 완료(97% 로 남지 않음): ${S2.tiles.milky.status} ${S2.tiles.milky.frac}`); } }
       { const q = factorResult({ cur: { count: 10 }, best: { count: 10, wCenter: 3 }, stages }, null, {}, 'position'); ok(q.chip === '바뀜' && /폭 위치 \+3/.test(q.body), `LED 폭 이동도 결과에 표시: ${q.chip} ${q.body}`); }
       ok(stages.position && stages.leds && !stages.milky && factorResult({ cur: { count: 5 }, best: { count: 5 }, stages }, null, {}, 'position').chip === '그대로', '위치 실행은 결과에 별도 기록 · 체크 해제한 Milky 는 실행 안 함');
       const b1 = { best: { Ulen: 0.85, Uwid: 0.4 }, cur: { Ulen: 0.6, Uwid: 0.3 }, targets: { len: 0.8, wid: 0.7 }, feasible: false, stages: { leds: true } };
@@ -174,10 +176,10 @@ ok(nextFinish({ kind: 'whiteDiffuse', R: 0.85 })?.R === 0.95 && nextFinish({ kin
   && nextFinish({ kind: 'metal', R: 0.88 })?.R === 0.95 && nextFinish({ kind: 'whiteDiffuse', R: 0.97 }) === null && nextFinish(null)?.R === 0.85 && nextFinish({ kind: 'gloss' })?.R === 0.85, '④ 보완 안내: 같은 종류 +0.10 이상 최저(백색 85→95, 90→97) · 최고면 없음');
 ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCap(0) === null && clampCap(-2) === null && clampCap(NaN) === null, 'Milky 상한: 0.5~9.9 로 자름 · 0/음수/NaN = 기본');
 { const all = { milky: true, leds: true, shape: true }, m = { milky: true };
-  ok(overallFrac(m, 'current', 0) === 0 && Math.abs(overallFrac(m, 'milky', 0) - 15 / 60) < 1e-12 && Math.abs(overallFrac(m, 'milky', 0.5) - 32.5 / 60) < 1e-12 && overallFrac(m, 'verify', 1) === 1, '전체 진행률: 켠 단계만 정규화(① 만 = 15+35+10)');
-  ok(Math.abs(overallFrac(all, 'shape', 0) - 50 / 145) < 1e-12 && overallFrac(all, 'shape', 2) <= 1 && overallFrac(m, 'shape', 0.5) === 0, '전체 진행률: 단계 순서(② → ③ → ①)·무게 · 꺼진 단계 = 0');
+  ok(overallFrac(m, 'current', 0) === 0 && Math.abs(overallFrac(m, 'milky', 0) - 15 / 85) < 1e-12 && Math.abs(overallFrac(m, 'milky', 0.5) - 32.5 / 85) < 1e-12 && overallFrac(m, 'verify', 1) === 1, '전체 진행률: 켠 단계만 정규화(① 만 = 15+35+35 — 최종 판정은 몇 분 걸려 무게 35, 2026-11-12)');
+  ok(Math.abs(overallFrac(all, 'shape', 0) - 50 / 170) < 1e-12 && overallFrac(all, 'shape', 2) <= 1 && overallFrac(m, 'shape', 0.5) === 0, '전체 진행률: 단계 순서(② → ③ → ①)·무게 · 꺼진 단계 = 0');
   const hh = { leds: true, height: true, housing: true, milky: true };
-  ok(Math.abs(overallFrac(hh, 'height', 0) - 50 / 135) < 1e-12 && Math.abs(overallFrac(hh, 'housing', 0.5) - 80 / 135) < 1e-12 && Math.abs(overallFrac(hh, 'milky', 0) - 90 / 135) < 1e-12, '전체 진행률: ⑤ 높이·④ 케이스 면(각 20)은 ② 와 ① 사이');
+  ok(Math.abs(overallFrac(hh, 'height', 0) - 50 / 160) < 1e-12 && Math.abs(overallFrac(hh, 'housing', 0.5) - 80 / 160) < 1e-12 && Math.abs(overallFrac(hh, 'milky', 0) - 90 / 160) < 1e-12, '전체 진행률: ⑤ 높이·④ 케이스 면(각 20)은 ② 와 ① 사이');
   ok(etaText(5000, 0.05) === '' && etaText(10000, 0.5) === '남은 약 10초' && etaText(1000, 1) === '', `남은 시간: 10% 이후만 (${etaText(10000, 0.5)})`); }
 { const s = profileSvg([1, 2, NaN, 4], [3, 3, 3, 3]);
   ok((s.match(/<polyline/g) ?? []).length === 2 && s.includes('<svg') && profileSvg(null, [1]) === '' && profileSvg([], [1]) === '', '길이 프로파일 SVG: 선 2개 · 없으면 생략');
@@ -960,7 +962,11 @@ done();
   const okS = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
   const { simStateText } = await import('../src/ui/m3/opt-dash.js');
   okS(simStateText('running') === '계산 중' && simStateText('paused', '', true) === '중지됨' && simStateText('paused') === '일시정지', '계산 중 · 중지됨 · 일시정지');
-  okS(simStateText('done', 'converged') === '완료 — 목표 정확도 도달' && simStateText('done', 'adopted') === '완료 — 기구 최적화 최종 판정 값' && simStateText('done', 'limit') === '계산 한도 도달 — 정확도 미달', '완료 이유별 글');
+  okS(simStateText('done', 'converged') === '계산 완료 — 노이즈 충분히 작음' && simStateText('done', 'adopted') === '계산 완료 — 기구 최적화 최종 판정 값' && simStateText('done', 'limit') === '계산 한도 도달 — 노이즈가 아직 큼', '완료 이유별 글');
+  // '목표'는 균일도 판정에만(2026-11-12 평가: "완료 — 목표 정확도 도달" 옆 "✕ 목표 미달" 이 헷갈림)
+  okS(['converged', 'adopted', 'limit'].every((r) => !/목표|미달/.test(simStateText('done', r))), '계산 상태 글에 목표·미달 없음');
+  const { simCtl, optCtl } = await import('../src/ui/m3/run-ctl.js');
+  okS(simCtl({ state: 'done' }).runLabel === '▶ 시뮬레이션 실행' && optCtl({}).runLabel === '▶ 최적화 시작' && optCtl({ running: true, paused: true }).runLabel === '▶ 최적화 이어서', '실행 단추 이름 = 무엇을 실행하는지');
   okS(simStateText('running', '', false, true) === '기구 최적화 중 — 일시정지(끝나면 이어서)' && simStateText('') === '', '기구 최적화 중 · 상태 없음');
 }
 { // 판정 배지 옆 '다음 할 일' 단추(2026-11-12) — 미달·근처 = 기구 최적화 창, 통과 = 크게 보기, 계산 중·결과 없음 = 없음

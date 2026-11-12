@@ -4,16 +4,18 @@ import { fmtJudge } from '../../engine/mech3d/tally.js';
 const LABEL = [['run', '▶ 실행'], ['pause', '⏸'], ['stop', '■ 중지']];   // 일시정지 = 표시만(글씨 빼고 마우스 설명·읽기 이름으로, 2026-11-08)
 const NAME = { run: '실행', pause: '일시정지', stop: '중지' };
 
+// 실행 단추 이름 = 무엇을 실행하는지(2026-11-12 평가: 상태줄·최적화 창의 '▶ 실행' 두 개가 같아 헷갈림)
+const SIM_RUN = '▶ 시뮬레이션 실행';
 // snap = 점진 계산 스냅숏, busy = 기구 최적화 중
 export function simCtl(snap, busy = false) {
-  if (busy) { const t = '기구 최적화가 끝나면 쓸 수 있음'; return { run: false, pause: false, stop: false, runTitle: t, pauseTitle: t, stopTitle: t }; }
+  if (busy) { const t = '기구 최적화가 끝나면 쓸 수 있음'; return { run: false, pause: false, stop: false, runLabel: SIM_RUN, runTitle: t, pauseTitle: t, stopTitle: t }; }
   const s = snap?.state, going = s === 'running' || s === 'pending' || s === 'starting', paused = s === 'paused' && !snap?.stopped;
-  return { run: !going, pause: going, stop: going || paused, runTitle: paused ? '이어서 계산' : going ? '' : '처음부터 계산', pauseTitle: going ? '멈췄다가 이어서 계산할 수 있음' : '', stopTitle: going || paused ? '계산을 끝냄 — 지금까지의 결과는 남음' : '' };
+  return { run: !going, pause: going, stop: going || paused, runLabel: SIM_RUN, runTitle: paused ? '이어서 계산' : going ? '' : '처음부터 계산', pauseTitle: going ? '멈췄다가 이어서 계산할 수 있음' : '', stopTitle: going || paused ? '계산을 끝냄 — 지금까지의 결과는 남음' : '' };
 }
 // canRun = 켠 항목이 있고 관측 라인이 있음, hasResult = 적용 전 결과가 있음(실행하면 버림)
 export function optCtl({ running = false, paused = false, canRun = true, hasResult = false, why = '' } = {}) {
-  if (running) return { run: paused, pause: !paused, stop: true, runTitle: paused ? '이어서 실행' : '', pauseTitle: paused ? '' : '멈췄다가 이어서 실행할 수 있음', stopTitle: '최적화를 끝냄 — 찾던 안은 반영되지 않음' };
-  return { run: canRun, pause: false, stop: false, runTitle: canRun ? (hasResult ? '지금 결과를 버리고 처음부터 실행 — 먼저 확인함' : '체크한 항목으로 실행') : why, pauseTitle: '', stopTitle: '' };
+  if (running) return { run: paused, pause: !paused, stop: true, runLabel: paused ? '▶ 최적화 이어서' : '▶ 최적화 시작', runTitle: paused ? '이어서 실행' : '', pauseTitle: paused ? '' : '멈췄다가 이어서 실행할 수 있음', stopTitle: '최적화를 끝냄 — 찾던 안은 반영되지 않음' };
+  return { run: canRun, pause: false, stop: false, runLabel: '▶ 최적화 시작', runTitle: canRun ? (hasResult ? '지금 결과를 버리고 처음부터 실행 — 먼저 확인함' : '체크한 항목으로 실행') : why, pauseTitle: '', stopTitle: '' };
 }
 // 창 제목의 단계 표시 — 상단 메뉴와 같은 번호, 끝나면 초록 ✓
 export function setStepMark(i, n, done) {
@@ -34,5 +36,6 @@ export function setCtl(box, c, fn) {
   for (const [k] of LABEL) {
     const b = box.querySelector(`[data-ctl="${k}"]`), title = c[`${k}Title`] || (k === 'pause' ? '일시정지' : '');
     b.disabled = !c[k]; if (b.title !== title) b.title = title; b.onclick = () => fn(k);
+    if (k === 'run' && c.runLabel && b.textContent !== c.runLabel) b.textContent = c.runLabel;
   }
 }

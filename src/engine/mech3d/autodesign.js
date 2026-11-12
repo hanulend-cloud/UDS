@@ -687,17 +687,17 @@ export async function runAutoDesign(cfg, io) {
     }
   }
   if (stop()) return { cancelled: true };
-  io.progress?.('verify', 0, '최종안 정밀 재계산');
+  io.progress?.('verify', 0, '최종안 정밀 재계산');   // 진행 표시만: 긴 최종 계산 시작 = 0.5(예전 0.9 — 남은 몇 분 동안 멈춰 보였음). 판정·계산은 그대로
   const sharpen = async (e, v) => {   // 목표 바로 아래면 노이즈 0.5% 로 다시 재서 판정 — 값이 노이즈로 낮게 나와 통과안을 미달로 판정하는 것을 막음
     if (v.sharp || !nearTarget(v.stats, obs) || !(v.stats.relNoise > JUDGE_NOISE * 1.1) || stop()) return v;
-    io.progress?.('verify', 0.9, `목표 근처 — 노이즈 ${JUDGE_NOISE * 100}% 까지 다시 계산(몇 분 걸림)`);
+    io.progress?.('verify', 0.5, `목표 근처 — 노이즈 ${JUDGE_NOISE * 100}% 까지 다시 계산(몇 분 걸림)`);
     return { ...await io.verify(e, { noise: JUDGE_NOISE, from: v }), sharp: true };
   };
   // 최종 판정 = 화면 화질 격자(2026-11-03) — 최적화 격자(저화질)에서 통과해도 화면에서 미달로 나오지 않게, 화면과 같은 규칙(목표 노이즈, 목표 근처면 0.5%)으로 잼
   const judge = async (e, v) => {
     if (!cfg.screenGrid) return sharpen(e, v);
     if (v.sharp || stop()) return v;
-    io.progress?.('verify', 0.9, '최종 화질로 판정(몇 분 걸림)');
+    io.progress?.('verify', 0.5, '최종 화질로 판정(몇 분 걸림)');
     // 목표에서 먼 안(LED 많은 현재안은 효율이 낮아 1% 까지 10 분도 모자람)은 판정이 안 바뀌니 시간 한도까지만
     let r = await io.verify(e, { noise: obs.targetNoise ?? 0.01, from: v, screen: true, ...(margin(v.stats, obs) < -FAR_MARGIN ? { maxMs: FAR_MS } : {}) });
     if (nearTarget(r.stats, obs) && r.stats.relNoise > JUDGE_NOISE * 1.1 && !stop()) r = await io.verify(e, { noise: JUDGE_NOISE, from: r, screen: true });
@@ -808,7 +808,7 @@ export async function runAutoDesign(cfg, io) {
         if (stop()) return { cancelled: true };
         const known = tried.find((t) => totalLeds(t.design) === n && (t.design.rows ?? 1) === ledRows), L = known ? null : ledMore(n);
         if (!known && (!L || await clashes({ ...d, ...L }))) continue;
-        io.progress?.('verify', 0.9, `최종 화질 미달 — LED ${n}개로 늘려 재확인(몇 분 걸림)`);
+        io.progress?.('verify', 0.5, `최종 화질 미달 — LED ${n}개로 늘려 재확인(몇 분 걸림)`);
         const t = known ?? { design: { ...d, ...L }, verified: await io.verify({ ...d, ...L }) };
         if (!known) { tried.push(t); more = true; }
         t.verified = await judge(t.design, t.verified);
