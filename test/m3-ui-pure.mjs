@@ -180,6 +180,9 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   ok(Math.abs(overallFrac(all, 'shape', 0) - 50 / 170) < 1e-12 && overallFrac(all, 'shape', 2) <= 1 && overallFrac(m, 'shape', 0.5) === 0, '전체 진행률: 단계 순서(② → ③ → ①)·무게 · 꺼진 단계 = 0');
   const hh = { leds: true, height: true, housing: true, milky: true };
   ok(Math.abs(overallFrac(hh, 'height', 0) - 50 / 160) < 1e-12 && Math.abs(overallFrac(hh, 'housing', 0.5) - 80 / 160) < 1e-12 && Math.abs(overallFrac(hh, 'milky', 0) - 90 / 160) < 1e-12, '전체 진행률: ⑤ 높이·④ 케이스 면(각 20)은 ② 와 ① 사이');
+  { const lm = { leds: true, milky: true };   // 기준 Milky 찾기 = 따로 단계(① 위치 35 를 10 + 25 로 나눔 — 다른 단계 % 는 그대로)
+    ok(Math.abs(overallFrac(lm, 'ledsRef', 0.5) - 20 / 120) < 1e-12 && Math.abs(overallFrac(lm, 'leds', 0) - 25 / 120) < 1e-12 && Math.abs(overallFrac({ leds: true }, 'leds', 0) - 15 / 85) < 1e-12 && overallFrac({ milky: true }, 'ledsRef', 0.5) === 0,
+      `전체 진행률: 기준 Milky 단계(위치+Milky 일 때만) ${overallFrac(lm, 'ledsRef', 0.5)}`); }
   ok(etaText(5000, 0.05) === '' && etaText(10000, 0.5) === '남은 약 10초' && etaText(1000, 1) === '', `남은 시간: 10% 이후만 (${etaText(10000, 0.5)})`); }
 { const s = profileSvg([1, 2, NaN, 4], [3, 3, 3, 3]);
   ok((s.match(/<polyline/g) ?? []).length === 2 && s.includes('<svg') && profileSvg(null, [1]) === '' && profileSvg([], [1]) === '', '길이 프로파일 SVG: 선 2개 · 없으면 생략');
@@ -504,6 +507,20 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   const j = judgeText(0.802, 0.8, 0.004); ok(j.cls === 'near' && j.text.includes('근처') && j.text.includes('±0.8%p'), `결과 판: ${j.text}`);
 ok(judgeText(0.3, 0.8, null, 0.2).cls === 'busy' && /판정 보류/.test(judgeText(0.3, 0.8, null, 0.2).text) && judgeText(0.85, 0.8, null, 0.01).cls === 'ok', '계산 초반(노이즈 큼) = 빨간 미달 대신 판정 보류');
 }
+{ // 진행 줄·지표 숫자 맞추기(2026-11-12 평가 1·4·9)
+  const { STAGES, monitorHtml, applyProgress } = await import('../src/ui/m3/opt-dash.js');
+  const T = () => ({ status: 'wait', frac: 0, evals: [], text: '' }), mk = () => ({ tiles: Object.fromEntries(STAGES.map(([k]) => [k, T()])), seq: [], tgLen: 0.8, tgWid: 0.8, cur: null, note: '', before: { Ulen: 0.7, Uwid: 0.7, eff: 0.66 } });
+  const S = mk(); applyProgress(S, 'ledsRef', 0.4, '위치 계산용 기준 Milky 찾기 (Milky 1.5)');
+  const chip = (h) => h.match(/<b>기준 Milky<\/b><span>([^<]*)<\/span>/)?.[1];
+  ok(S.refFrac === 0.4 && S.tiles.position.status === 'wait' && chip(monitorHtml(S, 5)) === '40.0%' && /위치 계산용 기준 Milky/.test(monitorHtml(S, 5)), `기준 Milky 찾기 = 진행 줄 따로 칸(① 위치는 대기): ${chip(monitorHtml(S, 5))}`);
+  ok(/<b>현재안<\/b><span>✓<\/span>/.test(monitorHtml(S, 5)), '다음 단계로 넘어가면 현재안 = 완료(후보가 아직 없어도)');
+  applyProgress(S, 'leds', 0, 'LED 후보 위치 추적');
+  ok(chip(monitorHtml(S, 5)) === '✓' && !chip(monitorHtml(mk(), 5)), '위치 계산이 시작되면 기준 Milky = 완료 · 그 단계가 없으면 칸 없음');
+  const E = mk(); E.seq = [{ k: 'milky', label: 'Milky 2', Ulen: 0.85, Uwid: 0.84, eff: 0.6 }];
+  const eh = monitorHtml(E, 5), effTxt = eh.match(/광 효율<\/div><b class="om-v">([^<]*)<\/b><div class="mut">([^<]*)/);
+  ok(effTxt?.[1] === '≈60.0%' && /시작 66\.0%/.test(effTxt[2]) && /▼6\.0%p/.test(effTxt[2]), `진행 중 광 효율 = 지금까지 최고안의 대략값: ${effTxt?.[1]} ${effTxt?.[2]}`);
+  const P = { ...mk(), stopped: true, partial: { done: ['leds'] } }, ph = monitorHtml(P, 5);
+  ok(/data-adpartial/.test(ph) && /끝난 항목\(LED 배치\)/.test(ph) && /정밀 판정/.test(ph) && !/data-adpartial/.test(monitorHtml({ ...mk(), stopped: true }, 5)), '중지 후 = 끝난 항목까지 반영한 안 정밀 판정 단추(끝난 항목이 있을 때만)'); }
 { // 전체 판정이 근처면 설명 문장도 근처로(엔진 사유의 '미달'이 남지 않게) · 하나라도 미달이면 그대로
   const { STAGES, monitorHtml } = await import('../src/ui/m3/opt-dash.js');
   const tiles = Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', text: '' }]));
@@ -1007,6 +1024,8 @@ done();
   okW(clampRect({ x: 100, y: 0, w: 400, h: 300 }, 1600, 900, 56).y === 56 && fitRect({ x: 100, y: 0, w: 400, h: 300 }, 1600, 900, 56).y === 56, '위 경계 = 상단 바 아래');
   okW(clampRect({ x: 100, y: 0, w: 400, h: 300 }, 1600, 900).y === 8, '위 경계를 안 주면 예전처럼 8');
   okW(fitRect({ x: 0, y: 0, w: 400, h: 2000 }, 1600, 900, 56).h <= 900 - 56 - 8, '높이도 상단 바 아래 공간에 맞춤');
+  const { maxRect } = await import('../src/ui/m3/monitor.js'), m = maxRect?.(1600, 900, 96);   // 최적화 창 [⤢ 크게](2026-11-12 평가 5: 창이 작아 안에서 스크롤)
+  okW(m && m.x === 8 && m.y === 96 && m.w === 1584 && m.h === 900 - 96 - 8, `크게 = 상단 바·단계 막대 아래 화면 전체: ${JSON.stringify(m)}`);
 }
 { // 최종 판정(몇 분)에도 남은 시간 — 90초 넘으면 분 단위(2026-11-12 평가: 검증 2~3분 동안 남은 시간 없음)
   const { etaText } = await import('../src/ui/m3/autodesign-panel.js');

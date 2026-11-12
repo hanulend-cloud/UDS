@@ -237,7 +237,7 @@ export async function mount(ctx) {
   a.results = createResultsPanel($('#m3-res'), { onOpt: () => { if (monitor) { monitor.open(); monitor.expand(); } }, onNote: (t) => setStatus(t), onCalc: (k) => calcCtl(k), calcBusy: () => !!A?.ad?.running, onLeak: () => A.store.update('session', (_, s) => { s.focusCheck = s.focusCheck === 'leak' ? null : 'leak'; }), onBig: (node) => A?.simDash?.attach(node), fileName: () => String(A?.store?.mspec?.name ?? 'uds').replace(/\.(stp|step)$/i, ''), onQuality: (v) => A.store.update('observe', (m) => { m.observe.quality = v; }) });
   // 균일도 그래프 칸 = 창 왼쪽 아래(실행·결과 밑, 2026-11-05)
   let chartEl = $('#m3-odchart'); if (!chartEl) { chartEl = document.createElement('div'); chartEl.id = 'm3-odchart'; $('#m3-factor')?.appendChild(chartEl); }
-  a.optDash = createOptDash($('#m3-optdash'), { history: () => { const st = A?.ad; return st ? { list: st.hist ?? [], tgLen: A.store.mspec.observe.targetLen, tgWid: A.store.mspec.observe.targetWid, busy: !!st.running } : null; }, onPick: (i) => adPickHist(i), chart: chartEl, result: (k) => adFactorResult(k), config: (k) => (A?.tileState ? tileConfigHtml(k, A.tileState) : { on: false, html: '' }), onSel: (k, v) => adSel(k, v), onUnlock: (k) => adUnlock(k), board: $('#m3-factor'), now: () => (A ? factorNow() : {}) }); a.simDash = createSimDash($('#m3-simdash'), { onCtl: (k) => calcCtl(k), bar: $('#m3-run') });
+  a.optDash = createOptDash($('#m3-optdash'), { history: () => { const st = A?.ad; return st ? { list: st.hist ?? [], tgLen: A.store.mspec.observe.targetLen, tgWid: A.store.mspec.observe.targetWid, busy: !!st.running } : null; }, onPick: (i) => adPickHist(i), onPartial: () => adRunPartial(), chart: chartEl, result: (k) => adFactorResult(k), config: (k) => (A?.tileState ? tileConfigHtml(k, A.tileState) : { on: false, html: '' }), onSel: (k, v) => adSel(k, v), onUnlock: (k) => adUnlock(k), board: $('#m3-factor'), now: () => (A ? factorNow() : {}) }); a.simDash = createSimDash($('#m3-simdash'), { onCtl: (k) => calcCtl(k), bar: $('#m3-run') });
   // 오른쪽 맨 위 광분포 시뮬레이션 ↕ 아래 광량 분포: 경계선 끌어 높이 조절(2026-10-30, 보는 사람별)
   mountSplit([$('#m3-simdash'), $('#m3-res')], { key: 'uds.m3.simSplit', dir: 'col', min: 80, init: [1, 3], onChange: () => window.dispatchEvent(new Event('resize')) });   // 아래 칸 = 기구 최적화 · 오른쪽 맨 위 = 광분포 시뮬레이션(항상 보임, 계산 제어 단추)
   a.cmd = mountCommandBar($('#m3-cmd'), cmdHandlers());
@@ -1046,10 +1046,21 @@ async function adHeightInfo(M0, line, rt) {
 const BOOST_SETS = [['housing'], ['height'], ['housing', 'height'], ['leds'], ['leds', 'housing'], ['leds', 'housing', 'height']];
 const BOOST_LABEL = { housing: '④ 케이스 면', height: '⑤ LED 높이', leds: '② LED 배치', milky: '① Milky' };
 // 최적화 대시보드 — 실행 시작 때 체크한 항목으로 초기화, 끝나면 결과 표시
-function dashReset(only = null) {   // only = 이번에 돌릴 단계(이어서 최적화) — 없으면 체크 상태
+function dashReset(only = null, done = []) {   // only = 이번에 돌릴 단계(이어서 최적화) — 없으면 체크 상태 · done = 이미 끝난 항목(중지 뒤 정밀 판정)
   const st = adState(), avail = adAvail(A.store.mspec), O = A.store.mspec.observe;
   const on = (k) => (only ? !!only[k] : !!st.sel[k] && !!avail[k]?.ok);
-  A.optDash?.reset({ stages: { milky: on('milky'), position: on('leds') || on('height'), shape: on('shape'), housing: on('housing') }, tgLen: O.targetLen, tgWid: O.targetWid, locked: { ...(st.locked ?? {}) } });
+  A.optDash?.reset({ stages: { milky: on('milky'), position: on('leds') || on('height'), shape: on('shape'), housing: on('housing') }, tgLen: O.targetLen, tgWid: O.targetWid, locked: { ...(st.locked ?? {}) }, done });
+}
+// 중지 뒤 — 끝난 항목까지 반영한 안만 최종 판정(2026-11-12 평가 9). 중지한 뒤 설계를 바꿨으면 쓰지 않음
+const adSig = () => JSON.stringify(A.store.mspec);
+function adRunPartial() {
+  const st = adState(), P = st.partial;
+  if (!P || st.running) return;
+  if (P.sig !== adSig()) { st.partial = null; A.optDash?.setPartial(null); setStatus('중지한 뒤 설계가 바뀌어 그 안을 쓸 수 없습니다 — 다시 최적화하세요'); return; }
+  const has = (k) => P.done.includes(k), g = P.stages ?? {};
+  const only = Object.fromEntries(['leds', 'height', 'shape', 'milky', 'housing'].map((k) => [k, !!g[k] && has(k)]));
+  const tiles = [...(only.leds || only.height ? ['position'] : []), ...['shape', 'milky', 'housing'].filter((k) => only[k])];   // 진행 줄 = 반영하는 항목은 완료로
+  dashReset(only, tiles); adRun({ stages: only, partial: P });
 }
 // 검증 후보 이름(⑥) — 바뀐 항목만 짧게
 function verifyLabel(d) {
@@ -1154,15 +1165,16 @@ async function adRun(opt = {}) {
   };
   const io = {
     progress: report,
+    kept: (q) => { if (A === a) kept = q; },   // 항목이 끝날 때마다 — 중지하면 '끝난 항목까지 반영한 안'(평가 9)
     now: () => R.now(),   // 일시정지한 시간은 시간 한도에서 뺌
     cancelled: () => R.stopped,
     shapePlan: ({ screen, total }) => { shapeScr = screen; shapeTot = Math.max(1, total ?? shapeTotal(screen, 27)); },
-    async milkyRows(d, ms, { precise = false, peek = false } = {}) {   // 재가중 기준 = 창 가운데. 시간 제한(Milky 4~5 는 광자당 ~10배) — 경계가 든 창은 정밀 재추적
+    async milkyRows(d, ms, { precise = false, peek = false, ref = false } = {}) {   // ref = 위치 계산용 기준 Milky 찾기 — Milky 후보 칸에 넣지 않음(진행 줄 '기준 Milky' 칸, 2026-11-12)   // 재가중 기준 = 창 가운데. 시간 제한(Milky 4~5 는 광자당 ~10배) — 경계가 든 창은 정밀 재추적
       const { M: Md, parts } = designScene({ ...d, milky: ms[Math.floor(ms.length / 2)] }, ctx);
       const hi = ms[Math.floor(ms.length / 2)] >= 6;   // 높은 Milky 는 광자당 매우 느림 — 탐색 창은 최소 광자를 낮춤(정밀 창은 그대로)
       const r = await R.trace(adJob(Md, parts, ctx), { ...(precise ? { N: 3e6, maxMs: 6000 } : { N: 1.5e6, maxMs: 2000, minN: hi ? 5e4 : 1e5 }), rw: { part: ctx.mp, milkies: ms } });
       const rows = milkyRows(G, obs, { milkies: ms, batches: r.rwBatches, ess: r.ess, emitted: r.ledger.emitted });
-      if (!peek) A.optDash?.evals('milky', rows.filter((q) => q.trusted).map((q) => ({ label: `Milky ${(+q.milky).toFixed(2)}`, v: +q.milky, Ulen: q.Ulen, Uwid: q.Uwid })));   // 믿을 수 있는(ESS 충분) 격자점만
+      if (!peek && !ref) A.optDash?.evals('milky', rows.filter((q) => q.trusted).map((q) => ({ label: `Milky ${(+q.milky).toFixed(2)}`, v: +q.milky, Ulen: q.Ulen, Uwid: q.Uwid, eff: q.eff })));   // 믿을 수 있는(ESS 충분) 격자점만
       return rows;
     },
     // ② 후보 = (s, w) 격자(spec P4 §2.2b): s 2 mm × w ∈ {0, ±δk}, δk = 0.2/0.27/0.33·W(반폭 − 0.5 로 자름) — 후보 수 ≈ (L/2+1)·7, 후보당 ≤ 1.2만 광자(60 s 예산)
@@ -1204,7 +1216,7 @@ async function adRun(opt = {}) {
         const r = await R.trace(adJob(Md, parts, ctx), { N, batches: 4, crn: SHAPE_CRN }), stt = tallyStats(G, r.batches, obs);
         out.push({ cand: c, ok: !stt.empty, stats: stt, eff: adEff(r) });
         caseLog.push({ c: caseCand(c), Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty, ...(stt.empty ? { why: '빛 없음' } : {}), N });
-        A.optDash?.evals('shape', [{ label: shapeText(c), Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty }]);
+        A.optDash?.evals('shape', [{ label: shapeText(c), Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty, eff: adEff(r) }]);
       }
       return out;
     },
@@ -1217,7 +1229,7 @@ async function adRun(opt = {}) {
         const r = await R.trace(adJob(Md, parts, ctx), { N, batches: 4, crn: SHAPE_CRN }), stt = tallyStats(G, r.batches, obs);
         const layout = { count: ss.length, pitch: 0, rows: 1, rowGap: 0, positions: dd.positions, wCenter: c, stepVirt: true, layoutKind: 'lateral-current', layoutText: `현재 배치 · 폭 위치 ${c > 0 ? '+' : ''}${c} mm` };
         out.push({ cand: { wCenter: c, layout }, ok: !stt.empty, stats: stt, eff: adEff(r) });
-        A.optDash?.evals('leds', [{ label: `폭 위치 ${c > 0 ? '+' : ''}${c} mm`, Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty }]);
+        A.optDash?.evals('leds', [{ label: `폭 위치 ${c > 0 ? '+' : ''}${c} mm`, Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty, eff: adEff(r) }]);
       }
       return out;
     },
@@ -1229,7 +1241,7 @@ async function adRun(opt = {}) {
         const { M: Md, parts } = designScene({ ...d, ...('dz' in c ? { dz: c.dz } : { finish: c.finish }) }, ctx);
         const r = await R.trace(adJob(Md, parts, ctx), { N, maxMs, minN: Math.min(N, 3e4), batches: 4 }), stt = tallyStats(G, r.batches, obs);
         out.push({ cand: c, ok: !stt.empty, stats: stt, eff: adEff(r) });
-        if (stages[stg]) A.optDash?.evals(stg, [{ label: 'dz' in c ? `높이 ${c.dz >= 0 ? '+' : ''}${(+c.dz).toFixed(2)} mm` : finishText(c.finish, reflCat()), Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty }]);
+        if (stages[stg]) A.optDash?.evals(stg, [{ label: 'dz' in c ? `높이 ${c.dz >= 0 ? '+' : ''}${(+c.dz).toFixed(2)} mm` : finishText(c.finish, reflCat()), Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty, eff: adEff(r) }]);
       }
       return out;
     },
@@ -1251,13 +1263,14 @@ async function adRun(opt = {}) {
     const k = defaultHousingPart(M0, adInfo().boxes), nf = avail.housing.parts.includes(k) ? nextFinish(M0.parts[k].finish, finCands(k).filter((f) => !f.current)) : null;   // 소재 상한 안(특수 허용 시 특수 포함) — 없으면 안내 생략
     if (nf) housingProbe = { part: k, kind: nf.kind, R: nf.R, ...(nf.coating ? { coating: nf.coating } : {}), cur: { part: k, ...M0.parts[k].finish, ...(M0.parts[k].coating ? { coating: M0.parts[k].coating } : {}) } };   // cur = 지금 면(같은 계산에서 비교)
   }
-  let res = null;
+  let res = null, kept = null;
+  st.partial = null;
   try {
     res = await runAutoDesign({
       stages, obs, G, line, current: cur, milkyMax: st.sel.milkyMax ?? null, housingProbe, finishText: (f) => finishText(f, reflCat()), nMax: Math.max(1, Math.min(60, Math.floor(line.length / 2))), pitchRange: null, stepMode: stp, currentIrregular: stages.leds && (() => { try { const q = pitchOf(L.currentEmitters(M0, line).map((e) => { const [s, w] = line.toSW(...line.to2D(e.pos)); return { s, w }; })); return !q.uniform; } catch { return false; } })(),
       shapePart: sp, shapeField, ...(opt.caseCheck ? { shapeCands: [opt.caseCheck], schedule: [[1, lens.schedule[0][1], lens.schedule[0][2]]], curve: false, fixedShape: true } : quickShape ? { shapeCands: lens.cands, schedule: lens.schedule, curve: false, shapeEmptyWhy: lens.cands.length ? null : lens.why } : {}),
       shapeStart: stages.shape && M0.parts[sp]?.shapeMod ? (({ dt, h, R, e, c, kL, kW, kF }) => ({ dt, h, R, e, c, kL, kW, kF }))(M0.parts[sp].shapeMod) : null,   // 이미 적용한 형상에서 이어서
-      lateral, rowsOptions: st.sel.oneRow ? [1] : [1, 2], currentVerified, screenGrid: !lowQ, currentScreen, heightRange: hInfo?.range ?? null, housingPart: hp, finishCands, ledsAtCurrentMilky: !!opt.added?.length,
+      lateral, rowsOptions: st.sel.oneRow ? [1] : [1, 2], currentVerified: opt.partial?.currentVerified ?? currentVerified, partial: opt.partial?.d ?? null, screenGrid: !lowQ, currentScreen, heightRange: hInfo?.range ?? null, housingPart: hp, finishCands, ledsAtCurrentMilky: !!opt.added?.length,
     }, io);
   } catch (e) { if (A === a && !R.stopped) setStatus(`기구 최적화 실패: ${e.message}`); }
   if (A !== a) return;   // 그사이 이탈
@@ -1265,6 +1278,7 @@ async function adRun(opt = {}) {
   if (A !== a) return;
   globalThis.__adLast = res;   // 진단용(콘솔에서 단계별 결과 확인)
   st.running = null; st.runner = null; st.paused = false;
+  if (R.stopped && kept?.done?.length && !opt.partial) { st.partial = { ...kept, stages, sig: adSig() }; A.optDash?.setPartial(st.partial); }
   if (res && !res.cancelled && !R.stopped) {
     st.view = 'result';
     const C = res.current;   // 현재안 = 최종안과 같은 추정기

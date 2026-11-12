@@ -14,6 +14,8 @@ export function fitRect(r, vw, vh, top = 8) {
   const w = Math.min(r.w, vw - 16), h = Math.min(r.h, vh - top - 8);
   return { x: Math.max(8, Math.min(r.x ?? vw - w - 8, vw - w - 8)), y: Math.max(top, Math.min(r.y ?? top, vh - h - 8)), w, h };
 }
+// [⤢ 크게] — 상단 바·단계 막대 아래 화면 전체(순수, 2026-11-12 평가 5: 창이 작아 안에서 계속 스크롤)
+export const maxRect = (vw, vh, top = 8) => ({ x: 8, y: top, w: Math.max(MIN_W, vw - 16), h: Math.max(MIN_H, vh - top - 8) });
 // 창이 화면 밖으로 나가지 않게(머리 줄은 늘 보이게) 위치·크기를 맞춤 — 순수
 // 위 경계(px) — 화면에서 읽음
 export const winTop = () => {   // 상단 바·작업 단계 막대 아래(둘 다 가리지 않게)
@@ -66,20 +68,29 @@ export function createMonitor({ host, items, onChange = () => {}, onTab = () => 
   const sv = load(), old = sv.lay !== LAY;
   let st = { open: false, min: false, ...DEF_RECT, ...(old ? { open: sv.open, min: sv.min } : sv) };
   st.min = !!st.min; st.open = !!st.open;
-  const persist = () => save({ lay: LAY, open: st.open, min: st.min, x: st.x, y: st.y, w: st.w, h: st.h });
+  st.max = !!sv.max && !old;
+  const persist = () => save({ lay: LAY, open: st.open, min: st.min, max: st.max, x: st.x, y: st.y, w: st.w, h: st.h });
   const el = document.createElement('div');
-  const place = () => { const r = clampRect(st.min ? { ...st, w: COLLAPSED_W } : st, innerWidth, innerHeight, winTop()); st.x = r.x; st.y = r.y; if (!st.min) { st.w = r.w; st.h = r.h; } el.style.left = `${r.x}px`; el.style.top = `${r.y}px`; el.style.width = `${r.w}px`; el.style.height = st.min ? 'auto' : `${r.h}px`; };
+  const place = () => { const r = st.max && !st.min ? maxRect(innerWidth, innerHeight, winTop()) : clampRect(st.min ? { ...st, w: COLLAPSED_W } : st, innerWidth, innerHeight, winTop()); st.x = r.x; st.y = r.y; if (!st.min) { st.w = r.w; st.h = r.h; } el.style.left = `${r.x}px`; el.style.top = `${r.y}px`; el.style.width = `${r.w}px`; el.style.height = st.min ? 'auto' : `${r.h}px`; };
   const kick = () => window.dispatchEvent(new Event('resize'));   // 담은 칸의 그래프·캔버스 크기 다시
   el.className = 'm3-mon'; el.hidden = true; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', '기구 최적화');
-  el.innerHTML = `<div class="m3-mon-hd" title="끌어서 옮기기 · ④ 광분포 결과가 목표 미달이면 여기서 후보를 찾아 최종 판정 → [적용]"><b><i class="m3-fl" data-mon-step>5</i>기구 최적화</b><span class="m3-mon-tabs" role="tablist" data-mon-tabs><button type="button" role="tab" data-mon-tab="set">설정</button><button type="button" role="tab" data-mon-tab="run">진행</button><button type="button" role="tab" data-mon-tab="result">결과</button></span><span class="m3-mon-sum" data-mon-sum></span><span class="m3-mon-sp"></span><span class="m3-ctl" data-mon-ctl></span><button type="button" data-mon-min></button><button type="button" data-mon-close title="창 닫기(진행 중인 최적화는 계속)">✕ 닫기</button></div><div class="m3-mon-body"></div>`;
+  el.innerHTML = `<div class="m3-mon-hd" title="끌어서 옮기기 · ④ 광분포 결과가 목표 미달이면 여기서 후보를 찾아 최종 판정 → [적용]"><b><i class="m3-fl" data-mon-step>5</i>기구 최적화</b><span class="m3-mon-tabs" role="tablist" data-mon-tabs><button type="button" role="tab" data-mon-tab="set">설정</button><button type="button" role="tab" data-mon-tab="run">진행</button><button type="button" role="tab" data-mon-tab="result">결과</button></span><span class="m3-mon-sum" data-mon-sum></span><span class="m3-mon-sp"></span><span class="m3-ctl" data-mon-ctl></span><button type="button" data-mon-max></button><button type="button" data-mon-min></button><button type="button" data-mon-close title="창 닫기(진행 중인 최적화는 계속)">✕ 닫기</button></div><div class="m3-mon-body"></div>`;
   const body = el.querySelector('.m3-mon-body');
   for (const it of items.filter(Boolean)) body.appendChild(it);   // 기본 화면에서 빼서 창 안으로(닫아도 여기 그대로)
   host.appendChild(el);
-  const snap = () => ({ ...st });
+  const unmax = () => { if (st.max && !st.min) { st.max = false; updMax(); } };   // 크게 한 채로 끌거나 크기를 바꾸면 그 크기에서 보통 창으로(지금 위치·크기는 place 가 st 에 남김)
+  const snap = () => { unmax(); return { ...st }; };
   dragBy(el.querySelector('.m3-mon-hd'), snap, (dx, dy, s0) => { st.x = s0.x + dx; st.y = s0.y + dy; place(); }, (e) => !e.target.closest('button'), persist);
-  mountResizers(el, { rect: () => st, apply: (r) => { Object.assign(st, r); place(); }, ok: () => !st.min, end: () => { persist(); kick(); } });
+  mountResizers(el, { rect: () => (unmax(), st), apply: (r) => { Object.assign(st, r); place(); }, ok: () => !st.min, end: () => { persist(); kick(); } });
   el.addEventListener('pointerdown', () => raiseWin(el), true);
   el.querySelector('[data-mon-min]').onclick = () => setMin(!st.min);
+  el.querySelector('[data-mon-max]').onclick = () => setMax(!st.max || st.min);
+  function updMax() { const b = el.querySelector('[data-mon-max]'), on = st.max && !st.min; b.textContent = on ? '⤡ 원래 크기' : '⤢ 크게'; b.title = on ? '크게 하기 전 크기로' : '상단 바 아래 화면 전체로 넓히기'; }
+  function setMax(v) {
+    if (v && !st.max) { st.prev = { x: st.x, y: st.y, w: st.w, h: st.h }; }   // 원래 크기로 돌아갈 자리
+    else if (!v && st.prev) { Object.assign(st, st.prev); st.prev = null; }
+    st.max = !!v; if (v && st.min) { setMin(false); } updMax(); place(); persist(); kick(); raiseWin(el);
+  }
   el.querySelector('[data-mon-close]').onclick = () => close();
   el.querySelectorAll('[data-mon-tab]').forEach((b) => { b.onclick = () => { if (!b.disabled) onTab(b.dataset.monTab); }; });
   // 화면 = 설정(설계 인자 고르기) · 진행(진행률·그래프) · 결과(판정·변화·적용). ok = 고를 수 있는 탭
@@ -92,9 +103,10 @@ export function createMonitor({ host, items, onChange = () => {}, onTab = () => 
     st.min = v; persist();
     el.classList.toggle('min', v);
     const b = el.querySelector('[data-mon-min]'); b.textContent = v ? '▾ 펼치기' : '▴ 접기'; b.title = v ? '모든 칸 보기' : '제목과 현재 결과만 남기기';
-    place(); kick();
+    updMax(); place(); kick();
   }
   function open() {
+    raiseWin(el);   // 열 때 늘 앞으로(2026-11-12 평가 5: 광량 분포 창 뒤에 숨었음)
     if (st.open) return;
     Object.assign(st, fitRect(st, innerWidth, innerHeight, winTop()));
     st.open = true; persist(); el.hidden = false; setMin(st.min); onChange(true);

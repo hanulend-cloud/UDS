@@ -379,10 +379,11 @@ const coarseBases = (cap) => Array.from({ length: Math.max(1, Math.floor((cap - 
 // ② 기준 Milky(spec §2.2c): 거친 창 0.5, 1.5, … ≤ cap 만(정밀 없음) — 최고점 뒤 처음 내려가면 멈춤. 반환 최고 믿는 행의 Milky | null(믿을 행 없음) | undefined(중지)
 async function coarsePeakMilky(d, cfg, io, steps, cap) {
   let best = null, prev = -Infinity;
-  for (const m of coarseBases(cap)) {
+  const B = coarseBases(cap), n = B.length;
+  for (const [k, m] of B.entries()) {
     if (io.cancelled?.()) return undefined;
-    io.progress?.('leds', 0, `② 기준 Milky 찾기 (Milky ${m.toFixed(1)})`);
-    const rows = await io.milkyRows(d, milkyAxis(m, MILKY_STEP, cap)), r = bestRow(rows), g = r?.margin ?? -Infinity;
+    io.progress?.('ledsRef', k / n, `위치 계산용 기준 Milky 찾기 (Milky ${m.toFixed(1)})`);   // 따로 단계(2026-11-12 평가: 0% 인 '① 위치' 아래 후보가 쌓이고 '②' 번호가 형상과 겹쳤음)
+    const rows = await io.milkyRows(d, milkyAxis(m, MILKY_STEP, cap), { ref: true }), r = bestRow(rows), g = r?.margin ?? -Infinity;
     steps.push({ stage: 'milky', phase: 'ledsRef', base: m, rows });
     if (r && (!best || r.margin > best.margin)) best = r;
     if (best && g < prev && g < best.margin) break;   // 최고점을 지나 내려감
@@ -481,7 +482,7 @@ export function pickLateral(res, obs) {
 // 정밀 재계산이 미달일 때 1열 개수를 하나씩 늘리는 한도 — 시간 · 나아짐이 이만큼도 없으면 두 번 만에 멈춤(폭 부족은 개수로 안 올라감)
 export const LADDER_MS = 600000, LADDER_GAIN = 0.005;
 export async function runAutoDesign(cfg, io) {
-  const { stages, obs } = cfg, steps = [], sCap = Math.min(cfg.milkyMax ?? MILKY_OPT_MAX, MILKY_OPT_MAX), mCap = sCap;
+  const { obs } = cfg, stages = cfg.partial ? {} : cfg.stages, steps = [], sCap = Math.min(cfg.milkyMax ?? MILKY_OPT_MAX, MILKY_OPT_MAX), mCap = sCap;   // partial = 중지 때 받은 안 — 항목은 다시 안 돌리고 최종 판정만(2026-11-12)
   let d = { ...cfg.current }, feasible = true, reason = '', hint = null, peek = null, shapeNote = null, ledAlts = null, ledMore = null, ledLimit = null, ledRows = 1, lateralLayout = null;
   const stop = () => io.cancelled?.();
   if (stop()) return { cancelled: true };
@@ -494,6 +495,11 @@ export async function runAutoDesign(cfg, io) {
   if (stop()) return { cancelled: true };
   if (lowered) d = { ...d, milky: sCap };
   const hasFin = 'finish' in d, fin0 = d.finish;   // ④ 전에 되돌릴 현재 케이스 면
+  if (cfg.partial) d = { ...cfg.partial };
+  // 중지 때 돌려줄 안 = 끝난 항목까지 반영(2026-11-12 평가 9). 기준 Milky·기준 케이스 면은 위치 계산용이라 그 항목이 끝나기 전에는 지금 값으로
+  const m0 = d.milky, done = []; let kept = null;
+  const keep = (k) => { if (!done.includes(k)) done.push(k); kept = { ...d }; if (!done.includes('milky')) kept.milky = m0; if (!done.includes('housing')) { if (hasFin) kept.finish = fin0; else delete kept.finish; } io.kept?.({ d: kept, done: [...done], currentVerified }); };   // 중지는 계산이 예외로 끝나므로 알림으로도
+  const halt = () => ({ cancelled: true, ...(kept ? { partial: { d: kept, done: [...done], currentVerified } } : {}) });
   if (stages.leds) {   // ② — 함께 켠 ①·④ 는 유리한 쪽에서 개수를 정함(spec §2.2c): ① → 거친 최고점 Milky(≤ 상한), ④ → 케이스 최고 등급
     const ref = stages.milky || (stages.housing && cfg.finishCands?.length);
     if (stages.housing && cfg.finishCands?.length) {
@@ -503,7 +509,7 @@ export async function runAutoDesign(cfg, io) {
     let mRef = null;
     if (stages.milky && !cfg.ledsAtCurrentMilky) {   // ledsAtCurrentMilky(보완 자동 추가) = 지금 Milky 에서 개수를 정함 — 적게 바꾸기 · 높은 Milky 추적은 매우 느림
       mRef = await coarsePeakMilky(d, cfg, io, steps, mCap);
-      if (mRef === undefined) return { cancelled: true };
+      if (mRef === undefined) return halt();
       d = { ...d, milky: Math.min(mCap, mRef ?? mCap) };
     }
     if (ref) steps.push({ stage: 'ledsRef', milky: mRef, finish: d.finish ?? null });
@@ -512,9 +518,9 @@ export async function runAutoDesign(cfg, io) {
     if (cfg.lateral?.length > 1 && io.evalLateral) {
       io.progress?.('leds', 0, `LED 폭 위치 후보 ${cfg.lateral.length}개 비교`);
       const res0 = await io.evalLateral(d, lateralCoarse(cfg.lateral));
-      if (stop()) return { cancelled: true };
+      if (stop()) return halt();
       const pick0 = pickLateral(res0, obs), fine = pick0 == null ? [] : lateralFine(cfg.lateral, pick0), res = fine.length ? [...res0, ...await io.evalLateral(d, fine)] : res0;
-      if (stop()) return { cancelled: true };
+      if (stop()) return halt();
       const pick = pickLateral(res, obs);
       steps.push({ stage: 'ledsLateral', pick, results: (res ?? []).map((x) => ({ wCenter: x.cand.wCenter, ok: x.ok, Ulen: x.stats?.Ulen ?? null, Uwid: x.stats?.Uwid ?? null, eff: x.eff })) });
       if (pick != null) { d = { ...d, wCenter: pick }; lateralLayout = res.find((x) => x.ok && x.cand.wCenter === pick)?.cand.layout ?? null; }
@@ -522,14 +528,14 @@ export async function runAutoDesign(cfg, io) {
     io.progress?.('leds', 0, 'LED 후보 위치 추적');
     const B = await io.basis(d);
     if (B.maps && two0(B)) smoothMapsS(B.maps, cfg.G);   // 후보 지도의 칸 노이즈를 줄임 — 배치 비교는 칸 하나가 아니라 곡선 모양이 중요
-    if (stop()) return { cancelled: true };
+    if (stop()) return halt();
     // 후보가 {s, w} 면 (s, w) 격자 — 열 수·열 간격까지(searchLeds2, nMax = 총수 상한), 숫자면 1열(기존)
     const two = typeof B.cand[0] === 'object', a = { G: cfg.G, obs, line: cfg.line, cand: B.cand, maps: B.maps, pitchRange: cfg.pitchRange ?? null, nMax: cfg.nMax, emitted: B.emitted, ...(B.minGap ? { minGap: B.minGap } : {}) };   // minGap = 이웃 LED 몸체가 겹치지 않는 최소 피치
     // (s, w) 격자 = 배치 Solver(같은 피치+끝 여백 → 끝 압축 → 자유 위치, spec 2026-10-20 led-layout-solver) · 숫자 격자 = 1열 기존 탐색
     // 균일한 구조 = 균일한 피치(2026-11-02, 설계자 원칙) — 끝 압축·자유 배치는 노이즈 낀 후보 지도에 맞춰 간격을 제멋대로 바꿈(실측: 안쪽 불균일 4.3% vs 등간격 2.8%). cfg.uniformPitch = false 일 때만 비균등
     const solved = two ? await solveLayoutAsync({ ...a, uniformOnly: cfg.uniformPitch !== false, wCenter: d.wCenter ?? 0, rowsOptions: cfg.rowsOptions ?? [1, 2], gaps: cfg.rowsOptions && !cfg.rowsOptions.includes(2) ? [] : B.gaps ?? [],   // rowsOptions [1] = 1열만(재료비)
        sMargin: B.sMargin ?? 0, timeBudget: cfg.layoutBudget ?? 20000, safety: cfg.layoutSafety ?? 0.02 }, { tick: pacer(), cancelled: stop }) : searchLeds({ ...a, spare: 1 });
-    if (!solved) return { cancelled: true };
+    if (!solved) return halt();
     const { atCount, limit, ...r } = solved;
     steps.push({ stage: 'leds', ...r });
     if (two) io.trace?.('leds', [r, ...(r.alts ?? [])].filter((e) => e.positions?.length).map((e, i) => ({ label: `${i ? '대안 ' : ''}${layoutText(e)}`, Ulen: e.stats?.Ulen, Uwid: e.stats?.Uwid, ok: true, est: true })));   // est = 배치 추정(실제 계산 아님)   // 대시보드: 배치 Solver 최선안·대안(기저 추정)
@@ -547,30 +553,33 @@ export async function runAutoDesign(cfg, io) {
     if (atCount) { const g0 = r.rowGap ?? 0; ledMore = (n) => { if (n % ledRows) return null; const e = atCount(n / ledRows, ledRows, g0); return e?.positions?.length ? lay(e) : null; }; }
     if (!r.feasible) { feasible = false; reason = keepCount ? `배치를 바꿔도 목표에서 멀어 LED ${totalLeds(cfg.current)}개를 유지 — Milky·형상으로 보완하세요` : r.reason; }
   }
+  if (stages.leds) keep('leds');
   const evalV = (cands, N, ms) => io.evalVariants(d, cands, N, ms), uText = (s) => `길이 균일도 ${fmtJudge(s.Ulen, obs.targetLen)}${s.Uwid == null ? '' : ` · 폭 균일도 ${fmtJudge(s.Uwid, obs.targetWid)}`}`;
   if (stages.height && cfg.heightRange) {   // ⑤ LED 높이 — 후보 { dz }(0 = 현재), 점수 최고
     const cands = heightCandidates(await io.heightRange?.(d) ?? cfg.heightRange, 7).map((dz) => ({ dz }));   // 범위는 ② 로 옮긴 자리 기준 — 처음 자리로 재면 벽 때문에 좁게 나옴(실측 +0.96 mm vs +3.9 mm)
     io.progress?.('height', 0, `LED 높이 후보 ${cands.length}개 평가`);
     const r = await pickVariant(cands, evalV, obs, { prefer: 'best', cancelled: stop, progress: (f, t) => io.progress?.('height', f, `LED 높이 ${t}`) });
-    if (stop()) return { cancelled: true };
+    if (stop()) return halt();
     steps.push({ stage: 'height', ...r });
     if (r.best) {
       d = { ...d, dz: r.best.cand.dz };
       if (margin(r.best.stats, obs) < 0) { feasible = false; reason = `LED 높이 최적(${r.best.cand.dz >= 0 ? '+' : ''}${r.best.cand.dz} mm)에서도 목표 미달 — ${uText(r.best.stats)}`; }
     }
   }
+  if (stages.height && cfg.heightRange) keep('height');
   if (stages.housing && cfg.finishCands?.length) {   // ④ 케이스 면 — 후보 { finish }(current = 현재 면 처리), 통과 중 최저 등급
     const cands = cfg.finishCands.map(({ current, ...f }) => ({ finish: { part: cfg.housingPart ?? f.part, kind: f.kind, ...(f.R != null ? { R: f.R } : {}), ...(f.coating ? { coating: f.coating } : {}) }, current: !!current }));   // coating = 특수 처리 id(spec P4 §2.3d)
     io.progress?.('housing', 0, `케이스 면 후보 ${cands.length}개 평가`);
     if (hasFin) d = { ...d, finish: fin0 }; else delete (d = { ...d }).finish;   // ② 기준용 최고 등급 → 현재 면으로 되돌린 뒤 평가
     const r = await pickVariant(cands, evalV, obs, { prefer: 'lowestPassing', grade: (c) => gradeOf(c.finish), cancelled: stop, progress: (f, t) => io.progress?.('housing', f, `케이스 면 ${t}`) });
-    if (stop()) return { cancelled: true };
+    if (stop()) return halt();
     steps.push({ stage: 'housing', ...r });
     if (r.best) {
       d = { ...d, finish: r.best.cand.current ? (cfg.current?.finish ?? null) : r.best.cand.finish };
       if (margin(r.best.stats, obs) < 0) { feasible = false; reason = `케이스 면 최고 등급에서도 목표 미달 — ${uText(r.best.stats)}`; }
     }
   }
+  if (stages.housing && cfg.finishCands?.length) keep('housing');
   // 계산 순서(2026-10-29): ② 위치(·⑤ 높이·④ 케이스) → ③ 형상 → ① Milky. Milky 는 마지막 — 앞 단계로 목표에 못 미치면 효율을 내주더라도
   // 목표를 만족하는 가장 낮은 Milky 로 올림(결과 카드의 Milky 조정 표로 설계자가 효율과 맞바꿔 낮출 수 있음)
   let shapeCands = cfg.shapeCands, shapeNone = false, shapeZero = null;   // shapeZero = 선별의 '변경 없음' 결과(곡선 다듬기 출발점)
@@ -580,12 +589,12 @@ export async function runAutoDesign(cfg, io) {
     io.shapePlan?.({ screen: 0, grid: 0, total: 16 });
     io.progress?.('shape', 0, '입광면 보정 — 광량 지도 측정');
     const [r0] = await io.evalShapes(d, [st], f.N, f.maxMs);
-    if (stop()) return { cancelled: true };
+    if (stop()) return halt();
     if (!r0?.ok) { feasible = false; reason = '제약(살두께·간섭)을 만족하는 형상 후보가 없음 — 범위를 줄이세요'; shapeNote = `지금 형상부터 ${r0?.why ?? '제약'} 위반 — 형상을 움직이지 못함`; }
     else {
       const ledS = f.ledSOf?.(d) ?? [], ev = (cands, n, t) => io.evalShapes(d, cands, n, t);
       const r = ledS.length >= 4 ? await solveShapeModes(r0, ev, obs, { ...f, ledS, G: cfg.G, cancelled: stop }) : await refineShapeField(r0, ev, obs, { ...f, G: cfg.G, cancelled: stop });   // LED 가 적으면 반복 구조가 아니라 측정 오차로 직접 보정
-      if (stop()) return { cancelled: true };
+      if (stop()) return halt();
       const b = r.best, c = b.cand, none = ['dt', 'h', 'e', 'c'].every((k) => !(c[k] ?? 0)) && !hasCurve(c) && !hasField(c);
       steps.push({ stage: 'shapeField', passes: r.passes, sens: r.sens ?? null, modes: r.modes ?? null, pred: r.pred ?? null, limited: !!r.limited, tried: r.tried.map((x) => ({ ok: x.ok, why: x.why ?? null, Ulen: x.stats?.Ulen ?? null, Uwid: x.stats?.Uwid ?? null, peak: Math.max(0, ...(x.cand.kF?.v ?? []).map(Math.abs)) })) });
       steps.push({ stage: 'shape', best: b });
@@ -601,7 +610,7 @@ export async function runAutoDesign(cfg, io) {
     io.shapePlan?.({ screen: nScreen, grid: null, total: null });
     io.progress?.('shape', 0, `형상 변수 선별 (후보 ${nScreen}개)`);
     const sc = await screenShapeVars((cands, N, ms) => io.evalShapes(d, cands, N, ms), rg, obs, cfg.screen);
-    if (stop()) return { cancelled: true };
+    if (stop()) return halt();
     steps.push({ stage: 'shapeScreen', gains: sc.gains, vars: sc.vars, results: (sc.results ?? []).map((r) => ({ cand: r.cand, ok: r.ok, why: r.why ?? null, Ulen: r.stats?.Ulen ?? null, Uwid: r.stats?.Uwid ?? null })) });   // results = 후보별 판정(진단·설명용)
     shapeZero = (sc.results ?? []).find((r) => r.ok && ['dt', 'h', 'e', 'c'].every((k) => !(r.cand[k] ?? 0))) ?? null;
     if (!sc.vars.length) { shapeNone = true; io.shapePlan?.({ screen: nScreen, grid: 0, total: nScreen + nCurve }); feasible = margin(currentVerified.stats, obs) >= 0; reason = '형상 변수의 효과가 노이즈 수준 — 현재 형상 유지'; }
@@ -631,7 +640,7 @@ export async function runAutoDesign(cfg, io) {
   }
   if (stages.shape && shapeNone && shapeZero && nCurve) {   // 선별 변수 효과가 노이즈 수준이어도 곡선은 시도
     const best = await curveStage(shapeZero);
-    if (best === undefined) return { cancelled: true };
+    if (best === undefined) return halt();
     if (best !== shapeZero) {
       d = { ...d, shape: { part: cfg.shapePart, ...best.cand } };
       steps.push({ stage: 'shape', best });
@@ -645,14 +654,14 @@ export async function runAutoDesign(cfg, io) {
     io.progress?.('shape', 0, `형상 후보 ${shapeCands.length}개 평가`);
     const seen = new Map();   // 후보별 마지막 판정(이유 문구용)
     let best = await halving(shapeCands, async (cands, N, ms) => { const res = await io.evalShapes(d, cands, N, ms); res.forEach((r) => seen.set(r.cand, r)); return res; }, obs, cfg.schedule, stop);
-    if (stop()) return { cancelled: true };
+    if (stop()) return halt();
     if (cfg.shapeCands) {   // 빠른 형상 — 안 바뀌면 이유를 남김
       const all = [...seen.values()], bad = all.filter((r) => !r.ok), lens = all.filter((r) => r.cand.h || r.cand.dt).length, n = (w) => bad.filter((r) => r.why === w).length;
       if (!best || !all.some((r) => r.ok)) shapeNote = `형상 후보가 모두 탈락(${[n('간섭') ? `간섭 ${n('간섭')}개` : '', n('살두께') ? `살두께 ${n('살두께')}개` : ''].filter(Boolean).join(' · ') || '계산 실패'}) — 입광면 앞에 틈을 두거나 살두께에 여유를 주세요`;
       else if (!(best.cand.h || best.cand.dt || best.cand.kF || best.cand.kL || best.cand.kW || best.cand.e || best.cand.c)) shapeNote = `형상 후보 ${lens}개 시험 — 지금보다 나은 형상 없음${bad.length ? ` (탈락 ${bad.length}개)` : ''}`;
     }
     best = await curveStage(best);
-    if (best === undefined) return { cancelled: true };
+    if (best === undefined) return halt();
     steps.push({ stage: 'shape', best });
     if (best) {
       const c = best.cand, zero = !cfg.fixedShape && ['dt', 'h', 'e', 'c'].every((k) => !(c[k] ?? 0)) && !hasCurve(c);   // 전부 0 이면 R 무관 — 빈 shapeMod 안 만듦
@@ -661,9 +670,10 @@ export async function runAutoDesign(cfg, io) {
       else { feasible = true; reason = ''; }
     } else { feasible = false; reason = '제약(살두께·간섭)을 만족하는 형상 후보가 없음 — 범위를 줄이세요'; }
   }
+  if (stages.shape) keep('shape');
   if (stages.milky) {   // ① 균일도 우선 — 목표 도달이면 최소 Milky, 아니면 균일도 최고 Milky + 한계·보완(④ 한 단계 위, spec §2.1a)
     const m = await searchMilkyPeak(d, cfg, io, steps, sCap);
-    if (!m) return { cancelled: true };
+    if (!m) return halt();
     if (m.found) { d = { ...d, milky: m.found.milky }; feasible = true; reason = ''; }   // 마지막 단계 — 앞 단계(②·③) 미달이어도 Milky 로 목표 도달이면 통과
     else if (!m.peak) { feasible = false; reason = '믿을 수 있는 격자점이 없음 — 광자를 늘리세요'; }
     else {
@@ -671,13 +681,13 @@ export async function runAutoDesign(cfg, io) {
       feasible = false; d = { ...d, milky: p.milky };
       reason = `균일도 최고 Milky ${p.milky}에서도 ${uText(p)} — 목표 ${fmtTg(obs.targetLen)}${p.Uwid == null ? '' : ` / ${fmtTg(obs.targetWid)}`} 미달 · ${limitText(p, obs)}${atCap ? ` · Milky 상한(${sCap}) — 위치·형상을 함께 쓰세요` : ''}`;
       peek = await peekAbove(d, p, sCap, io);
-      if (stop()) return { cancelled: true };
+      if (stop()) return halt();
       if (cfg.housingProbe && io.evalVariants && !stop()) {   // 보완 계산: 최고점 Milky 에서 케이스 면 한 단계 위 한 번
         io.progress?.('milky', 0.95, '케이스 면 추천 계산');
         // 지금 케이스 면(cur)과 추천 면을 같은 계산에서 나란히 — 다른 계산의 값과 비교하면 노이즈로 오름폭이 실행마다 크게 달라짐(2026-11-07)
         const { cur, ...probe } = cfg.housingProbe;
         const res2 = await io.evalVariants(d, cur ? [{ finish: cur }, { finish: probe }] : [{ finish: probe }], 6e5, 9000), h = res2[res2.length - 1], b0 = cur ? res2[0] : null;
-        if (stop()) return { cancelled: true };
+        if (stop()) return halt();
         if (h?.ok && (!cur || b0?.ok)) {
           // 케이스 면 추천(2026-11-07) — ④ 최적화는 없앴으므로 사유에 섞지 않고 따로(결과 카드의 💡 추천 줄). base = 같은 Milky 의 지금 값
           const ft = cfg.finishText ?? ((f) => `${f.kind}${f.R != null ? ` ${Math.round(f.R * 100)}%` : ''}`);
@@ -686,7 +696,8 @@ export async function runAutoDesign(cfg, io) {
       }
     }
   }
-  if (stop()) return { cancelled: true };
+  if (stages.milky) keep('milky');
+  if (stop()) return halt();
   io.progress?.('verify', 0, '최종안 정밀 재계산');   // 진행 표시만: 긴 최종 계산 시작 = 0.5(예전 0.9 — 남은 몇 분 동안 멈춰 보였음). 판정·계산은 그대로
   const sharpen = async (e, v) => {   // 목표 바로 아래면 노이즈 0.5% 로 다시 재서 판정 — 값이 노이즈로 낮게 나와 통과안을 미달로 판정하는 것을 막음
     if (v.sharp || !nearTarget(v.stats, obs) || !(v.stats.relNoise > JUDGE_NOISE * 1.1) || stop()) return v;
@@ -711,7 +722,7 @@ export async function runAutoDesign(cfg, io) {
   // 현재안이 미달이고 LED 를 늘려 볼 수 있으면 아래 늘리기까지 감(2026-11-11)
   if (sameDesign(d, cfg.current) && !(ledMore && margin(currentVerified.stats, obs) < 0)) {
     currentVerified = await judgeCurrent(currentVerified);
-    if (stop()) return { cancelled: true };   // 현재안이 최선 — 현재안이 목표 미달이면 이유를 비워 두지 않음
+    if (stop()) return halt();   // 현재안이 최선 — 현재안이 목표 미달이면 이유를 비워 두지 않음
     const okCur = margin(currentVerified.stats, obs) >= 0, cs = currentVerified.stats;
     const why = reason || (okCur ? '' : `현재 설계가 최선 — 목표 미달(길이 균일도 ${fmtJudge(cs.Ulen)}${cs.Uwid == null ? '' : ` · 폭 균일도 ${fmtJudge(cs.Uwid)}`})`);
     return { feasible: feasible && okCur, best: { ...cfg.current }, steps, reason: why, verified: currentVerified, current: currentVerified, unchanged: true, cancelled: false, hint, peek, milkyLowered: lowered, shapeNote };
@@ -725,7 +736,7 @@ export async function runAutoDesign(cfg, io) {
   if (ledAlts?.length || ledMore) {   // ② 재확인: 정밀 검증 미달이면 기저 순위의 다음 후보(같은 총수 → 다음 총수) 최대 2개 — 다른 필드(①③⑤④ 결과)는 그대로
     const tried = [{ design: d, verified }], scV = (v) => shapeScore({ ok: !v.stats.empty, stats: v.stats, eff: v.eff }, obs);
     for (const [i, L] of (margin(verified.stats, obs) < 0 ? ledAlts ?? [] : []).slice(0, 2).entries()) {
-      if (stop()) return { cancelled: true };
+      if (stop()) return halt();
       io.progress?.('verify', (i + 1) / 3, `② 후보 재확인 (${i + 2}/3)`);
       const e = { ...d, ...L }, v = await io.verify(e);
       tried.push({ design: e, verified: v });
@@ -748,7 +759,7 @@ export async function runAutoDesign(cfg, io) {
       };
       let lo = Math.max(...tried.map((t) => totalLeds(t.design))), n = upTo(lo + 1), top = Math.max(...tried.map(mgOf)), stall = 0, step = ledRows, hi = null;
       while (n <= cap && stall < 2 && inTime()) {
-        if (stop()) return { cancelled: true };
+        if (stop()) return halt();
         const mg = await tryN(n);
         if (mg == null) { n += ledRows; continue; }
         if (mg >= 0) { hi = n; break; }
@@ -758,7 +769,7 @@ export async function runAutoDesign(cfg, io) {
         if (n <= lo) break;
       }
       while (hi != null && hi - lo > ledRows && inTime()) {
-        if (stop()) return { cancelled: true };
+        if (stop()) return halt();
         const mid = upTo(Math.floor((lo + hi) / 2));
         if (mid <= lo || mid >= hi) break;
         const mg = await tryN(mid);
@@ -770,7 +781,7 @@ export async function runAutoDesign(cfg, io) {
       const t0 = clock(), best0 = Math.max(...tried.map(mgOf)), passed = best0 >= 0;
       let n = downTo(Math.min(...tried.map((t) => totalLeds(t.design))) - 1);
       for (; (passed || best0 >= -FAR_MARGIN) && n >= ledRows && clock() - t0 < (cfg.ladderMs ?? LADDER_MS); n -= ledRows) {   // 목표에서 멀면 줄여도 나빠지는 줄 모름(모두 0 근처)
-        if (stop()) return { cancelled: true };
+        if (stop()) return halt();
         const L = ledMore(n);
         if (!L) break;
         if (await clashes({ ...d, ...L })) continue;
@@ -782,7 +793,7 @@ export async function runAutoDesign(cfg, io) {
     }
     // 부품과 겹치는 안은 고르지 않음(2026-11-07) — 처음 고른 배치·대안도 검사. 모두 겹치면 그대로(결과 카드가 '적용 불가' 로 알림)
     if (io.clash) {
-      for (const t of tried) { if (stop()) return { cancelled: true }; t.clash = await clashes(t.design); }
+      for (const t of tried) { if (stop()) return halt(); t.clash = await clashes(t.design); }
       const free = tried.filter((t) => !t.clash);
       if (free.length && free.length < tried.length) tried.splice(0, tried.length, ...free);
     }
@@ -794,7 +805,7 @@ export async function runAutoDesign(cfg, io) {
       const pool = tried.filter((t) => nearTarget(t.verified.stats, obs)).sort((a, b) => totalLeds(a.design) - totalLeds(b.design)).slice(0, SHARPEN_MAX);
       for (const t of pool) {
         t.verified = await judge(t.design, t.verified);
-        if (stop()) return { cancelled: true };
+        if (stop()) return halt();
         if (margin(t.verified.stats, obs) >= 0) break;
       }
     }
@@ -805,7 +816,7 @@ export async function runAutoDesign(cfg, io) {
       pick.verified = await judge(pick.design, pick.verified);
       let left = SHARPEN_MAX - 1;
       for (let n = upTo(totalLeds(pick.design) + 1); left > 0 && margin(pick.verified.stats, obs) < 0 && margin(pick.verified.stats, obs) >= -JUDGE_BAND && n <= cfg.nMax; n += ledRows) {
-        if (stop()) return { cancelled: true };
+        if (stop()) return halt();
         const known = tried.find((t) => totalLeds(t.design) === n && (t.design.rows ?? 1) === ledRows), L = known ? null : ledMore(n);
         if (!known && (!L || await clashes({ ...d, ...L }))) continue;
         io.progress?.('verify', 0.5, `최종 화질 미달 — LED ${n}개로 늘려 재확인(몇 분 걸림)`);
@@ -815,7 +826,7 @@ export async function runAutoDesign(cfg, io) {
         left--;
         if (margin(t.verified.stats, obs) >= 0 || margin(t.verified.stats, obs) > margin(pick.verified.stats, obs) + SCORE_EPS) pick = t;
       }
-      if (stop()) return { cancelled: true };
+      if (stop()) return halt();
     }
     d = pick.design; verified = pick.verified;
     if (more && mgOf(pick) < 0) {
@@ -825,9 +836,9 @@ export async function runAutoDesign(cfg, io) {
   }
   if (ledLimit && margin(verified.stats, obs) < 0 && mgFix(verified.stats) >= 0) reason = `길이 목표는 LED ${totalLeds(d)}개로 통과, 폭은 미달 — ${uText(verified.stats)} · 한계: 폭 방향 확산 부족(LED 개수로는 안 오름) — Milky·형상으로 보완`;
   verified = await judge(d, verified);
-  if (stop()) return { cancelled: true };
+  if (stop()) return halt();
   currentVerified = await judgeCurrent(currentVerified);   // 같은 격자·노이즈로 비교
-  if (stop()) return { cancelled: true };
+  if (stop()) return halt();
   // 노이즈 방어(①②③ 공통): 검증값이 현재안보다 SCORE_EPS 이상 낫지 않으면 현재안 유지. 둘 다 통과면 총 LED 수(rows·count) 감소도 이득
   const sc = (v) => shapeScore({ ok: !v.stats.empty, stats: v.stats, eff: v.eff }, obs);
   const fewer = margin(verified.stats, obs) >= 0 && margin(currentVerified.stats, obs) >= 0 && totalLeds(d) < totalLeds(cfg.current);

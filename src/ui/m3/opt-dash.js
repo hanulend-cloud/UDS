@@ -14,6 +14,7 @@ export const STAGES = [['position', '① 위치'], ['shape', '② 형상'], ['mi
 export function applyProgress(S, stage, frac, text, overall) {
   if (Number.isFinite(overall)) S.overall = Math.max(S.overall ?? 0, overall);
   if (stage === 'current') S.curFrac = Math.max(S.curFrac ?? 0, frac ?? 0); else if (stage === 'verify') S.verFrac = Math.max(S.verFrac ?? 0, frac ?? 0);
+  else if (stage === 'ledsRef') S.refFrac = Math.max(S.refFrac ?? 0, frac ?? 0);   // 위치 계산용 기준 Milky 찾기 = 진행 줄 따로 칸(2026-11-12 평가 1)
   const k = tileOf(stage);
   if (!k) {   // 현재안·검증 = 머리 줄 문구. 최종 판정으로 넘어가면 앞 항목은 끝난 것(97% 로 남아 미완료처럼 보이던 것, 2026-11-12)
     if (stage === 'verify' && S.cur && S.tiles[S.cur]?.status === 'run') { S.tiles[S.cur].status = 'done'; S.tiles[S.cur].frac = 1; }
@@ -129,13 +130,21 @@ export function beforeAfterHtml(k, b0, best, tl, tw, n = 0) {
 export const chartHtml = () => `<div class="od-plot" title="위로 갈수록 좋음 · 빨간 선에 닿으면 목표 통과"></div>
     <div class="od-legend od-lg"><span><i class="lg-dot"></i>시험한 후보(대략값)</span><span><i class="lg-line"></i>지금까지 최고</span><span><i class="lg-dia"></i>최종 판정(확정값)</span><span><i class="lg-tg"></i>목표</span><span><i class="lg-st"></i>시작</span></div>`;
 // chart = false → 그래프는 따로(창 왼쪽 아래 칸, createOptDash h.chart)
+// 중지 후 — 끝난 항목까지 반영한 안을 최종 판정만 해 볼 수 있게(2026-11-12 평가 9). 판정은 정밀 계산 그대로, 적용은 결과 카드 [적용]
+const DONE_NAME = { leds: 'LED 배치', height: 'LED 높이', housing: '케이스 면', shape: '형상', milky: 'Milky' };   // ① 위치 = LED 배치 + 높이 — 끝난 것만 정확히
+const partialHtml = (P) => {
+  const names = (P?.done ?? []).map((k) => DONE_NAME[k]).filter(Boolean);
+  return names.length ? `<p><button type="button" class="od-partial" data-adpartial title="끝난 항목의 결과만 넣은 안을 최종 화질로 판정합니다 — 끝나지 않은 항목은 지금 값 그대로">끝난 항목(${names.join(' · ')})까지 반영한 안 정밀 판정</button> <span class="mut">몇 분 걸림 · [적용]을 눌러야 설계에 반영</span></p>` : '';
+};
 export function monitorHtml(S, sec = 0, { chart = true } = {}) {
   const tl = S.tgLen, tw = S.tgWid, ok = (e) => e.ok !== false && Number.isFinite(e.Ulen);
   let best = null; for (const e of S.seq ?? []) if (ok(e) && (!best || scoreOf(e, tl, tw) > scoreOf(best, tl, tw))) best = e;
   const busy = S.ended == null && !S.stopped, fin0 = S.final;
   const step = (cls, name, sub) => `<div class="om-st om-${cls}"><b>${name}</b><span>${sub}</span></div>`;
   const uv = (e) => (e && Number.isFinite(e.Ulen) ? ` <i class="om-sv">${e.est ? '≈' : ''}${fmtJudge(e.Ulen)}/${fmtJudge(e.Uwid)}</i>` : '');   // 단계 최고(길이/폭) — 현황표 대신 상자 안에(2026-11-08)
-  const steps = [step(S.seq?.length || !busy ? 'done' : 'run', '현재안', S.seq?.length || !busy ? '✓' : `${Math.round((S.curFrac ?? 0) * 100)}%`)];
+  const curDone = !busy || S.seq?.length || S.refFrac != null || S.cur || S.verFrac != null;   // 다음 단계로 넘어갔으면 완료(기준 Milky 찾기는 후보 수에 안 들어감)
+  const steps = [step(curDone ? 'done' : 'run', '현재안', curDone ? '✓' : `${Math.round((S.curFrac ?? 0) * 100)}%`)];
+  if (S.refFrac != null) steps.push(S.cur || !busy ? step('done', '기준 Milky', '✓') : step('run', '기준 Milky', `${fmtProg(S.refFrac * 100)}%`));
   for (const [k, name] of STAGES) {
     const t = S.tiles[k];
     if (S.locked?.[k] && t.status === 'off') steps.push(step('lock', name, '고정 ✓'));
@@ -153,17 +162,19 @@ export function monitorHtml(S, sec = 0, { chart = true } = {}) {
     const d = Number.isFinite(v) && Number.isFinite(v0) ? v - v0 : NaN;
     return `<div class="om-k"><div class="mut">${label}${Number.isFinite(tg) ? ` · 목표 ${fmtTg(tg)}` : ''}</div><b class="om-v ${pass}">${fmtJudge(v)}</b><div class="mut">시작 ${fmtJudge(v0)}${Number.isFinite(d) && Math.abs(d) >= 0.0005 ? ` → ${d > 0 ? '▲' : '▼'}${fmtDp(Math.abs(d)).slice(1)}` : ''}${Number.isFinite(vLast) ? ` <span class="om-last" title="방금 시험한 후보(대략값) — 큰 숫자는 시작값을 포함한 지금까지 최고">· 방금 후보 ${fmtJudge(vLast)}</span>` : ''}</div></div>`;
   };
-  const effB = S.effBest, eff0 = b0.eff;
-  const effK = `<div class="om-k"><div class="mut">광 효율</div><b class="om-v">${Number.isFinite(effB) ? `${(effB * 100).toFixed(1)}%` : Number.isFinite(eff0) ? `${(eff0 * 100).toFixed(1)}%` : '–'}</b><div class="mut">${Number.isFinite(effB) && Number.isFinite(eff0) ? `시작 ${(eff0 * 100).toFixed(1)}%` : Number.isFinite(eff0) ? '시작값 · 최적안은 끝나면' : ''}</div></div>`;
+  const better = best && (!Number.isFinite(b0.Ulen) || scoreOf(best, tl, tw) > scoreOf(b0, tl, tw)) ? best : null;   // 시작보다 나은 후보만 '최고'
+  // 광 효율 — 끝나면 확정값, 도는 동안 = 지금까지 최고안의 대략값(≈, 2026-11-12 평가 4: 끝나야 7%p 떨어진 걸 알았음)
+  const effE = S.effBest, effR = !Number.isFinite(effE) && busy ? better?.eff : NaN, effB = Number.isFinite(effE) ? effE : effR, eff0 = b0.eff, pc = (v) => `${(v * 100).toFixed(1)}%`;
+  const effD = Number.isFinite(effB) && Number.isFinite(eff0) && Math.abs(effB - eff0) >= 0.0005 ? ` → ${effB > eff0 ? '▲' : '▼'}${fmtDp(Math.abs(effB - eff0)).slice(1)}` : '';
+  const effK = `<div class="om-k"><div class="mut">광 효율</div><b class="om-v">${Number.isFinite(effB) ? `${Number.isFinite(effR) ? '≈' : ''}${pc(effB)}` : Number.isFinite(eff0) ? pc(eff0) : '–'}</b><div class="mut">${Number.isFinite(effB) && Number.isFinite(eff0) ? `시작 ${pc(eff0)}${effD}` : Number.isFinite(eff0) ? '시작값 · 후보가 나오면 대략값' : ''}</div></div>`;
   const mmss = (t) => `${String((t / 60) | 0).padStart(2, '0')}:${String(t % 60 | 0).padStart(2, '0')}`;
   const nEval = (S.seq ?? []).length;
-  const better = best && (!Number.isFinite(b0.Ulen) || scoreOf(best, tl, tw) > scoreOf(b0, tl, tw)) ? best : null;   // 시작보다 나은 후보만 '최고'
   const fin = S.final, cur = fin ?? better, J = fin ? judgeStats(fin, { targetLen: tl, targetWid: tw }) : {}, uTxt = (l, v, t, j) => `${l} <b>${fmtJudge(v)}</b>${Number.isFinite(v) && Number.isFinite(t) ? ` (목표 ${fmtTg(t)} ${j === 'near' ? '<span class="od-near">근처</span>' : v + 1e-9 >= t ? '<span class="od-ok">통과</span>' : '<span class="od-bad">미달</span>'})` : ''}`;
   const uLine = cur ? `${uTxt('길이 균일도', cur.Ulen, tl, J.len)}, ${uTxt('폭 균일도', cur.Uwid, tw, J.wid)}` : '';
   const doing = S.note || (S.cur ? S.tiles[S.cur].text : '') || '준비하는 중';
   // 판정은 한 줄만 — 값은 아래 지표 카드에(같은 값을 여러 곳에 쓰지 않음, 2026-11-08)
   const say = busy ? `<p><b>지금</b> ${esc(doing)}</p>`
-    : S.stopped ? '<p><b>중지했습니다.</b> 찾던 안은 설계에 반영되지 않았습니다.</p>'
+    : S.stopped ? `<p><b>중지했습니다.</b> 찾던 안은 설계에 반영되지 않았습니다.</p>${partialHtml(S.partial)}`
     : '';
   const pct = fmtProg(S.ended != null ? 100 : Math.max(0, Math.min(1, S.overall ?? 0)) * 100);
   return `<div class="om-kpi">${kpi('길이 균일도', tl, cur?.Ulen ?? b0.Ulen, b0.Ulen, lastE?.Ulen)}${kpi('폭 균일도', tw, cur?.Uwid ?? b0.Uwid, b0.Uwid, lastE?.Uwid)}${effK}</div>${busy && !fin0 ? '<div class="mut om-kpi-note">큰 숫자 = 지금까지 최고(빠른 계산 대략값 · 길이·폭 중 목표에 더 모자란 쪽 기준) — 끝나면 정밀 재계산 값으로 조금 바뀔 수 있음</div>' : ''}
@@ -222,9 +233,10 @@ export function createOptDash(el, h = {}) {
   el.addEventListener('change', onChange); h.board?.addEventListener('change', onChange);
   h.board?.addEventListener('click', (e) => { const b = e.target.closest('[data-adunlock]'); if (b) h.onUnlock?.(b.dataset.adunlock); });   // 🔒 고정 → [다시 최적화]   // 켜기·설정 = 설계 인자 현황 줄
   const blank = () => Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', frac: 0, text: '', evals: [] }]));
-  function reset({ stages = {}, tgLen, tgWid, locked = {} } = {}) {
+  function reset({ stages = {}, tgLen, tgWid, locked = {}, done = [] } = {}) {   // done = 중지 때 끝난 항목(그 안만 정밀 판정할 때 '완료'로)
     S = { tiles: blank(), tgLen, tgWid, t0: performance.now(), cur: null, note: '', seq: [], log: [], locked, before: h.now?.() ?? {} };   // before = 실행 전 사양(타일 전후 비교) · locked = 고정 항목(진행 줄 표시)
-    for (const [k] of STAGES) S.tiles[k].status = stages[k] ? 'wait' : 'off';
+    for (const [k] of STAGES) S.tiles[k].status = done.includes(k) ? 'done' : stages[k] ? 'wait' : 'off';
+    for (const k of done) if (S.tiles[k]) S.tiles[k].frac = 1;
     draw();
   }
   // 보완 실행 — 새로 켠 항목을 '대기' 로(기존 결과는 남김)
@@ -243,7 +255,7 @@ export function createOptDash(el, h = {}) {
   // 오른쪽 모니터 — 진행 줄 · 지표 · 그래프(자리 크기로) · 기록. 끝나도 그대로 남김(결과 카드는 위 #m3-auto)
   // 지난 후보 표(2026-11-07) — 실행 결과 아래에 늘 붙임(실행 전에도 지난 후보가 있으면)
   const histHtml = () => { const H = h.history?.(); return H?.list?.length ? histTableHtml(H.list, H.tgLen, H.tgWid, H.busy) : ''; };
-  el.addEventListener('click', (e) => { const b = e.target.closest('[data-hpick]'); if (b && !b.disabled) h.onPick?.(+b.dataset.hpick); });
+  el.addEventListener('click', (e) => { const b = e.target.closest('[data-hpick]'); if (b && !b.disabled) h.onPick?.(+b.dataset.hpick); if (e.target.closest('[data-adpartial]')) h.onPartial?.(); });
   function render() {
     // 바뀐 것만 갱신(2026-11-07) — 전에는 초당 3~4번 통째로 다시 만들고 그래프 칸을 비웠다가 그려 화면이 깜빡였음
     const put = (node, html) => { if (node && node._html !== html) { const op = keepOpen(node); node.innerHTML = html; node._html = html; op(); } };
@@ -258,6 +270,7 @@ export function createOptDash(el, h = {}) {
   if (typeof setInterval !== 'undefined') setInterval(() => { if (S && S.ended == null && !S.stopped && el.isConnected && el.offsetParent) draw(); }, 1000);   // 걸린 시간 갱신
   render(); renderBoard();
   function stop() { if (S) { S.stopped = true; S.pauseAt = null; stopTiles(S); draw(); } }
+  function setPartial(P) { if (S) { S.partial = P; draw(); } }   // 중지 뒤 끝난 항목까지 반영한 안(정밀 판정 단추)
   // 일시정지한 시간은 걸린 시간에서 뺌
   function setPaused(on) { if (!S) return; if (on) S.pauseAt ??= performance.now(); else if (S.pauseAt) { S.t0 += performance.now() - S.pauseAt; S.pauseAt = null; } draw(); }
   // 고르기만 바뀜(실행 전) — 다시 그림. 실행 결과가 남아 있으면 그대로 두고 스위치만 갱신
@@ -266,7 +279,7 @@ export function createOptDash(el, h = {}) {
   // 단계별 최고(실제 계산값) — 결과 화면의 항목별 효과
   function stageBests() { if (!S) return null; const o = {}; for (const [k] of STAGES) { const t = S.tiles[k]; if (t.status !== 'off') { const e = stageBest(t, S.tgLen, S.tgWid); if (e && !e.est) o[k] = { Ulen: e.Ulen, Uwid: e.Uwid }; } } return o; }
   const hasRun = () => !!S;
-  return { stageBests, hasRun, reset, addStages, progress, evals, finish, stop, setPaused, refresh, clear };
+  return { stageBests, hasRun, reset, addStages, progress, evals, finish, stop, setPartial, setPaused, refresh, clear };
 }
 
 // 광경로 순위(순수) — paths = { 'R:2>1': 가중 합 } → [{ parts:[번호], refl, share }] 비중 큰 순(기구 부품만, 같은 경로 합침)
