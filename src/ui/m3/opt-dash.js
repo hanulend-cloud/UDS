@@ -336,8 +336,15 @@ export function simCaption(H, tgt, obs, state) {
   const last = H[H.length - 1]; if (!last) return '광선 수 0';
   return `광선 ${human(last.ph)} / 총 ${human(state === 'done' ? last.ph : simTotal(last, tgt))}${state === 'running' ? etaText(H, tgt).replace(/ · 필요 광선 ≈ [^·]*/, '') : ''}`;
 }
+// 시뮬레이션 상태 글(순수) — 카드·아래 상태줄 공용
+export function simStateText(state, reason = '', stopped = false, busy = false) {
+  if (busy) return '기구 최적화 중 — 일시정지(끝나면 이어서)';
+  return { running: '계산 중', paused: stopped ? '중지됨' : '일시정지', done: reason === 'adopted' ? '완료 — 기구 최적화 최종 판정 값' : reason === 'converged' ? '완료 — 목표 정확도 도달' : '계산 한도 도달 — 정확도 미달', pending: '대기', starting: '장면 준비' }[state] ?? state ?? '';
+}
 // 오른쪽 맨 위 카드(항상 보임) — onCtl(k) = 실행·일시정지·중지. 광경로 목록은 접는 칸
-export function createSimDash(el, { onCtl = null } = {}) {
+// bar = 아래 상태줄 칸(2026-11-12 화면 다시 그리기 6단계): 있으면 실행·일시정지·중지 · 진행률 · 광선 수 · 상태 글을 그 줄에 그리고,
+//       카드에는 제목과 접는 칸(계산 오차·균일도 추이 / 광경로)만 남김. 접는 칸 열림은 보는 사람별로 기억(uds.m3.simPlots)
+export function createSimDash(el, { onCtl = null, bar = null } = {}) {
   let H = [], tgt = 0.02, raf = 0, state = '', obs = null, P = [], names = [], reason = '', stopped = false;
   // names = 부품 이름, nMech = 기구 부품 수(LED STEP 부품 번호는 그 뒤 — 경로에서 뺌)
   let busy = false;   // 기구 최적화 중(점진 계산 일시정지)
@@ -359,8 +366,19 @@ export function createSimDash(el, { onCtl = null } = {}) {
     const last = H[H.length - 1], pct = state === 'done' ? 100 : Number.isFinite(prog) ? prog : last ? simPct(last.noise, tgt) : 0, pctT = fmtProg(pct);
     const plot = el.querySelector('.od-simplot'), svg = simPlotSvg(H, tgt, obs, plot?.clientWidth || 300, plot?.clientHeight || 70);
     const row = simCaption(H, tgt, obs, state);
-    const sTxt = { running: '계산 중', paused: stopped ? '중지됨' : '일시정지', done: reason === 'adopted' ? '완료 — 기구 최적화 최종 판정 값' : reason === 'converged' ? '완료 — 목표 정확도 도달' : '계산 한도 도달 — 정확도 미달', pending: '대기', starting: '장면 준비' }[state] ?? state ?? '';
+    const sTxt = simStateText(state, reason, stopped, busy);
     // 틀은 한 번만 만들고 칸마다 바뀐 것만 고침 — 계산 중 갱신이 잦아도 단추 클릭·접는 칸이 끊기지 않게
+    if (bar && !el.querySelector('.od-simh')) {   // 상태줄 모드: 카드 = 제목 + 접는 칸
+      let open = false; try { open = localStorage.getItem('uds.m3.simPlots') === '1'; } catch {}
+      el.innerHTML = `<div class="od-h od-simh"><i class="m3-fl" data-s="step">4</i>광분포 시뮬레이션<span class="m3-ad-sp"></span><span class="mut od-simst" data-s="st"></span></div>
+        <details class="od-more od-plots"${open ? ' open' : ''}><summary title="계산 오차(목표 점선까지 내려가면 계산 끝) · 길이·폭 균일도가 광선 수에 따라 어떻게 변했는지">계산 오차 · 균일도 추이</summary><div class="od-simbox"><div class="od-simplot" data-s="svg"></div></div></details>
+        <div class="od-diag" data-s="diag" hidden></div>
+        <details class="od-more"><summary><span data-s="sum">광경로</span></summary><div data-s="paths"></div></details>`;
+      el.querySelector('.od-plots').addEventListener('toggle', (e) => { try { localStorage.setItem('uds.m3.simPlots', e.target.open ? '1' : '0'); } catch {} draw(); window.dispatchEvent(new Event('resize')); });
+    }
+    if (bar && !bar.querySelector('[data-b="pct"]')) {
+      bar.innerHTML = `<span class="m3-ctl" data-sim-ctl></span><b data-b="pct"></b><span class="od-bar m3-run-bar" title="계산 오차가 목표에 닿으면 100%"><i data-b="bar"></i></span><span class="m3-run-row" data-b="row"></span><span class="m3-run-st" data-b="st"></span>`;
+    }
     if (!el.querySelector('.od-simh')) {
       el.innerHTML = `<div class="od-h od-simh"><i class="m3-fl" data-s="step">4</i>광분포 시뮬레이션<span class="m3-ad-sp"></span>${onCtl ? '<span class="m3-ctl" data-sim-ctl></span>' : ''}</div>
         <div class="od-pct"><b data-s="pct"></b><div class="od-bar od-bar-big" title="계산 오차가 목표에 닿으면 100%"><i data-s="bar"></i></div><span class="od-simcap od-capr" data-s="row"></span><span class="mut od-simst" data-s="st"></span></div>
@@ -368,12 +386,15 @@ export function createSimDash(el, { onCtl = null } = {}) {
         <details class="od-more"><summary><span data-s="sum">광경로</span></summary><div data-s="paths"></div></details>`;
     }
     const set = (k, html) => { const n = el.querySelector(`[data-s="${k}"]`); if (n && n.innerHTML !== html) n.innerHTML = html; };
-    set('st', busy ? '기구 최적화 중 — 일시정지(끝나면 이어서)' : esc(sTxt));
+    set('st', esc(sTxt));
     { const n = el.querySelector('[data-s="st"]'); if (n) n.title = n.textContent; }   // 좁은 칸에서 … 로 잘려도 전체 문구를 볼 수 있게
     setStepMark(el.querySelector('[data-s="step"]'), 4, state === 'done');
-    setCtl(el.querySelector('[data-sim-ctl]'), simCtl({ state, stopped }, busy), (k) => onCtl?.(k));
-    set('pct', `${pctT}%`); el.querySelector('[data-s="bar"]').style.width = `${pctT}%`;
-    set('row', row);
+    setCtl((bar ?? el).querySelector('[data-sim-ctl]'), simCtl({ state, stopped }, busy), (k) => onCtl?.(k));
+    if (bar) {
+      const B = (k) => bar.querySelector(`[data-b="${k}"]`), bt = (k, t) => { const n = B(k); if (n && n.textContent !== t) n.textContent = t; };
+      bt('pct', `${pctT}%`); B('bar').style.width = `${pctT}%`; bt('row', row); bt('st', sTxt);
+      const sn = B('st'); sn.title = sTxt; sn.className = `m3-run-st ${state === 'done' ? (reason === 'converged' || reason === 'adopted' ? 'ok' : 'warn') : ''}`;
+    } else { set('pct', `${pctT}%`); el.querySelector('[data-s="bar"]').style.width = `${pctT}%`; set('row', row); }
     const dg = el.querySelector('[data-s="diag"]'); if (dg) { dg.hidden = !diag; set('diag', diag?.html ?? ''); }
     set('svg', svg);
     if (mini) {

@@ -956,3 +956,10 @@ done();
   const a = overallVerdict({ Ulen: 0.79999, Uwid: 0.9, relNoise: 0.001 }, O), b = judgeText(0.79999, 0.8, null, 0.001);
   okV(a.cls === b.cls, `경계값도 judgeText 와 같은 판정(${a.cls} / ${b.cls})`);
 }
+{ // 아래 상태줄 시뮬레이션 상태 글(2026-11-12 화면 다시 그리기 6단계) — 예전 시뮬레이션 카드 글 그대로
+  const okS = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
+  const { simStateText } = await import('../src/ui/m3/opt-dash.js');
+  okS(simStateText('running') === '계산 중' && simStateText('paused', '', true) === '중지됨' && simStateText('paused') === '일시정지', '계산 중 · 중지됨 · 일시정지');
+  okS(simStateText('done', 'converged') === '완료 — 목표 정확도 도달' && simStateText('done', 'adopted') === '완료 — 기구 최적화 최종 판정 값' && simStateText('done', 'limit') === '계산 한도 도달 — 정확도 미달', '완료 이유별 글');
+  okS(simStateText('running', '', false, true) === '기구 최적화 중 — 일시정지(끝나면 이어서)' && simStateText('') === '', '기구 최적화 중 · 상태 없음');
+}

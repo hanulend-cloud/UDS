@@ -1380,3 +1380,24 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .m3-sum-c .m3-need:empty { display: none; }
 .m3-res > .m3-blk { min-height: 130px; }
 @media (min-width: 1025px) { .m3-res { overflow-y: auto; } }
+
+/* ---- 화면 다시 그리기 6단계(2026-11-12): 아래 상태줄 = [실행·일시정지·중지 · 진행률 · 광선 수 · 상태] + 조립·성형 점검 ---- */
+.m3-foot { display: flex; align-items: center; min-height: 44px; border-top: 1px solid var(--m3-line); background: var(--m3-panel, transparent); min-width: 0; }
+.m3-foot > .m3-status { flex: 1 1 auto; border-top: 0; min-width: 0; }
+.m3-run { display: flex; align-items: center; gap: 10px; padding: 4px 12px; font-size: 13px; flex: 0 1 auto; min-width: 0; border-right: 1px solid var(--m3-line); }
+.m3-run:empty { display: none; }
+.m3-run .m3-ctl { display: inline-flex; gap: 4px; }
+.m3-run .m3-ctl button { min-height: 32px; padding: 0 12px; border: 1px solid var(--m3-line); border-radius: 6px; background: var(--m3-panel, #fff); color: inherit; font: inherit; cursor: pointer; }
+.m3-run .m3-ctl button[data-ctl="run"]:not(:disabled) { background: var(--m3-acc); border-color: var(--m3-acc); color: #fff; font-weight: 600; }
+#mech3d-wrap[data-theme="dark"] .m3-run .m3-ctl button[data-ctl="run"]:not(:disabled) { background: var(--m3-acc); border-color: var(--m3-acc); color: #0b1220; }
+.m3-run .m3-ctl button:disabled { opacity: .45; cursor: default; }
+.m3-run b[data-b="pct"] { font-size: 16px; min-width: 48px; text-align: right; font-variant-numeric: tabular-nums; }
+.m3-run-bar { display: inline-block; width: 140px; height: 6px; border-radius: 3px; background: var(--m3-line); overflow: hidden; flex: none; }
+.m3-run-bar > i { display: block; height: 100%; background: var(--m3-acc); }
+.m3-run-row { color: var(--m3-mut); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.m3-run-st { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.m3-run-st.ok { color: var(--m3-ok); } .m3-run-st.warn { color: var(--m3-warn); }
+/* 시뮬레이션 카드: 접는 칸이 닫혀 있으면 내용 높이만(아래 결과 칸이 자리를 가짐) */
+.m3-right > .m3-simcard:not(:has(details.od-plots[open])) { flex: none !important; height: auto !important; }
+.m3-simcard details.od-plots[open] > .od-simbox { min-height: 96px; height: 120px; display: flex; flex-direction: column; border: 1px solid var(--m3-line); border-radius: 6px; padding: 2px; }
+.m3-simcard details.od-plots > summary { font-weight: 600; }
