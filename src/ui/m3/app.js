@@ -23,7 +23,7 @@ import { createProgressive, photonCap, fmtProg } from './progressive.js';
 import { createPool } from './pool.js';
 import * as L from './leds.js';
 import { buildObsOverlay, cellColors, extractFaces } from './colormap.js';
-import { mountCommandBar } from './command-bar.js';
+import { mountCommandBar, obsCmd } from './command-bar.js';
 import { renderFeatureTree, toggleVisibility, viewKeep, togglePcb, makeGroup, ungroup, groupMembers, rangeSelect, obsFacesAfterClick, removeFromGroups, viewCtxItems, showCtxMenu, toggleLed, ledFoldDefault, untraceItem } from './feature-tree.js';
 import { mountSplitter, mountDockSplitter, mountFacSplitter } from './splitter.js';
 import { createOptDash, createSimDash, simPct, traceFrac } from './opt-dash.js';
@@ -1944,7 +1944,7 @@ function cmdHandlers() {
     onImport: (f) => A.ctx.onImportMech3d(f),
     // ① LED 지정: 광원이 아직 없거나 발광 방향 미지정이면 먼저 자동 선택(같은 부품 2개 이상 · PCB 위 · PCB 반대쪽 발광) — 못 찾으면 기존 흐름
     onLed: () => { const L0 = A.store.mspec.light; if ((L0.kind === 'none' || (L0.kind === 'step' && !L0.step?.emitters?.length)) && autoLed()) return; A.store.update('session', (m, x) => { const stp = m.light.kind === 'step' && m.light.step; x.node = 'light'; x.pick = stp && !stp.virtual ? (x.pick === 'led' ? null : 'led') : null; }); },
-    onObs: () => A.store.update('session', (_, x) => { x.node = 'obs'; x.pick = x.pick === 'obs' ? null : 'obs'; }),
+    onObs: () => A.store.update('session', (m, x) => Object.assign(x, obsCmd(x, m.observe.faces?.length ?? 0))),   // 이미 지정 = 메뉴만(면 바꾸기는 메뉴의 단추)
     onTarget: () => { setLpTab('obs', 'basic'); A.store.update('session', (_, x) => { x.node = 'obs'; x.sel = null; x.ledSel = null; x.pick = null; });
       setTimeout(() => { const q = $('[data-lp-tgt="targetLen"]'); q?.scrollIntoView?.({ block: 'center' }); q?.focus(); q?.select?.(); }, 0); },   // 목표 = 관측면 기본 탭의 ③ 칸
     onSection: () => A.store.update('view', (_, x) => {

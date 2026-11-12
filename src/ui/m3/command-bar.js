@@ -8,6 +8,11 @@ export function stepState(M) {
   const O = M.observe, tgOk = O.targetLen > 0 && O.targetWid > 0;   // 목표 둘 다 입력됨 = ✓
   return { led, obs: (O.faces?.length ?? 0) > 0, tgOk, tgt: `${Math.round(O.targetLen * 100)}% / ${Math.round(O.targetWid * 100)}%` };
 }
+// ② 관측면 지정 단추(순수, 2026-11-12 사용자 결정) — 면이 없으면 바로 3D 클릭 대기. 이미 지정돼 있으면 관측면 메뉴만 열고
+// 면 바꾸기는 메뉴의 [면 다시 지정] 으로(사용 중 실수로 면이 바뀌지 않게). 클릭 대기 중에 누르면 끝내기
+export function obsCmd(S, nFaces) {
+  return { node: 'obs', pick: S.pick === 'obs' ? null : nFaces > 0 ? null : 'obs' };
+}
 // 흐름 4·5단계 상태(순수, 2026-10-29) — 4 광분포 시뮬레이션(지금 설계의 빛 분포·균일도) → 5 기구 최적화(후보를 찾아 적용 → 4 가 다시 검증)
 // calc = 점진 계산 스냅숏, stats = 그 결과, ad = { running, result } (기구 최적화). 반환 { sim:{ text, cls, done }, opt:{ text, cls, done } }
 export function flowState(calc, stats, M, ad = {}) {

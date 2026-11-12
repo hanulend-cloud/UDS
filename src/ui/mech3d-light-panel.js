@@ -286,7 +286,7 @@ export function renderObserveProps(el, m, ui, h) {
   // 기본 탭(2026-10-30 정리, 2026-11-03 목표 통합): ① 어디를 보나(면 지정·상태) ② 목표와 지금 결과(한 표) · 밝기 목표
   const basic = `<div class="m3-card"><div class="m3-sub"><i class="m3-fl">2</i> 관측면 지정 <span class="mut">빛이 고르게 보여야 하는 면</span></div>
       <div class="m3-row">${state}</div>
-      <div class="m3-row">${pickBtn(ui, 'obs', ui.pick === 'obs' ? '클릭 대기 중 — 끝내기' : nF ? '면 더하기 / 빼기' : '👁 3D 에서 면 클릭')} ${nF ? '<button data-lp-clear>모두 지우기</button>' : ''} ${ui.lineErr ? '<button data-lp-reline>라인 다시 인식</button>' : ''}</div>
+      <div class="m3-row">${pickBtn(ui, 'obs', ui.pick === 'obs' ? '클릭 대기 중 — 끝내기(Esc)' : nF ? '면 다시 지정 (더하기·빼기)' : '👁 3D 에서 면 클릭')} ${nF ? '<button data-lp-clear>모두 지우기</button>' : ''} ${ui.lineErr ? '<button data-lp-reline>라인 다시 인식</button>' : ''}</div>
       <div class="m3-row mut">${nF ? '3D 의 하늘색 테두리 = 관측면 · 화살표 = 보는 방향 · 같은 면을 다시 클릭 = 빼기' : '예: 확산판·도광판의 윗면(사람이 보는 면)을 3D 에서 클릭'}</div>
       ${ui.lineErr ? `<div class="m3-row warn">${esc(ui.lineErr)}</div>` : ''}</div>
     <div class="m3-card m3-goal"><div class="m3-sub"><i class="m3-fl">3</i> 목표 설정 <span class="m3-req">꼭 입력</span></div>

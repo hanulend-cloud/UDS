@@ -822,6 +822,12 @@ done();
   const { toCsv } = await import('../src/ui/m3/results-panel.js');
   const c = toCsv('# 이름 a,b\ns\t값\t\n1.5\t"x"\t2.00');
   console.log(c === '"# 이름 a,b"\r\ns,값,\r\n1.5,"""x""",2.00' ? 'PASS CSV 변환' : (process.exitCode = 1, `FAIL CSV 변환 ${JSON.stringify(c)}`)); }
+{ // ② 관측면 지정(2026-11-12 사용자 결정): 면이 없으면 바로 클릭 대기 · 이미 있으면 메뉴만(면 바꾸기는 메뉴의 단추) · 대기 중 다시 누르면 끝내기
+  const { obsCmd } = await import('../src/ui/m3/command-bar.js');
+  const a = obsCmd({ node: 'parts', pick: null }, 0), b = obsCmd({ node: 'parts', pick: null }, 2), c = obsCmd({ node: 'obs', pick: 'obs' }, 2), d = obsCmd({ node: 'light', pick: 'led' }, 2);
+  ok(a.node === 'obs' && a.pick === 'obs', '면 없음 = 바로 클릭 대기');
+  ok(b.node === 'obs' && b.pick === null, `이미 지정 = 메뉴만 (${JSON.stringify(b)})`);
+  ok(c.pick === null && d.pick === null, '대기 중 다시 누름 = 끝내기 · 다른 클릭 대기도 끝냄'); }
 { // 부품 리스트(2026-11-11): 소재 칸만 3D 색 배경, 이름은 그대로 · 계산 제외는 색 없이 흐리게(k-off)
   const { treeHtml } = await import('../src/ui/m3/feature-tree.js'), { defaultLight, defaultObserve } = await import('../src/engine/mech3d/defs.js');
   const M = { parts: [{ name: 'A', material: { kind: 'milky', milky: 2 } }, { name: 'B', material: { kind: 'milky', milky: 2 }, untrace: true }], light: defaultLight(), observe: defaultObserve(), groups: [] };
