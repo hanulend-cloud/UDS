@@ -154,6 +154,21 @@ export function makeAccumulator(G, line, obs, rw = null, { virtual = false } = {
 // relNoise = U 를 만드는 값들의 노이즈: 길이 프로파일 s 칸(폭 방향 합) · 폭 판정 창의 w 칸(창 안 s 합) 각각 (배치 간 표준편차/평균)/√B 의 중앙값 중 큰 쪽
 //   — min/max 의 낮은 쪽 편향을 만드는 노이즈의 크기. 예전엔 2D 칸 하나하나의 노이즈가라, 관측면이 좁고 효율이 낮으면(ㄱ자 Milky 출구 등)
 //   필요한 광자가 수억 개가 되어 수렴하지 않았다(2026-10-28). relNoiseCell = 2D 칸 노이즈(색지도 얼룩 참고용).
+// 영역 균일도(2026-11-12, 표시 전용) — rect = { s0, s1, w0, w1 } mm. 격자를 칸 경계로 잘라(바깥쪽으로 맞춤) tallyStats 를 그대로 부름 → 판정과 같은 식.
+// 반환 = tallyStats 결과 + { cells:[i0,i1,j0,j1], mm:[s0,s1,w0,w1], meanRatio(영역 평균 / 전체 평균) }
+export function regionStats(G, accs, obs, rect) {
+  const cl = (v, n) => Math.max(0, Math.min(n, v));
+  let i0 = cl(Math.floor(rect.s0 / G.ds + 1e-9), G.ns), i1 = cl(Math.ceil(rect.s1 / G.ds - 1e-9), G.ns);
+  let j0 = cl(Math.floor((rect.w0 - G.w0) / G.cell + 1e-9), G.nw), j1 = cl(Math.ceil((rect.w1 - G.w0) / G.cell - 1e-9), G.nw);
+  if (i1 <= i0) { i1 = Math.min(G.ns, i0 + 1); i0 = i1 - 1; }
+  if (j1 <= j0) { j1 = Math.min(G.nw, j0 + 1); j0 = j1 - 1; }
+  const ns = i1 - i0, nw = j1 - j0;
+  const crop = (a) => { const o = new a.constructor(ns * nw); for (let i = 0; i < ns; i++) for (let j = 0; j < nw; j++) o[i * nw + j] = a[(i0 + i) * G.nw + j0 + j]; return o; };
+  const g = { ...G, ns, nw, valid: crop(G.valid), area: crop(G.area), w0: G.w0 + j0 * G.cell, L: ns * G.ds, closed: false, validAll: undefined, areaAll: undefined };
+  const sub = accs.map(crop), st = tallyStats(g, sub, obs);
+  const avg = (gg, as) => { let s = 0, ar = 0; for (const a of as) for (let k = 0; k < a.length; k++) if (gg.valid[k]) { s += a[k]; ar += gg.area[k]; } return ar > 0 ? s / ar : NaN; };
+  return { ...st, cells: [i0, i1, j0, j1], mm: [i0 * G.ds, i1 * G.ds, G.w0 + j0 * G.cell, G.w0 + j1 * G.cell], meanRatio: avg(g, sub) / avg(G, accs) };
+}
 export function tallyStats(G, accs, obs, cnts = null) {
   const B = accs.length, nCell = G.ns * G.nw, { ns, nw, ds, area, valid } = G;
   let nValid = 0; for (let k = 0; k < nCell; k++) if (valid[k]) nValid++;
