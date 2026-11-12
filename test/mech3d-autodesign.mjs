@@ -555,6 +555,13 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   const b = await run((n) => (n === 3 ? 0.4 : n > first ? 0.81 : 0.79));
   ok(b.r.feasible && b.r.best.count > first && b.r.verified.stats.Ulen === 0.81, `저화질 통과 ${first}개가 화면 격자 미달 → ${b.r.best.count}개 (${b.seen.join()})`);
 }
+{ // 최종 판정 시간(2026-11-12, 3번 묶음 A): LED 재확인이 없으면 저화질 재계산은 짧은 추정(광자 수 정하기용)만 · 화면 격자가 목표 노이즈에 못 닿으면 이어서 더 잼(판정 규칙 그대로)
+  const calls = [], io = { milkyRows: async (d, ms) => rowsOf(ms), progress() {}, cancelled: () => false,
+    verify: async (d, o = {}) => { calls.push({ cur: d.milky === 3, ...o, from: o.from ? { screen: !!o.from.screen } : null }); const rn = o.screen ? (o.from?.screen ? o.noise : 0.014) : 0.02; return { stats: { ...st(0.9, 0.9), relNoise: rn }, eff: 0.5, photons: 1e6, screen: !!o.screen }; } };
+  const r = await runAutoDesign({ stages: { milky: true }, obs: { ...obs, targetNoise: 0.01 }, current: { milky: 3, count: 5, pitch: 0, shape: null }, milkyMax: 5, screenGrid: true }, io);
+  const fin = calls.filter((c) => !c.cur), low = fin.filter((c) => !c.screen), scr = fin.filter((c) => c.screen);
+  ok(low.length === 1 && low[0].estimate === true && scr.length === 2 && scr[1].from?.screen && scr[1].noise === 0.01 && r.verified.stats.relNoise === 0.01,
+    `저화질 = 짧은 추정 ${low.map((c) => c.estimate)} · 화면 격자 ${scr.length}회(못 닿으면 이어서) · 노이즈 ${r.verified.stats.relNoise}`); }
 { // 화면 격자 판정: 목표에서 먼 안은 시간 한도까지만(현재안 40개가 10 분 걸렸음) · 가까운 안은 한도 없음
   const calls = [], io = { milkyRows: async (d, ms) => rowsOf(ms), verify: async (d, o = {}) => { if (o.screen) calls.push([d.milky, o.maxMs]); return { stats: { ...st(d.milky === 3 ? 0.45 : 0.85, 0.9), relNoise: o.noise ?? 0.03 }, eff: 0.5, photons: 1e7 }; }, progress() {}, cancelled: () => false };
   const r = await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 3, count: 5, pitch: 0, shape: null }, milkyMax: 5, screenGrid: true }, io);

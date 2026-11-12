@@ -710,7 +710,10 @@ export async function runAutoDesign(cfg, io) {
     if (v.sharp || stop()) return v;
     io.progress?.('verify', 0.5, '최종 화질로 판정(몇 분 걸림)');
     // 목표에서 먼 안(LED 많은 현재안은 효율이 낮아 1% 까지 10 분도 모자람)은 판정이 안 바뀌니 시간 한도까지만
-    let r = await io.verify(e, { noise: obs.targetNoise ?? 0.01, from: v, screen: true, ...(margin(v.stats, obs) < -FAR_MARGIN ? { maxMs: FAR_MS } : {}) });
+    const tn = obs.targetNoise ?? 0.01, far = margin(v.stats, obs) < -FAR_MARGIN;
+    let r = await io.verify(e, { noise: tn, from: v, screen: true, ...(far ? { maxMs: FAR_MS } : {}) });
+    // 광자 수를 짧은 추정으로 정했으면 목표 노이즈에 못 닿을 수 있음 — 같은 계산에 이어서 목표까지(판정 규칙 그대로, 2026-11-12)
+    if (!far && r.stats.relNoise > tn * 1.1 && !stop()) r = await io.verify(e, { noise: tn, from: r, screen: true });
     if (nearTarget(r.stats, obs) && r.stats.relNoise > JUDGE_NOISE * 1.1 && !stop()) r = await io.verify(e, { noise: JUDGE_NOISE, from: r, screen: true });
     return { ...r, sharp: true };
   };
@@ -727,7 +730,8 @@ export async function runAutoDesign(cfg, io) {
     const why = reason || (okCur ? '' : `현재 설계가 최선 — 목표 미달(길이 균일도 ${fmtJudge(cs.Ulen)}${cs.Uwid == null ? '' : ` · 폭 균일도 ${fmtJudge(cs.Uwid)}`})`);
     return { feasible: feasible && okCur, best: { ...cfg.current }, steps, reason: why, verified: currentVerified, current: currentVerified, unchanged: true, cancelled: false, hint, peek, milkyLowered: lowered, shapeNote };
   }
-  let verified = await io.verify(d);
+  // LED 재확인이 없으면 저화질 재계산은 화면 격자 판정의 광자 수를 정하는 데만 쓰임 — 짧은 추정으로(최대 45 초 → 약 8 초, 2026-11-12 3번 묶음 A)
+  let verified = await io.verify(d, cfg.screenGrid && !(ledAlts?.length || ledMore) ? { estimate: true } : {});
   // 개수로 고칠 수 있는 방향만 본 여유 — 폭이 어떤 개수로도 못 닿으면(ledLimit) 길이로 판정
   const mgFix = (s) => (ledLimit ? s.Ulen - obs.targetLen : margin(s, obs));
   // 늘리기·줄이기 보조(2026-11-07): 열 수의 배수로 맞춤 · 부품과 겹치는 안(io.clash > 0)은 건너뜀 — 겹치는 안을 골라 '적용 불가' 가 되지 않게
