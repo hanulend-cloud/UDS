@@ -51,7 +51,13 @@ export function makeChunkHost({ getTable, getDb = () => null }) {
         }
         const args = { S, line, obs, G, emitters, ledSpec, N: m.N, seed: m.seed, rw };
         if (gpu && !gpu.lost && !obsVirtual(S, obs)) {
-          return runChunkGpu(gpu, args).then((r) => pack(m, r), (e) => { const msg = String(e?.message ?? e); gpu = null; gpuFail(msg); return pack(m, runChunk(args)); });
+          // GPU 가 청크 중에 멈추면 GPU 를 끄고 CPU 로 — 단 cpuMax(점진 계산이 줌)보다 큰 GPU 몫 청크는 CPU 로 통째 돌리면 청크 제한 시간을 넘기므로
+          // gpuRetry 로 돌려보내 호출 쪽이 CPU 크기로 다시 보내게 함(2026-11-12, 'Worker 응답 없음' 원인)
+          return runChunkGpu(gpu, args).then((r) => pack(m, r), (e) => {
+            const msg = String(e?.message ?? e); gpu = null; gpuFail(msg);
+            if (m.cpuMax > 0 && m.N > m.cpuMax) return { reply: { sceneKey: m.sceneKey, gpuRetry: true }, transfer: [] };
+            return pack(m, runChunk(args));
+          });
         }
         return pack(m, runChunk(args));
       }

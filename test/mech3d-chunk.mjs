@@ -79,4 +79,14 @@ const same = (a, b) => a.length === b.length && a.every((v, k) => v === b[k]);
   const h = host.handle({ type: 'path', sceneKey: 'p1', emitter: fx.emitters[2], want: ':0', nMech: 1 }).reply;
   ok(h.path?.pts?.length >= 3 && host.handle({ type: 'path', sceneKey: 'zz', want: ':0' }).reply.stale === true, 'Worker path 메시지 → 경로, 다른 장면 → stale');
 }
+{   // GPU 가 청크 중에 멈추면(2026-11-12) — cpuMax 보다 큰 청크는 CPU 로 통째 이어 돌리지 않고 gpuRetry 로 돌려보냄(이어 돌리면 청크 제한 시간을 넘김)
+  const host = makeChunkHost({ getTable: () => table, getDb: () => null });
+  let failed = 0; host.setGpu({ lost: false, trace: () => Promise.reject(new Error('GPU 응답 없음 (20초)')) }, () => failed++);
+  host.handle({ type: 'scene', sceneKey: 'g1', mechParts: [fx.plate], mspec: fx.mspec, ledParts: null, lineData: lightData(fx.line), G: fx.G, obs: fx.obs, emitters: fx.emitters });
+  const big = (await host.handle({ type: 'chunk', sceneKey: 'g1', seed: 1, N: 200000, cpuMax: 50000 })).reply;
+  ok(big.gpuRetry === true && !big.acc && failed === 1 && host.gpu === null, 'GPU 실패 + cpuMax 초과 청크 → gpuRetry(CPU 로 통째 계산 안 함), GPU 끔');
+  host.setGpu({ lost: false, trace: () => Promise.reject(new Error('x')) });
+  const small = (await host.handle({ type: 'chunk', sceneKey: 'g1', seed: 1, N: 2000, cpuMax: 50000 })).reply;
+  ok(small.acc?.length > 0 && !small.gpuRetry, 'GPU 실패 + 작은 청크 → 그대로 CPU 로 계산');
+}
 done();

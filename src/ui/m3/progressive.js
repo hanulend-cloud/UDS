@@ -139,8 +139,14 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
         else { c = nextChunk++; N = Math.min(o.fixedChunk ? o.chunkN : size[k], cap() - issued); issued += N; b = pickBin(c); binIssued[b] += N; }
         let r;
         const t0 = now();
-        try { r = await send(ports[k], { type: 'chunk', sceneKey: job.sceneKey, seed: chunkSeed(o.seedBase, c), N }, chunkLimit); } catch (e) { fail(g, e); return; }
+        try { r = await send(ports[k], { type: 'chunk', sceneKey: job.sceneKey, seed: chunkSeed(o.seedBase, c), N, cpuMax: o.maxChunk }, chunkLimit); } catch (e) { fail(g, e); return; }
         if (g !== gen) return;   // 그사이 다시 시작·취소됨 — 버림
+        // GPU 가 이 청크 중에 멈춰 꺼짐 — Worker 가 큰 GPU 몫을 CPU 로 통째 돌리지 않고 돌려보냄. 광자를 세지 않고 CPU 크기로 이어 감(2026-11-12)
+        if (r.gpuRetry) {
+          size[k] = o.minChunk;
+          if (o.fixedChunk) retry.push({ c, N, b }); else { issued -= N; binIssued[b] -= N; }
+          continue;
+        }
         if (r.stale || r.sceneKey !== job.sceneKey) {
           retry.push({ c, N, b });
           if (++ignored > o.maxIgnored) { fail(g, new Error('Worker 장면이 맞지 않음 — 다시 계산하세요')); return; }

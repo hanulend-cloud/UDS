@@ -315,4 +315,15 @@ const perPhoton = (s) => Array.from(s.sum, (v) => v / (s.photons / 25000));   //
   P.pause(); P.restart(job(23)); await T.advance(1200); await settle();
   ok(P.snapshot().state === 'paused', '일시정지는 다시 시작 뒤에도 유지(기존 동작)');
   P.dispose(); }
+{   // GPU 가 청크 중에 멈춤(2026-11-12) — 청크에 cpuMax 를 실어 보내고, gpuRetry 응답이면 실패 없이 CPU 크기(최소 청크)로 이어 감
+  const T = fakeTimers(), m = manualPort();
+  const P = createProgressive({ ports: [m], timers: T, opts: { ...OPT, fixedChunk: false, minChunk: 1000, maxChunk: 50000 } });
+  P.restart(job(1)); await T.advance(500);
+  const c0 = chunks(m)[0];
+  ok(c0.cpuMax === 50000, `청크 메시지에 cpuMax = maxChunk (${c0.cpuMax})`);
+  m.pend.shift().res({ sceneKey: c0.sceneKey, gpuRetry: true }); await T.advance(1);
+  const s = P.snapshot();
+  ok(s.state === 'running' && s.photons === 0 && chunks(m).length === 2 && chunks(m)[1].N === 1000, `gpuRetry → 실패 없이 다시 보냄, 광자 안 셈 (${s.state}, N=${chunks(m)[1]?.N})`);
+  P.dispose();
+}
 done();
