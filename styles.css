@@ -1482,3 +1482,9 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 }
 .om-kpi-note { font-size: 11px; margin: -4px 0 6px; }
 .fb-desc { font-size: 11px; line-height: 1.35; margin-bottom: 2px; }
+
+/* 회색 설명 줄이기(2026-11-12) — 긴 설명은 ⓘ·점선 글에 마우스 */
+.fb-i { display: inline-block; margin-left: 4px; color: var(--m3-mut); font-size: 12px; cursor: help; }
+.rs-note[title], .rs-lim[title], .rs-h[title], .om-kpi[title] { cursor: help; }
+.rs-note[title] { text-decoration: underline dotted var(--m3-line); text-underline-offset: 3px; }
+.od-toset { margin-left: 6px; }

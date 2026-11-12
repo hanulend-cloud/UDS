@@ -58,7 +58,7 @@ export function factorBoardHtml(S, nw = {}, cfg = null, res = null) {
   const tl = S?.tgLen ?? nw.tgLen, tw = S?.tgWid ?? nw.tgWid;
   const row = (k, name, nowTxt) => {
     // 고정 = 적용까지 마친 항목 — 다음 실행에서 건드리지 않음. [다시 최적화] = 고정 풀고 다시 체크
-    const dot = `<i class="fb-dot" style="background:${FB_COL[k]}"></i>`, head = (lead, chipC, chipT) => `<div class="fb-head">${lead}${dot}<b class="fb-name">${name}</b><span class="od-chip ${chipC}">${chipT}</span></div>`;
+    const dot = `<i class="fb-dot" style="background:${FB_COL[k]}"></i>`, head = (lead, chipC, chipT) => `<div class="fb-head">${lead}${dot}<b class="fb-name">${name}</b>${FB_DESC[k] ? `<span class="fb-i" title="${FB_DESC[k]}">ⓘ</span>` : ''}<span class="od-chip ${chipC}">${chipT}</span></div>`;   // 한 줄 설명 = ⓘ 에 마우스(2026-11-12 사용자: 회색 글이 많아 정신없음)
     const R = res?.(k);   // 결과 화면(2026-11-08) — 같은 자리 상자에 이전 → 이후 · 효과(설정·진행·결과에서 인자 위치가 그대로)
     if (R) return `<div class="fb-card ${R.chg ? 'fb-on' : 'fb-off'}" style="--fb:${FB_COL[k]}">${head('<span class="fb-sw"></span>', R.chg ? 'st-run' : 'st-off', R.chip)}<div class="fb-in"><div class="fb-val">${R.body}</div>${R.eff ? `<div class="fb-eff">${R.eff}</div>` : ''}</div></div>`;
     if (nw.locked?.[k]) return `<div class="fb-card fb-lock" style="--fb:${FB_COL[k]}" title="최적화 결과를 적용함 — 다음 실행에서 이 값 그대로 씀">${head('<span class="fb-lk">🔒</span>', 'st-lock', '✓ 고정')}<div class="fb-in"><div class="fb-val">${esc(nowTxt)} <button type="button" class="fb-redo" data-adunlock="${k}">다시 최적화</button></div></div></div>`;
@@ -68,7 +68,7 @@ export function factorBoardHtml(S, nw = {}, cfg = null, res = null) {
     const [chipC, chipT] = t && t.status !== 'off' ? { wait: ['st-wait', '대기'], run: ['st-run', `진행 ${fmtProg(t.frac * 100)}%`], done: ['st-done', '✓ 완료'], stop: ['st-off', '중지됨'] }[t.status] : on ? ['st-on', '켜짐'] : ['st-off', '꺼짐'];
     const txt = `지금 ${nowTxt}${b ? ` → ${b.label} (${fmtJudge(b.Ulen)}/${fmtJudge(b.Uwid)})` : ''}`;
     const box = c?.box ? `<label class="fb-sw" title="${esc(c.why || '최적화에 사용')}">${c.box}</label>` : '<span class="fb-sw"></span>';
-    return `<div class="fb-card${on ? ' fb-on' : ' fb-off'}${t?.status === 'run' ? ' fb-run' : ''}" style="--fb:${FB_COL[k]}" title="${esc(txt)}">${head(box, chipC, chipT)}<div class="fb-in">${FB_DESC[k] ? `<div class="fb-desc mut">${FB_DESC[k]}</div>` : ''}<div class="fb-val"><span class="mut">지금</span> ${esc(nowTxt)}</div>${c?.opt ? `<div class="fb-opt">${c.opt}</div>` : ''}</div></div>`;
+    return `<div class="fb-card${on ? ' fb-on' : ' fb-off'}${t?.status === 'run' ? ' fb-run' : ''}" style="--fb:${FB_COL[k]}" title="${esc(txt)}">${head(box, chipC, chipT)}<div class="fb-in"><div class="fb-val"><span class="mut">지금</span> ${esc(nowTxt)}</div>${c?.opt ? `<div class="fb-opt">${c.opt}</div>` : ''}</div></div>`;
   };
   // 그래프는 오른쪽 모니터로(2026-10-30) — 여기는 입력(체크·옵션)과 상태만
   const nowOf = { position: nw.leds ?? '–', housing: nw.housing ?? '–', shape: nw.shape ?? '원래 형상', milky: Number.isFinite(nw.milky) ? `Milky ${f2(nw.milky)}` : '확산 부품 없음' };
@@ -134,7 +134,7 @@ export const chartHtml = () => `<div class="od-plot" title="위로 갈수록 좋
 const DONE_NAME = { leds: 'LED 배치', height: 'LED 높이', housing: '케이스 면', shape: '형상', milky: 'Milky' };   // ① 위치 = LED 배치 + 높이 — 끝난 것만 정확히
 const partialHtml = (P) => {
   const names = (P?.done ?? []).map((k) => DONE_NAME[k]).filter(Boolean);
-  return names.length ? `<p><button type="button" class="od-partial" data-adpartial title="끝난 항목의 결과만 넣은 안을 최종 화질로 판정합니다 — 끝나지 않은 항목은 지금 값 그대로">끝난 항목(${names.join(' · ')})까지 반영한 안 정밀 판정</button> <span class="mut">몇 분 걸림 · [적용]을 눌러야 설계에 반영</span></p>` : '';
+  return names.length ? `<p><button type="button" class="od-partial" data-adpartial title="끝난 항목의 결과만 넣은 안을 최종 화질로 판정합니다 — 끝나지 않은 항목은 지금 값 그대로 · [적용]을 눌러야 설계에 반영">끝난 항목(${names.join(' · ')})까지 반영한 안 정밀 판정</button> <span class="mut">몇 분 걸림</span></p>` : '';
 };
 export function monitorHtml(S, sec = 0, { chart = true } = {}) {
   const tl = S.tgLen, tw = S.tgWid, ok = (e) => e.ok !== false && Number.isFinite(e.Ulen);
@@ -157,10 +157,10 @@ export function monitorHtml(S, sec = 0, { chart = true } = {}) {
   const b0 = S.before ?? {};
   // 방금 시험한 후보(작은 글씨) — 큰 숫자는 시작값 포함 '지금까지 최고'라 흔들리지 않음(2026-11-12 평가)
   const lastE = busy ? [...(S.seq ?? [])].reverse().find(ok) : null;
-  const kpi = (label, tg, v, v0, vLast) => {
+  const kpi = (label, tg, v, v0, vLast, est = false) => {   // est = 후보에서 고른 대략값(≈) — 끝나면 정밀 재계산 값
     const pass = Number.isFinite(v) && Number.isFinite(tg) ? (v + 1e-9 >= tg ? 'ok' : 'bad') : '';
     const d = Number.isFinite(v) && Number.isFinite(v0) ? v - v0 : NaN;
-    return `<div class="om-k"><div class="mut">${label}${Number.isFinite(tg) ? ` · 목표 ${fmtTg(tg)}` : ''}</div><b class="om-v ${pass}">${fmtJudge(v)}</b><div class="mut">시작 ${fmtJudge(v0)}${Number.isFinite(d) && Math.abs(d) >= 0.0005 ? ` → ${d > 0 ? '▲' : '▼'}${fmtDp(Math.abs(d)).slice(1)}` : ''}${Number.isFinite(vLast) ? ` <span class="om-last" title="방금 시험한 후보(대략값) — 큰 숫자는 시작값을 포함한 지금까지 최고">· 방금 후보 ${fmtJudge(vLast)}</span>` : ''}</div></div>`;
+    return `<div class="om-k"><div class="mut">${label}${Number.isFinite(tg) ? ` · 목표 ${fmtTg(tg)}` : ''}</div><b class="om-v ${pass}">${est ? '≈' : ''}${fmtJudge(v)}</b><div class="mut">시작 ${fmtJudge(v0)}${Number.isFinite(d) && Math.abs(d) >= 0.0005 ? ` → ${d > 0 ? '▲' : '▼'}${fmtDp(Math.abs(d)).slice(1)}` : ''}${Number.isFinite(vLast) ? ` <span class="om-last" title="방금 시험한 후보(대략값) — 큰 숫자는 시작값을 포함한 지금까지 최고">· 방금 후보 ${fmtJudge(vLast)}</span>` : ''}</div></div>`;
   };
   const better = best && (!Number.isFinite(b0.Ulen) || scoreOf(best, tl, tw) > scoreOf(b0, tl, tw)) ? best : null;   // 시작보다 나은 후보만 '최고'
   // 광 효율 — 끝나면 확정값, 도는 동안 = 지금까지 최고안의 대략값(≈, 2026-11-12 평가 4: 끝나야 7%p 떨어진 걸 알았음)
@@ -174,10 +174,11 @@ export function monitorHtml(S, sec = 0, { chart = true } = {}) {
   const doing = S.note || (S.cur ? S.tiles[S.cur].text : '') || '준비하는 중';
   // 판정은 한 줄만 — 값은 아래 지표 카드에(같은 값을 여러 곳에 쓰지 않음, 2026-11-08)
   const say = busy ? `<p><b>지금</b> ${esc(doing)}</p>`
-    : S.stopped ? `<p><b>중지했습니다.</b> 찾던 안은 설계에 반영되지 않았습니다.</p>${partialHtml(S.partial)}`
+    : S.stopped ? `<p><b>중지했습니다.</b> 찾던 안은 설계에 반영되지 않았습니다. <button type="button" class="od-toset" data-adset title="항목을 다시 고르고 새로 최적화">⚙ 설정 바꾸기</button></p>${partialHtml(S.partial)}`
     : '';
   const pct = fmtProg(S.ended != null ? 100 : Math.max(0, Math.min(1, S.overall ?? 0)) * 100);
-  return `<div class="om-kpi">${kpi('길이 균일도', tl, cur?.Ulen ?? b0.Ulen, b0.Ulen, lastE?.Ulen)}${kpi('폭 균일도', tw, cur?.Uwid ?? b0.Uwid, b0.Uwid, lastE?.Uwid)}${effK}</div>${busy && !fin0 ? '<div class="mut om-kpi-note">큰 숫자 = 지금까지 최고(빠른 계산 대략값 · 길이·폭 중 목표에 더 모자란 쪽 기준) — 끝나면 정밀 재계산 값으로 조금 바뀔 수 있음</div>' : ''}
+  const est = busy && !fin0 && !!cur, kt = busy && !fin0 ? ' title="큰 숫자 = 지금까지 최고(빠른 계산 대략값 · 길이·폭 중 목표에 더 모자란 쪽 기준) — 끝나면 정밀 재계산 값으로 조금 바뀔 수 있음"' : '';
+  return `<div class="om-kpi"${kt}>${kpi('길이 균일도', tl, cur?.Ulen ?? b0.Ulen, b0.Ulen, lastE?.Ulen, est)}${kpi('폭 균일도', tw, cur?.Uwid ?? b0.Uwid, b0.Uwid, lastE?.Uwid, est)}${effK}</div>
     <div class="od-pct om-pct"><b>${pct}%</b><div class="od-bar od-bar-big" role="progressbar" aria-label="기구 최적화 진행" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div><span class="mut od-simst">${busy ? `${S.pauseAt ? '일시정지' : '진행'} ${mmss(sec)}` : S.stopped ? '중지됨' : `끝남 ${mmss((S.endSec ?? sec))}`} · 후보 ${nEval}개</span></div>
     <div class="om-steps">${steps.join('<i class="om-ar">→</i>')}</div>
     <div class="om-say">${say}</div>
@@ -255,7 +256,7 @@ export function createOptDash(el, h = {}) {
   // 오른쪽 모니터 — 진행 줄 · 지표 · 그래프(자리 크기로) · 기록. 끝나도 그대로 남김(결과 카드는 위 #m3-auto)
   // 지난 후보 표(2026-11-07) — 실행 결과 아래에 늘 붙임(실행 전에도 지난 후보가 있으면)
   const histHtml = () => { const H = h.history?.(); return H?.list?.length ? histTableHtml(H.list, H.tgLen, H.tgWid, H.busy) : ''; };
-  el.addEventListener('click', (e) => { const b = e.target.closest('[data-hpick]'); if (b && !b.disabled) h.onPick?.(+b.dataset.hpick); if (e.target.closest('[data-adpartial]')) h.onPartial?.(); });
+  el.addEventListener('click', (e) => { const b = e.target.closest('[data-hpick]'); if (b && !b.disabled) h.onPick?.(+b.dataset.hpick); if (e.target.closest('[data-adpartial]')) h.onPartial?.(); if (e.target.closest('[data-adset]')) h.onSet?.(); });
   function render() {
     // 바뀐 것만 갱신(2026-11-07) — 전에는 초당 3~4번 통째로 다시 만들고 그래프 칸을 비웠다가 그려 화면이 깜빡였음
     const put = (node, html) => { if (node && node._html !== html) { const op = keepOpen(node); node.innerHTML = html; node._html = html; op(); } };

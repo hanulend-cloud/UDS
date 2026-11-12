@@ -130,7 +130,7 @@ export const TILE_NOTE = { position: '부족한 방향으로 LED 를 옮기고, 
 export function tileConfigHtml(k, { avail, sel, running, names = [], milkyPart = null, housingMat = null, path = null }) {
   const pname = (i) => esc(names[i] ?? `부품 ${i + 1}`), dis = running ? ' disabled' : '';
   const pct = (i) => (path && (path.shares?.[i] ?? 0) > 0 ? ` · 빛 ${Math.round(path.shares[i] * 100)}%` : '');
-  const pathNote = (t) => `<div class="od-path-note mut" title="${t}">${path ? '광경로에서 자동 검출 · 빛 많은 순' : '광경로 검출 전 — 쓸 수 있는 부품 전체'}</div>`;
+  const pathNote = (t) => `<span class="fb-i" title="${path ? '광경로에서 자동 검출 · 빛 많은 순' : '광경로 검출 전 — 쓸 수 있는 부품 전체'} · ${t}">ⓘ</span>`;   // 긴 안내 = 마우스(2026-11-12)
   if (k === 'position') {   // ② 기구 위치 = LED 배치 + LED 높이(쓸 수 있는 것만)
     const okL = !!avail.leds?.ok, okH = !!avail.height?.ok;
     if (!okL && !okH) { const why = avail.leds?.why ?? avail.height?.why ?? ''; return { on: false, box: '<input type="checkbox" data-ad="position" disabled aria-label="① 위치 사용">', opt: '', why, html: `<label class="od-sw off"><input type="checkbox" data-ad="position" disabled> 사용 안 함</label><div class="od-why mut">${esc(why)}</div>` }; }
@@ -145,7 +145,7 @@ export function tileConfigHtml(k, { avail, sel, running, names = [], milkyPart =
   let opt = '';
   if (on && k === 'milky') opt = milkyPart != null ? `<div class="od-opt mut">대상: ${pname(milkyPart)}</div>` : '';   // 상한 입력칸은 뺌(2026-10-29) — 상한 = capDefault 자동
   if (k === 'shape') opt = `<div class="od-opt">형상 바꿀 부품 <select data-ad="shapePart" aria-label="③ 대상 부품"${dis}>${avail.shape.parts.map((i) => `<option value="${i}"${i === sel.shapePart ? ' selected' : ''}>${pname(i)}${pct(i)}</option>`).join('')}${(avail.shape.skip ?? []).map((i) => `<option value="${i}" disabled>${pname(i)}${pct(i)} · 2.5D 아님</option>`).join('')}</select></div>${avail.shape.fallback
-    ? '<div class="od-path-note mut">광경로 표본에서 후보를 찾지 못해 형상 변경 가능한 부품 전체를 표시 · 추천 순</div>' : pathNote('빛 % = 관측면에 닿은 빛 중 그 부품을 지난 비중(1% 미만 부품은 목록에서 뺌)')}`;
+    ? '<span class="fb-i" title="광경로 표본에서 후보를 찾지 못해 형상 변경 가능한 부품 전체를 표시 · 추천 순">ⓘ</span>' : pathNote('빛 % = 관측면에 닿은 빛 중 그 부품을 지난 비중(1% 미만 부품은 목록에서 뺌)')}`;
   if (k === 'shape' && avail.shape.rec != null && avail.shape.diffuse?.includes(sel.shapePart)) opt += `<div class="od-opt m3-pcbwarn">확산 부품은 형상 효과가 작음 — ${pname(avail.shape.rec)} 추천</div>`;
   if (k === 'housing') opt = `<div class="od-opt">대상 <select data-ad="housingPart" aria-label="④ 대상 부품"${dis}>${avail.housing.parts.map((i) => `<option value="${i}"${i === sel.housingPart ? ' selected' : ''}>${pname(i)}${pct(i)}</option>`).join('')}</select> <span class="mut">${housingMat ? `${esc(housingMat.name)} · 최대 ${Math.round(housingMat.max * 100)}%` : '소재 미지정'}</span></div>${pathNote('빛 % = LED 에서 나온 빛 중 그 면에 닿은 비중(1% 미만 부품은 목록에서 뺌)')}
     <label class="od-opt"><input type="checkbox" data-ad="housingSpecial"${sel.housingSpecial ? ' checked' : ''}${dis}> 특수 표면처리 허용</label>`;
@@ -435,34 +435,46 @@ export function nextTryText(r) {
   const g = [gap(r.best.Ulen, tg.len) && `길이 ${gap(r.best.Ulen, tg.len)}`, gap(r.best.Uwid, tg.wid) && `폭 ${gap(r.best.Uwid, tg.wid)}`].filter(Boolean).join(' · ');
   return `남은 차이 ${g || '–'} → ${off.join('·')}도 체크하고 다시 실행해 보세요`;
 }
-// 참고 한 줄씩(최대 3, 길면 …) — 접지 않고 바로. 다음 할 일(nextTryText)이 맨 앞
+// 긴 문구 → 화면용 짧은 글(2026-11-12 사용자: 회색 글이 많아 정신없음 — 전체는 마우스를 올리면). '참고:' 떼고 ' — ' 앞만
+export const shortNote = (t) => {
+  const s = String(t ?? '').replace(/^💡\s*/, '').replace(/^참고:\s*/, '');
+  const nx = s.match(/^남은 차이 .*→ (.+)도 체크하고 다시 실행해 보세요$/);
+  if (nx) return `다음: ${nx[1]}도 체크해 다시 실행`;
+  const cs = s.match(/^추천: 부품 속성에서 케이스 면을 '(.+?)'\(으\)로 바꾸면 (.+?) 정도 오름/);
+  if (cs) return `케이스 면 ${cs[1]} → ${cs[2]}`;
+  return clip(s.split(' — ')[0], 38);
+};
+const tipNote = (t, cls = '') => `<div class="rs-note${cls ? ` ${cls}` : ''}" title="${esc(String(t).replace(/^💡\s*/, ''))}">${cls === 'warn' ? '⚠' : '💡'} ${esc(shortNote(t))}</div>`;
+const effDropHtml = (cur, best) => (Number.isFinite(cur?.eff) && Number.isFinite(best?.eff) && best.eff - cur.eff <= -0.02 ? `<div class="rs-note warn" title="광 효율 ${((cur.eff - best.eff) * 100).toFixed(1)}%p 감소 — 같은 광속이면 그만큼 어두워짐">⚠ 광 효율 −${((cur.eff - best.eff) * 100).toFixed(1)}%p</div>` : '');
+const toSetBtn = '<button type="button" data-ad="toSet" title="항목을 다시 고르고 새로 최적화">⚙ 설정 바꾸기</button>';
+// 참고 한 줄씩(최대 3) — 화면엔 짧게, 전체는 마우스. 다음 할 일(nextTryText)이 맨 앞
 function notesLines(r) {
   const n = [
     nextTryText(r), oneRowHint(r), r.shapeNote ? `형상 그대로: ${r.shapeNote}` : '', shapeMissText(r),
     r.lowered ? loweredText(r.lowered, r.unchanged) : '', !r.feasible && r.peek ? peekText(r.peek) : '',
-  ].filter(Boolean).slice(0, 3).map((t) => `<div class="rs-note">💡 ${clip(String(t).replace(/^💡\s*/, ''), 70)}</div>`);
-  const ch = caseHintText(r) ? `<button type="button" class="rs-note m3-rhint" data-ad="casePart" data-v="${r.hint.finish.part}" title="${esc(caseHintText(r))}">${clip(caseHintText(r).replace(/^💡\s*/, '💡 '), 72)} ▸</button>` : '';
+  ].filter(Boolean).slice(0, 3).map((t) => tipNote(t));
+  const ch = caseHintText(r) ? `<button type="button" class="rs-note m3-rhint" data-ad="casePart" data-v="${r.hint.finish.part}" title="${esc(caseHintText(r))}">💡 ${esc(shortNote(caseHintText(r)))} ▸</button>` : '';
   return n.join('') + ch;
 }
 // 결과 화면 — 판정 · 균일도 카드 · 최적화 인자 상자 · 참고 · 단추 · 지난 후보(위 3개, 나머지는 [전체 보기])
 export function resultViewHtml(r, { applied = null, effects = null, hist = null, busy = false, catalog = null, locked = {} } = {}) {
   const x = r ?? applied, tg = x?.targets ?? {};
-  const histBox = hist?.length ? `<div class="rs-hist"><div class="rs-h">지난 후보 <span class="mut">균일도 순 · 골라서 [적용]</span><span class="rs-hn mut">${hist.length}개</span></div>${histTableHtml(hist, tg.len, tg.wid, busy, { pick: 'ad' })}</div>` : '';
+  const histBox = hist?.length ? `<div class="rs-hist"><div class="rs-h" title="균일도 순 · 골라서 [적용]">지난 후보 <span class="rs-hn mut">${hist.length}개</span></div>${histTableHtml(hist, tg.len, tg.wid, busy, { pick: 'ad' })}</div>` : '';
   if (!x) return `<div class="rs"><div class="rs-h mut">이번 결과 없음</div>${histBox}</div>`;
   const cards = `<div class="rs-cards">${changeCard('길이 균일도', x.cur?.Ulen, x.best?.Ulen, tg.len)}${changeCard('폭 균일도', x.cur?.Uwid, x.best?.Uwid, tg.wid)}${changeCard('광 효율', x.cur?.eff, x.best?.eff, NaN, true)}</div>`;
   if (!r) {   // 적용 뒤에도 판정·경고·다음 할 일 메모는 남김(2026-11-12 평가: 적용하면 메모가 사라짐)
-    const va = verdictOf(applied), effDrop = Number.isFinite(applied.cur?.eff) && Number.isFinite(applied.best?.eff) && applied.best.eff - applied.cur.eff <= -0.02 ? `<div class="rs-note warn">⚠ 광 효율 ${((applied.cur.eff - applied.best.eff) * 100).toFixed(1)}%p 감소 — 같은 광속이면 그만큼 어두워짐</div>` : '';
+    const va = verdictOf(applied), effDrop = effDropHtml(applied.cur, applied.best);
     return `<div class="rs">${cards}<div class="rs-vd ok"><b>✓ 적용됨</b> <span class="mut">${esc(applied.at ?? '')} · 되돌리기 전까지 유지</span>${va?.[0] && va[0] !== 'ok' ? ` <span class="rs-lim">· ${esc(va[1])}</span>` : ''}</div>${effDrop}${notesLines(applied)}
-    <div class="rs-btn"><button type="button" data-ad="revert" title="적용 전 값으로">↶ 되돌리기</button></div>${histBox}</div>`;
+    <div class="rs-btn"><button type="button" data-ad="revert" title="적용 전 값으로">↶ 되돌리기</button>${toSetBtn}</div>${histBox}</div>`;
   }
   const v = verdictOf(r), lim = limitText(r.reason);
   const warn = [r.clash > 0 ? `<div class="m3-clash" role="alert">LED 몸체가 부품과 겹침(${r.clash}개) — 적용 불가</div>` : '',
     r.best?.rows === 2 && r.cur?.rows !== 2 ? '<div class="rs-note warn">⚠ 2열 배치 = LED PCB 새로 설계</div>' : '',
-    Number.isFinite(r.cur?.eff) && Number.isFinite(r.best?.eff) && r.best.eff - r.cur.eff <= -0.02 ? `<div class="rs-note warn">⚠ 광 효율 ${((r.cur.eff - r.best.eff) * 100).toFixed(1)}%p 감소 — 같은 광속이면 그만큼 어두워짐</div>` : ''].join('');
+    effDropHtml(r.cur, r.best)].join('');
   const alt = r.unchanged && r.alt ? `<div class="rs-note">찾은 후보 ${fmtJudge(r.alt.Ulen)}/${fmtJudge(r.alt.Uwid)} — 지금보다 뚜렷이 낫지 않음</div>` : '';
-  return `<div class="rs">${cards}<div class="rs-vd ${v[0]}"><b>${v[1]}</b> <span class="mut">${v[2]}</span>${lim ? ` <span class="rs-lim">· 한계: ${clip(lim, 40)}</span>` : ''}</div>
+  return `<div class="rs">${cards}<div class="rs-vd ${v[0]}"><b>${v[1]}</b> <span class="mut">${v[2]}</span>${lim ? ` <span class="rs-lim" title="한계: ${esc(lim)}">· 한계: ${esc(lim.split(' — ')[0])}</span>` : ''}</div>
     ${warn}${alt}${notesLines(r)}
-    <div class="rs-btn">${applyBtn(r, 'LED 몸체가 부품과 겹침')}${altBtn(r)}${shapeDeepBtn(r)}${r.clash > 0 ? '' : `<button type="button" data-ad="continue" title="${r.unchanged ? '지금 설계 그대로' : '이 안을 적용한 뒤'}, 체크했지만 이번에 돌리지 않은 항목을 이어서 최적화">이 안에서 이어서 ▸</button>`}<span class="m3-ad-sp"></span>${r.shape ? '<button type="button" data-ad="step">STEP 내보내기</button>' : ''}<button type="button" data-ad="view" title="프로파일 비교 · Milky 표 · 전체 비교표">프로파일·표</button><button type="button" data-ad="cancel" title="이 결과를 설계에 적용하지 않고 닫기 — 지난 후보 표에는 남음">적용 안 함</button></div>
+    <div class="rs-btn">${applyBtn(r, 'LED 몸체가 부품과 겹침')}${altBtn(r)}${shapeDeepBtn(r)}${r.clash > 0 ? '' : `<button type="button" data-ad="continue" title="${r.unchanged ? '지금 설계 그대로' : '이 안을 적용한 뒤'}, 체크했지만 이번에 돌리지 않은 항목을 이어서 최적화">이 안에서 이어서 ▸</button>`}${toSetBtn}<span class="m3-ad-sp"></span>${r.shape ? '<button type="button" data-ad="step">STEP 내보내기</button>' : ''}<button type="button" data-ad="view" title="프로파일 비교 · Milky 표 · 전체 비교표">프로파일·표</button><button type="button" data-ad="cancel" title="이 결과를 설계에 적용하지 않고 닫기 — 지난 후보 표에는 남음">적용 안 함</button></div>
     ${histBox}</div>`;
 }
 // 참고 문구·Milky 표는 접어 둠(2026-11-08) — 메인 카드는 판정·값·단추만
@@ -496,7 +508,7 @@ export function renderAutoPanel(el, state, h) {
   const flashH = state.flash ? `<div class="m3-rflash" role="alert">${esc(state.flash)}</div>` : '';
   const modal = r && state.resultOpen ? `<div class="m3-rmodal" role="dialog" aria-modal="true" aria-label="기구 최적화 결과"><div class="m3-rmodal-in"><div class="m3-rmodal-hd"><b>기구 최적화 결과 — 프로파일·표</b><span class="m3-ad-sp"></span><button type="button" data-ad="hide" title="결과는 남음">✕ 닫기</button></div>${full}${milkyTableHtml(r.milkyRows, r.best?.milky, r.targets ?? {})}</div></div>` : '';
   const html = state.mode === 'result' ? `${flashH}${resultViewHtml(r, { applied: state.applied, effects: state.effects, hist: state.hist, busy: !!state.running, catalog: state.catalog, locked: state.locked ?? {} })}${modal}`
-    : state.mode === 'set' ? `${nowCardsHtml(state.now)}${flashH}${autoCardHtml({ ...state, applied: null })}`
+    : state.mode === 'set' ? `${nowCardsHtml(state.now)}${flashH}${autoCardHtml({ ...state, applied: null })}${state.hasResult ? '<div class="rs-btn"><button type="button" data-ad="toResult" title="지난 실행 결과·지난 후보 보기">↩ 결과 다시 보기</button></div>' : ''}`
     : state.mode === 'run' ? flashH
     : r ? `${state.flash ? `<div class="m3-rflash" role="alert">${esc(state.flash)}</div>` : ''}${resultLineHtml(r)}${state.resultOpen ? `<div class="m3-rmodal" role="dialog" aria-modal="true" aria-label="기구 최적화 결과"><div class="m3-rmodal-in"><div class="m3-rmodal-hd"><b>기구 최적화 결과</b><span class="m3-ad-sp"></span><button type="button" data-ad="hide" title="결과는 남음">✕ 닫기</button></div>
       <div class="m3-rverdict ${r.unchanged ? '' : r.targets?.judge?.all === 'near' ? 'near' : r.feasible ? 'ok' : 'bad'}">${r.unchanged ? `현재 설계보다 나은 안을 찾지 못함 — 현재안 유지${r.alt ? ' (찾은 후보가 뚜렷이 낫지 않음 — 원하면 [후보로 바꾸기])' : ''}` : r.targets?.judge?.all === 'near' ? '≈ 목표 근처 — 목표와의 차이가 노이즈보다 작음' : r.feasible ? '✓ 목표 통과' : '✕ 목표 미달 — 가장 가까운 안'}</div>${full}</div></div>` : ''}` : `${state.flash ? `<div class="m3-rflash" role="alert">${esc(state.flash)}</div>` : ''}${autoCardHtml(state)}`;

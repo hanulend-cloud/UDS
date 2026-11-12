@@ -926,7 +926,7 @@ done();
   { const many = Array.from({ length: 6 }, (_, i) => ({ label: `M${i}`, Ulen: 0.7 + i * 0.01, Uwid: 0.7, eff: 0.5 })), hm = resultViewHtml(r, { hist: many }), h1 = resultViewHtml(r, { hist: many.slice(0, 1) });
     ok((hm.match(/data-ad="hpick"/g) ?? []).length === 6 && hm.includes('6개') && !hm.includes('data-ad="histAll"') && hm.includes('rs-histt') && h1.includes('rs-histt') && hm.includes('<colgroup>'), '지난 후보: 같은 크기 표(고정 높이 · 넘치면 스크롤 · 열 폭 고정)'); }
   { const { clip } = await import('../src/ui/m3/autodesign-panel.js'); ok(clip('가'.repeat(30), 10).includes('…') && clip('가'.repeat(30), 10).includes('title=') && clip('짧음', 10) === '짧음', '긴 글 = … + 전체는 마우스'); }
-  ok((h.match(/한계/g) ?? []).length === 1, '한계 한 번만');
+  ok((h.replace(/\stitle="[^"]*"/g, '').match(/한계/g) ?? []).length === 1, '한계 한 번만(화면에 보이는 글 기준 — 전체 설명은 마우스)');
   const a = resultViewHtml(null, { applied: { ...r, at: '13:57' } });
   ok(a.includes('적용됨') && a.includes('13:57') && a.includes('data-ad="revert"') && !a.includes('data-ad="apply"'), '적용 뒤: 적용됨 · 되돌리기');
   { const { factorResult } = await import('../src/ui/m3/autodesign-panel.js'); ok(/효과 ≈/.test(factorResult({ ...r, at: '13:57' }, eff, {}, 'shape').eff), '적용 뒤에도 항목별 효과'); } }
@@ -1003,7 +1003,7 @@ done();
   okK(big(a)[0] === '21.8%' && big(a)[1] === '20.0%', `시작보다 나쁜 후보만 있으면 큰 숫자 = 시작값: ${big(a).join(' ')}`);
   okK(/방금 후보 6\.3%/.test(a), '방금 시험한 후보는 작은 글씨로');
   const b = monitorHtml({ ...base, seq: [{ k: 'milky', Ulen: 0.063, Uwid: 0.1 }, { k: 'milky', Ulen: 0.457, Uwid: 0.386 }, { k: 'milky', Ulen: 0.3, Uwid: 0.3 }] }, 9);
-  okK(big(b)[0] === '45.7%' && /방금 후보 30\.0%/.test(b), `나은 후보가 나오면 그 값, 뒤에 나쁜 후보가 와도 유지: ${big(b).join(' ')}`);
+  okK(big(b)[0] === '≈45.7%' && /방금 후보 30\.0%/.test(b), `나은 후보가 나오면 그 값, 뒤에 나쁜 후보가 와도 유지: ${big(b).join(' ')}`);
   const c = monitorHtml({ ...base, seq: [{ k: 'milky', Ulen: 0.457, Uwid: 0.386 }], ended: true, endSec: 9, final: { Ulen: 0.44, Uwid: 0.38 } }, 9);
   okK(big(c)[0] === '44.0%' && !/방금 후보/.test(c), '끝나면 최종 판정 값, 방금 후보 글 없음');
 }
@@ -1043,13 +1043,13 @@ done();
   const tiles = Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', evals: [] }])); tiles.milky = { status: 'run', frac: 0.4, evals: [] };
   const base = { tgLen: 0.8, tgWid: 0.8, before: { Ulen: 0.2, Uwid: 0.2 }, tiles, seq: [{ k: 'milky', Ulen: 0.5, Uwid: 0.4 }] };
   const run = monitorHtml(base, 5), end = monitorHtml({ ...base, ended: true, endSec: 9, final: { Ulen: 0.53, Uwid: 0.46 } }, 9);
-  console.log(/om-kpi-note/.test(run) && /대략값/.test(run) && /정밀 재계산/.test(run) && /목표에 더 모자란/.test(run) && !/om-kpi-note/.test(end) ? 'PASS 실행 중 큰 숫자 = 대략값 · 최고 기준 안내' : (process.exitCode = 1, 'FAIL 대략값 안내'));
+  console.log(/om-kpi" title="[^"]*대략값[^"]*정밀 재계산/.test(run) && /목표에 더 모자란/.test(run) && !/om-kpi" title=/.test(end) ? 'PASS 실행 중 큰 숫자 = 대략값 · 최고 기준 안내' : (process.exitCode = 1, 'FAIL 대략값 안내'));
 }
 { // 항목 카드 한 줄 설명(2026-11-12 평가: 무엇을 얼마나 바꾸는지 없음)
   const { factorBoardHtml, STAGES } = await import('../src/ui/m3/opt-dash.js');
   const tiles = Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', evals: [] }]));
   const h = factorBoardHtml({ tgLen: 0.8, tgWid: 0.8, tiles }, { on: {} }, (k) => ({ on: true, box: `<input type="checkbox" data-ad="${k}">`, opt: '', why: '' }));
-  const d = [...h.matchAll(/class="fb-desc[^"]*">([^<]*)</g)].map((x) => x[1]);
+  const d = [...h.matchAll(/class="fb-i" title="([^"]*)"/g)].map((x) => x[1]);   // 설명 = ⓘ 에 마우스(2026-11-12)
   console.log(d.length === 3 && /LED/.test(d.join()) && /입광면/.test(d.join()) && /0~5/.test(d.join()) ? `PASS 항목 카드 설명 3개` : (process.exitCode = 1, `FAIL 항목 카드 설명: ${d.join(' | ')}`));
 }
 { // 중지하면 돌던 항목 = '중지됨'(2026-11-12 평가: 중지 뒤에도 '진행 90.0%' 가 남음)
@@ -1074,4 +1074,24 @@ done();
 { // 문구 정리(2026-11-12 평가): '버리기' → '적용 안 함', 일시정지 '조각' 없음
   const { readFileSync } = await import('node:fs'), pn = readFileSync(new URL('../src/ui/m3/autodesign-panel.js', import.meta.url), 'utf8'), ap = readFileSync(new URL('../src/ui/m3/app.js', import.meta.url), 'utf8');
   console.log(!/>버리기</.test(pn) && />적용 안 함</.test(pn) && !/조각까지만 받음/.test(ap) ? 'PASS 문구: 적용 안 함 · 조각 없음' : (process.exitCode = 1, 'FAIL 문구 정리'));
+}
+{ // 회색 작은 글 줄이기(2026-11-12 사용자: 정신없음) — 화면엔 짧은 요약, 긴 설명은 마우스를 올리면(title) · 설정으로 돌아가는 단추
+  const okG = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
+  const vis = (h) => h.replace(/\s(title|aria-label)="[^"]*"/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const { factorBoardHtml, monitorHtml, STAGES } = await import('../src/ui/m3/opt-dash.js');
+  const tiles = () => Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', evals: [] }]));
+  const fb = factorBoardHtml({ tgLen: 0.8, tgWid: 0.8, tiles: tiles() }, { on: {} }, (k) => ({ on: true, box: `<input type="checkbox" data-ad="${k}">`, opt: '', why: '' }));
+  okG(!/class="fb-desc/.test(fb) && /title="LED 개수·간격/.test(fb) && !/LED 개수·간격/.test(vis(fb)) && (fb.match(/ⓘ/g) ?? []).length === 3, '항목 카드 설명 = ⓘ 에 마우스(화면엔 안 씀)');
+  const t = tiles(); t.milky = { status: 'run', frac: 0.4, evals: [] };
+  const run = monitorHtml({ tgLen: 0.8, tgWid: 0.8, before: { Ulen: 0.2, Uwid: 0.2 }, tiles: t, seq: [{ k: 'milky', Ulen: 0.5, Uwid: 0.4 }] }, 5);
+  okG(!/om-kpi-note/.test(run) && /title="[^"]*대략값/.test(run) && /≈50\.0%/.test(vis(run)), `진행 중 큰 숫자 = ≈ 표시 + 설명은 마우스: ${vis(run).slice(0, 60)}`);
+  const stop = monitorHtml({ tgLen: 0.8, tgWid: 0.8, before: {}, tiles: tiles(), seq: [], stopped: true }, 5);
+  okG(/data-adset/.test(stop), '중지 뒤 = [설정 바꾸기] 단추');
+  const { resultViewHtml } = await import('../src/ui/m3/autodesign-panel.js');
+  const r = { feasible: false, reason: '목표 미달 · 한계: 폭 방향 — 폭 가장자리가 가장 어두움(가장자리 감쇠)', targets: { len: 0.8, wid: 0.8 }, stages: { milky: true },
+    cur: { milky: 2, Ulen: 0.25, Uwid: 0.19, eff: 0.192 }, best: { milky: 3.48, Ulen: 0.551, Uwid: 0.127, eff: 0.148 }, peek: { cap: 5, rows: [] }, hint: { finish: { part: 1 }, text: '백색 95%', Ulen: 0.6, Uwid: 0.15, base: { Ulen: 0.552, Uwid: 0.122 } } };
+  const h = resultViewHtml(r, { hist: [{ label: 'Milky 3.48', Ulen: 0.551, Uwid: 0.127, eff: 0.148 }] });
+  const notes = [...h.matchAll(/<(?:div|button)[^>]*class="rs-note[^"]*"[^>]*>([\s\S]*?)<\/(?:div|button)>/g)].map((x) => vis(x[1]));
+  okG(notes.length >= 3 && notes.every((n) => n.length <= 42) && /광 효율 −4\.4%p/.test(vis(h)) && /어두워짐/.test(h) && !/어두워짐/.test(vis(h)), `참고 줄 = 짧게(≤42자) · 긴 글은 마우스: ${notes.join(' | ')}`);
+  okG(/한계: 폭 방향/.test(vis(h)) && !/가장자리 감쇠/.test(vis(h)) && !/골라서/.test(vis(h)) && /data-ad="toSet"/.test(h), `판정 한계 짧게 · 지난 후보 머리 설명 숨김 · [설정 바꾸기]: ${vis(h).slice(0, 120)}`);
 }
