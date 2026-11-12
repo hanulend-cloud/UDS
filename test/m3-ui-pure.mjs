@@ -1025,6 +1025,11 @@ done();
   okW(clampRect({ x: 100, y: 0, w: 400, h: 300 }, 1600, 900).y === 8, '위 경계를 안 주면 예전처럼 8');
   okW(fitRect({ x: 0, y: 0, w: 400, h: 2000 }, 1600, 900, 56).h <= 900 - 56 - 8, '높이도 상단 바 아래 공간에 맞춤');
   const { maxRect } = await import('../src/ui/m3/monitor.js'), m = maxRect?.(1600, 900, 96);   // 최적화 창 [⤢ 크게](2026-11-12 평가 5: 창이 작아 안에서 스크롤)
+  { const { monStepsHtml } = await import('../src/ui/m3/monitor.js'), tx = (h) => (h ?? '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim(), cur = (h) => h?.match(/class="now">([^<]*)</)?.[1];
+    okW(typeof monStepsHtml === 'function' && tx(monStepsHtml('set')) === '설정 › 진행 › 결과' && cur(monStepsHtml('set')) === '설정'
+      && tx(monStepsHtml('run')) === '설정 ✓ › 진행 › 결과' && cur(monStepsHtml('run')) === '진행'
+      && tx(monStepsHtml('result')) === '설정 ✓ › 진행 ✓ › 결과' && cur(monStepsHtml('result')) === '결과' && !/<button/.test(monStepsHtml('run')),
+      `최적화 창 = 탭 대신 단계 표시(누르는 단추 아님): ${tx(monStepsHtml?.('result'))}`); }
   okW(m && m.x === 8 && m.y === 96 && m.w === 1584 && m.h === 900 - 96 - 8, `크게 = 상단 바·단계 막대 아래 화면 전체: ${JSON.stringify(m)}`);
 }
 { // 최종 판정(몇 분)에도 남은 시간 — 90초 넘으면 분 단위(2026-11-12 평가: 검증 2~3분 동안 남은 시간 없음)

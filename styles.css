@@ -1198,10 +1198,13 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 .m3-asum b.ok { color: var(--m3-ok); } .m3-asum b.bad { color: var(--m3-bad); }
 
 /* 기구 최적화 창 화면: 설정 · 진행 · 결과(2026-11-08) — 한 번에 한 화면만, 한 열 */
-.m3-mon-tabs { display: inline-flex; gap: 2px; margin-left: 10px; padding: 2px; border-radius: 7px; background: rgba(255,255,255,.18); }
-.m3-mon-tabs button { border: 0; background: transparent; color: inherit; font-size: 12px; padding: 2px 12px; border-radius: 5px; cursor: pointer; opacity: .85; }
-.m3-mon-tabs button.on { background: #fff; color: #3b2a8f; opacity: 1; font-weight: 600; }
-.m3-mon-tabs button:disabled { opacity: .35; cursor: default; }
+.m3-mon-steps { display: inline-flex; align-items: center; gap: 2px; margin-left: 10px; font-size: 12px; white-space: nowrap; }   /* 탭 대신 단계 표시(누르지 않음, 2026-11-12) */
+.m3-mon-steps i { font-style: normal; padding: 2px 9px; border-radius: 6px; color: var(--m3-mut); }
+.m3-mon-steps i.now { background: var(--m3-acc); color: #fff; font-weight: 600; }
+.m3-mon-steps i.ok { color: var(--m3-ok); }
+.m3-mon-steps .sep { color: var(--m3-mut); }
+.m3-mon-log { display: none; justify-self: start; border: 1px solid var(--m3-line); background: transparent; color: var(--m3-text, inherit); border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+.m3-mon[data-mode="result"] .m3-mon-log { display: block; order: 2; }
 .m3-mon[data-mode] .m3-mon-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-auto-rows: max-content; align-content: start; }
 .m3-mon[data-mode] .m3-mon-colsplit { display: none; }
 .m3-mon[data-mode] .m3-mon-body #m3-auto, .m3-mon[data-mode] .m3-mon-body #m3-odchart, .m3-mon[data-mode] .m3-mon-body > #m3-dock, .m3-mon[data-mode] .m3-mon-body .fb-body { grid-column: 1; grid-row: auto; border-right: 0; }
@@ -1209,9 +1212,9 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 .m3-mon[data-mode="run"] #m3-auto:empty, .m3-mon[data-mode="run"] .om-hist { display: none !important; }
 .m3-mon[data-mode="run"] .m3-mon-body > #m3-dock { order: 1; }
 .m3-mon[data-mode="run"] #m3-odchart { order: 2; }
-.m3-mon[data-mode="result"] .m3-mon-body > #m3-dock { display: none !important; }
-.m3-mon[data-mode="result"]:not(.show-chart) #m3-odchart { display: none !important; }
-.m3-mon[data-mode="result"] #m3-odchart { order: 2; }
+.m3-mon[data-mode="result"]:not(.show-log) .m3-mon-body > #m3-dock, .m3-mon[data-mode="result"]:not(.show-log) #m3-odchart { display: none !important; }   /* 끝난 뒤 진행 기록 = 결과 아래 접는 칸 */
+.m3-mon[data-mode="result"] .m3-mon-body > #m3-dock { order: 3; }
+.m3-mon[data-mode="result"] #m3-odchart { order: 4; }
 .m3-mon[data-mode="result"] #m3-auto { order: 1; }
 .rs-vd { font-size: 14px; margin: 2px 0 10px; }
 .rs-vd b { font-size: 15px; margin-right: 4px; }
@@ -1241,7 +1244,7 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 .rs-link::before { content: '▸ '; } .m3-mon.show-chart .rs-link::before { content: '▾ '; }
 @media (max-width: 860px) { .rs-cards { grid-template-columns: minmax(0, 1fr); } }
 /* 결과 화면 2(2026-11-08): 접은 창엔 탭 없음 · 최적화 인자 상자 · 참고 한 줄 · 지난 후보 바로 */
-.m3-mon.min .m3-mon-tabs { display: none; }
+.m3-mon.min .m3-mon-steps, .m3-mon.min .m3-mon-log { display: none !important; }
 .rs-fbs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
 .rs-fb { border: 1px solid var(--m3-line); border-left: 4px solid var(--fb); border-radius: 0; padding: 7px 10px; font-size: 12px; min-width: 0; background: #fff; }
 .rs-fb.rs-chg { background: color-mix(in srgb, var(--fb) 7%, #fff); border-color: color-mix(in srgb, var(--fb) 45%, #fff); border-left-color: var(--fb); }

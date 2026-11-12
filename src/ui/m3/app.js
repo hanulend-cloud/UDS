@@ -718,7 +718,7 @@ function renderAuto() {
     return;
   }
   A.optDash?.refresh();
-  // 창 화면(2026-11-08): 설정 · 진행 · 결과 — 실행하면 진행, 끝나면 결과로 넘어감. 탭으로 오갈 수 있음
+  // 창 화면(2026-11-08): 설정 · 진행 · 결과 — 실행하면 진행, 끝나면 결과로 넘어감. 탭 없음 — 머리에 단계 표시만, 진행 기록은 결과 아래 접는 칸(2026-11-12)
   const hasRes = !!(st.result || (st.undo && st.applied) || st.hist?.length), hasRun = !!st.running || !!A.optDash?.hasRun?.();
   let mode = st.view ?? 'set'; if (mode === 'result' && !hasRes) mode = 'set'; if (mode === 'run' && !hasRun) mode = 'set';
   monitor?.setMode?.(mode, { set: true, run: hasRun, result: hasRes }); A.adMode = mode;
@@ -761,6 +761,7 @@ function adPause(on) {
   setStatus(on ? '기구 최적화 일시정지 — 지금 계산하던 부분까지만 끝내고 멈춤' : '기구 최적화 이어서 실행'); renderAuto();
 }
 function adCtl(k) {
+  if (!A) return;   // 3D 화면이 아직 준비 전(예제 불러오는 중)에 누름 — 오류 창 대신 무시(2026-11-12)
   const st = adState();
   if (k === 'pause') adPause(true);
   else if (k === 'stop') adStop();
