@@ -1401,3 +1401,32 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .m3-right > .m3-simcard:not(:has(details.od-plots[open])) { flex: none !important; height: auto !important; }
 .m3-simcard details.od-plots[open] > .od-simbox { min-height: 96px; height: 120px; display: flex; flex-direction: column; border: 1px solid var(--m3-line); border-radius: 6px; padding: 2px; }
 .m3-simcard details.od-plots > summary { font-weight: 600; }
+
+/* ---- 화면 다시 그리기 7단계(2026-11-12): 대비 점검 · 남은 고유색 ---- */
+/* 흐린 글(mut) = 테마 토큰 — 예전 #8390a6 은 흰 바탕에서 대비 3:1 미만 */
+#mech3d-wrap .mut, header .mut { color: var(--m3-mut, var(--ui-mut)); }
+/* 밝은 카드(설계 인자) 안은 어두운 테마에서도 밝은 바탕 — 흐린 글도 진하게 */
+.fb-card { --m3-mut: #5f6b7e; }
+.fb-card.fb-off .fb-head { color: #5f6b7e; }
+/* 어두운 테마: 밝은 강조색·초록 바탕 위 글자는 어둡게(흰 글자는 대비 3:1 미만) */
+#mech3d-wrap[data-theme="dark"] .m3-views button.on,
+#mech3d-wrap[data-theme="dark"] .m3-fl,
+#mech3d-wrap[data-theme="dark"] .m3-mon-hd .m3-fl,
+#mech3d-wrap[data-theme="dark"] .m3-big-hd .m3-fl,
+#mech3d-wrap[data-theme="dark"] .m3-cmd .m3-step.done i,
+#mech3d-wrap[data-theme="dark"] .m3-cmd .m3-step.need i,
+#mech3d-wrap[data-theme="dark"] .m3-fl.done { color: #0b1220; }
+/* 좁은 화면(1024px 이하): 결과 칸 = 제목·요약은 한 줄 전체, 그래프만 격자로 */
+@media (max-width: 1024px) {
+  .m3-res > .m3-res-h, .m3-res > .m3-msg, .m3-res > .m3-sum { grid-column: 1 / -1; }
+}
+@media (max-width: 720px) { .m3-sum { grid-template-columns: 1fr 1fr; } }
+/* 상단 바: 좁으면 부제를 숨기고 저장 상태 글을 줄여(… + 마우스 올리면 전체) 한 줄 유지 */
+.hd-left { flex-wrap: nowrap; }
+.hd-right { flex: 0 1 auto; }
+.hd-right .proj-file { flex: 0 1 auto; overflow: hidden; }
+.hd-right .proj-file [data-pf="st"] { min-width: 0; }
+.hd-right .proj-file button { white-space: nowrap; flex: none; }
+@media (max-width: 1200px) { header h1 small { display: none; } }
+@media (max-width: 900px) { header { flex-wrap: wrap; } .hd-left { flex-wrap: wrap; } }
+@media (max-width: 900px) { .m3-cmd { flex-wrap: wrap; overflow-x: visible; } }   /* 좁으면 단계 막대는 두 줄로(옆으로 숨지 않게) */

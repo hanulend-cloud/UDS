@@ -975,7 +975,7 @@ function renderProjFile(st) {
   const d = projectFileLabel(st);
   el.dataset.kind = d.kind; el.title = d.title ?? (st.hasFile ? '이 파일에 실시간 저장됨' : '파일 › 다른 이름으로 저장 — 고른 파일에 실시간 저장');
   el.querySelector('[data-pf="name"]').textContent = d.name;
-  el.querySelector('[data-pf="st"]').textContent = d.status;
+  { const n = el.querySelector('[data-pf="st"]'); n.textContent = d.status; n.title = d.status; }   // 좁은 화면에서 … 로 잘려도 마우스를 올리면 전체
   const b = el.querySelector('[data-pf="act"]'); b.hidden = !d.action; b.textContent = d.actionText ?? ''; b.onclick = () => { m3app.flush(); if (d.action === 'regrant') projFile.regrant(); else projFile.saveAs(); };
   document.title = `${d.name} — Uniform Design Simulator`;
 }
