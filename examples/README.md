@@ -1,7 +1,8 @@
 # 예제 도면
 
 프로그램에서 **파일 › 예제 불러오기…**(또는 시작 화면의 [예제 불러오기])를 누르면 아래 목록에서 골라 엽니다.
-목록은 `examples/index.json`, 예제마다 폴더 하나(기구 STEP · LED STEP · `project.json` 설정)입니다.
+목록은 `examples/index.json`, 예제마다 폴더 하나입니다. 프로그램이 여는 파일은 `<폴더>/<폴더>.uds`(설정 + 기구·LED STEP 통합) 하나이고,
+폴더의 STEP · `project.json` 은 그 `.uds` 를 만드는 원본입니다. `.uds` 는 **파일 › 프로젝트 열기**로 직접 열어도 됩니다.
 
 | 폴더 | 내용 | 설정 |
 |---|---|---|
@@ -25,4 +26,5 @@
 
 ## 다시 만들기
 
+원본(STEP · `project.json`)을 고친 뒤 `node examples/make-uds.mjs` 로 `.uds` 를 다시 만듭니다.
 2열 STEP: `node examples/make-flat-2row.mjs` · 1열 STEP 원본 생성기: `test/fixtures/mech3d-sample.mjs`, `mech3d-led-sample.mjs`.

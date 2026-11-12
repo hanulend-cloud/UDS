@@ -245,10 +245,13 @@ ${NO_SERVER}`); return; }
   const ex = await pickExample(list); if (!ex) return;
   if ((spec.mech3d || spec.mech3dPending) && !confirm(`지금 프로젝트를 닫고 예제 '${ex.title}'를 불러올까요?
 (파일로 저장하지 않은 작업은 사라집니다)`)) return;
-  try { const r = await fetch(ex.project, { cache: 'no-store' }); if (!r.ok) throw new Error(String(r.status)); }
+  let file;   // 예제 = 통합 프로젝트 파일(.uds, 2026-11-12) — 프로젝트 열기와 같은 경로
+  try { const r = await fetch(ex.project, { cache: 'no-store' }); if (!r.ok) throw new Error(String(r.status)); file = new File([await r.blob()], ex.project.split('/').pop()); }
   catch { alert(`예제를 열 수 없습니다. 지금 프로젝트는 그대로 둡니다.
 ${NO_SERVER}`); return; }
-  projFile?.clear(); m3app.unmount(); spec.mech3d = null; spec.mech3dPending = null; spec.mode = 'mech3d'; persist(); applyMode(); loadSampleProject(false, ex.project);
+  try { if (ex.theme && !localStorage.getItem('uds.m3.theme')) localStorage.setItem('uds.m3.theme', ex.theme); } catch {}
+  projFile?.clear(); m3app.unmount(); spec.mech3d = null; spec.mech3dPending = null; spec.mode = 'mech3d'; persist(); applyMode();
+  openProjectFile(file).catch((e) => { $('#m3-start-msg').textContent = `예제 열기 실패: ${e.message ?? e}`; });
 }
 // 예제 고르기 창 → 고른 항목 | null(닫음)
 function pickExample(list) {
@@ -946,7 +949,7 @@ async function openProjectFile(f) {
     for (let i = 0; i < 200 && !m3app.isMounted(); i++) await new Promise((r) => setTimeout(r, 100));
     if (led && getLedMesh()?.name !== led.name) m3app.importLed(led);
   };
-  if (!spec.mech3dPending || !mech.length) { ledNow(); return; }   // 지금 메쉬가 같은 기구면 다시 읽지 않음
+  if ((!spec.mech3dPending && spec.mech3d) || !mech.length) { ledNow(); return; }   // 지금 메쉬가 같은 기구면 다시 읽지 않음(설정 없는 파일 = 새 기구로 읽음)
   const next = (k) => importMech3d(mech[k], ledNow, { onMore: () => next(k + 1) });   // 여러 파일 = 저장 순서대로
   next(0);
 }

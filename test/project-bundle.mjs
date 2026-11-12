@@ -32,4 +32,12 @@ process.exitCode = fail ? 1 : 0;
   const m = pickSources({ mech3d: { name: 'c.stp', parts: [1], light: { kind: 'none' } } }, have);
   ok(!m.files.length && m.missing.join() === 'c.stp', '원본이 없는 도면 = 빠진 목록');
   ok(!pickSources({ mode: 'flat' }, have).files.length, '3D 도면 없음 = 빈 목록'); }
+// 예제 = .uds(2026-11-12) — 목록이 .uds 를 가리키고, 각 파일에 기구(+LED) STEP 원본과 설정(보관분)
+{ const { readFileSync } = await import('node:fs'), list = JSON.parse(readFileSync('examples/index.json', 'utf8'));
+  for (const ex of list) {
+    const P = JSON.parse(readFileSync(ex.project.replace(/[^/]+$/, 'project.json'), 'utf8')), U = await unpackBundle(new Blob([readFileSync(ex.project)])), S = JSON.parse(U.text);
+    const roles = U.files.map((f) => f.role).join(), want = P.led ? 'mech,led' : 'mech';
+    let same = true; for (const f of U.files) same &&= readFileSync(f.role === 'mech' ? P.mech : P.led).equals(Buffer.from(await f.file.arrayBuffer()));
+    ok(/\.uds$/.test(ex.project) && roles === want && same && S.mode === 'mech3d' && !S.mech3d && JSON.stringify(S.mech3dPending ?? null) === JSON.stringify(P.mech3d ?? null), `예제 ${ex.id}: .uds · 도면 ${roles} · 설정 보관분`);
+  } }
 process.exitCode = fail ? 1 : 0;
