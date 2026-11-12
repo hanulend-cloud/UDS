@@ -36,9 +36,16 @@ import { createProjectFile, projectFileLabel } from './ui/project-file.js';
 import { packBundle, isBundle, unpackBundle } from './ui/project-bundle.js';
 import { pickSources, sourcesKey, keepStepSource, loadStepSources, onStepSourcesChange } from './ui/step-sources.js';
 import { createTabLock, openChannel } from './ui/tab-lock.js';
-import { readTheme, applyPageTheme } from './ui/theme.js';
+import { readTheme, applyPageTheme, themeButton } from './ui/theme.js';
 // 화면 전체 테마를 3D 화면이 뜨기 전에 먼저 적용(상단 바가 깜빡이지 않게)
 try { applyPageTheme(document, readTheme(localStorage)); } catch {}
+// 상단 바 ☀/☾ — 어느 단추·메뉴로 바꿔도 <html data-theme> 를 보고 모양을 맞춤
+{ const b = document.getElementById('hd-theme');
+  if (b) {
+    const sync = () => { const v = themeButton(document.documentElement.dataset.theme); b.textContent = v.icon; b.title = v.title; b.setAttribute('aria-label', v.title); b.setAttribute('aria-pressed', v.pressed); };
+    b.onclick = () => m3app.toggleTheme();
+    new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] }); sync();
+  } }
 
 const LS_KEY = 'uds.spec.v11';
 

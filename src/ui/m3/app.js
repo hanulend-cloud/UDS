@@ -126,6 +126,12 @@ export function command(id) {
 export const canUndo = () => !!A?.hist?.canUndo();
 export const canRedo = () => !!A?.hist?.canRedo();
 export const theme = () => { try { return readTheme(localStorage); } catch { return 'light'; } };
+// 상단 바 ☀/☾ 단추 = '보기 › 어두운 화면' 메뉴 = 3D 보기 단추 — 셋 다 같은 동작. 3D 화면이 아직 없으면 화면 색만 바꿈
+export function toggleTheme() {
+  const b = document.querySelector('#m3-views [data-theme-toggle]');
+  if (b) { b.click(); return; }
+  const t = nextTheme(theme()); try { localStorage.setItem(THEME_KEY, t); } catch {} applyPageTheme(document, t);
+}
 // 3D 기구 STEP 내보내기 — 지금 부품 메쉬(크기·위치·형상 수정 반영)를 부품마다 솔리드로(삼각형 근사 — 수정 안 한 부품은 원본 STEP 이 더 정확)
 let mechStepBusy = false;
 const stepBase = (n, d) => String(n ?? d).replace(/\.(stp|step)$/i, '').replace(/[/\\:*?"<>|]/g, '_');

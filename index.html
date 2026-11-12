@@ -16,9 +16,13 @@
 <body class="booting"><script>setTimeout(() => document.body.classList.remove("booting"), 60000);   /* 시작 중 오류가 나도 60초 뒤엔 보이게 — 큰 도면 복원은 10초를 넘김(2026-11-06). 예전 평판 화면은 처음부터 숨김 */</script>
   <header>
     <div class="hd-left">
-      <h1>Uniform Design Simulator <small id="gpu-badge" class="gpu-badge" hidden></small></h1>
+      <h1 title="Uniform Design Simulator">UDS <small>Uniform Design Simulator</small></h1>
       <nav id="menubar" class="menubar" aria-label="메뉴"></nav>
+    </div>
+    <div class="hd-right">
       <div id="proj-file" class="proj-file" aria-live="polite"><b data-pf="name"></b><span data-pf="st"></span><button type="button" data-pf="act" hidden></button></div>
+      <small id="gpu-badge" class="gpu-badge" hidden></small>
+      <button type="button" id="hd-theme" class="hd-theme"></button>
     </div>
     <!-- 메뉴가 쓰는 파일 선택(숨김) -->
     <input type="file" id="file-import" accept=".uds,application/json,.json" hidden />

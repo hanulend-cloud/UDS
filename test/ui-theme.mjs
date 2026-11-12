@@ -1,5 +1,5 @@
 // 화면 전체 밝은/어두운 테마(src/ui/theme.js): node test/ui-theme.mjs
-import { readTheme, nextTheme, applyPageTheme, THEME_KEY } from '../src/ui/theme.js';
+import { readTheme, nextTheme, applyPageTheme, THEME_KEY, themeButton } from '../src/ui/theme.js';
 import { ok, done } from './mech3d-util.mjs';
 
 const mem = (o = {}) => ({ getItem: (k) => (k in o ? o[k] : null), setItem: (k, v) => { o[k] = String(v); } });
@@ -11,4 +11,7 @@ ok(nextTheme('dark') === 'light' && nextTheme('light') === 'dark' && nextTheme(u
 { const el = { dataset: {}, style: {} }; applyPageTheme({ documentElement: el }, 'dark');
   ok(el.dataset.theme === 'dark' && el.style.colorScheme === 'dark', '<html> 에 data-theme·color-scheme');
   applyPageTheme({ documentElement: el }, 'x'); ok(el.dataset.theme === 'light', '모르는 값 → 밝게'); }
+{ const d = themeButton('dark'), l = themeButton('light');
+  ok(d.icon === '☀' && /밝은 화면/.test(d.title) && d.pressed === 'true', '어두울 때 단추 = ☀ 밝은 화면으로');
+  ok(l.icon === '☾' && /어두운 화면/.test(l.title) && l.pressed === 'false', '밝을 때 단추 = ☾ 어두운 화면으로'); }
 done();

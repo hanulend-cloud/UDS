@@ -30,5 +30,10 @@
 - [ ] 6. Edge 확인: 밝게/어둡게 전환 시 상단 바·메뉴까지 따라감, 큰 창·최적화 창 머리 글자·단추 대비, 어두운 테마에서 창 안 글자(완료 초록 등) 보임
 - [ ] 7. 커밋 `feat(ui): page-wide light/dark tokens, neutral floating windows`
 
-## 2~7단계
+## 2단계 — 상단 바 한 줄 (완료)
+- `index.html` header: 왼쪽 `UDS` 로고·메뉴 / 오른쪽(`.hd-right`) 프로젝트·저장 상태·[파일로 저장]·GPU 배지·☀/☾(`#hd-theme`)
+- `src/ui/theme.js` `themeButton(t)` (시험 `test/ui-theme.mjs`), `src/ui/m3/app.js` `toggleTheme()` = 3D 보기 단추·메뉴와 같은 동작
+- `src/main.js`: `<html data-theme>` 를 지켜보며 ☀/☾ 모양 맞춤
+
+## 3~7단계
 설계 문서의 단계 2~7 을 같은 형식(파일·시험·확인·커밋)으로, 앞 단계가 끝난 뒤 이 문서에 덧붙여 진행한다.
