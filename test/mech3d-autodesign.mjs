@@ -99,8 +99,9 @@ const peakRows = (ms, top, { len = 0.5, wid = 0.5, Uw = () => 0.9 } = {}) => ms.
   const r = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0 }, current: { milky: 7, count: 5, pitch: 0 }, G, line: { length: 2, closed: false }, nMax: 4 }, io);
   ok(verified.every((m) => m === 7) && basisMilky === 7 && r.best.milky === 7 && !r.milkyLowered && r.current.stats.Ulen === 0.5, `고정 7 → 최적화 ${basisMilky} · 최종 ${r.best.milky} · 표시 ${JSON.stringify(r.milkyLowered)}`); }
 { // Milky 미선택: 상한 아래 후보와 비교하지 않고 현재 7 유지
+  // 가짜 계산: Milky 7·LED 5개 이상만 통과(2026-11-12 — 예전엔 LED 개수와 무관하게 통과시켜, 고정 Milky 로 최적화하게 된 뒤(cb32919) LED 1개도 통과로 보였음)
   const G = { ns: 2, nw: 1, ds: 1, cell: 1, w0: -0.5, L: 2, closed: false, winS: 5, area: new Float64Array([1, 1]), valid: new Uint8Array([1, 1]) };
-  const io = { basis: async () => ({ cand: [0, 1, 2], maps: [0, 1, 2].map(() => Float32Array.from([1, 1])), emitted: 1 }), verify: async (d) => ({ stats: d.milky === 7 ? st(0.9, 0.9) : st(0.5, 0.5), eff: 1 }), progress() {}, cancelled: () => false };
+  const io = { basis: async () => ({ cand: [0, 1, 2], maps: [0, 1, 2].map(() => Float32Array.from([1, 1])), emitted: 1 }), verify: async (d) => ({ stats: d.milky === 7 && d.count >= 5 ? st(0.9, 0.9) : st(0.5, 0.5), eff: 1 }), progress() {}, cancelled: () => false };
   const r = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0 }, current: { milky: 7, count: 5, pitch: 0 }, G, line: { length: 2, closed: false }, nMax: 4 }, io);
   ok(r.unchanged && r.best.milky === 7 && !r.milkyLowered, `고정 Milky ${r.best.milky} 유지`); }
 { // Milky 미선택: 현재 7은 일반 후보와 동일하게 계산하고 5 후보는 만들지 않음
@@ -268,7 +269,7 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   const io = { evalVariants: async (d, cs) => cs.map((c) => ({ cand: c, ok: true, stats: st(0.85 + c.dz / 100, 0.9), eff: 0.5 + c.dz / 100 })),
     verify: async (d) => ({ stats: st(d.dz ? 0.77 : 0.5, 0.92), eff: 0.5 }), progress() {}, cancelled: () => false };
   const r = await runAutoDesign({ stages: { height: true }, obs, current: { milky: 3, count: 5, pitch: 0, dz: 0 }, heightRange: [0, 3] }, io);
-  ok(!r.unchanged && !r.feasible && /최종 정밀 재계산에서 목표 미달 — 길이 균일도 0\.77 · 폭 균일도 0\.92/.test(r.reason), `정밀 재계산 미달 → 불가: ${r.reason}`); }
+  ok(!r.unchanged && !r.feasible && /최종 정밀 재계산에서 목표 미달 — 길이 균일도 77\.0% · 폭 균일도 92\.0%/.test(r.reason), `정밀 재계산 미달 → 불가: ${r.reason}`); }
 { // ② 재확인: 첫 후보(±1) 검증 미달 → 같은 총수 다른 열 간격(±2) 검증 통과 → 그것
   const G = { ns: 2, nw: 1, ds: 1, cell: 1, w0: -0.5, L: 2, closed: false, winS: 5, area: new Float64Array([1, 1]), valid: new Uint8Array([1, 1]) };
   const cand = [0, -1, 1, -2, 2].flatMap((w) => [0, 1, 2].map((s) => ({ s, w }))), maps = cand.map(({ w }) => Float32Array.from(w === 0 ? [1, 0.1] : [1, 1]));
@@ -284,7 +285,7 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   ok(a.r.feasible && a.r.best.rows === 2 && a.r.best.rowGap === 2 && a.calls.length === 2 && sv?.tried.length === 2 && sv.tried[1].verified.stats.Ulen === 0.95 && a.prog.includes('② 후보 재확인 (2/3)'),
     `② 첫 후보 미달 → 두 번째(±${a.r.best.rowGap}) 통과 (verify ${a.calls.length}회)`);
   const b = await run((d) => (d.rows === 2 && d.rowGap === 2 ? 0.75 : d.rows === 2 ? 0.7 : 0.6));
-  ok(!b.r.feasible && b.r.best.rows === 2 && b.r.best.rowGap === 2 && b.calls.length <= 3 && /최종 정밀 재계산에서 목표 미달 — 길이 균일도 0\.75/.test(b.r.reason),
+  ok(!b.r.feasible && b.r.best.rows === 2 && b.r.best.rowGap === 2 && b.calls.length <= 3 && /최종 정밀 재계산에서 목표 미달 — 길이 균일도 75\.0%/.test(b.r.reason),
     `② 모두 미달 → 검증 최고(±${b.r.best.rowGap}) 유지 · verify ${b.calls.length}회: ${b.r.reason}`); }
 { // ②+④+① (spec §2.2c): ② 기준 = 거친 최고점 Milky(상한 아님) · 케이스 최고 등급 → 개수 확정 뒤 ④ 최저 통과 등급 · ① 최소 Milky
   const G = { ns: 2, nw: 1, ds: 1, cell: 1, w0: -0.5, L: 2, closed: false, winS: 5, area: new Float64Array([1, 1]), valid: new Uint8Array([1, 1]) };
