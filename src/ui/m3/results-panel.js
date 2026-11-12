@@ -670,14 +670,14 @@ export function createResultsPanel(el, { onOpt = null, onQuality = null, fileNam
   function unroll() {
     const cv = big?.cvs.map; if (!cv?._mapv?.at || !big.equal) return false;
     big.equal = false; const b = big.el.querySelector('[data-big-eq]'); if (b) b.checked = false;
-    onNote?.('확대·영역 선택은 펼친 그림에서 — [실제 비율]을 껐습니다'); paint('map', cv); return true;
+    onNote?.('확대·이동·영역 선택은 펼친 그림에서 — [실제 비율]을 껐습니다'); paint('map', cv); return true;
   }
   function wireBigZoom(cv) {
     const M = () => (cv._mapv && !cv._mapv.at ? cv._mapv : null);
     const P = (e) => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * (cv.width / r.width), (e.clientY - r.top) * (cv.height / r.height)]; };
     const full = (G) => fullView(mapViewG(G)), redraw = () => paint('map', cv);
     cv.addEventListener('wheel', (e) => {
-      if (unroll()) { e.preventDefault(); return; }
+      unroll();   // 실제 비율이면 끄고 바로 이어서 확대(2026-11-12 — 예전엔 첫 휠은 끄기만 해서 '확대가 안 됨' 으로 보였음)
       const m = M(); if (!m) return; const B = mapBox(cv, m.v.G, m.dpr, m.equal), sw = B.at(...P(e)); if (!sw) return;
       e.preventDefault(); const F = full(m.v.G), v = zoomAt(cv._view ?? F, F, e.deltaY < 0 ? 1.25 : 0.8, sw[0], sw[1]);
       cv._view = v.s0 === F.s0 && v.s1 === F.s1 && v.w0 === F.w0 && v.w1 === F.w1 ? null : v; redraw();
@@ -685,7 +685,9 @@ export function createResultsPanel(el, { onOpt = null, onQuality = null, fileNam
     let drag = null;
     cv.addEventListener('pointerdown', (e) => {
       // 오른쪽 끌기 = 이동(2026-11-12) · 왼쪽 끌기 = 영역(영역 선택 켰을 때만). 오른쪽을 끌지 않고 떼면 기존 저장 메뉴
-      const m = M(), pan = e.button === 2; if (!m || !(pan || (e.button === 0 && big.regMode))) return;
+      const pan = e.button === 2; if (!(pan || (e.button === 0 && big.regMode))) return;
+      unroll();   // 실제 비율로 다시 켜 둔 채 끌어도 바로 이동·영역 선택
+      const m = M(); if (!m) return;
       const B = mapBox(cv, m.v.G, m.dpr, m.equal), p = P(e), sw = B.at(...p);
       drag = { p, sw, B, pan, v: cv._view ?? full(m.v.G), moved: false }; cv.setPointerCapture?.(e.pointerId);
     });
