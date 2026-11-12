@@ -487,8 +487,9 @@ export async function runAutoDesign(cfg, io) {
   if (stop()) return { cancelled: true };
   const clock = io.now ?? Date.now;   // 일시정지한 시간은 빼고 잼
   io.progress?.('current', 0, '현재안 계산');   // 비교표 '현재' 열 — 최종안과 같은 추정기(io.verify). 수렴한 점진 결과가 있으면 재사용
-  // Milky 단계를 선택했을 때만 상한을 적용한다. 체크 해제(고정)한 Milky 는 위치·높이·형상을 돌려도 절대 바꾸지 않는다.
-  const lowered = stages.milky && cfg.current?.milky > sCap ? { from: cfg.current.milky, to: sCap, rough: !cfg.currentVerified } : null;
+  // 지금 Milky 가 상한(5)보다 높으면 '현재' 열은 그 값 그대로(비교용 — 계산마다 시간 한도), 최적화는 상한으로 낮춰서 — 결과에 표시(milkyLowered).
+  // Milky 를 체크하지 않아도 같음(2026-11-12 사용자: Milky 5 초과는 투과율이 50% 넘게 떨어져 현실적으로 적용 어려움 — 11-09 의 '체크 해제 = 그대로 고정' 을 되돌림)
+  const lowered = cfg.current?.milky > sCap ? { from: cfg.current.milky, to: sCap, rough: !cfg.currentVerified } : null;
   let currentVerified = cfg.currentVerified ?? await (lowered ? io.verify(d, { maxMs: FAR_MS, rough: true }) : io.verify(d));
   if (stop()) return { cancelled: true };
   if (lowered) d = { ...d, milky: sCap };
