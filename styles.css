@@ -780,6 +780,7 @@ body.booting::after { content: "불러오는 중…"; position: fixed; left: 50%
 .m3-fl { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: var(--m3-acc); color: #fff; font-style: normal; font-size: 10.5px; font-weight: 700; margin-right: 4px; vertical-align: 1px; }
 .m3-mon-flow { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .m3-leak { display: block; margin-top: 4px; padding: 2px 0; border: 0; background: none; color: #b7791f; font: inherit; font-size: 11.5px; text-align: left; cursor: pointer; text-decoration: underline dotted; }
+.m3-effload { margin-top: 3px; font-size: 11.5px; font-weight: 600; cursor: help; } .m3-effload.near { color: #b7791f; } .m3-effload.bad { color: #d64545; }
 /* 기구 최적화 결과 카드 — 판정 · 작은 비교표 · 한계 한 줄 · 단추 */
 .m3-rcard { border: 1px solid var(--m3-line); border-left: 4px solid #8a96a8; border-radius: 8px; padding: 8px 10px; margin: 6px 0; background: #fbfcfe; }
 .m3-rcard.ok { border-left-color: #1f9d55; } .m3-rcard.bad { border-left-color: #d64545; } .m3-rcard.keep { border-left-color: #8a96a8; }

@@ -26,6 +26,19 @@ export function judgeText(v, tg, se = null, relNoise = null) {
 }
 export { needText } from './progressive.js';
 // 평균 광량 카드: 광속이 있으면 cd/m²(목표 대비), 없으면 상대값(길이 프로파일 평균/최대)
+// 광효율 → 계산 부담(순수, 표시 전용, 2026-11-12) — 관측면 원뿔에 닿는 광선이 적을수록 같은 노이즈에 광선이 더 필요(대략 광효율에 반비례).
+// 5% 이상 = 표시 없음 · 1~5% = 노랑 '계산 느림' · 1% 미만 = 빨강 '계산 매우 느림'(글은 짧게, 2026-11-12 사용자 요청). 계산 중이면 남은 시간(경과 × 남은 %/진행 %). 자세한 숫자는 툴팁
+export const EFF_HEAVY = 0.05, EFF_VERY = 0.01;
+export function effLoad(eff, snap, elapsedSec) {
+  if (!Number.isFinite(eff) || eff >= EFF_HEAVY) return { text: '', cls: '', title: '' };
+  const cls = eff < EFF_VERY ? 'bad' : 'near', pct = snap?.progress ?? 0;
+  const left = snap?.state === 'running' && pct >= 1 && pct < 100 && elapsedSec > 0 ? elapsedSec * (100 - pct) / pct : null;
+  const tm = left == null ? '' : ` · 남은 ${Math.max(1, Math.round(left / 60))}분`;
+  const rn = snap?.stats?.relNoise, goal = snap?.targetNoise, need = snap?.photons > 0 && rn > 0 && goal > 0 ? snap.photons * (rn / goal) ** 2 : null;
+  const big = (n) => (n >= 1e8 ? `${(n / 1e8).toFixed(1)}억` : `${Math.round(n / 1e4).toLocaleString()}만`);
+  const title = `광선 1만 개 중 ${Math.round(eff * 1e4)}개만 쓰임${need ? ` · 목표까지 약 ${big(need)} 광선` : ''}`;
+  return { text: `${cls === 'bad' ? '계산 매우 느림' : '계산 느림'}${tm}`, cls, title };
+}
 export function lumCard(st, ph, targetLum) {
   if (ph?.lum != null && Number.isFinite(ph.lum)) {
     const ratio = targetLum > 0 ? ph.lum / targetLum : null, li = Math.floor(ph.lum + 1e-9), ti = Math.floor(targetLum + 1e-9), pass = ratio == null ? null : li >= ti;
@@ -478,6 +491,7 @@ export const mapMenuItems = (hasPin, onCell) => [
 // 1D 우클릭 메뉴 항목(순수)
 export const plotMenuItems = (title) => [{ k: 'csv', label: `${title} 데이터 CSV 저장` }, { k: 'png', label: '그래프 이미지 저장 (PNG)' }, { k: 'copy', label: '그래프 이미지 복사' }];
 export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds', onLeak = null, onBig = null, onCalc = null, calcBusy = () => false, onNote = null } = {}) {
+  let effT = { key: null, t0: null };   // 계산 부담 배지의 경과 시간 기준
   const gaugeHtml = (k) => `<div class="m3-gauge" data-r="${k}"><div class="f"></div><div class="tg"></div></div>`;
   el.innerHTML = `
     <div class="m3-res-h">시뮬레이션 결과</div>
@@ -485,7 +499,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     <div class="m3-blk"><div class="m3-t"><b class="m3-tt">2D 광량 분포 <i class="m3-info" data-r="mapsub" tabindex="0">ⓘ</i></b><span><label class="m3-map-eq" title="가로세로를 같은 축척으로 — 끄면 좁은 폭을 늘려 보여 줌"><input type="checkbox" data-r="mapEq"> 실제 비율</label> <select data-r="quality" title="2D 분포·1D 프로파일 칸 크기(정사각) — 저 1.5 mm(빠름) · 중 1.0 mm(광선 ≈2배) · 고 0.5 mm(광선 ≈4배) · 짧거나 좁은 면은 그 방향만 더 잘게" aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>  <button type="button" class="m3-zoom" data-zoom="map" title="큰 창으로 보기" aria-label="2D 광량 분포 확대">⤢</button></span></div>
       <div class="m3-withm"><canvas class="m3-g" data-r="map" width="600" height="200"></canvas>
         <div class="m3-m"><div class="l">평균 광량</div><div class="v" data-r="avg" title="cd/m² 값은 보는 각도 설정과 상관없이 정면 ±10° 안의 평균 휘도">–</div><div class="s" data-r="avgs"></div><div class="s m3-need" data-r="need"></div>${gaugeHtml('avgg')}
-          <div class="l" style="margin-top:6px">광 효율</div><div class="v sm" data-r="eff">–</div><div class="s">관측면 원뿔 안 / LED 총 방출</div><button type="button" class="m3-leak" data-r="leak" hidden title="누르면 3D 에서 가장 많이 새는 면을 강조"></button></div></div></div>
+          <div class="l" style="margin-top:6px">광 효율</div><div class="v sm" data-r="eff">–</div><div class="s">관측면 원뿔 안 / LED 총 방출</div><div class="m3-effload" data-r="effl" hidden></div><button type="button" class="m3-leak" data-r="leak" hidden title="누르면 3D 에서 가장 많이 새는 면을 강조"></button></div></div></div>
     <div class="m3-blk"><div class="m3-t"><b class="m3-tt">길이 방향 1D 프로파일 <i class="m3-info" data-r="psub" tabindex="0">ⓘ</i></b><span><button type="button" class="m3-zoom" data-zoom="prof" title="큰 창으로 보기" aria-label="길이 프로파일 확대">⤢</button></span></div>
       <div class="m3-withm"><canvas class="m3-g" data-r="prof" width="600" height="150"></canvas>
         <div class="m3-m"><div class="l">길이 균일도</div><div class="v" data-r="ul">–</div>${gaugeHtml('ulg')}<div class="s" data-r="ulj"></div></div></div></div>
@@ -714,6 +728,10 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     if (lc.ratio != null) fill(q('avgg'), lc.ratio * 50, lc.pass, 50);   // 목표 = 가운데, 목표의 2배 = 가득
     const eff = snap.photometry?.eff;
     q('eff').textContent = Number.isFinite(eff) ? `${(eff * 100).toFixed(1)}%` : '–';
+    { // 광효율에 따른 계산 부담(짧은 배지 · 자세히는 툴팁). 경과 시간 = 이 계산(sceneKey)이 처음 돌기 시작한 때부터
+      const now = performance.now(); if (snap.sceneKey !== effT.key || snap.state === 'pending' || snap.state === 'starting') effT = { key: snap.sceneKey, t0: null }; if (snap.state === 'running' && effT.t0 == null) effT.t0 = now;
+      const L = effLoad(eff, snap, effT.t0 == null ? 0 : (now - effT.t0) / 1000), e = q('effl');
+      if (e.textContent !== L.text) e.textContent = L.text; e.className = `m3-effload ${L.cls}`; e.title = L.title; e.hidden = !L.text; }
     const lk = args.leak ?? ''; if (q('leak').textContent !== lk) q('leak').textContent = lk; q('leak').hidden = !lk;   // 새는 빛(광 효율 아래)
     paintBig(); syncBig();   // 큰 창도 계산을 따라감
   }
