@@ -33,6 +33,7 @@ self.onmessage = async (ev) => {
       }
       return;
     }
+    if (m.type === 'interactive') { host.handle(m); return; }   // 3D 화면 조작 중/끝 — 답하지 않음(계산 중에도 바로 반영)
     if (m.type === 'db') { db = createDb(m.db?.base ?? [], m.db?.user ?? []); setMaterialDb(db); return; }
     if (m.type === 'line') {
       const L = recognizeLine(m.parts, m.faces, m.dir);

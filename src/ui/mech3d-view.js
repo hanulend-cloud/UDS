@@ -20,7 +20,7 @@ const SEL_TINT = new THREE.Color(0xffb020), FACE_COLOR = new THREE.Color(0xff5a3
 const VIEW_DIR = { top: [0, -1e-3, 1], front: [0, -1, 0], side: [1, 0, 0], iso: [0.7, -1.1, 0.9], bottom: [0, -1e-3, -1], back: [0, 1, 0], side2: [-1, 0, 0] };   // bottom·back·side2 = 반대쪽(2026-11-06)
 const SECTION_N = { x: [-1, 0, 0], y: [0, -1, 0], z: [0, 0, -1] };   // 단면: 좌표 ≤ pos 쪽만 남김
 
-export function createMech3dView(canvas, { onPick, onContext = null, gizmo = null, onLost = null }) {
+export function createMech3dView(canvas, { onPick, onContext = null, gizmo = null, onLost = null, onInteract = null }) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   // 그래픽 메모리 부족 등으로 3D 문맥이 끊기면 화면이 빈 채로 남음 — 알려서 원인을 보이게(2026-11-06)
   canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); onLost?.(); });
@@ -111,9 +111,12 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   let spin = 0, spinUntil = 0;
   const tick = () => { controls.update(); if (spinUntil === Infinity || performance.now() < spinUntil) spin = requestAnimationFrame(tick); else { spin = 0; if (setLowRes(false)) render(); } };
   const wake = (ms) => { setLowRes(true); spinUntil = ms === Infinity ? Infinity : Math.max(spinUntil === Infinity ? 0 : spinUntil, performance.now() + ms); if (!spin) spin = requestAnimationFrame(tick); };
-  controls.addEventListener('start', () => wake(Infinity));
-  controls.addEventListener('end', () => { spinUntil = 0; wake(300); });
-  canvas.addEventListener('wheel', () => wake(300), { passive: true });
+  // 조작 중 알림(onInteract(true/false), 2026-11-12) — 계산이 GPU 를 잘게 쓰게 해 화면이 끊기지 않게. 끝난 뒤 0.4초 더 기다렸다 false
+  let iOn = false, iOff = null;
+  const interact = (on) => { if (!onInteract) return; clearTimeout(iOff); if (on) { if (!iOn) { iOn = true; onInteract(true); } } else iOff = setTimeout(() => { iOn = false; onInteract(false); }, 400); };
+  controls.addEventListener('start', () => { wake(Infinity); interact(true); });
+  controls.addEventListener('end', () => { spinUntil = 0; wake(300); interact(false); });
+  canvas.addEventListener('wheel', () => { wake(300); interact(true); interact(false); }, { passive: true });
   // Shift/Ctrl + 왼쪽 드래그 = 화면 이동, Shift/Ctrl + 오른쪽 드래그 = 위로 확대·아래로 축소(2026-11-11)
   // Trackball 은 mouseButtons 값을 동작이 아니라 실제 event.button 번호로 비교하므로(LEFT → MIDDLE → RIGHT 순),
   // 수정키가 눌린 버튼이 원하는 분기로 가게 번호를 바꾼다. 오른쪽+수정키는 MIDDLE(휠 확대 분기)에 2번 버튼을 연결한다.

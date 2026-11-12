@@ -29,6 +29,7 @@ export function makeChunkHost({ getTable, getDb = () => null }) {
           return { reply: { sceneKey: m.sceneKey, ready: true }, transfer: [] };
         } catch (e) { cache = null; return { reply: { sceneKey: m.sceneKey, error: String(e?.message ?? e) }, transfer: [] }; }
       }
+      if (m.type === 'interactive') { gpu?.setInteractive?.(!!m.on); return { reply: null, transfer: [] }; }   // 3D 화면 조작 중 = GPU 를 작게 나눠 화면에 틈(2026-11-12) — 응답 없음
       if (m.type === 'drop') { cache = null; return { reply: { dropped: true }, transfer: [] }; }   // 쉬는 Worker — 장면을 내려놓음(메모리)
       if (m.type === 'path') {   // 대표 광경로 — { emitter, want, nMech } → { path: { pts, dir } | null }
         if (!cache || cache.sceneKey !== m.sceneKey) return { reply: { sceneKey: m.sceneKey, stale: true }, transfer: [] };

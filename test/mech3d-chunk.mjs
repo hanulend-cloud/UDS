@@ -104,4 +104,12 @@ const same = (a, b) => a.length === b.length && a.every((v, k) => v === b[k]);
   await host.handle({ type: 'chunk', sceneKey: 'r1', seed: 3, N: 500 });
   ok(made === 2 && timers.length === 0 && host.gpu === null, `복구 최대 2번 — 그 뒤로는 CPU 로 계속 (만든 횟수 ${made}, 예약 ${timers.length})`);
 }
+{   // 3D 화면 조작 중(2026-11-12) — 'interactive' 메시지 → GPU 추적기에 전달(작게 나눠 화면에 틈), 응답 없음
+  const host = makeChunkHost({ getTable: () => table, getDb: () => null });
+  const calls = []; host.setGpu({ lost: false, setInteractive: (on) => calls.push(on), trace: () => Promise.reject(new Error('x')) });
+  const r1 = host.handle({ type: 'interactive', on: true }), r2 = host.handle({ type: 'interactive', on: false });
+  ok(calls.join() === 'true,false' && r1?.reply == null && r2?.reply == null, `interactive → gpu.setInteractive(${calls.join()}), 응답 없음`);
+  const h2 = makeChunkHost({ getTable: () => table, getDb: () => null });
+  ok(h2.handle({ type: 'interactive', on: true })?.reply == null, 'GPU 없어도 interactive 무시(오류 없음)');
+}
 done();

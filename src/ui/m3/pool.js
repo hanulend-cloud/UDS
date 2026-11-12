@@ -83,6 +83,7 @@ export function createPool({ dbLists, l2Raw = () => null, onStatus = () => {}, o
   };
   const ports = () => Array.from({ length: size() }, (_, k) => ({ send: (msg) => sendK(k, msg), gpu: k === size() - 1, off: () => isOff(k) }));
   const warm = () => { for (let k = 0; k < size(); k++) worker(k); };
+  const setInteractive = (on) => { for (const w of pool) w.postMessage({ type: 'interactive', on: !!on }); };   // 3D 화면 조작 중 — GPU 계산을 잘게(화면 끊김 방지, 2026-11-12)
   const setDb = (db) => { for (const w of pool) w.postMessage({ type: 'db', db }); };   // 이미 뜬 Worker 의 소재 DB 갱신(새 Worker 는 init 에서)
-  return { worker, call, killAll, ports, warm, setDb, gpu: () => (gpuAllowed() ? gpu : { ok: false, name: null, error: globalThis.navigator?.gpu ? '설정에서 끔' : null }), cpuWorkers: () => (gpu?.ok ? cpuWithGpu() : size()), sceneLimit: () => limit };
+  return { worker, call, killAll, ports, warm, setDb, setInteractive, gpu: () => (gpuAllowed() ? gpu : { ok: false, name: null, error: globalThis.navigator?.gpu ? '설정에서 끔' : null }), cpuWorkers: () => (gpu?.ok ? cpuWithGpu() : size()), sceneLimit: () => limit };
 }

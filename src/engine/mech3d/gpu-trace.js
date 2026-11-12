@@ -12,7 +12,8 @@ const OPT = 14;   // 부품 광학 표 한 줄: n, mus, g, mua, 투과, 위상�
 const PART_BOX_MARGIN = 0.1;   // 맞붙은 면 틈(COIN_GAP 0.04)보다 넉넉히
 const TIR_TRAP = 2000;
 const SW = 56;   // 이어 돌리기 상태 한 줄(u32 개수) — 셰이더 ST 배치와 같게
-export const EV_BUDGET = 2048;   // 한 번의 GPU 실행에서 광자마다 따라가는 사건 수 상한(넘으면 다음 실행에서 이어 감)   // 산란 없는 매질에서 이만큼 연달아 전반사 = 갇힘(직육면체 투명판은 방향이 몇 개로 닫혀 영영 못 나옴)
+export const EV_BUDGET = 2048;
+const INTERACTIVE_MS = 8, INTERACTIVE_GAP_MS = 8;   // 3D 화면 조작 중: 한 번의 GPU 실행 목표 시간 · 실행 사이 쉬는 시간(화면 한 장 몫)   // 한 번의 GPU 실행에서 광자마다 따라가는 사건 수 상한(넘으면 다음 실행에서 이어 감)   // 산란 없는 매질에서 이만큼 연달아 전반사 = 갇힘(직육면체 투명판은 방향이 몇 개로 닫혀 영영 못 나옴)
 const KIND = { whiteDiffuse: 0, metal: 1, black: 2, gloss: 3 };
 
 const WGSL = /* wgsl */`
@@ -414,7 +415,7 @@ export async function createGpuTracer() {
   if (errs.length) throw new Error(`GPU 셰이더 오류: ${errs.map((m) => `${m.lineNum}:${m.message}`).join(' / ')}`);
   const pipe = await device.createComputePipelineAsync({ layout: 'auto', compute: { module: mod, entryPoint: 'main' } });
   const scenes = new WeakMap();
-  let slice0 = 1024, lastSc = null;   // 슬라이스 크기 — 청크 사이에 기억(매 청크 4096 부터 다시 키우면 느림)
+  let slice0 = 1024, lastSc = null, interactive = false, iSlice = 256;   // interactive: 3D 화면을 돌리는 중 — 실행을 짧게(≈INTERACTIVE_MS) 나누고 사이에 화면 그릴 틈을 줌(결과는 같음)   // 슬라이스 크기 — 청크 사이에 기억(매 청크 4096 부터 다시 키우면 느림)
   const name = [info.vendor, info.architecture, info.description].filter(Boolean).join(' ').trim() || 'GPU';
 
   // 장면 → GPU 버퍼(장면마다 한 번). 좌표는 장면 중심 기준(f32 정밀도)
@@ -459,6 +460,7 @@ export async function createGpuTracer() {
 
   // starts: Float32Array(N·6) 광원 표본(원래 좌표). 슬라이스마다 ≈ targetMs 가 되게 나눠 보냄(GPU 감시 시간 초과 방지)
   async function trace(S, { starts, N, seed, track = -1, w0, wMin, maxEvents = 100000, targetMs = 120, evBudget = EV_BUDGET }) {
+    let maxMs = 0;
     if (dead) throw new Error('GPU 장치를 잃음');
     const t0 = performance.now(), sc = upload(S);
     if (sc !== lastSc) { lastSc = sc; slice0 = 1024; }   // 새 장면은 작은 슬라이스부터(이전 장면보다 훨씬 느릴 수 있음 — 한 번의 dispatch 가 길면 GPU 감시 시간 초과)
@@ -478,7 +480,8 @@ export async function createGpuTracer() {
     let base = 0, slice = slice0, rounds = 0;
     try {
       while (base < N) {
-        const n = Math.min(slice, N - base);
+        const calm = interactive, cap = calm ? iSlice : slice;   // 조작 중에는 따로 잰 작은 슬라이스
+        const n = Math.min(cap, N - base);
         pu[0] = n; pu[1] = base; pu[2] = seed >>> 0; pi[3] = track; pf[4] = w0; pf[5] = wMin; pu[6] = maxEvents; pu[7] = sc.nCon;
         pu.set([O.oP, O.oNM, O.oBOX, O.oPH, O.oOPT, O.oFIN, O.oT, O.oTI, O.oMETA, O.oORD, O.oCON, sc.nOrd], 8);
         // 실행마다 광자당 사건 evBudget 개까지 — 남은 광자가 없을 때까지 이어 실행(한 번의 실행이 GPU 감시 시간을 넘지 않게)
@@ -493,8 +496,10 @@ export async function createGpuTracer() {
           device.queue.submit([enc.finish()]);
           await guarded(device.queue.onSubmittedWorkDone());
           if (dead) throw new Error('GPU 장치를 잃음');
-          if (round === 0) ms = performance.now() - ts;   // 슬라이스 크기는 첫 실행(대부분의 광자) 시간으로 잼
+          const dt = performance.now() - ts; maxMs = Math.max(maxMs, dt);
+          if (round === 0) ms = dt;   // 슬라이스 크기는 첫 실행(대부분의 광자) 시간으로 잼
           rounds++;
+          if (calm) await new Promise((r) => setTimeout(r, INTERACTIVE_GAP_MS));   // 화면이 한 장 그릴 틈
           await guarded(cntRb.mapAsync(GPUMapMode.READ));
           const left = new Uint32Array(cntRb.getMappedRange())[0];
           cntRb.unmap();
@@ -506,14 +511,15 @@ export async function createGpuTracer() {
         device.queue.submit([enc.finish()]);
         base += n;
         // 다 찬 슬라이스로만 잼. 한 번에 두 배를 넘기지 않고 6만 5천 광자를 넘기지 않는다 — 크게 잡은 한 번의 실행이 Windows GPU 감시 시간(약 2초)을 넘기면 드라이버가 장치를 멈춤(DXGI_ERROR_DEVICE_HUNG, 2026-11-11)
-        if (n >= slice) slice = slice0 = Math.max(1024, Math.min(slice * 2, 1 << 16, Math.round(n * targetMs / Math.max(1, ms))));
+        if (calm) { if (n >= iSlice) iSlice = Math.max(256, Math.min(iSlice * 2, 1 << 16, Math.round(n * INTERACTIVE_MS / Math.max(0.1, ms)))); }
+        else if (n >= slice) slice = slice0 = Math.max(1024, Math.min(slice * 2, 1 << 16, Math.round(n * targetMs / Math.max(1, ms))));
       }
       await guarded(rb.mapAsync(GPUMapMode.READ));
       const rec = new Float32Array(rb.getMappedRange().slice(0));
       rb.unmap();
       for (let p = 0; p < N; p++) { const o = p * REC; if (rec[o + 1] >= 0) for (let k = 0; k < 3; k++) rec[o + 3 + k] += sc.c[k]; }
-      return { rec, ms: performance.now() - t0, rounds };
+      return { rec, ms: performance.now() - t0, rounds, maxMs };
     } finally { src.destroy(); out.destroy(); rb.destroy(); ub.destroy(); stb.destroy(); cnt.destroy(); cntRb.destroy(); }
   }
-  return { name, trace, get lost() { return dead; } };
+  return { name, trace, setInteractive: (on) => { interactive = !!on; }, get lost() { return dead; } };
 }

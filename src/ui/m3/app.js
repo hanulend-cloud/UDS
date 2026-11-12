@@ -170,7 +170,7 @@ globalThis.__m3 = () => A;   // 브라우저 점검용: __m3().prog.snapshot(), 
 
 function getView() {
   viewP ??= import('../mech3d-view.js').then(({ createMech3dView }) => {
-    const v = createMech3dView($('#mech3d-canvas'), { onPick: (s) => { if (A) onPick(s); }, onContext: (c) => { if (A) onViewContext(c); }, gizmo: $('#m3-axes'),
+    const v = createMech3dView($('#mech3d-canvas'), { onPick: (s) => { if (A) onPick(s); }, onContext: (c) => { if (A) onViewContext(c); }, gizmo: $('#m3-axes'), onInteract: (on) => pool?.setInteractive?.(on),
       onLost: () => { const n = getMech3d()?.combined?.partOf?.length ?? 0; reportError('3D 화면', `3D 화면 끊김 — 그래픽 메모리 부족으로 보임(삼각형 ${Math.round(n / 1e4)}만 개)`); setStatus(`3D 화면이 끊겨 도면이 안 보임 — 그래픽 메모리 부족으로 보임(삼각형 ${Math.round(n / 1e4)}만 개). 다른 프로그램·탭을 닫고 새로고침하세요`); } });
     const el = $('#m3-views');
     el.innerHTML = VIEWS.map(([k, t, r, rt]) => (r ? `<div class="m3-vrow"><button data-view="${k}">${t}</button><button data-view="${r}" class="m3-vrev" title="${rt}" aria-label="${rt}">반대</button></div>` : `<button data-view="${k}">${t}</button>`)).join('') + '<button type="button" data-fit title="지금 보이는 도면 전체를 창에 맞춤 — 보는 방향은 그대로 (F)">⤢ 맞춤</button><button type="button" data-xray aria-pressed="false" title="전체 부품 반투명 — 속 구조를 봄">투시</button><button type="button" data-lines aria-pressed="false" title="면을 감추고 부품마다 다른 색의 외곽선만 표시 — 부품 구조 확인">선 보기</button><button type="button" data-paths aria-pressed="false" title="광경로 화살표 켜기/끄기">광경로</button><button type="button" data-obs aria-pressed="true" title="관측면 표시(테두리·화살표·색지도) 보이기/감추기 — 관측면을 고를 때는 늘 보임">관측면</button><button type="button" data-theme-toggle aria-pressed="false"></button>';

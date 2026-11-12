@@ -30,6 +30,9 @@ try {
   ok(diff === 0, `이어 돈 기록 = 한 번에 돈 기록(비트 일치, 다른 값 ${diff}개 / ${A.rec.length})`);
   let d0 = 0; for (let k = 0; k < O.rec.length; k++) if (!Object.is(O.rec[k], A.rec[k])) d0++;
   ok(d0 === 0, `기본 나눔(EV_BUDGET) = 예전 한 번에 돈 기록(비트 일치, 다른 값 ${d0}개)`);
+  gpu.setInteractive(true); const C = await gpu.trace(fx.S, { ...opt }); gpu.setInteractive(false);
+  let d1 = 0; for (let k = 0; k < C.rec.length; k++) if (!Object.is(C.rec[k], A.rec[k])) d1++;
+  ok(d1 === 0 && C.maxMs < 60, `화면 조작 중 = 작게 나눠 실행(가장 긴 실행 ${C.maxMs?.toFixed(1)}ms), 기록 비트 일치(다른 값 ${d1}개)`);
   let esc = 0; for (let p = 0; p < N; p++) esc += A.rec[p * 24];
   ok(esc > 0, `탈출 광자 있음 (${esc})`);
   lines.push(lines.every((l) => l.startsWith('PASS')) ? 'all PASS' : 'FAIL');
