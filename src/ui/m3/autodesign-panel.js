@@ -419,10 +419,21 @@ function factorBoxesHtml(x, effects, locked = {}, only = null) {
   if (only) return box(only);
   return `<div class="rs-fbs">${['position', 'shape', 'milky'].map(box).join('')}</div>`;
 }
-// 참고 한 줄씩(최대 3, 길면 …) — 접지 않고 바로
+// 최적화 뒤에도 미달일 때 다음 할 일(순수, 2026-11-12 평가) — 이번에 안 돌린 항목(위치·형상·Milky)을 켜고 다시 해 보라고만. 몰래 켜지 않음.
+// 남은 차이 = 판정과 같은 규칙(0.1% 내림 표시끼리, judgeText 와 같음)
+export function nextTryText(r) {
+  if (!r || r.feasible || !r.best) return '';
+  const S = r.stages ?? {}, ran = { position: !!(S.position || S.leds || S.height), shape: !!S.shape, milky: !!S.milky };
+  const off = [['position', '위치'], ['shape', '형상'], ['milky', 'Milky']].filter(([k]) => !ran[k]).map(([, n]) => n);
+  if (!off.length) return '';
+  const tg = r.targets ?? {}, gap = (v, t) => (Number.isFinite(v) && Number.isFinite(t) && Math.floor(v * 1000 + 1e-9) < Math.floor(t * 100 + 1e-9) * 10 ? `−${((Math.floor(t * 100 + 1e-9) * 10 - Math.floor(v * 1000 + 1e-9)) / 10).toFixed(1)}%p` : '');
+  const g = [gap(r.best.Ulen, tg.len) && `길이 ${gap(r.best.Ulen, tg.len)}`, gap(r.best.Uwid, tg.wid) && `폭 ${gap(r.best.Uwid, tg.wid)}`].filter(Boolean).join(' · ');
+  return `남은 차이 ${g || '–'} → ${off.join('·')}도 체크하고 다시 실행해 보세요`;
+}
+// 참고 한 줄씩(최대 3, 길면 …) — 접지 않고 바로. 다음 할 일(nextTryText)이 맨 앞
 function notesLines(r) {
   const n = [
-    oneRowHint(r), r.shapeNote ? `형상 그대로: ${r.shapeNote}` : '', shapeMissText(r),
+    nextTryText(r), oneRowHint(r), r.shapeNote ? `형상 그대로: ${r.shapeNote}` : '', shapeMissText(r),
     r.lowered ? loweredText(r.lowered, r.unchanged) : '', !r.feasible && r.peek ? peekText(r.peek) : '',
   ].filter(Boolean).slice(0, 3).map((t) => `<div class="rs-note">💡 ${clip(String(t).replace(/^💡\s*/, ''), 70)}</div>`);
   const ch = caseHintText(r) ? `<button type="button" class="rs-note m3-rhint" data-ad="casePart" data-v="${r.hint.finish.part}" title="${esc(caseHintText(r))}">${clip(caseHintText(r).replace(/^💡\s*/, '💡 '), 72)} ▸</button>` : '';

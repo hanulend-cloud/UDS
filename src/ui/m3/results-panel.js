@@ -28,7 +28,8 @@ export function judgeText(v, tg, se = null, relNoise = null) {
 }
 export { needText } from './progressive.js';
 // 판정 배지 옆 '다음 할 일' 단추(순수, 2026-11-12) — 판정을 본 그 자리에서 다음 단계로: 미달·근처 = ⑤ 기구 최적화 창, 통과 = 큰 창
-export function nextAction(cls) {
+export function nextAction(cls, optFrac = null) {
+  if ((cls === 'bad' || cls === 'near') && Number.isFinite(optFrac)) return { k: 'opt', label: `최적화 진행 중 ${fmtProg(Math.max(0, Math.min(1, optFrac)) * 100)}%`, title: '⑤ 기구 최적화 창 보기 — 진행 중' };   // 돌고 있으면 진행률(2026-11-12 평가)
   if (cls === 'bad' || cls === 'near') return { k: 'opt', label: '기구 최적화로 개선 →', title: '⑤ 기구 최적화 창 열기 — Milky·LED 위치·형상 후보를 찾아 최종 판정' };
   if (cls === 'ok') return { k: 'big', label: '⤢ 크게 보기', title: '④ 광분포 시뮬레이션 창 열기 — 2D·1D 를 크게, 영역 선택' };
   return null;
@@ -541,6 +542,12 @@ export const mapMenuItems = (hasPin, onCell) => [
 export const plotMenuItems = (title) => [{ k: 'csv', label: `${title} 데이터 CSV 저장` }, { k: 'png', label: '그래프 이미지 저장 (PNG)' }, { k: 'copy', label: '그래프 이미지 복사' }];
 export function createResultsPanel(el, { onOpt = null, onQuality = null, fileName = () => 'uds', onLeak = null, onBig = null, onCalc = null, calcBusy = () => false, onNote = null } = {}) {
   let effT = { key: null, t0: null };
+  let optFrac = null, vCls = '';   // 기구 최적화 진행률(null = 안 돎) · 지금 종합 판정
+  function syncNext() {   // 판정 옆 '다음 할 일' 단추
+    const N = nextAction(vCls, optFrac), b = q('next'); if (!b) return;
+    b.hidden = !N || (N.k === 'opt' && !onOpt); if (!N) return;
+    if (b.textContent !== N.label) b.textContent = N.label; b.title = N.title; b.dataset.k = N.k; b.className = `m3-next ${N.k}`;
+  }
   let region = null, regKey = null;   // 선택 영역 { s0, s1, w0, w1 } mm(세션 동안만, 관측면이 바뀌면 지움, 2026-11-12)   // 계산 부담 배지의 경과 시간 기준
   const gaugeHtml = (k) => `<div class="m3-gauge" data-r="${k}"><div class="f"></div><div class="tg"></div></div>`;
   el.innerHTML = `
@@ -798,7 +805,7 @@ export function createResultsPanel(el, { onOpt = null, onQuality = null, fileNam
     for (const k of ['avgg', 'ulg', 'uwg']) resetGauge(q(k));
     q('avgg').hidden = true;
     q('msg').hidden = false; q('msg').textContent = message || DEFAULT_GUIDE;
-    q('verdict').textContent = ''; q('verdict').className = 'm3-verdict'; q('next').hidden = true;
+    q('verdict').textContent = ''; q('verdict').className = 'm3-verdict'; vCls = ''; q('next').hidden = true;
   }
   function update(args) {
     last = args;
@@ -838,8 +845,7 @@ export function createResultsPanel(el, { onOpt = null, onQuality = null, fileNam
       gauge('uw', st.Uwid, observe.targetWid, st.seWid, st.relNoise);
       q('wsub').title = `최저 창 s = ${st.sWorst.toFixed(1)} mm${pp ? ` · 지정 점 s = ${pin.s.toFixed(1)} mm(주황, ${rad} 방향)` : ''}`;
     }
-    { const V = overallVerdict(st, observe), N = nextAction(V.cls), b = q('next'); q('verdict').textContent = V.text; q('verdict').className = `m3-verdict ${V.cls}`;
-      b.hidden = !N || (N.k === 'opt' && !onOpt); if (N) { if (b.textContent !== N.label) b.textContent = N.label; b.title = N.title; b.dataset.k = N.k; b.className = `m3-next ${N.k}`; } }   // 요약 카드 종합 판정(길이·폭 judgeText 그대로)
+    { const V = overallVerdict(st, observe); q('verdict').textContent = V.text; q('verdict').className = `m3-verdict ${V.cls}`; vCls = V.cls; syncNext(); }   // 요약 카드 종합 판정(길이·폭 judgeText 그대로)
     const lc = lumCard(st, snap.photometry, observe.targetLum);
     q('avg').textContent = lc.value; q('avgs').textContent = lc.sub; q('avg').className = `v ${lc.pass == null ? '' : lc.pass ? 'ok' : 'bad'}`;
     { const n = requiredFlux(snap.photometry, observe.targetLum); q('need').textContent = needShort(n); q('need').title = n ? `${needText(n)} — 정면 ±10° 기준: 목표 휘도 × 관측면적 × π × sin²10° ÷ ±10° 안 광 효율` : ''; }
@@ -859,5 +865,7 @@ export function createResultsPanel(el, { onOpt = null, onQuality = null, fileNam
     new ResizeObserver(() => { const c = q('map'), w = c.clientWidth ? `${c.clientWidth}x${c.clientHeight}` : 0; if (w && w !== w0) { w0 = w; if (last) update(last); } }).observe(el);   // 폭·높이(아래 칸 높이 조절) 바뀌면 다시 그림
   }
   clear();
-  return { update, closeBig, toggleBig: () => (big ? closeBig() : openBig()) };
+  // 기구 최적화 진행률(null = 안 돎) — 판정 옆 단추 글만 고침(그래프는 다시 안 그림)
+  const setOptRun = (f) => { const v = Number.isFinite(f) ? Math.round(f * 1000) / 1000 : null; if (v === optFrac) return; optFrac = v; syncNext(); };
+  return { update, closeBig, setOptRun, toggleBig: () => (big ? closeBig() : openBig()) };
 }

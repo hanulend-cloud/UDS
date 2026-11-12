@@ -696,6 +696,7 @@ function factorNow() {
 }
 function renderAuto() {
   const el = $('#m3-auto'), st = adState();
+  A?.results?.setOptRun?.(st.running ? st.running.frac ?? 0 : null);   // 결과 칸 판정 옆 단추 = '최적화 진행 중 N%'
   monitorSummary();
   el.hidden = false;   // 닫혀 있어도 한 줄 머리는 늘 보인다(메뉴가 사라진 것처럼 보이지 않게)
   $('#m3-dock')?.classList.toggle('collapsed', !st.open);   // 접으면 아래 칸 = 한 줄(대시보드 숨김)

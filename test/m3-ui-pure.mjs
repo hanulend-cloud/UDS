@@ -976,3 +976,28 @@ done();
   okN(nextAction('ok')?.k === 'big' && /크게/.test(nextAction('ok').label), '통과 → 크게 보기');
   okN(nextAction('busy') === null && nextAction('') === null, '계산 중·결과 없음 → 단추 없음');
 }
+{ // 최적화 창 큰 숫자 = 시작값 포함 '지금까지 최고'(2026-11-12 평가: 21.8% → 6.3% → 45.7% 로 흔들려 나빠지는 줄 앎) · 방금 시험한 후보는 작게
+  const okK = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
+  const { monitorHtml, STAGES } = await import('../src/ui/m3/opt-dash.js');
+  const tiles = Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', evals: [] }])); tiles.milky = { status: 'run', frac: 0.4, evals: [] };
+  const base = { tgLen: 0.8, tgWid: 0.8, before: { Ulen: 0.218, Uwid: 0.2 }, tiles };
+  const big = (h) => [...h.matchAll(/class="om-v[^"]*">([^<]*)</g)].map((x) => x[1]);
+  const a = monitorHtml({ ...base, seq: [{ k: 'milky', Ulen: 0.063, Uwid: 0.1 }] }, 5);
+  okK(big(a)[0] === '21.8%' && big(a)[1] === '20.0%', `시작보다 나쁜 후보만 있으면 큰 숫자 = 시작값: ${big(a).join(' ')}`);
+  okK(/방금 후보 6\.3%/.test(a), '방금 시험한 후보는 작은 글씨로');
+  const b = monitorHtml({ ...base, seq: [{ k: 'milky', Ulen: 0.063, Uwid: 0.1 }, { k: 'milky', Ulen: 0.457, Uwid: 0.386 }, { k: 'milky', Ulen: 0.3, Uwid: 0.3 }] }, 9);
+  okK(big(b)[0] === '45.7%' && /방금 후보 30\.0%/.test(b), `나은 후보가 나오면 그 값, 뒤에 나쁜 후보가 와도 유지: ${big(b).join(' ')}`);
+  const c = monitorHtml({ ...base, seq: [{ k: 'milky', Ulen: 0.457, Uwid: 0.386 }], ended: true, endSec: 9, final: { Ulen: 0.44, Uwid: 0.38 } }, 9);
+  okK(big(c)[0] === '44.0%' && !/방금 후보/.test(c), '끝나면 최종 판정 값, 방금 후보 글 없음');
+}
+{ // 최적화 뒤에도 미달 → 다음 할 일 안내(2026-11-12 평가) — 안 돌린 항목을 켜 보라고만(몰래 켜지 않음)
+  const okT = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
+  const { nextTryText } = await import('../src/ui/m3/autodesign-panel.js');
+  const r = { feasible: false, stages: { milky: true }, best: { Ulen: 0.457, Uwid: 0.386 }, targets: { len: 0.8, wid: 0.8 } };
+  const t = nextTryText(r);
+  okT(/위치/.test(t) && /형상/.test(t) && !/Milky/.test(t) && /−34\.3%p/.test(t) && /−41\.4%p/.test(t), `안 돌린 위치·형상 + 남은 차이: ${t}`);
+  okT(nextTryText({ ...r, stages: { leds: true, shape: true, milky: true } }) === '' && nextTryText({ ...r, feasible: true }) === '', '다 돌렸거나 통과면 안내 없음');
+  okT(/형상/.test(nextTryText({ ...r, stages: { position: true, leds: true, milky: true } })) && !/위치/.test(nextTryText({ ...r, stages: { position: true, leds: true, milky: true } })), '위치를 돌렸으면 형상만');
+}
+{ const { nextAction } = await import('../src/ui/m3/results-panel.js');
+  console.log(nextAction('bad', 0.98)?.label === '최적화 진행 중 98.0%' && nextAction('bad', 0.98).k === 'opt' && nextAction('ok', 0.5)?.k === 'big' ? 'PASS 최적화 도는 중 = 판정 옆 단추에 진행률' : (process.exitCode = 1, `FAIL 최적화 진행률 단추: ${JSON.stringify(nextAction('bad', 0.98))}`)); }
