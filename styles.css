@@ -1465,3 +1465,15 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
   .m3-section { left: auto; right: 10px; }
 }
 .m3-views { gap: 4px; } .m3-views button { padding: 0 7px; } .m3-vb-g + .m3-vb-g { padding-left: 4px; }   /* 1440 화면에서 한 줄 */
+/* 3D 보기 막대 = 오른쪽 세로(2026-11-12 사용자) — 위(떠 있는 창 머리)·왼쪽 아래(범례·축)와 겹치지 않음. 화면이 낮으면 막대 안에서 스크롤 */
+.m3-views { top: 50%; bottom: auto; right: 10px; left: auto; transform: translateY(-50%); flex-direction: column; flex-wrap: nowrap; align-items: stretch;
+  width: auto; max-width: none; max-height: calc(100% - 20px); overflow-y: auto; gap: 4px; }
+.m3-vb-g { flex-direction: column; align-items: stretch; gap: 2px; }
+.m3-vb-g + .m3-vb-g { padding-left: 0; border-left: 0; padding-top: 4px; border-top: 1px solid rgba(127, 137, 160, .35); }
+.m3-views button { min-height: 30px; padding: 0 10px; text-align: center; }
+@container (max-width: 620px) {
+  .m3-views { left: auto; right: 10px; justify-content: flex-start; }
+  .m3-legend { top: auto; bottom: 10px; }
+  #m3-axes { top: auto; bottom: 30px; }
+  .m3-section { left: 10px; right: auto; }
+}
