@@ -42,5 +42,11 @@
 - 시험: `test/m3-ui-pure.mjs` 끝 '구성 트리' 블록, 예전 시험은 `lightOpen` 감싸개로 펼친 상태
 - 참고: `test:mech3d` 의 mech3d-autodesign 실패 3건은 이 작업 전부터 있음(엔진 쪽)
 
-## 4~7단계
+## 4단계 — 3D 위 보기 막대 (완료)
+- 새로: `src/ui/m3/view-bar.js` (`VIEWS`, `oppositeView`, `baseView`, `viewBarHtml`), 시험 `test/m3-view-bar.mjs`
+- `src/ui/m3/app.js`: `#m3-views` = 보기 막대, [⇄ 반대] 하나 = 지금 방향의 짝(등각이면 꺼짐), 반대쪽을 보는 중에도 원래 방향 단추 켜짐
+- `styles.css`: 위쪽 가운데 떠 있는 막대(`width: max-content`), 단면 칸은 막대 아래(top 58px)
+- 단추 이름은 글자로 둠(아이콘만이면 처음 쓰는 사람이 뜻을 모름) — 마우스 올리면 설명
+
+## 5~7단계
 설계 문서의 단계 2~7 을 같은 형식(파일·시험·확인·커밋)으로, 앞 단계가 끝난 뒤 이 문서에 덧붙여 진행한다.

@@ -1333,3 +1333,20 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .m3-cmd .m3-fs.ok, .m3-cmd .m3-now b.ok { color: var(--m3-ok); } .m3-cmd .m3-fs.bad, .m3-cmd .m3-now b.bad { color: var(--m3-bad); } .m3-cmd .m3-fs.need { color: var(--m3-warn); }
 .m3-cmd .m3-step.need { border-color: var(--m3-warn); background: color-mix(in srgb, var(--m3-warn) 12%, transparent); }
 .m3-cmd .m3-step.need i { background: var(--m3-warn); }
+
+/* ---- 화면 다시 그리기 4단계(2026-11-12): 3D 위쪽 가운데 떠 있는 얇은 보기 막대 ---- */
+.m3-views { left: 50%; right: auto; top: 10px; transform: translateX(-50%); flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: center;
+  gap: 6px; width: max-content; max-width: calc(100% - 24px); padding: 4px; border-radius: 10px; background: rgba(22, 28, 40, .82); border: 1px solid #364055; box-shadow: 0 4px 14px rgba(0, 0, 0, .25); z-index: 4; }
+.m3-vp:not([data-theme="dark"]) .m3-views { background: rgba(255, 255, 255, .92); border-color: #c4cbd6; box-shadow: 0 4px 14px rgba(16, 24, 40, .12); }
+.m3-vb-g { display: flex; gap: 2px; align-items: center; }
+.m3-vb-g + .m3-vb-g { padding-left: 6px; border-left: 1px solid rgba(127, 137, 160, .35); }
+.m3-views button { min-height: 32px; padding: 0 10px; border-color: transparent; background: transparent; font-size: 13px; white-space: nowrap; }
+.m3-vp:not([data-theme="dark"]) .m3-views button { background: transparent; border-color: transparent; }
+.m3-views button:hover:not(:disabled) { background: rgba(127, 137, 160, .18); }
+.m3-vp:not([data-theme="dark"]) .m3-views button:hover:not(:disabled) { background: #eef2f8; }
+.m3-views button:disabled { opacity: .4; cursor: default; }
+.m3-views [data-theme-toggle] { margin-top: 0; }
+/* 단면 조절 칸은 막대 아래로(겹치지 않게) */
+.m3-section { top: 58px; }
+#mech3d-wrap .m3-vp .m3-views button:not(.on):not([aria-pressed=true]):not(.m3-link):not([role=tab]) { background: transparent; border-color: transparent; }
+#mech3d-wrap .m3-vp .m3-views button:not(.on):not([aria-pressed=true]):not(.m3-link):not([role=tab]):hover:not(:disabled) { background: rgba(127, 137, 160, .18); }

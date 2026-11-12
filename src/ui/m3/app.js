@@ -62,10 +62,11 @@ import { defaultChecks } from '../../engine/mech3d/defs.js';
 import { validAdjust } from '../../engine/mech3d/led-adjust.js';
 import { beamSpec, ledOfHit, ledClashItems, dropStaleAdjust, setLedAdjust } from './led-select.js';
 import { keepStepSource } from '../step-sources.js';
+import { viewBarHtml, oppositeView, baseView } from './view-bar.js';
 import { readTheme, nextTheme, applyPageTheme, THEME_KEY } from '../theme.js';
 
 const $ = (s) => document.querySelector(s);
-const VIEWS = [['top', '평면 (XY)', 'bottom', '아래에서 본 평면 (−Z 쪽)'], ['front', '정면 (XZ)', 'back', '뒤에서 본 정면 (+Y 쪽)'], ['side', '측면 (YZ)', 'side2', '반대쪽 측면 (−X 쪽)'], ['iso', '등각']];   // 셋째·넷째 = 반대쪽 보기(2026-11-06)
+// 보기 방향 단추 = 3D 위 보기 막대(view-bar.js)
 let A = null;       // 마운트 상태 { ctx, store, pool, prog, view, results, cmd, ... }
 let viewP = null;   // 3D 뷰는 한 번만 만든다(같은 캔버스에 WebGL 문맥을 다시 만들지 않음)
 // 계산 Worker 풀도 한 번만 — 3D↔평판 전환·다시 마운트에도 유지(Worker 시작·L2 표 적재 수 초 방지). resetWorkers() 로만 종료.
@@ -180,9 +181,11 @@ function getView() {
     const v = createMech3dView($('#mech3d-canvas'), { onPick: (s) => { if (A) onPick(s); }, onContext: (c) => { if (A) onViewContext(c); }, gizmo: $('#m3-axes'), onInteract: (on) => pool?.setInteractive?.(on),
       onLost: () => { const n = getMech3d()?.combined?.partOf?.length ?? 0; reportError('3D 화면', `3D 화면 끊김 — 그래픽 메모리 부족으로 보임(삼각형 ${Math.round(n / 1e4)}만 개)`); setStatus(`3D 화면이 끊겨 도면이 안 보임 — 그래픽 메모리 부족으로 보임(삼각형 ${Math.round(n / 1e4)}만 개). 다른 프로그램·탭을 닫고 새로고침하세요`); } });
     const el = $('#m3-views');
-    el.innerHTML = VIEWS.map(([k, t, r, rt]) => (r ? `<div class="m3-vrow"><button data-view="${k}">${t}</button><button data-view="${r}" class="m3-vrev" title="${rt}" aria-label="${rt}">반대</button></div>` : `<button data-view="${k}">${t}</button>`)).join('') + '<button type="button" data-fit title="지금 보이는 도면 전체를 창에 맞춤 — 보는 방향은 그대로 (F)">⤢ 맞춤</button><button type="button" data-xray aria-pressed="false" title="전체 부품 반투명 — 속 구조를 봄">투시</button><button type="button" data-lines aria-pressed="false" title="면을 감추고 부품마다 다른 색의 외곽선만 표시 — 부품 구조 확인">선 보기</button><button type="button" data-paths aria-pressed="false" title="광경로 화살표 켜기/끄기">광경로</button><button type="button" data-obs aria-pressed="true" title="관측면 표시(테두리·화살표·색지도) 보이기/감추기 — 관측면을 고를 때는 늘 보임">관측면</button><button type="button" data-theme-toggle aria-pressed="false"></button>';
+    el.innerHTML = viewBarHtml();
     el.querySelector('[data-fit]').onclick = () => v.fitAll();
-    el.querySelectorAll('[data-view]').forEach((b) => { b.onclick = () => { v.setView(b.dataset.view); A?.store.update('view', (_, s) => { s.view = b.dataset.view; }); }; });
+    const goView = (k) => { v.setView(k); A?.store.update('view', (_, s) => { s.view = k; }); };
+    el.querySelectorAll('[data-view]').forEach((b) => { b.onclick = () => goView(b.dataset.view); });
+    el.querySelector('[data-flip]').onclick = () => { const o = oppositeView(A?.store.session.view); if (o) goView(o); };   // 반대 = 지금 방향의 짝(다시 누르면 돌아옴)
     // 3D 배경 밝게/어둡게 — 보는 사람별 편의 설정(새로고침해도 유지)
     const tb = el.querySelector('[data-theme-toggle]'), vp = $('#mech3d-canvas').parentElement;
     const applyTheme = (t) => { v.setTheme(t); vp.dataset.theme = t; const wr = $('#mech3d-wrap'); if (wr) wr.dataset.theme = t; applyPageTheme(document, t); tb.textContent = t === 'dark' ? '☀ 밝게' : '☾ 어둡게'; tb.setAttribute('aria-pressed', String(t === 'dark')); tb.title = '화면 밝게/어둡게(3D 배경 포함)'; };
@@ -2173,7 +2176,8 @@ function renderView() {
   if (v.lines?.() !== linesOn()) v.setLines(linesOn());
   if (v.obsShow?.() !== obsShowNow()) v.setObsShow(obsShowNow());
   syncViewBtns();
-  $('#m3-views').querySelectorAll('[data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === S.view));
+  $('#m3-views').querySelectorAll('[data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === baseView(S.view)));
+  { const f = $('#m3-views [data-flip]'); if (f) { const rev = baseView(S.view) !== S.view; f.disabled = !oppositeView(S.view); f.classList.toggle('on', rev); f.setAttribute('aria-pressed', String(rev)); } }
   v.setSection(S.section);
   renderSectionCtl();
 }
