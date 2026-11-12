@@ -62,6 +62,7 @@ import { defaultChecks } from '../../engine/mech3d/defs.js';
 import { validAdjust } from '../../engine/mech3d/led-adjust.js';
 import { beamSpec, ledOfHit, ledClashItems, dropStaleAdjust, setLedAdjust } from './led-select.js';
 import { keepStepSource } from '../step-sources.js';
+import { readTheme, nextTheme, applyPageTheme, THEME_KEY } from '../theme.js';
 
 const $ = (s) => document.querySelector(s);
 const VIEWS = [['top', '평면 (XY)', 'bottom', '아래에서 본 평면 (−Z 쪽)'], ['front', '정면 (XZ)', 'back', '뒤에서 본 정면 (+Y 쪽)'], ['side', '측면 (YZ)', 'side2', '반대쪽 측면 (−X 쪽)'], ['iso', '등각']];   // 셋째·넷째 = 반대쪽 보기(2026-11-06)
@@ -124,7 +125,7 @@ export function command(id) {
 }
 export const canUndo = () => !!A?.hist?.canUndo();
 export const canRedo = () => !!A?.hist?.canRedo();
-export const theme = () => { try { return localStorage.getItem('uds.m3.theme') === 'dark' ? 'dark' : 'light'; } catch { return 'light'; } };
+export const theme = () => { try { return readTheme(localStorage); } catch { return 'light'; } };
 // 3D 기구 STEP 내보내기 — 지금 부품 메쉬(크기·위치·형상 수정 반영)를 부품마다 솔리드로(삼각형 근사 — 수정 안 한 부품은 원본 STEP 이 더 정확)
 let mechStepBusy = false;
 const stepBase = (n, d) => String(n ?? d).replace(/\.(stp|step)$/i, '').replace(/[/\\:*?"<>|]/g, '_');
@@ -178,14 +179,13 @@ function getView() {
     el.querySelectorAll('[data-view]').forEach((b) => { b.onclick = () => { v.setView(b.dataset.view); A?.store.update('view', (_, s) => { s.view = b.dataset.view; }); }; });
     // 3D 배경 밝게/어둡게 — 보는 사람별 편의 설정(새로고침해도 유지)
     const tb = el.querySelector('[data-theme-toggle]'), vp = $('#mech3d-canvas').parentElement;
-    const applyTheme = (t) => { v.setTheme(t); vp.dataset.theme = t; const wr = $('#mech3d-wrap'); if (wr) wr.dataset.theme = t; tb.textContent = t === 'dark' ? '☀ 밝게' : '☾ 어둡게'; tb.setAttribute('aria-pressed', String(t === 'dark')); tb.title = '3D 배경 밝게/어둡게'; };
+    const applyTheme = (t) => { v.setTheme(t); vp.dataset.theme = t; const wr = $('#mech3d-wrap'); if (wr) wr.dataset.theme = t; applyPageTheme(document, t); tb.textContent = t === 'dark' ? '☀ 밝게' : '☾ 어둡게'; tb.setAttribute('aria-pressed', String(t === 'dark')); tb.title = '화면 밝게/어둡게(3D 배경 포함)'; };
     el.querySelector('[data-xray]').onclick = () => setXrayOn(!xrayOn());
     el.querySelector('[data-lines]').onclick = () => setLinesOn(!linesOn());
     el.querySelector('[data-paths]').onclick = () => setPathsOn(!pathsOn());
     el.querySelector('[data-obs]').onclick = () => setObsOn(!obsOn());
-    let t0 = 'light'; try { t0 = localStorage.getItem('uds.m3.theme') === 'dark' ? 'dark' : 'light'; } catch {}
-    applyTheme(t0);
-    tb.onclick = () => { const t = v.theme() === 'dark' ? 'light' : 'dark'; try { localStorage.setItem('uds.m3.theme', t); } catch {} applyTheme(t); };
+    applyTheme(theme());
+    tb.onclick = () => { const t = nextTheme(v.theme()); try { localStorage.setItem(THEME_KEY, t); } catch {} applyTheme(t); };
     return v;
   });
   return viewP;

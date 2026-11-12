@@ -36,6 +36,9 @@ import { createProjectFile, projectFileLabel } from './ui/project-file.js';
 import { packBundle, isBundle, unpackBundle } from './ui/project-bundle.js';
 import { pickSources, sourcesKey, keepStepSource, loadStepSources, onStepSourcesChange } from './ui/step-sources.js';
 import { createTabLock, openChannel } from './ui/tab-lock.js';
+import { readTheme, applyPageTheme } from './ui/theme.js';
+// 화면 전체 테마를 3D 화면이 뜨기 전에 먼저 적용(상단 바가 깜빡이지 않게)
+try { applyPageTheme(document, readTheme(localStorage)); } catch {}
 
 const LS_KEY = 'uds.spec.v11';
 
@@ -328,7 +331,7 @@ function setupMenubar() {
       { id: 'fit', label: '화면 맞춤', key: 'F', enabled: m3 }, { id: 'section', label: '단면 켜기/끄기', enabled: m3 },
       { id: 'show-all', label: '모든 부품 보기', enabled: m3 },
       '-',
-      { id: 'theme', label: '3D 배경 어둡게', checked: () => m3app.theme() === 'dark', enabled: m3 },
+      { id: 'theme', label: '어두운 화면(3D 배경 포함)', checked: () => m3app.theme() === 'dark', enabled: m3 },
       { id: 'xray', label: '투시 보기 (전체 반투명)', checked: () => m3app.xrayOn(), enabled: m3 },
       { id: 'lines', label: '선 보기 (부품별 색 외곽선)', checked: () => m3app.linesOn(), enabled: m3 },
       { id: 'obs', label: '관측면 표시', checked: () => m3app.obsOn(), enabled: m3 },
