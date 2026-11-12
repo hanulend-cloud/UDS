@@ -73,34 +73,30 @@ select,input{font-family:inherit}
   
 
   <!-- 아래 상태줄 -->
+  <nav aria-label="작업 단계" style="display: flex; gap: 4px; padding: 6px 12px; background: {{t.panel}}; border-bottom: 1px solid {{t.line}}; overflow-x: auto">
+    <sc-for list="{{steps}}" as="s" hint-placeholder-count="5">
+      <button type="button" onClick="{{s.pick}}" style="{{s.style}}">
+        <span style="{{s.markStyle}}">{{s.mark}}</span>
+        <span style="font-weight: 500; color: {{t.text}}">{{s.title}}</span>
+        <span style="font-size: 13.5px; color: {{s.subColor}}">{{s.sub}}</span>
+      </button>
+    </sc-for>
+  </nav>
   <div style="flex: 1; display: flex; flex-wrap: wrap; min-height: 0">
 
-    <!-- 왼쪽: 단계 + 부품 트리 -->
+    <!-- 오른쪽: 결과 (평가 관련) -->
     
 
     <!-- 가운데: 3D -->
     
 
-    <!-- 오른쪽: 결과 / 속성 -->
-    <aside style="flex: 1 1 300px; max-width: 320px; min-width: 270px; background: {{t.panel}}; border-right: 1px solid {{t.line}}; display: flex; flex-direction: column; box-sizing: border-box">
-      <div style="padding: 14px 14px 6px; color: {{t.sub}}; font-size: 13.5px; font-weight: 500">작업 단계</div>
-      <div style="display: flex; flex-direction: column; gap: 2px; padding: 0 8px 10px">
-        <sc-for list="{{steps}}" as="s" hint-placeholder-count="5">
-          <button type="button" onClick="{{s.pick}}" style="{{s.style}}">
-            <span style="{{s.markStyle}}">{{s.mark}}</span>
-            <span style="display: flex; flex-direction: column; gap: 1px; min-width: 0">
-              <span style="font-weight: 500; color: {{t.text}}">{{s.title}}</span>
-              <span style="font-size: 13.5px; color: {{s.subColor}}">{{s.sub}}</span>
-            </span>
-          </button>
-        </sc-for>
-      </div>
-      <div style="height: 1px; background: {{t.line}}; margin: 0 14px"></div>
+    <!-- 왼쪽: 구성 트리 + 부품 속성 (부품 관련) -->
+    <aside style="flex: 1 1 330px; max-width: 360px; min-width: 290px; background: {{t.panel}}; border-right: 1px solid {{t.line}}; display: flex; flex-direction: column; box-sizing: border-box">
       <div style="display: flex; align-items: baseline; justify-content: space-between; padding: 12px 14px 6px">
         <span style="color: {{t.sub}}; font-size: 13.5px; font-weight: 500">구성</span>
         <span style="color: {{t.sub}}; font-size: 13.5px">우클릭 = 그룹</span>
       </div>
-      <div style="flex: 1; overflow: auto; padding: 0 8px 12px; display: flex; flex-direction: column; gap: 1px">
+      <div style="flex: 1 1 55%; min-height: 0; overflow: auto; padding: 0 8px 12px; display: flex; flex-direction: column; gap: 1px">
         <button type="button" onClick="{{g.obs.toggle}}" aria-expanded="{{g.obs.exp}}" style="{{groupRow}}">
           <span style="width: 12px; color: {{t.sub}}">{{g.obs.caret}}</span>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{t.accent}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"></path></svg>
@@ -146,6 +142,31 @@ select,input{font-family:inherit}
           </div>
         </sc-if>
       </div>
+        <div style="flex: 1 1 45%; min-height: 0; overflow: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid {{t.line}}">
+          <div style="color: {{t.sub}}; font-size: 13.5px; font-weight: 500">부품 속성</div>
+          <sc-if value="{{hasSel}}" hint-placeholder-val="{{false}}">
+            <div style="display: flex; align-items: center; justify-content: space-between">
+              <b style="font-size: 16px">{{selPart.name}}</b>
+              <button type="button" onClick="{{clearSel}}" style="{{b.sm}}">선택 해제 (Esc)</button>
+            </div>
+            <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; color: {{t.sub}}">이름
+              <input value="{{selPart.name}}" style="{{field}}">
+            </label>
+            <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; color: {{t.sub}}">소재
+              <select style="{{field}}">
+                <option>{{selPart.badge}}</option><option>불투명 85%</option><option>투명 89%</option><option>Milky 2.0</option><option>PCB 면 30%</option>
+              </select>
+            </label>
+            <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; color: {{t.sub}}">표면
+              <select style="{{field}}"><option>광택</option><option>경면</option><option>백색</option></select>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 15px"><input type="checkbox" checked="{{true}}"> 3D에 보이기</label>
+            <div style="padding: 10px; border-radius: 8px; background: {{t.panel2}}; color: {{t.sub}}; font-size: 13.5px">숫자 칸은 Enter 또는 Tab으로 확정 · 다른 버튼을 눌러도 확정</div>
+          </sc-if>
+          <sc-if value="{{noSel}}" hint-placeholder-val="{{true}}">
+            <div style="padding: 16px 8px; text-align: center; color: {{t.sub}}; line-height: 1.7">위 트리나 3D에서 부품을 고르면<br>여기에 속성이 나옵니다</div>
+          </sc-if>
+        </div>
     </aside><main style="flex: 999 1 560px; min-width: 0; min-height: 640px; position: relative; background: {{viewBg}}; overflow: hidden">
       <div style="position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 4px; background: {{t.panel}}; border: 1px solid {{t.line}}; border-radius: 10px; box-shadow: {{t.shadow}}; z-index: 2; flex-wrap: wrap; justify-content: center; max-width: 94%">
         <sc-for list="{{views}}" as="v" hint-placeholder-count="4">
@@ -205,12 +226,7 @@ select,input{font-family:inherit}
       </div>
       <div style="position: absolute; right: 16px; bottom: 14px; padding: 6px 10px; border-radius: 8px; background: {{t.panel}}; border: 1px solid {{t.line}}; font-size: 13.5px; color: {{t.sub}}">보기: {{viewName}}</div>
     </main><aside style="flex: 1 1 410px; max-width: 450px; min-width: 330px; background: {{t.panel}}; border-left: 1px solid {{t.line}}; display: flex; flex-direction: column; box-sizing: border-box">
-      <div style="display: flex; gap: 4px; padding: 10px 12px 0; border-bottom: 1px solid {{t.line}}" role="tablist">
-        <button type="button" role="tab" aria-selected="{{tabRes}}" onClick="{{tabResult}}" style="{{tabResStyle}}">결과</button>
-        <button type="button" role="tab" aria-selected="{{tabPrp}}" onClick="{{tabProp}}" style="{{tabPropStyle}}">속성</button>
-      </div>
 
-      <sc-if value="{{tabRes}}" hint-placeholder-val="{{true}}">
         <div style="flex: 1; overflow: auto; padding: 14px; display: flex; flex-direction: column; gap: 14px">
           <div style="display: flex; align-items: center; justify-content: space-between">
             <b style="font-size: 16px">광분포 시뮬레이션</b>
@@ -288,34 +304,6 @@ select,input{font-family:inherit}
             </sc-if>
           </div>
         </div>
-      </sc-if>
-
-      <sc-if value="{{tabPrp}}" hint-placeholder-val="{{false}}">
-        <div style="flex: 1; overflow: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px">
-          <sc-if value="{{hasSel}}" hint-placeholder-val="{{false}}">
-            <div style="display: flex; align-items: center; justify-content: space-between">
-              <b style="font-size: 16px">{{selPart.name}}</b>
-              <button type="button" onClick="{{clearSel}}" style="{{b.sm}}">선택 해제 (Esc)</button>
-            </div>
-            <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; color: {{t.sub}}">이름
-              <input value="{{selPart.name}}" style="{{field}}">
-            </label>
-            <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; color: {{t.sub}}">소재
-              <select style="{{field}}">
-                <option>{{selPart.badge}}</option><option>불투명 85%</option><option>투명 89%</option><option>Milky 2.0</option><option>PCB 면 30%</option>
-              </select>
-            </label>
-            <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; color: {{t.sub}}">표면
-              <select style="{{field}}"><option>광택</option><option>경면</option><option>백색</option></select>
-            </label>
-            <label style="display: flex; align-items: center; gap: 8px; font-size: 15px"><input type="checkbox" checked="{{true}}"> 3D에 보이기</label>
-            <div style="padding: 10px; border-radius: 8px; background: {{t.panel2}}; color: {{t.sub}}; font-size: 13.5px">숫자 칸은 Enter 또는 Tab으로 확정 · 다른 버튼을 눌러도 확정</div>
-          </sc-if>
-          <sc-if value="{{noSel}}" hint-placeholder-val="{{true}}">
-            <div style="padding: 32px 12px; text-align: center; color: {{t.sub}}; line-height: 1.7">부품 트리나 3D에서 부품을 고르면<br>여기에 속성이 나옵니다</div>
-          </sc-if>
-        </div>
-      </sc-if>
     </aside>
   </div><footer style="min-height: 46px; display: flex; align-items: center; gap: 14px; padding: 4px 16px; background: {{t.panel}}; border-top: 1px solid {{t.line}}; flex-wrap: wrap; font-size: 13.5px">
     <div style="display: flex; gap: 4px">
@@ -500,13 +488,13 @@ class Component extends DCLogic {
     const steps = STEPS.map(([title, sub, st], i) => {
       const n = i + 1, on = S.step === n, col = st === 'ok' ? t.ok : st === 'bad' ? t.bad : t.warn;
       return { title, sub, mark: st === 'todo' ? String(n) : st === 'ok' ? '✓' : '!', subColor: st === 'ok' ? t.sub : col,
-        style: 'display: flex; align-items: center; gap: 10px; width: 100%; min-height: 56px; padding: 6px 8px; border-radius: 8px; text-align: left; font-size: 15px; color: ' + t.text + '; border: 1px solid ' + (on ? t.accent : 'transparent') + '; background: ' + (on ? t.accentSoft : 'transparent') + ';',
+        style: 'flex: none; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border-radius: 8px; white-space: nowrap; font-size: 15px; color: ' + t.text + '; border: 1px solid ' + (on ? t.accent : 'transparent') + '; background: ' + (on ? t.accentSoft : 'transparent') + ';',
         markStyle: 'flex: none; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 13.5px; font-weight: 700; ' + (st === 'todo' ? 'border: 1.5px solid ' + col + '; color: ' + col + ';' : 'background: ' + col + '; color: ' + (S.dark ? '#0b1220' : '#ffffff') + ';'),
         pick: () => set({ step: n, big: n === 4 ? true : S.big, opt: n === 5 ? true : S.opt, menu: null }) };
     });
     const row = (on) => 'display: flex; align-items: center; gap: 8px; width: 100%; height: 38px; padding: 0 8px 0 30px; border-radius: 7px; border: 0; font-size: 15px; color: ' + t.text + '; background: ' + (on ? t.accentSoft : 'transparent') + ';';
     const PARTS = [['부품 1', '불투명 85%', '#9aa3ae'], ['부품 2', '투명 89%', '#5b9bff'], ['부품 3', 'Milky 2.0', '#e58fc0'], ['PCB', 'PCB 면 30%', '#4cc38a']];
-    const parts = PARTS.map(([name, badge, dot]) => ({ name, badge, dot, style: row(S.sel === name), pick: () => set({ sel: name, tab: 'prop', menu: null }) }));
+    const parts = PARTS.map(([name, badge, dot]) => ({ name, badge, dot, style: row(S.sel === name), pick: () => set({ sel: name, menu: null }) }));
     const selP = parts.find((p) => p.name === S.sel);
     const VIEWS = [['xy', 'XY', '평면 (XY)'], ['xz', 'XZ', '정면 (XZ)'], ['yz', 'YZ', '측면 (YZ)'], ['iso', '등각', '등각']];
     const views = VIEWS.map(([k, label, title]) => ({ label, title, style: S.view === k ? segOn : segOff, pick: () => set({ view: k }) }));
