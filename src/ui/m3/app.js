@@ -660,12 +660,14 @@ function adDetectPath() {
   const a = A, st = a?.ad;
   if (!st || st.running || !monitor?.isOpen()) return;
   const sceneKey = a.prog?.snapshot?.().sceneKey, port = a.pool?.ports?.()[0];
-  if (!sceneKey || !port || st.pathKey === sceneKey) return;
+  if (!sceneKey || !port || st.pathKey === sceneKey || performance.now() < (st.pathWait ?? 0)) return;
   st.pathKey = sceneKey;
   port.send({ type: 'partsOnPath', sceneKey, nMech: a.store.mspec.parts.length }).then((r) => {
     if (A !== a || st.pathKey !== sceneKey) return;
     if (!r?.result) { st.pathKey = null; return; }   // 장면이 그새 바뀜 — 다음 갱신에서 다시
     st.path = r.result.observed > 0 ? { shares: r.result.shares } : null;
+    // 아직 관측면에 닿은 빛이 없으면(계산 막 시작) 2 초 뒤 다시 잼 — 예전엔 그 장면 동안 '광경로 검출 전' 으로 굳었음(2026-11-12 평가)
+    if (!st.path) { st.pathKey = null; st.pathWait = performance.now() + 2000; }
     renderAuto(); renderMarkers();
   }, () => { if (st.pathKey === sceneKey) st.pathKey = null; });
 }

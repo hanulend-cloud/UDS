@@ -486,7 +486,7 @@ export async function runAutoDesign(cfg, io) {
   const stop = () => io.cancelled?.();
   if (stop()) return { cancelled: true };
   const clock = io.now ?? Date.now;   // 일시정지한 시간은 빼고 잼
-  io.progress?.('current', 0, '현재안 계산');   // 비교표 '현재' 열 — 최종안과 같은 추정기(io.verify). 수렴한 점진 결과가 있으면 재사용
+  io.progress?.('current', 0, cfg.currentVerified ? '현재안 계산' : '현재 설계 다시 계산 — 후보와 같은 조건(최적화 격자)으로 비교');   // 이유를 보여 줌(2026-11-12 평가: 왜 다시 재는지 모름) · 비교표 '현재' 열 — 최종안과 같은 추정기(io.verify). 수렴한 점진 결과가 있으면 재사용
   // 지금 Milky 가 상한(5)보다 높으면 '현재' 열은 그 값 그대로(비교용 — 계산마다 시간 한도), 최적화는 상한으로 낮춰서 — 결과에 표시(milkyLowered).
   // Milky 를 체크하지 않아도 같음(2026-11-12 사용자: Milky 5 초과는 투과율이 50% 넘게 떨어져 현실적으로 적용 어려움 — 11-09 의 '체크 해제 = 그대로 고정' 을 되돌림)
   const lowered = cfg.current?.milky > sCap ? { from: cfg.current.milky, to: sCap, rough: !cfg.currentVerified } : null;

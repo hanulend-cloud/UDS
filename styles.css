@@ -1448,3 +1448,6 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 #mech3d-wrap[data-theme="dark"] .m3-res-h button.m3-next.opt.opt.opt { background: #a08cf0; border-color: #a08cf0; color: #0b1220; }   /* 어두운 테마 단추 일괄 규칙보다 우선 */
 .m3-cmd .m3-winic { margin-left: 4px; font-size: 11px; opacity: .65; }
 .om-last { font-size: 11px; opacity: .85; white-space: nowrap; }
+/* 3D 보기 막대 = 오른쪽 위(2026-11-12 사용자: 가운데는 떠 있는 창 머리의 메뉴와 겹쳐 보임) · 밝게/어둡게는 상단 바 ☀/☾ 하나로(막대의 단추는 숨김 — 메뉴·☀/☾ 가 이 단추를 눌러 3D 배경까지 바꿈) */
+.m3-views { left: auto; right: 10px; transform: none; justify-content: flex-end; max-width: calc(100% - 20px); }
+.m3-views .m3-vb-g:has([data-theme-toggle]) { display: none; }

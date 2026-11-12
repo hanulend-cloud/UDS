@@ -1001,3 +1001,10 @@ done();
 }
 { const { nextAction } = await import('../src/ui/m3/results-panel.js');
   console.log(nextAction('bad', 0.98)?.label === '최적화 진행 중 98.0%' && nextAction('bad', 0.98).k === 'opt' && nextAction('ok', 0.5)?.k === 'big' ? 'PASS 최적화 도는 중 = 판정 옆 단추에 진행률' : (process.exitCode = 1, `FAIL 최적화 진행률 단추: ${JSON.stringify(nextAction('bad', 0.98))}`)); }
+{ // 떠 있는 창은 상단 바(메뉴) 아래로만(2026-11-12 평가: 접은 최적화 창이 메뉴를 가림)
+  const okW = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
+  const { clampRect, fitRect } = await import('../src/ui/m3/monitor.js');
+  okW(clampRect({ x: 100, y: 0, w: 400, h: 300 }, 1600, 900, 56).y === 56 && fitRect({ x: 100, y: 0, w: 400, h: 300 }, 1600, 900, 56).y === 56, '위 경계 = 상단 바 아래');
+  okW(clampRect({ x: 100, y: 0, w: 400, h: 300 }, 1600, 900).y === 8, '위 경계를 안 주면 예전처럼 8');
+  okW(fitRect({ x: 0, y: 0, w: 400, h: 2000 }, 1600, 900, 56).h <= 900 - 56 - 8, '높이도 상단 바 아래 공간에 맞춤');
+}

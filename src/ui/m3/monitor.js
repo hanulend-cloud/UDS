@@ -9,15 +9,22 @@ export const DEF_RECT = { x: null, y: 80, w: 1040, h: 680 };   // x null = 오�
 const LAY = 2;   // 창 배치 판 — 예전(세로 쌓기, 폭 540) 저장값은 위치·크기를 새 기본으로
 
 // 창을 열 때 — 아래가 화면 밖이면 올려서(필요하면 줄여서) 모든 가장자리를 잡을 수 있게(순수)
-export function fitRect(r, vw, vh) {
-  const w = Math.min(r.w, vw - 16), h = Math.min(r.h, vh - 16);
-  return { x: Math.max(8, Math.min(r.x ?? vw - w - 8, vw - w - 8)), y: Math.max(8, Math.min(r.y ?? 8, vh - h - 8)), w, h };
+// top = 창이 올라갈 수 있는 맨 위(상단 바 아래, 2026-11-12 — 메뉴를 가리지 않게). 생략 = 8
+export function fitRect(r, vw, vh, top = 8) {
+  const w = Math.min(r.w, vw - 16), h = Math.min(r.h, vh - top - 8);
+  return { x: Math.max(8, Math.min(r.x ?? vw - w - 8, vw - w - 8)), y: Math.max(top, Math.min(r.y ?? top, vh - h - 8)), w, h };
 }
 // 창이 화면 밖으로 나가지 않게(머리 줄은 늘 보이게) 위치·크기를 맞춤 — 순수
-export function clampRect(r, vw, vh) {
-  const w = Math.round(Math.max(MIN_W, Math.min(r.w ?? DEF_RECT.w, vw - 16))), h = Math.round(Math.max(MIN_H, Math.min(r.h ?? DEF_RECT.h, vh - 16)));
+// 위 경계(px) — 화면에서 읽음
+export const winTop = () => {   // 상단 바·작업 단계 막대 아래(둘 다 가리지 않게)
+  if (typeof document === 'undefined') return 8;
+  const b = [document.querySelector('header'), document.querySelector('#m3-cmd')].filter((e) => e && e.offsetParent !== null).map((e) => e.getBoundingClientRect().bottom);
+  return b.length ? Math.round(Math.max(...b)) + 4 : 8;
+};
+export function clampRect(r, vw, vh, top = 8) {
+  const w = Math.round(Math.max(MIN_W, Math.min(r.w ?? DEF_RECT.w, vw - 16))), h = Math.round(Math.max(MIN_H, Math.min(r.h ?? DEF_RECT.h, vh - top - 8)));
   const x0 = r.x == null ? vw - w - 16 : r.x;
-  return { x: Math.round(Math.max(8, Math.min(x0, vw - w - 8))), y: Math.round(Math.max(8, Math.min(r.y ?? DEF_RECT.y, vh - 40))), w, h };
+  return { x: Math.round(Math.max(8, Math.min(x0, vw - w - 8))), y: Math.round(Math.max(top, Math.min(r.y ?? DEF_RECT.y, vh - 40))), w, h };
 }
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) ?? {}; } catch { return {}; } };
 const save = (s) => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch {} };
@@ -61,7 +68,7 @@ export function createMonitor({ host, items, onChange = () => {}, onTab = () => 
   st.min = !!st.min; st.open = !!st.open;
   const persist = () => save({ lay: LAY, open: st.open, min: st.min, x: st.x, y: st.y, w: st.w, h: st.h });
   const el = document.createElement('div');
-  const place = () => { const r = clampRect(st.min ? { ...st, w: COLLAPSED_W } : st, innerWidth, innerHeight); st.x = r.x; st.y = r.y; if (!st.min) { st.w = r.w; st.h = r.h; } el.style.left = `${r.x}px`; el.style.top = `${r.y}px`; el.style.width = `${r.w}px`; el.style.height = st.min ? 'auto' : `${r.h}px`; };
+  const place = () => { const r = clampRect(st.min ? { ...st, w: COLLAPSED_W } : st, innerWidth, innerHeight, winTop()); st.x = r.x; st.y = r.y; if (!st.min) { st.w = r.w; st.h = r.h; } el.style.left = `${r.x}px`; el.style.top = `${r.y}px`; el.style.width = `${r.w}px`; el.style.height = st.min ? 'auto' : `${r.h}px`; };
   const kick = () => window.dispatchEvent(new Event('resize'));   // 담은 칸의 그래프·캔버스 크기 다시
   el.className = 'm3-mon'; el.hidden = true; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', '기구 최적화');
   el.innerHTML = `<div class="m3-mon-hd" title="끌어서 옮기기 · ④ 광분포 결과가 목표 미달이면 여기서 후보를 찾아 최종 판정 → [적용]"><b><i class="m3-fl" data-mon-step>5</i>기구 최적화</b><span class="m3-mon-tabs" role="tablist" data-mon-tabs><button type="button" role="tab" data-mon-tab="set">설정</button><button type="button" role="tab" data-mon-tab="run">진행</button><button type="button" role="tab" data-mon-tab="result">결과</button></span><span class="m3-mon-sum" data-mon-sum></span><span class="m3-mon-sp"></span><span class="m3-ctl" data-mon-ctl></span><button type="button" data-mon-min></button><button type="button" data-mon-close title="창 닫기(진행 중인 최적화는 계속)">✕ 닫기</button></div><div class="m3-mon-body"></div>`;
@@ -89,7 +96,7 @@ export function createMonitor({ host, items, onChange = () => {}, onTab = () => 
   }
   function open() {
     if (st.open) return;
-    Object.assign(st, fitRect(st, innerWidth, innerHeight));
+    Object.assign(st, fitRect(st, innerWidth, innerHeight, winTop()));
     st.open = true; persist(); el.hidden = false; setMin(st.min); onChange(true);
     addEventListener('resize', place);
   }

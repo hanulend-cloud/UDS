@@ -1,7 +1,7 @@
 import { shapeLayout } from './map-shape.js';
 import { requiredFlux, fmtProg, needText, needShort } from './progressive.js';
 import { mountSplit, mountHeightHandle } from './pane-split.js';
-import { clampRect, fitRect, dragBy, raiseWin, mountResizers, COLLAPSED_W } from './monitor.js';
+import { clampRect, fitRect, winTop, dragBy, raiseWin, mountResizers, COLLAPSED_W } from './monitor.js';
 import { simPct } from './opt-dash.js';
 import { simCtl, setCtl, setStepMark } from './run-ctl.js';
 import { showCtxMenu } from './feature-tree.js';
@@ -718,7 +718,7 @@ export function createResultsPanel(el, { onOpt = null, onQuality = null, fileNam
     const eq0 = defaultEqual(VIEW.map?.G);
     const ov = document.createElement('div');
     // 떠 있는 창(2026-11-02) — 기구 최적화 창처럼 머리 끌어 옮기기 · 모서리로 크기 · 접기. 뒤 화면을 막지 않음(열어 둔 채 설계·최적화). 위치·크기 = 보는 사람별, 접힘은 열 때마다 펼침
-    const rect = fitRect(bigRectLoad(), innerWidth, innerHeight);
+    const rect = fitRect(bigRectLoad(), innerWidth, innerHeight, winTop());
     ov.className = 'm3-big-in'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', '광분포 시뮬레이션');
     const cell = (k) => `<div class="m3-big-c" data-k="${k}"><div class="m3-big-ct"><b>${TITLE[k]}</b><span class="m3-big-sp"></span>${k === 'map' ? `<label class="m3-big-eq"><input type="checkbox" data-big-eq${eq0 ? ' checked' : ''}> 실제 비율</label><button type="button" data-big-reg-on aria-pressed="false" title="켜 둔 동안 끌 때마다 새 영역 · 그 영역의 균일도를 아래 표로 비교 · 켠 채 클릭 = 영역 지움 · 꺼도 영역은 남음 · 휠 = 확대 · 오른쪽 끌기 = 이동 · 더블클릭 = 전체 보기">▭ 영역 선택</button><button type="button" data-big-fit title="확대를 풀고 전체 보기(더블클릭과 같음)">1:1</button>` : ''}<button type="button" data-big-one="${k}">⤢ 이 그림만</button></div><canvas class="m3-big-cv" data-big-cv="${k}"></canvas>${k === 'map' ? '<div class="m3-big-reg" data-big-reg hidden></div>' : ''}</div>`;
     ov.innerHTML = `<div class="m3-big-hd" title="끌어서 옮기기"><b title="진행 현황 · 2D · 1D — 2D 클릭 = 그 점 기준 1D 곡선(주황) · 그림 우클릭 = 데이터·이미지 저장"><i class="m3-fl" data-big-step>4</i>광분포 시뮬레이션</b><span class="m3-mon-sum" data-big-sum></span><span class="m3-big-sp"></span><span class="m3-ctl" data-big-ctl></span><label class="m3-big-q">화질 <select data-big-q aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label><button type="button" data-big-min></button><button type="button" data-big-close title="Esc">✕ 닫기</button></div>
@@ -726,7 +726,7 @@ export function createResultsPanel(el, { onOpt = null, onQuality = null, fileNam
     (el.closest('#mech3d-wrap') ?? document.body).appendChild(ov);   // 설계 화면에 붙임(화면을 바꾸면 함께 숨음)
     const cvs = Object.fromEntries(KINDS.map((k) => [k, ov.querySelector(`[data-big-cv="${k}"]`)]));
     const place = () => {
-      const m = big.min, r = clampRect(m ? { ...rect, w: BIG_MIN_W } : rect, innerWidth, innerHeight);
+      const m = big.min, r = clampRect(m ? { ...rect, w: BIG_MIN_W } : rect, innerWidth, innerHeight, winTop());
       rect.x = r.x; rect.y = r.y; if (!m) { rect.w = r.w; rect.h = r.h; }
       Object.assign(ov.style, { left: `${r.x}px`, top: `${r.y}px`, width: `${r.w}px`, height: m ? 'auto' : `${r.h}px` });
     };
