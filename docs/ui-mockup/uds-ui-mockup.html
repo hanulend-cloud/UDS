@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UDS 새 화면 시안</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#5b9bff}a:hover{color:#8bb8ff}
+button{font-family:inherit;cursor:pointer}
+select,input{font-family:inherit}
+</style>
+
+</head>
+<body>
+<template id="tpl">
+
+<div style="font-family: 'Noto Sans KR', system-ui, sans-serif; font-size: 15px; font-variant-numeric: tabular-nums; background: {{t.bg}}; color: {{t.text}}; min-height: 900px; display: flex; flex-direction: column; position: relative; box-sizing: border-box">
+
+  <!-- 상단 바 -->
+  <header style="min-height: 56px; display: flex; align-items: center; gap: 16px; padding: 0 16px; background: {{t.panel}}; border-bottom: 1px solid {{t.line}}; flex-wrap: wrap; position: relative; z-index: 5">
+    <div style="display: flex; align-items: center; gap: 8px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="{{t.accent}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="14" width="18" height="6" rx="1.5"></rect><path d="M7 14V9M12 14V5M17 14V9"></path></svg>
+      <b style="font-size: 18px; letter-spacing: 0.5px">UDS</b>
+      <span style="color: {{t.sub}}; font-size: 13.5px">Uniform Design Simulator</span>
+    </div>
+    <nav style="display: flex; gap: 2px" aria-label="메뉴">
+      <sc-for list="{{menus}}" as="m" hint-placeholder-count="6">
+        <div style="position: relative">
+          <button type="button" onClick="{{m.toggle}}" style="{{m.style}}">{{m.label}}</button>
+          <sc-if value="{{m.open}}" hint-placeholder-val="{{false}}">
+            <div style="position: absolute; top: 34px; left: 0; min-width: 340px; background: {{t.panel}}; border: 1px solid {{t.line}}; border-radius: 8px; box-shadow: {{t.shadow}}; padding: 4px; z-index: 20">
+              <sc-for list="{{m.items}}" as="it" hint-placeholder-count="5">
+                <sc-if value="{{it.sep}}" hint-placeholder-val="{{false}}">
+                  <div style="height: 1px; background: {{t.line}}; margin: 4px 6px"></div>
+                </sc-if>
+                <sc-if value="{{it.real}}" hint-placeholder-val="{{true}}">
+                  <button type="button" onClick="{{closeMenu}}" style="display: flex; width: 100%; align-items: center; gap: 8px; height: 36px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: {{t.text}}; font-size: 15px; text-align: left">
+                    <span style="width: 14px; color: {{t.accent}}">{{it.check}}</span>
+                    <span style="flex: 1">{{it.label}}</span>
+                    <span style="color: {{t.sub}}; font-size: 13.5px">{{it.key}}</span>
+                  </button>
+                </sc-if>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+    </nav>
+    <div style="flex: 1"></div>
+    <div style="display: flex; align-items: center; gap: 10px">
+      <b>이름 없는 프로젝트</b>
+      <span style="display: flex; align-items: center; gap: 6px; color: {{t.warn}}; font-size: 13.5px"><span style="width: 7px; height: 7px; border-radius: 50%; background: {{t.warn}}"></span>저장 안 됨</span>
+      <button type="button" style="{{b.sm}}">파일로 저장</button>
+    </div>
+    <span style="display: flex; align-items: center; gap: 5px; height: 28px; padding: 0 9px; border-radius: 12px; background: {{t.okSoft}}; color: {{t.ok}}; font-size: 13.5px; font-weight: 500">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"></path></svg>GPU 사용
+    </span>
+    <button type="button" onClick="{{toggleTheme}}" aria-label="{{themeLabel}}" title="{{themeLabel}}" style="{{b.icon}}">
+      <sc-if value="{{dark}}" hint-placeholder-val="{{true}}">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg>
+      </sc-if>
+      <sc-if value="{{light}}" hint-placeholder-val="{{false}}">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path></svg>
+      </sc-if>
+    </button>
+  </header>
+
+  <!-- 본문 3단 -->
+  
+
+  <!-- 아래 상태줄 -->
+  <div style="flex: 1; display: flex; flex-wrap: wrap; min-height: 0">
+
+    <!-- 왼쪽: 단계 + 부품 트리 -->
+    
+
+    <!-- 가운데: 3D -->
+    
+
+    <!-- 오른쪽: 결과 / 속성 -->
+    <aside style="flex: 1 1 300px; max-width: 320px; min-width: 270px; background: {{t.panel}}; border-right: 1px solid {{t.line}}; display: flex; flex-direction: column; box-sizing: border-box">
+      <div style="padding: 14px 14px 6px; color: {{t.sub}}; font-size: 13.5px; font-weight: 500">작업 단계</div>
+      <div style="display: flex; flex-direction: column; gap: 2px; padding: 0 8px 10px">
+        <sc-for list="{{steps}}" as="s" hint-placeholder-count="5">
+          <button type="button" onClick="{{s.pick}}" style="{{s.style}}">
+            <span style="{{s.markStyle}}">{{s.mark}}</span>
+            <span style="display: flex; flex-direction: column; gap: 1px; min-width: 0">
+              <span style="font-weight: 500; color: {{t.text}}">{{s.title}}</span>
+              <span style="font-size: 13.5px; color: {{s.subColor}}">{{s.sub}}</span>
+            </span>
+          </button>
+        </sc-for>
+      </div>
+      <div style="height: 1px; background: {{t.line}}; margin: 0 14px"></div>
+      <div style="display: flex; align-items: baseline; justify-content: space-between; padding: 12px 14px 6px">
+        <span style="color: {{t.sub}}; font-size: 13.5px; font-weight: 500">구성</span>
+        <span style="color: {{t.sub}}; font-size: 13.5px">우클릭 = 그룹</span>
+      </div>
+      <div style="flex: 1; overflow: auto; padding: 0 8px 12px; display: flex; flex-direction: column; gap: 1px">
+        <button type="button" onClick="{{g.obs.toggle}}" aria-expanded="{{g.obs.exp}}" style="{{groupRow}}">
+          <span style="width: 12px; color: {{t.sub}}">{{g.obs.caret}}</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{t.accent}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"></path></svg>
+          <span style="flex: 1; text-align: left; font-weight: 700">관측면</span>
+          <span style="min-width: 24px; height: 22px; padding: 0 7px; border-radius: 11px; background: {{t.panel2}}; color: {{t.sub}}; font-size: 13px; line-height: 22px; text-align: center; box-sizing: border-box">1</span>
+        </button>
+        <sc-if value="{{g.obs.open}}" hint-placeholder-val="{{true}}">
+          <button type="button" onClick="{{pickObs}}" style="{{childRow}}">
+            <span style="flex: 1; text-align: left">직선 116×16 mm</span>
+            <span style="color: {{t.sub}}; font-size: 13.5px">목표 80 / 80%</span>
+          </button>
+        </sc-if>
+        <button type="button" onClick="{{g.parts.toggle}}" aria-expanded="{{g.parts.exp}}" style="{{groupRow}}">
+          <span style="width: 12px; color: {{t.sub}}">{{g.parts.caret}}</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{t.accent}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10"></path></svg>
+          <span style="flex: 1; text-align: left; font-weight: 700">부품</span>
+          <span style="min-width: 24px; height: 22px; padding: 0 7px; border-radius: 11px; background: {{t.panel2}}; color: {{t.sub}}; font-size: 13px; line-height: 22px; text-align: center; box-sizing: border-box">4</span>
+        </button>
+        <sc-if value="{{g.parts.open}}" hint-placeholder-val="{{true}}">
+          <sc-for list="{{parts}}" as="p" hint-placeholder-count="4">
+            <button type="button" onClick="{{p.pick}}" style="{{p.style}}">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="{{t.sub}}" stroke-width="2" stroke-linecap="round" aria-label="보이기"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="2.5"></circle></svg>
+              <span style="flex: 1; text-align: left">{{p.name}}</span>
+              <span style="display: flex; align-items: center; gap: 5px; height: 24px; padding: 0 7px; border-radius: 10px; background: {{t.panel2}}; border: 1px solid {{t.line}}; font-size: 13px; color: {{t.text}}"><span style="width: 7px; height: 7px; border-radius: 50%; background: {{p.dot}}"></span>{{p.badge}}</span>
+            </button>
+          </sc-for>
+        </sc-if>
+        <button type="button" onClick="{{g.light.toggle}}" aria-expanded="{{g.light.exp}}" style="{{groupRow}}">
+          <span style="width: 12px; color: {{t.sub}}">{{g.light.caret}}</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{t.accent}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z"></path></svg>
+          <span style="flex: 1; text-align: left; font-weight: 700">광원</span>
+          <span style="min-width: 24px; height: 22px; padding: 0 7px; border-radius: 11px; background: {{t.panel2}}; color: {{t.sub}}; font-size: 13px; line-height: 22px; text-align: center; box-sizing: border-box">20</span>
+        </button>
+        <sc-if value="{{g.light.open}}" hint-placeholder-val="{{false}}">
+          <div style="display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 8px 0 30px">
+            <span style="flex: 1">LED ×20</span>
+            <span style="height: 24px; padding: 0 7px; border-radius: 10px; background: {{t.warnSoft}}; color: {{t.warn}}; font-size: 13px; line-height: 24px">120°</span>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 4px 8px 4px 30px">
+            <sc-for list="{{leds}}" as="l" hint-placeholder-count="20">
+              <span style="height: 26px; border-radius: 5px; background: {{t.panel2}}; border: 1px solid {{t.line}}; font-size: 13px; text-align: center; line-height: 26px; color: {{t.sub}}">{{l.n}}</span>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+    </aside><main style="flex: 999 1 560px; min-width: 0; min-height: 640px; position: relative; background: {{viewBg}}; overflow: hidden">
+      <div style="position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 4px; background: {{t.panel}}; border: 1px solid {{t.line}}; border-radius: 10px; box-shadow: {{t.shadow}}; z-index: 2; flex-wrap: wrap; justify-content: center; max-width: 94%">
+        <sc-for list="{{views}}" as="v" hint-placeholder-count="4">
+          <button type="button" onClick="{{v.pick}}" title="{{v.title}}" style="{{v.style}}">{{v.label}}</button>
+        </sc-for>
+        <button type="button" onClick="{{toggleFlip}}" title="반대 방향에서 보기" aria-label="반대 방향" style="{{flipStyle}}">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h11l-3-3M17 17H6l3 3"></path></svg>
+        </button>
+        <span style="width: 1px; height: 24px; background: {{t.line}}; margin: 0 4px"></span>
+        <button type="button" title="화면 맞춤 (F)" aria-label="화면 맞춤" style="{{b.tool}}">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"></path></svg>
+        </button>
+        <sc-for list="{{tools}}" as="tl" hint-placeholder-count="5">
+          <button type="button" onClick="{{tl.toggle}}" title="{{tl.title}}" aria-label="{{tl.title}}" aria-pressed="{{tl.pressed}}" style="{{tl.style}}">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{tl.icon}}"></path></svg>
+          </button>
+        </sc-for>
+      </div>
+
+      <svg viewBox="0 0 800 520" style="position: absolute; inset: 56px 16px 56px 16px; width: calc(100% - 32px); height: calc(100% - 112px)" role="img" aria-label="3D 기구와 관측면 광량 분포">
+        <polygon points="90,300 180,355 180,425 90,370" fill="{{t.boxSide}}" opacity="{{faceOp}}" stroke="{{edge}}" stroke-width="1"></polygon>
+        <polygon points="180,355 708,163 708,233 180,425" fill="{{t.boxFront}}" opacity="{{faceOp}}" stroke="{{edge}}" stroke-width="1"></polygon>
+        <g transform="matrix(1.1 -0.4 0.9 0.55 90 300)">
+          <rect x="0" y="0" width="480" height="100" fill="{{t.box}}" stroke="{{edge}}" stroke-width="1"></rect>
+          <sc-if value="{{tool.obs}}" hint-placeholder-val="{{true}}">
+            <g opacity="{{heatOp}}">
+              <sc-for list="{{cells}}" as="c" hint-placeholder-count="20">
+                <rect x="{{c.x}}" y="{{c.y}}" width="10.4" height="10.4" fill="{{c.f}}"></rect>
+              </sc-for>
+            </g>
+            <rect x="0" y="0" width="480" height="100" fill="none" stroke="{{t.accent}}" stroke-width="1.6"></rect>
+          </sc-if>
+        </g>
+        <sc-if value="{{tool.paths}}" hint-placeholder-val="{{true}}">
+          <g stroke="{{t.warn}}" stroke-width="2" fill="none" stroke-linecap="round">
+            <path d="M300 335 L318 262"></path><path d="M312 266 L318 258 L322 268"></path>
+            <path d="M420 292 L436 222"></path><path d="M430 226 L436 218 L440 228"></path>
+          </g>
+        </sc-if>
+        <sc-if value="{{tool.obs}}" hint-placeholder-val="{{true}}">
+          <g>
+            <rect x="336" y="150" width="64" height="24" rx="5" fill="{{t.accent}}"></rect>
+            <text x="368" y="166" text-anchor="middle" font-size="12" font-weight="700" fill="{{t.accentText}}">관측면</text>
+          </g>
+        </sc-if>
+        <g transform="translate(40,470)" font-size="13" font-weight="700">
+          <path d="M0 0 L0 -34" stroke="#4c8dff" stroke-width="2"></path><text x="-4" y="-40" fill="#4c8dff">Z</text>
+          <path d="M0 0 L30 0" stroke="#ff6b5e" stroke-width="2"></path><text x="34" y="5" fill="#ff6b5e">X</text>
+          <path d="M0 0 L18 -16" stroke="#3fbf7f" stroke-width="2"></path><text x="20" y="-19" fill="#3fbf7f">Y</text>
+        </g>
+      </svg>
+
+      <div style="position: absolute; left: 16px; bottom: 14px; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; background: {{t.panel}}; border: 1px solid {{t.line}}; font-size: 13.5px; color: {{t.sub}}">
+        광량 낮음
+        <span style="width: 140px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #30123b, #4675ed, #1bcfd4, #61fc6c, #d1e834, #fe9b2d, #d93806)"></span>
+        높음
+      </div>
+      <div style="position: absolute; right: 16px; bottom: 14px; padding: 6px 10px; border-radius: 8px; background: {{t.panel}}; border: 1px solid {{t.line}}; font-size: 13.5px; color: {{t.sub}}">보기: {{viewName}}</div>
+    </main><aside style="flex: 1 1 410px; max-width: 450px; min-width: 330px; background: {{t.panel}}; border-left: 1px solid {{t.line}}; display: flex; flex-direction: column; box-sizing: border-box">
+      <div style="display: flex; gap: 4px; padding: 10px 12px 0; border-bottom: 1px solid {{t.line}}" role="tablist">
+        <button type="button" role="tab" aria-selected="{{tabRes}}" onClick="{{tabResult}}" style="{{tabResStyle}}">결과</button>
+        <button type="button" role="tab" aria-selected="{{tabPrp}}" onClick="{{tabProp}}" style="{{tabPropStyle}}">속성</button>
+      </div>
+
+      <sc-if value="{{tabRes}}" hint-placeholder-val="{{true}}">
+        <div style="flex: 1; overflow: auto; padding: 14px; display: flex; flex-direction: column; gap: 14px">
+          <div style="display: flex; align-items: center; justify-content: space-between">
+            <b style="font-size: 16px">광분포 시뮬레이션</b>
+            <span style="display: flex; align-items: center; gap: 5px; height: 28px; padding: 0 9px; border-radius: 12px; background: {{t.badSoft}}; color: {{t.bad}}; font-size: 13.5px; font-weight: 700">✕ 목표 미달</span>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+            <sc-for list="{{metrics}}" as="k" hint-placeholder-count="2">
+              <div style="padding: 12px; border-radius: 10px; background: {{t.panel2}}; border: 1px solid {{t.line}}; display: flex; flex-direction: column; gap: 6px">
+                <span style="color: {{t.sub}}; font-size: 13.5px">{{k.label}}</span>
+                <span style="font-size: 32px; font-weight: 700; color: {{t.bad}}; line-height: 1">{{k.value}}</span>
+                <span style="position: relative; height: 6px; border-radius: 3px; background: {{t.line}}">
+                  <span style="position: absolute; left: 0; top: 0; bottom: 0; width: {{k.pct}}; border-radius: 3px; background: {{t.bad}}"></span>
+                  <span style="position: absolute; left: 80%; top: -3px; width: 2px; height: 12px; background: {{t.text}}"></span>
+                </span>
+                <span style="color: {{t.sub}}; font-size: 13.5px">목표 80% · {{k.gap}}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap">
+            <span style="{{chip}}">새는 빛 0%</span>
+            <span style="{{chip}}">계산 오차 ±1.50%</span>
+            <span style="{{chip}}">광선 315만</span>
+          </div>
+
+          <div style="border: 1px solid {{t.line}}; border-radius: 10px; overflow: hidden">
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; background: {{t.panel2}}">
+              <b style="font-size: 14px">2D 광량 분포 <span style="color: {{t.sub}}; font-weight: 400">관측면 펼침</span></b>
+              <button type="button" onClick="{{openBig}}" style="{{b.sm}}">⤢ 크게</button>
+            </div>
+            <svg viewBox="0 0 480 100" preserveAspectRatio="none" style="display: block; width: 100%; height: 96px" role="img" aria-label="2D 광량 분포 미리보기">
+              <sc-for list="{{cells}}" as="c" hint-placeholder-count="20">
+                <rect x="{{c.x}}" y="{{c.y}}" width="10.4" height="10.4" fill="{{c.f}}"></rect>
+              </sc-for>
+              <sc-if value="{{region}}" hint-placeholder-val="{{false}}">
+                <rect x="157" y="41" width="71" height="31" fill="none" stroke="#ffffff" stroke-width="2" stroke-dasharray="5 3" vector-effect="non-scaling-stroke"></rect>
+              </sc-if>
+            </svg>
+            <sc-if value="{{region}}" hint-placeholder-val="{{false}}">
+              <div style="padding: 6px 10px; font-size: 13.5px; color: {{t.sub}}; border-top: 1px solid {{t.line}}">선택 영역 <b style="color: {{t.text}}">20.5% / 79.4%</b> (길이 / 폭)</div>
+            </sc-if>
+          </div>
+
+          <sc-for list="{{profiles}}" as="pf" hint-placeholder-count="2">
+            <div style="border: 1px solid {{t.line}}; border-radius: 10px; overflow: hidden">
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; background: {{t.panel2}}">
+                <b style="font-size: 14px">{{pf.title}}</b>
+                <span style="font-size: 13.5px; color: {{t.sub}}">최저 <b style="color: {{t.warn}}">{{pf.min}}</b></span>
+              </div>
+              <svg viewBox="0 0 340 120" style="display: block; width: 100%; height: 150px" role="img" aria-label="{{pf.title}}">
+                <sc-for list="{{gridY}}" as="g" hint-placeholder-count="4">
+                  <line x1="34" x2="334" y1="{{g.y}}" y2="{{g.y}}" stroke="{{t.grid}}" stroke-width="1"></line>
+                  <text x="28" y="{{g.ty}}" text-anchor="end" font-size="12" fill="{{t.sub}}">{{g.label}}</text>
+                </sc-for>
+                <line x1="34" x2="334" y1="30" y2="30" stroke="{{t.text}}" stroke-width="1" stroke-dasharray="4 3" opacity="0.7"></line>
+                <text x="332" y="25" text-anchor="end" font-size="12" fill="{{t.sub}}">목표 80%</text>
+                <path d="{{pf.d}}" fill="none" stroke="{{t.accent}}" stroke-width="1.8"></path>
+                <circle cx="{{pf.mx}}" cy="{{pf.my}}" r="3.5" fill="{{t.warn}}"></circle>
+              </svg>
+            </div>
+          </sc-for>
+
+          <div style="border: 1px solid {{t.line}}; border-radius: 10px">
+            <button type="button" onClick="{{toggleMore}}" style="display: flex; width: 100%; align-items: center; gap: 8px; height: 42px; padding: 0 10px; border: 0; background: transparent; color: {{t.text}}; font-size: 14px; font-weight: 700">
+              <span>{{moreCaret}}</span><span style="flex: 1; text-align: left">계산 오차 · 균일도 추이 · 광경로</span>
+            </button>
+            <sc-if value="{{more}}" hint-placeholder-val="{{false}}">
+              <div style="padding: 0 10px 10px; display: flex; flex-direction: column; gap: 8px">
+                <svg viewBox="0 0 340 80" style="display: block; width: 100%; height: 80px" role="img" aria-label="계산 오차 추이">
+                  <line x1="0" x2="340" y1="60" y2="60" stroke="{{t.text}}" stroke-dasharray="4 3" opacity="0.6"></line>
+                  <path d="M0 6 L20 6 L40 26 L60 38 L90 46 L130 52 L180 56 L240 58 L300 60 L340 60" fill="none" stroke="{{t.accent}}" stroke-width="1.8"></path>
+                  <text x="4" y="74" font-size="12" fill="{{t.sub}}">계산 오차 ±1.43% → ±1.50% (목표 ±1.5%)</text>
+                </svg>
+                <div style="font-size: 13.5px; color: {{t.sub}}">광경로 <b style="color: {{t.text}}">80% LED → 부품 2 → 부품 3 → 관측면</b></div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{tabPrp}}" hint-placeholder-val="{{false}}">
+        <div style="flex: 1; overflow: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px">
+          <sc-if value="{{hasSel}}" hint-placeholder-val="{{false}}">
+            <div style="display: flex; align-items: center; justify-content: space-between">
+              <b style="font-size: 16px">{{selPart.name}}</b>
+              <button type="button" onClick="{{clearSel}}" style="{{b.sm}}">선택 해제 (Esc)</button>
+            </div>
+            <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; color: {{t.sub}}">이름
+              <input value="{{selPart.name}}" style="{{field}}">
+            </label>
+            <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; color: {{t.sub}}">소재
+              <select style="{{field}}">
+                <option>{{selPart.badge}}</option><option>불투명 85%</option><option>투명 89%</option><option>Milky 2.0</option><option>PCB 면 30%</option>
+              </select>
+            </label>
+            <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; color: {{t.sub}}">표면
+              <select style="{{field}}"><option>광택</option><option>경면</option><option>백색</option></select>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 15px"><input type="checkbox" checked="{{true}}"> 3D에 보이기</label>
+            <div style="padding: 10px; border-radius: 8px; background: {{t.panel2}}; color: {{t.sub}}; font-size: 13.5px">숫자 칸은 Enter 또는 Tab으로 확정 · 다른 버튼을 눌러도 확정</div>
+          </sc-if>
+          <sc-if value="{{noSel}}" hint-placeholder-val="{{true}}">
+            <div style="padding: 32px 12px; text-align: center; color: {{t.sub}}; line-height: 1.7">부품 트리나 3D에서 부품을 고르면<br>여기에 속성이 나옵니다</div>
+          </sc-if>
+        </div>
+      </sc-if>
+    </aside>
+  </div><footer style="min-height: 46px; display: flex; align-items: center; gap: 14px; padding: 4px 16px; background: {{t.panel}}; border-top: 1px solid {{t.line}}; flex-wrap: wrap; font-size: 13.5px">
+    <div style="display: flex; gap: 4px">
+      <button type="button" onClick="{{toggleRun}}" style="{{b.primary}}">{{runLabel}}</button>
+      <button type="button" style="{{b.sm}}">■ 중지</button>
+    </div>
+    <span style="position: relative; width: 180px; height: 6px; border-radius: 3px; background: {{t.line}}"><span style="position: absolute; inset: 0; border-radius: 3px; background: {{t.accent}}"></span></span>
+    <b>100%</b>
+    <span style="color: {{t.sub}}">광선 315만 / 315만</span>
+    <span style="color: {{t.sub}}">계산 오차 ±1.50%</span>
+    <span style="color: {{t.ok}}">완료 — 목표 정확도 도달</span>
+    <span style="flex: 1"></span>
+    <label style="display: flex; align-items: center; gap: 6px; color: {{t.sub}}">화질
+      <select style="{{fieldSm}}"><option>중화질 1 mm</option><option>저화질 2 mm</option><option>고화질 0.5 mm</option></select>
+    </label>
+  </footer>
+
+  <!-- 큰 창 (2D · 1D) -->
+  <sc-if value="{{big}}" hint-placeholder-val="{{false}}">
+    <section role="dialog" aria-label="광분포 시뮬레이션 큰 창" style="position: absolute; top: 64px; left: 50%; transform: translateX(-50%); width: min(1040px, 94%); background: {{t.panel}}; border: 1px solid {{t.line}}; border-radius: 12px; box-shadow: {{t.shadow}}; z-index: 10; overflow: hidden">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid {{t.line}}; flex-wrap: wrap">
+        <b style="font-size: 16px">광분포 시뮬레이션</b>
+        <span style="color: {{t.sub}}">길이 <b style="color: {{t.bad}}">21.9%</b> · 폭 <b style="color: {{t.bad}}">19.5%</b></span>
+        <span style="flex: 1"></span>
+        <button type="button" onClick="{{toggleRun}}" style="{{b.sm}}">{{runLabel}}</button>
+        <label style="display: flex; align-items: center; gap: 6px; color: {{t.sub}}">화질 <select style="{{fieldSm}}"><option>중화질 1 mm</option></select></label>
+        <button type="button" onClick="{{closeBig}}" aria-label="닫기" style="{{b.icon}}">✕</button>
+      </div>
+      <div style="padding: 14px; display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+          <b>2D 광량 분포</b><span style="color: {{t.sub}}">s (mm) · 폭 ×2.4 확대</span>
+          <span style="flex: 1"></span>
+          <label style="display: flex; align-items: center; gap: 6px"><input type="checkbox" checked="{{equal}}" onChange="{{toggleEqual}}"> 실제 비율</label>
+          <button type="button" onClick="{{toggleRegion}}" aria-pressed="{{regionMode}}" style="{{regionBtn}}">▭ 영역 선택</button>
+          <button type="button" title="확대를 풀고 전체 보기(더블클릭과 같음)" style="{{b.sm}}">1:1</button>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: stretch">
+          <svg viewBox="0 0 480 100" preserveAspectRatio="none" style="flex: 1; min-width: 0; height: {{mapH}}; border-radius: 6px; display: block" role="img" aria-label="2D 광량 분포">
+            <sc-for list="{{cells}}" as="c" hint-placeholder-count="20">
+              <rect x="{{c.x}}" y="{{c.y}}" width="10.4" height="10.4" fill="{{c.f}}"></rect>
+            </sc-for>
+            <sc-if value="{{region}}" hint-placeholder-val="{{false}}">
+              <rect x="157" y="41" width="71" height="31" fill="none" stroke="#ffffff" stroke-width="2" stroke-dasharray="6 4" vector-effect="non-scaling-stroke"></rect>
+            </sc-if>
+          </svg>
+          <div style="width: 10px; border-radius: 5px; background: linear-gradient(0deg, #30123b, #4675ed, #1bcfd4, #61fc6c, #d1e834, #fe9b2d, #d93806)"></div>
+        </div>
+        <div style="color: {{t.sub}}; font-size: 13.5px">휠 = 확대 · 오른쪽 끌기 = 이동 · 더블클릭 = 전체 보기 · 영역 선택 켠 채 끌기 = 새 영역, 클릭 = 지움</div>
+        <sc-if value="{{region}}" hint-placeholder-val="{{false}}">
+          <table style="border-collapse: collapse; font-size: 14px; width: 100%; max-width: 460px">
+            <tr style="color: {{t.sub}}"><th style="text-align: left; padding: 4px 8px; font-weight: 500"></th><th style="text-align: right; padding: 4px 8px; font-weight: 500">전체</th><th style="text-align: right; padding: 4px 8px; font-weight: 500">선택 영역 (17×5 mm)</th></tr>
+            <tr style="border-top: 1px solid {{t.line}}"><th style="text-align: left; padding: 6px 8px; font-weight: 500">길이</th><td style="text-align: right; padding: 6px 8px; color: {{t.bad}}">21.9%</td><td style="text-align: right; padding: 6px 8px; color: {{t.bad}}">20.5%</td></tr>
+            <tr style="border-top: 1px solid {{t.line}}"><th style="text-align: left; padding: 6px 8px; font-weight: 500">폭</th><td style="text-align: right; padding: 6px 8px; color: {{t.bad}}">19.5%</td><td style="text-align: right; padding: 6px 8px; color: {{t.bad}}">79.4%</td></tr>
+            <tr style="border-top: 1px solid {{t.line}}"><th style="text-align: left; padding: 6px 8px; font-weight: 500">평균</th><td style="text-align: right; padding: 6px 8px">100%</td><td style="text-align: right; padding: 6px 8px">135.6%</td></tr>
+          </table>
+        </sc-if>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+          <sc-for list="{{profiles}}" as="pf" hint-placeholder-count="2">
+            <div style="border: 1px solid {{t.line}}; border-radius: 10px; overflow: hidden">
+              <div style="display: flex; justify-content: space-between; padding: 8px 10px; background: {{t.panel2}}"><b style="font-size: 14px">{{pf.title}}</b><span style="font-size: 13.5px; color: {{t.sub}}">최저 <b style="color: {{t.warn}}">{{pf.min}}</b></span></div>
+              <svg viewBox="0 0 340 120" style="display: block; width: 100%; height: 160px" role="img" aria-label="{{pf.title}}">
+                <sc-for list="{{gridY}}" as="g" hint-placeholder-count="4">
+                  <line x1="34" x2="334" y1="{{g.y}}" y2="{{g.y}}" stroke="{{t.grid}}" stroke-width="1"></line>
+                  <text x="28" y="{{g.ty}}" text-anchor="end" font-size="12" fill="{{t.sub}}">{{g.label}}</text>
+                </sc-for>
+                <line x1="34" x2="334" y1="30" y2="30" stroke="{{t.text}}" stroke-width="1" stroke-dasharray="4 3" opacity="0.7"></line>
+                <text x="332" y="25" text-anchor="end" font-size="12" fill="{{t.sub}}">목표 80%</text>
+                <path d="{{pf.d}}" fill="none" stroke="{{t.accent}}" stroke-width="1.8"></path>
+                <circle cx="{{pf.mx}}" cy="{{pf.my}}" r="3.5" fill="{{t.warn}}"></circle>
+              </svg>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </section>
+  </sc-if>
+
+  <!-- 기구 최적화 창 -->
+  <sc-if value="{{opt}}" hint-placeholder-val="{{false}}">
+    <section role="dialog" aria-label="기구 최적화" style="position: absolute; top: 96px; right: 24px; width: min(420px, 92%); background: {{t.panel}}; border: 1px solid {{t.line}}; border-radius: 12px; box-shadow: {{t.shadow}}; z-index: 11; overflow: hidden">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid {{t.line}}">
+        <b style="font-size: 16px">기구 최적화</b>
+        <span style="color: {{t.sub}}">목표 80% / 80%</span>
+        <span style="flex: 1"></span>
+        <button type="button" onClick="{{closeOpt}}" aria-label="닫기" style="{{b.icon}}">✕</button>
+      </div>
+      <div style="padding: 14px; display: flex; flex-direction: column; gap: 10px">
+        <div style="color: {{t.sub}}; font-size: 13.5px">바꿀 항목</div>
+        <sc-for list="{{optItems}}" as="o" hint-placeholder-count="3">
+          <label style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; border: 1px solid {{t.line}}; background: {{t.panel2}}">
+            <input type="checkbox" checked="{{o.on}}" onChange="{{o.toggle}}">
+            <span style="display: flex; flex-direction: column; gap: 2px">
+              <b style="font-size: 15px">{{o.title}}</b>
+              <span style="color: {{t.sub}}; font-size: 13.5px">{{o.sub}}</span>
+            </span>
+          </label>
+        </sc-for>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 4px">
+          <div style="padding: 10px; border-radius: 8px; border: 1px solid {{t.line}}"><div style="color: {{t.sub}}; font-size: 13.5px">현재</div><b style="color: {{t.bad}}">21.9% / 19.5%</b></div>
+          <div style="padding: 10px; border-radius: 8px; border: 1px dashed {{t.line}}"><div style="color: {{t.sub}}; font-size: 13.5px">최적안</div><b style="color: {{t.sub}}">시작하면 표시</b></div>
+        </div>
+        <button type="button" style="{{b.primaryWide}}">최적화 시작</button>
+      </div>
+    </section>
+  </sc-if>
+</div>
+</template>
+<div id="root"></div>
+<script>
+class DCLogic { constructor(props) { this.props = props || {}; this.state = {}; }
+  setState(o) { Object.assign(this.state, typeof o === 'function' ? o(this.state) : o); render(); } forceUpdate() { render(); } }
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { dark: true, tab: 'result', menu: null, step: 4, sel: null, open: { obs: true, parts: true, light: false }, big: false, opt: false, view: 'iso', flip: false,
+      tool: { xray: false, lines: false, paths: true, obs: true, bright: false }, region: false, regionMode: false, equal: false, more: false, running: false,
+      optOn: { pos: true, shape: true, milky: true } };
+    this.cache = this.build();
+  }
+  build() {
+    const STOPS = ['#30123b','#4145ab','#4675ed','#39a2fc','#1bcfd4','#24eca6','#61fc6c','#a4fc3b','#d1e834','#f3c63a','#fe9b2d','#f36315','#d93806','#b11901'];
+    const hex = (h) => [1,3,5].map((i) => parseInt(h.slice(i, i + 2), 16));
+    const ramp = (v) => { v = Math.max(0, Math.min(1, v)); const x = v * (STOPS.length - 1), i = Math.min(STOPS.length - 2, Math.floor(x)), f = x - i, a = hex(STOPS[i]), b = hex(STOPS[i + 1]);
+      return 'rgb(' + a.map((c, k) => Math.round(c + (b[k] - c) * f)).join(',') + ')'; };
+    const L = 116, W0 = -8, W1 = 8, leds = Array.from({ length: 10 }, (_, i) => (i + 0.5) * L / 10);
+    const val = (s, w) => { let a = 0; for (const p of leds) a += Math.exp(-(((s - p) / 4) ** 2)); return a * (Math.exp(-(((w - 3) / 3.2) ** 2)) + Math.exp(-(((w + 3) / 3.2) ** 2))); };
+    const NS = 48, NW = 10, raw = [];
+    let mx = 0;
+    for (let j = 0; j < NW; j++) for (let i = 0; i < NS; i++) { const s = (i + 0.5) * L / NS, w = W1 - (j + 0.5) * (W1 - W0) / NW, v = val(s, w); mx = Math.max(mx, v); raw.push({ i, j, v }); }
+    const cells = raw.map((c) => ({ x: c.i * 10, y: c.j * 10, f: ramp(c.v / mx) }));
+    const prof = (n, f) => Array.from({ length: n }, (_, k) => f(k / (n - 1)));
+    const lenV = prof(200, (u) => { let a = 0; for (let k = 0; k < 9; k++) a += val(u * L, W0 + (k + 0.5) * 16 / 9); return a; });
+    const widV = prof(60, (u) => { let a = 0; for (let k = 0; k < 40; k++) a += val((k + 0.5) * L / 40, W0 + 0.6 + u * 14.8); return a; });
+    const chart = (vals, title, unit, x0, x1) => {
+      const m = Math.max(...vals), ys = vals.map((v) => v / m), toY = (r) => 110 - (r - 0.1) / 0.9 * 100;
+      const pts = ys.map((r, k) => [34 + k / (ys.length - 1) * 300, toY(Math.max(0.1, r))]);
+      let mi = 0; ys.forEach((r, k) => { if (r < ys[mi]) mi = k; });
+      const pos = x0 + mi / (ys.length - 1) * (x1 - x0);
+      return { title, d: 'M' + pts.map((p) => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' L'), mx: pts[mi][0].toFixed(1), my: pts[mi][1].toFixed(1),
+        min: Math.floor(ys[mi] * 1000) / 10 + '% @ ' + pos.toFixed(1) + ' ' + unit };
+    };
+    const profiles = [chart(lenV, '길이 방향 1D 프로파일', 'mm', 0, L), chart(widV, '폭 방향 1D 프로파일', 'mm', -7.4, 7.4)];
+    const gridY = [30, 50, 70, 90].map((p) => { const y = 110 - (p / 100 - 0.1) / 0.9 * 100; return { y: y.toFixed(1), ty: (y + 3.5).toFixed(1), label: p + '%' }; });
+    return { cells, profiles, gridY };
+  }
+  renderVals() {
+    const S = this.state, set = (o) => this.setState(o);
+    const D = { bg: '#0e1116', panel: '#151a21', panel2: '#1b2129', line: '#2a313c', text: '#e7eaf0', sub: '#a3acba', accent: '#5b9bff', accentText: '#0b1220',
+      accentSoft: 'rgba(91,155,255,0.16)', ok: '#4cc38a', okSoft: 'rgba(76,195,138,0.14)', bad: '#ff7b72', badSoft: 'rgba(255,123,114,0.14)', warn: '#f5a524', warnSoft: 'rgba(245,165,36,0.14)',
+      view: '#0a0d12', viewBright: '#1a2029', grid: '#232a35', shadow: '0 16px 48px rgba(0,0,0,0.55)', box: '#2d3542', boxSide: '#20262f', boxFront: '#262d38' };
+    const Lt = { bg: '#f3f5f8', panel: '#ffffff', panel2: '#f6f7f9', line: '#e0e4ea', text: '#151a21', sub: '#535d6c', accent: '#2563eb', accentText: '#ffffff',
+      accentSoft: 'rgba(37,99,235,0.10)', ok: '#16773a', okSoft: 'rgba(22,119,58,0.10)', bad: '#c62f2b', badSoft: 'rgba(198,47,43,0.10)', warn: '#a65800', warnSoft: 'rgba(166,88,0,0.10)',
+      view: '#e7ebf0', viewBright: '#f7f9fb', grid: '#e8ebf0', shadow: '0 16px 48px rgba(20,30,50,0.18)', box: '#c4ccd7', boxSide: '#b4bdca', boxFront: '#a9b3c1' };
+    const t = S.dark ? D : Lt;
+    const base = 'display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: 7px; font-size: 15px; white-space: nowrap; box-sizing: border-box; ';
+    const b = {
+      sm: base + 'height: 34px; padding: 0 10px; border: 1px solid ' + t.line + '; background: ' + t.panel2 + '; color: ' + t.text + ';',
+      icon: base + 'height: 38px; width: 38px; padding: 0; border: 1px solid ' + t.line + '; background: ' + t.panel2 + '; color: ' + t.text + ';',
+      tool: base + 'height: 38px; width: 40px; padding: 0; border: 0; background: transparent; color: ' + t.text + ';',
+      primary: base + 'height: 36px; padding: 0 14px; border: 0; background: ' + t.accent + '; color: ' + t.accentText + '; font-weight: 700;',
+      primaryWide: base + 'height: 46px; width: 100%; border: 0; background: ' + t.accent + '; color: ' + t.accentText + '; font-weight: 700; font-size: 16px;',
+    };
+    const segOn = base + 'height: 38px; padding: 0 10px; border: 0; background: ' + t.accentSoft + '; color: ' + t.accent + '; font-weight: 700;';
+    const segOff = base + 'height: 38px; padding: 0 10px; border: 0; background: transparent; color: ' + t.text + ';';
+    const MENUS = [
+      ['파일', [['새 프로젝트'], ['예제 불러오기…'], ['프로젝트 열기…'], ['프로젝트 저장', 'Ctrl+S'], ['다른 이름으로 저장…', 'Ctrl+Shift+S'], null, ['3D 기구 STEP Import…'], ['LED STEP Import…'], null, ['3D 기구 STEP Export (수정 반영)'], ['LED STEP Export (현재 배치)'], null, ['기본값으로 초기화…']]],
+      ['편집', [['되돌리기', 'Ctrl+Z'], ['다시 실행', 'Ctrl+Y'], null, ['선택 해제', 'Esc'], ['LED 발광면 지정'], ['관측면 지정']]],
+      ['보기', [['평면 (XY)'], ['정면 (XZ)'], ['측면 (YZ)'], ['등각'], ['화면 맞춤', 'F'], ['단면 켜기/끄기'], ['모든 부품 보기'], null, ['3D 배경 어둡게', '', S.dark], ['투시 보기 (전체 반투명)', '', S.tool.xray], ['선 보기 (부품별 색 외곽선)', '', S.tool.lines], ['관측면 표시', '', S.tool.obs], ['광경로 화살표', '', S.tool.paths]]],
+      ['계산', [['다시 계산 / 일시정지'], ['기구 최적화 열기']]],
+      ['설정', [['목표 균일도 · 계산 정밀도 · 설계 점검 기준…'], ['기구 최적화 기본값 (Milky 상한 · 보완 자동 추가)…'], null, ['관리자 모드 (소재 DB 관리)'], ['소재 DB 관리…']]],
+      ['도움말', [['사용 순서'], ['오류 기록…'], ['버전 정보']]],
+    ];
+    const menus = MENUS.map(([label, items]) => ({ label, open: S.menu === label,
+      style: (S.menu === label ? segOn : segOff).replace('height: 38px', 'height: 36px'),
+      toggle: () => set({ menu: S.menu === label ? null : label }),
+      items: items.map((it) => it ? { sep: false, real: true, label: it[0], key: it[1] || '', check: it[2] ? '✓' : '' } : { sep: true, real: false }) }));
+    const STEPS = [
+      ['LED 지정', 'LED 20개 · 120°', 'ok'], ['관측면 지정', '직선 116×16 mm', 'ok'], ['목표 설정', '80% / 80%', 'ok'],
+      ['광분포 시뮬레이션', '21.9% / 19.5% · 목표 미달', 'bad'], ['기구 최적화', '필요 — 목표 미달', 'todo'],
+    ];
+    const steps = STEPS.map(([title, sub, st], i) => {
+      const n = i + 1, on = S.step === n, col = st === 'ok' ? t.ok : st === 'bad' ? t.bad : t.warn;
+      return { title, sub, mark: st === 'todo' ? String(n) : st === 'ok' ? '✓' : '!', subColor: st === 'ok' ? t.sub : col,
+        style: 'display: flex; align-items: center; gap: 10px; width: 100%; min-height: 56px; padding: 6px 8px; border-radius: 8px; text-align: left; font-size: 15px; color: ' + t.text + '; border: 1px solid ' + (on ? t.accent : 'transparent') + '; background: ' + (on ? t.accentSoft : 'transparent') + ';',
+        markStyle: 'flex: none; width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 13.5px; font-weight: 700; ' + (st === 'todo' ? 'border: 1.5px solid ' + col + '; color: ' + col + ';' : 'background: ' + col + '; color: ' + (S.dark ? '#0b1220' : '#ffffff') + ';'),
+        pick: () => set({ step: n, big: n === 4 ? true : S.big, opt: n === 5 ? true : S.opt, menu: null }) };
+    });
+    const row = (on) => 'display: flex; align-items: center; gap: 8px; width: 100%; height: 38px; padding: 0 8px 0 30px; border-radius: 7px; border: 0; font-size: 15px; color: ' + t.text + '; background: ' + (on ? t.accentSoft : 'transparent') + ';';
+    const PARTS = [['부품 1', '불투명 85%', '#9aa3ae'], ['부품 2', '투명 89%', '#5b9bff'], ['부품 3', 'Milky 2.0', '#e58fc0'], ['PCB', 'PCB 면 30%', '#4cc38a']];
+    const parts = PARTS.map(([name, badge, dot]) => ({ name, badge, dot, style: row(S.sel === name), pick: () => set({ sel: name, tab: 'prop', menu: null }) }));
+    const selP = parts.find((p) => p.name === S.sel);
+    const VIEWS = [['xy', 'XY', '평면 (XY)'], ['xz', 'XZ', '정면 (XZ)'], ['yz', 'YZ', '측면 (YZ)'], ['iso', '등각', '등각']];
+    const views = VIEWS.map(([k, label, title]) => ({ label, title, style: S.view === k ? segOn : segOff, pick: () => set({ view: k }) }));
+    const TOOLS = [
+      ['xray', '투시 보기 (전체 반투명)', 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 3v18'],
+      ['lines', '선 보기 (부품별 색 외곽선)', 'M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10'],
+      ['paths', '광경로 화살표', 'M4 20L14 10M14 10h-6M14 10v6M15 4h5v5'],
+      ['obs', '관측면 표시', 'M3 12s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z'],
+      ['bright', '밝게', 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.4 1.4M17.6 17.6L19 19M5 19l1.4-1.4M17.6 6.4L19 5'],
+    ];
+    const tools = TOOLS.map(([k, title, icon]) => ({ title, icon, pressed: S.tool[k] ? 'true' : 'false',
+      style: (S.tool[k] ? segOn : segOff).replace('padding: 0 10px', 'padding: 0; width: 40px'),
+      toggle: () => set({ tool: { ...S.tool, [k]: !S.tool[k] } }) }));
+    const tabStyle = (on) => 'height: 42px; padding: 0 14px; border: 0; border-bottom: 2px solid ' + (on ? t.accent : 'transparent') + '; background: transparent; color: ' + (on ? t.text : t.sub) + '; font-size: 15px; font-weight: ' + (on ? 700 : 500) + ';';
+    const metrics = [{ label: '길이 균일도', value: '21.9%', pct: '21.9%', gap: '−58.1%p' }, { label: '폭 균일도', value: '19.5%', pct: '19.5%', gap: '−60.5%p' }];
+    const OPT = [['pos', '① 위치', 'LED 배치 · LED 높이'], ['shape', '② 형상', '빛이 들어오는 면의 국부 형상'], ['milky', '③ Milky', 'Milky 레벨 — 5 이하에서만 최적화']];
+    const optItems = OPT.map(([k, title, sub]) => ({ title, sub, on: S.optOn[k], toggle: () => set({ optOn: { ...S.optOn, [k]: !S.optOn[k] } }) }));
+    const field = 'height: 38px; padding: 0 10px; border-radius: 7px; border: 1px solid ' + t.line + '; background: ' + t.panel2 + '; color: ' + t.text + '; font-size: 15px;';
+    return {
+      t, b, dark: S.dark, light: !S.dark, themeLabel: S.dark ? '밝은 화면으로' : '어두운 화면으로',
+      toggleTheme: () => set({ dark: !S.dark, menu: null }), closeMenu: () => set({ menu: null }),
+      menus, steps, parts, leds: Array.from({ length: 20 }, (_, i) => ({ n: 'LED ' + (i + 1) })),
+      g: Object.fromEntries(['obs', 'parts', 'light'].map((k) => [k, { open: S.open[k], exp: S.open[k] ? 'true' : 'false', caret: S.open[k] ? '▾' : '▸', toggle: () => set({ open: { ...S.open, [k]: !S.open[k] } }) }])),
+      groupRow: row(false).replace('padding: 0 8px 0 30px', 'padding: 0 8px').replace('height: 38px', 'height: 40px'),
+      childRow: row(false),
+      pickObs: () => set({ step: 2 }),
+      views, tools, tool: S.tool, flipStyle: (S.flip ? segOn : segOff).replace('padding: 0 10px', 'padding: 0; width: 40px'), toggleFlip: () => set({ flip: !S.flip }),
+      viewName: (VIEWS.find((v) => v[0] === S.view) || VIEWS[3])[2] + (S.flip ? ' · 반대' : ''),
+      viewBg: S.tool.bright ? t.viewBright : t.view, faceOp: S.tool.xray ? 0.35 : 1, heatOp: S.tool.xray ? 0.75 : 1, edge: S.tool.lines ? t.accent : 'transparent',
+      cells: this.cache.cells, profiles: this.cache.profiles, gridY: this.cache.gridY,
+      tabRes: S.tab === 'result', tabPrp: S.tab === 'prop', tabResStyle: tabStyle(S.tab === 'result'), tabPropStyle: tabStyle(S.tab === 'prop'),
+      tabResult: () => set({ tab: 'result' }), tabProp: () => set({ tab: 'prop' }),
+      metrics, chip: 'height: 28px; padding: 0 9px; border-radius: 12px; border: 1px solid ' + t.line + '; color: ' + t.sub + '; font-size: 13.5px; line-height: 26px; box-sizing: border-box;',
+      region: S.region, regionMode: S.regionMode ? 'true' : 'false',
+      regionBtn: (S.regionMode ? b.sm.replace('background: ' + t.panel2, 'background: ' + t.accent).replace('color: ' + t.text, 'color: ' + t.accentText) : b.sm),
+      toggleRegion: () => set({ regionMode: !S.regionMode, region: true }),
+      equal: S.equal, toggleEqual: () => set({ equal: !S.equal }), mapH: S.equal ? '130px' : '300px',
+      more: S.more, moreCaret: S.more ? '▾' : '▸', toggleMore: () => set({ more: !S.more }),
+      hasSel: !!selP, noSel: !selP, selPart: selP || { name: '', badge: '' }, clearSel: () => set({ sel: null }),
+      field, fieldSm: field.replace('height: 38px', 'height: 34px'),
+      big: S.big, openBig: () => set({ big: true }), closeBig: () => set({ big: false }),
+      opt: S.opt, closeOpt: () => set({ opt: false }), optItems,
+      runLabel: S.running ? '⏸ 일시정지' : '▶ 다시 계산', toggleRun: () => set({ running: !S.running }),
+    };
+  }
+}
+
+const comp = new Component({});
+const tpl = document.getElementById('tpl'), root = document.getElementById('root');
+const HOLE = /\{\{\s*([^}]+?)\s*\}\}/g, WHOLE = /^\{\{\s*([^}]+?)\s*\}\}$/;
+function look(ctx, p) {
+  if (p === 'true') return true; if (p === 'false') return false; if (/^-?\d+(\.\d+)?$/.test(p)) return +p;
+  return p.split('.').reduce((o, k) => (o == null ? undefined : o[k]), ctx);
+}
+const interp = (ctx, str) => str.replace(HOLE, (_, p) => { const v = look(ctx, p); return v == null ? '' : String(v); });
+function conv(node, ctx) {
+  if (node.nodeType === 3) return [document.createTextNode(interp(ctx, node.nodeValue))];
+  if (node.nodeType !== 1) return [];
+  const tag = node.localName;
+  if (tag === 'sc-for') {
+    const list = look(ctx, node.getAttribute('list').match(WHOLE)[1]) || [], as = node.getAttribute('as');
+    return list.flatMap((it, i) => kids(node, { ...ctx, [as]: it, $index: i }));
+  }
+  if (tag === 'sc-if') return look(ctx, node.getAttribute('value').match(WHOLE)[1]) ? kids(node, ctx) : [];
+  const el = document.createElementNS(node.namespaceURI, tag);
+  for (const a of node.attributes) {
+    if (a.name.startsWith('hint-')) continue;
+    const w = a.value.match(WHOLE);
+    if (a.name.startsWith('on') && w) { const fn = look(ctx, w[1]); if (typeof fn === 'function') el.addEventListener(a.name.slice(2).toLowerCase(), fn); continue; }
+    if ((a.name === 'checked' || a.name === 'value') && w) { el[a.name] = look(ctx, w[1]); continue; }
+    el.setAttribute(a.name, interp(ctx, a.value));
+  }
+  for (const n of kids(node, ctx)) el.appendChild(n);
+  return [el];
+}
+function kids(node, ctx) { const src = node.content || node; return [...src.childNodes].flatMap((c) => conv(c, ctx)); }
+function render() { root.replaceChildren(...kids(tpl, comp.renderVals())); }
+render();
+</script>
+</body>
+</html>
