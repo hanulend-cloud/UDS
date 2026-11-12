@@ -658,24 +658,32 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     }, { passive: false });
     let drag = null;
     cv.addEventListener('pointerdown', (e) => {
-      const m = M(); if (!m || e.button !== 0) return; const B = mapBox(cv, m.v.G, m.dpr, m.equal), p = P(e), sw = B.at(...p);
-      if (big.regMode && !sw) return;
-      drag = { p, sw, B, v: cv._view ?? full(m.v.G), moved: false }; cv.setPointerCapture?.(e.pointerId);
+      // 오른쪽 끌기 = 이동(2026-11-12) · 왼쪽 끌기 = 영역(영역 선택 켰을 때만). 오른쪽을 끌지 않고 떼면 기존 저장 메뉴
+      const m = M(), pan = e.button === 2; if (!m || !(pan || (e.button === 0 && big.regMode))) return;
+      const B = mapBox(cv, m.v.G, m.dpr, m.equal), p = P(e), sw = B.at(...p);
+      if (!pan && !sw) return;
+      drag = { p, sw, B, pan, v: cv._view ?? full(m.v.G), moved: false }; cv.setPointerCapture?.(e.pointerId);
     });
+    cv.addEventListener('contextmenu', (e) => { if (cv._noMenu) { cv._noMenu = false; e.preventDefault(); e.stopImmediatePropagation(); } }, true);
     cv.addEventListener('pointermove', (e) => {
       if (!drag) return; const m = M(); if (!m) return; const p = P(e), dx = p[0] - drag.p[0], dy = p[1] - drag.p[1];
       if (Math.hypot(dx, dy) > 4 * m.dpr) drag.moved = true; if (!drag.moved) return;
-      if (big.regMode) { const B = mapBox(cv, m.v.G, m.dpr, m.equal), q2 = B.at(Math.max(B.ox, Math.min(B.ox + B.PW, p[0])), Math.max(B.oy, Math.min(B.oy + B.rowH, p[1]))); if (q2) cv._drag = { s0: drag.sw[0], w0: drag.sw[1], s1: q2[0], w1: q2[1] }; }
+      if (!drag.pan) { const B = mapBox(cv, m.v.G, m.dpr, m.equal), q2 = B.at(Math.max(B.ox, Math.min(B.ox + B.PW, p[0])), Math.max(B.oy, Math.min(B.oy + B.rowH, p[1]))); if (q2) cv._drag = { s0: drag.sw[0], w0: drag.sw[1], s1: q2[0], w1: q2[1] }; }
       else { const v = drag.v; cv._view = panBy(v, full(m.v.G), (-dx / drag.B.PW) * (v.s1 - v.s0), (dy / drag.B.rowH) * (v.w1 - v.w0)); }
       redraw();
     });
     const end = () => {
-      if (!drag) return; const m = M(), d = drag; drag = null; if (!d.moved) return; cv._noClick = true;
-      if (big.regMode && cv._drag && m) { region = snapRect(m.v.G, cv._drag); big.regMode = false; }
+      if (!drag) return; const m = M(), d = drag; drag = null; if (!d.moved) return; if (d.pan) cv._noMenu = true; else cv._noClick = true;
+      if (!d.pan && big.regMode && cv._drag && m) { region = snapRect(m.v.G, cv._drag); }   // 영역 선택은 켜 둔 채 — 다시 끌면 새 영역
       cv._drag = null; showRegion(); redraw(); paint('map', q('map'));
     };
     cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
     cv.addEventListener('dblclick', () => { cv._view = null; redraw(); });
+  }
+  // 영역 선택 끄기 = 영역도 지움(✕ 대신, 2026-11-12)
+  function regOff() {
+    region = null; if (big) { big.regMode = false; big.cvs.map._drag = null; paint('map', big.cvs.map); }
+    showRegion(); paint('map', q('map'));
   }
   function openBig() {
     closeBig();
@@ -684,7 +692,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     // 떠 있는 창(2026-11-02) — 기구 최적화 창처럼 머리 끌어 옮기기 · 모서리로 크기 · 접기. 뒤 화면을 막지 않음(열어 둔 채 설계·최적화). 위치·크기 = 보는 사람별, 접힘은 열 때마다 펼침
     const rect = fitRect(bigRectLoad(), innerWidth, innerHeight);
     ov.className = 'm3-big-in'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', '광분포 시뮬레이션');
-    const cell = (k) => `<div class="m3-big-c" data-k="${k}"><div class="m3-big-ct"><b>${TITLE[k]}</b><span class="m3-big-sp"></span>${k === 'map' ? `<label class="m3-big-eq"><input type="checkbox" data-big-eq${eq0 ? ' checked' : ''}> 실제 비율</label><button type="button" data-big-reg-on aria-pressed="false" title="끌어서 영역을 그리면 그 영역의 균일도를 아래 표로 비교 · 휠 = 확대 · 끌기 = 이동 · 더블클릭 = 전체 보기">▭ 영역 선택</button><button type="button" data-big-reg-clr title="선택 영역 지우기">✕</button><button type="button" data-big-fit title="전체 보기(더블클릭)">1:1</button>` : ''}<button type="button" data-big-one="${k}">⤢ 이 그림만</button></div><canvas class="m3-big-cv" data-big-cv="${k}"></canvas>${k === 'map' ? '<div class="m3-big-reg" data-big-reg hidden></div>' : ''}</div>`;
+    const cell = (k) => `<div class="m3-big-c" data-k="${k}"><div class="m3-big-ct"><b>${TITLE[k]}</b><span class="m3-big-sp"></span>${k === 'map' ? `<label class="m3-big-eq"><input type="checkbox" data-big-eq${eq0 ? ' checked' : ''}> 실제 비율</label><button type="button" data-big-reg-on aria-pressed="false" title="켜 둔 동안 끌 때마다 새 영역 · 그 영역의 균일도를 아래 표로 비교 · 끄면(또는 Esc) 영역 지움 · 휠 = 확대 · 오른쪽 끌기 = 이동 · 더블클릭 = 전체 보기">▭ 영역 선택</button><button type="button" data-big-fit title="확대를 풀고 전체 보기(더블클릭과 같음)">1:1</button>` : ''}<button type="button" data-big-one="${k}">⤢ 이 그림만</button></div><canvas class="m3-big-cv" data-big-cv="${k}"></canvas>${k === 'map' ? '<div class="m3-big-reg" data-big-reg hidden></div>' : ''}</div>`;
     ov.innerHTML = `<div class="m3-big-hd" title="끌어서 옮기기"><b title="진행 현황 · 2D · 1D — 2D 클릭 = 그 점 기준 1D 곡선(주황) · 그림 우클릭 = 데이터·이미지 저장"><i class="m3-fl" data-big-step>4</i>광분포 시뮬레이션</b><span class="m3-mon-sum" data-big-sum></span><span class="m3-big-sp"></span><span class="m3-ctl" data-big-ctl></span><label class="m3-big-q">화질 <select data-big-q aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label><button type="button" data-big-min></button><button type="button" data-big-close title="Esc">✕ 닫기</button></div>
       <div class="m3-big-grid"><div class="m3-big-prog" data-big-prog></div>${cell('map')}<div class="m3-big-row">${cell('prof')}${cell('wprof')}</div></div>`;
     (el.closest('#mech3d-wrap') ?? document.body).appendChild(ov);   // 설계 화면에 붙임(화면을 바꾸면 함께 숨음)
@@ -701,7 +709,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     };
     // Esc = 이 창을 마지막으로 눌렀을 때만(뒤 화면에서 작업 중인 Esc 를 가로채지 않게)
     big = { el: ov, cvs, grid: ov.querySelector('.m3-big-grid'), focus: null, equal: eq0, min: false, active: true,
-      key: (e) => { if (e.key !== 'Escape' || !big.active) return; if (big.regMode) { big.regMode = false; big.cvs.map._drag = null; showRegion(); paint('map', big.cvs.map); } else if (big.focus) setFocus(null); else closeBig(); },
+      key: (e) => { if (e.key !== 'Escape' || !big.active) return; if (big.regMode) regOff(); else if (big.focus) setFocus(null); else closeBig(); },
       down: (e) => { big.active = ov.contains(e.target); },
       rs: () => { place(); paintBig(); } };
     document.addEventListener('keydown', big.key); document.addEventListener('pointerdown', big.down, true); window.addEventListener('resize', big.rs);
@@ -712,8 +720,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     ov.querySelector('[data-big-min]').onclick = () => setMin(!big.min);
     ov.addEventListener('click', (e) => {
       const one = e.target.closest('[data-big-one]'); if (one) { setFocus(big.focus === one.dataset.bigOne ? null : one.dataset.bigOne); return; }
-      if (e.target.closest('[data-big-reg-on]')) { big.regMode = !big.regMode; if (big.regMode) unroll(); showRegion(); return; }
-      if (e.target.closest('[data-big-reg-clr]')) { region = null; big.regMode = false; showRegion(); paint('map', cvs.map); paint('map', q('map')); return; }
+      if (e.target.closest('[data-big-reg-on]')) { if (big.regMode) regOff(); else { big.regMode = true; unroll(); showRegion(); } return; }
       if (e.target.closest('[data-big-fit]')) { cvs.map._view = null; paint('map', cvs.map); return; }
     });
     ov.querySelector('[data-big-close]').onclick = closeBig;
