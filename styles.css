@@ -1451,3 +1451,17 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 /* 3D 보기 막대 = 오른쪽 위(2026-11-12 사용자: 가운데는 떠 있는 창 머리의 메뉴와 겹쳐 보임) · 밝게/어둡게는 상단 바 ☀/☾ 하나로(막대의 단추는 숨김 — 메뉴·☀/☾ 가 이 단추를 눌러 3D 배경까지 바꿈) */
 .m3-views { left: auto; right: 10px; transform: none; justify-content: flex-end; max-width: calc(100% - 20px); }
 .m3-views .m3-vb-g:has([data-theme-toggle]) { display: none; }
+/* 3D 보기 막대 = 오른쪽 아래(2026-11-12 사용자) — 위쪽은 떠 있는 창 머리와 겹쳐 보임. 왼쪽 아래 = 축 표시·광량 범례 · 단면 칸은 다시 왼쪽 위 */
+.m3-views { top: auto; bottom: 10px; }
+.m3-section { top: 10px; }
+/* 넓은 3D: 막대는 오른쪽 아래, 왼쪽 아래 광량 범례(≈190px)와 겹치지 않게 폭 제한(넘치면 두 줄)
+   좁은 3D(620px 미만): 막대는 아래 한 폭 전체, 범례·축 표시는 왼쪽 위로, 단면 칸은 오른쪽 위로 */
+.m3-vp { container-type: inline-size; }
+.m3-views { max-width: calc(100% - 220px); }
+@container (max-width: 620px) {
+  .m3-views { left: 10px; right: 10px; max-width: none; width: auto; justify-content: center; }
+  .m3-legend { top: 10px; bottom: auto; }
+  #m3-axes { top: 30px; bottom: auto; }
+  .m3-section { left: auto; right: 10px; }
+}
+.m3-views { gap: 4px; } .m3-views button { padding: 0 7px; } .m3-vb-g + .m3-vb-g { padding-left: 4px; }   /* 1440 화면에서 한 줄 */
