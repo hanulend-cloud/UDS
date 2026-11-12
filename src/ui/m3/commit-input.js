@@ -10,6 +10,14 @@ const mark = (t) => {
   t.classList.toggle('m3-pending', on);
   if (on) { t._commitTitle ??= t.title; t.title = HINT; } else if (t._commitTitle != null) { t.title = t._commitTitle; t._commitTitle = null; }
 };
+// 대기 값을 먼저 적용할 누름(순수, 2026-11-12) — 단추·3D 화면 = 다음 작업(면 다시 지정·탭 바꾸기 등)이라 패널이 다시 그려지며 대기 값이 버려졌음
+// (보는 각도 30 을 Enter 없이 두고 면을 다시 지정 → 저장된 90 으로 보임). 다른 칸·빈 곳 누름은 그대로 적용 안 함
+export const flushOn = (t) => !!t?.closest?.('button, canvas, select, [role="tab"]');
+const commit = (t) => {
+  t._commitV = t.value; mark(t);
+  committing = true;
+  try { t.dispatchEvent(new Event('input', { bubbles: true })); t.dispatchEvent(new Event('change', { bubbles: true })); } finally { committing = false; }
+};
 export function installCommitInputs(doc = document) {
   if (installed) return;
   installed = true;
@@ -24,8 +32,11 @@ export function installCommitInputs(doc = document) {
     if (e.key !== 'Enter' && e.key !== 'Tab') return;
     if (e.key === 'Enter') e.preventDefault();
     if (!t.classList.contains('m3-pending')) return;
-    t._commitV = t.value; mark(t);
-    committing = true;
-    try { t.dispatchEvent(new Event('input', { bubbles: true })); t.dispatchEvent(new Event('change', { bubbles: true })); } finally { committing = false; }
+    commit(t);
   }, true);
+  // 단추는 click 캡처에서(누르는 순간 적용하면 패널이 다시 그려져 그 click 이 사라질 수 있음 — click 은 이미 경로가 정해진 뒤라 그대로 감)
+  // 3D 화면은 pointerdown 에서(면 고르기는 pointerup 에서 끝나 click 보다 먼저)
+  const flush = () => { for (const t of doc.querySelectorAll('#mech3d-wrap input.m3-pending')) if (isField(t)) commit(t); };
+  doc.addEventListener('pointerdown', (e) => { if (e.target?.closest?.('canvas')) flush(); }, true);
+  doc.addEventListener('click', (e) => { if (flushOn(e.target)) flush(); }, true);
 }
