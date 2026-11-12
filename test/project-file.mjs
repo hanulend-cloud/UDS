@@ -39,4 +39,15 @@ const memStore = () => { let v = null; return { get: async () => v, put: async (
 { const clk = () => '12:00:00';
   ok(projectFileLabel({ name: null, hasFile: false, browserAt: 1 }, clk).status === '파일로 저장 안 됨 — 창을 닫으면 사라짐' && projectFileLabel({ name: null, hasFile: false }, clk).name === '이름 없는 프로젝트', '파일 없음 표시');
   ok(projectFileLabel({ name: 'a', hasFile: true, perm: 'granted', savedAt: 1 }, clk).status === '자동 저장됨 12:00:00', '자동 저장 시각'); }
+// 통합 파일(.uds, 2026-11-12): 쓸 내용 = pack(text, 이름) · 도면 목록이 바뀌어도 다시 씀(extra) · 열 때 read(파일)
+{ let text = 'p1', ex = 'a', packed = []; const H = fakeHandle('도면.uds'), tm = timers(), J = fakeHandle('옛.json');
+  const win = { showSaveFilePicker: async (o) => { ok(o.types.some((t) => Object.values(t.accept).flat().includes('.uds')) && o.suggestedName === 'x.uds', '저장 창에 .uds 형식 · 기본 이름'); return H; }, showOpenFilePicker: async (o) => { ok(o.types.some((t) => Object.values(t.accept).flat().includes('.uds')) && o.types.some((t) => Object.values(t.accept).flat().includes('.json')), '열기 창 = .uds · .json'); return [J]; } };
+  const P = createProjectFile({ getText: () => text, extra: () => ex, pack: async (t, n) => { packed.push(n); return /.uds$/.test(n) ? 'PK:' + t + ':' + ex : t; }, win, timers: tm, store: memStore(), suggest: () => 'x.uds', read: async (f) => 'RAW:' + await f.text(), onOpen: async (t, n) => { text = t; } });
+  ok(await P.saveAs() && H.text === 'PK:p1:a' && packed[0] === '도면.uds', '.uds = 묶은 내용으로 저장');
+  ex = 'b'; P.touched(); await tm.run(); ok(H.text === 'PK:p1:b', '도면만 바뀌어도 다시 저장');
+  P.touched(); await tm.run(); ok(H.writes === 2, '내용·도면 같으면 생략');
+  J.text = '{}'; ok(await P.open() && text === 'RAW:{}', '열기 = read(파일) 결과로');
+  text = 'p2'; P.touched(); await tm.run(); ok(J.text === 'p2', '옛 .json 파일에는 JSON 그대로'); }
+{ let dl = null; const P = createProjectFile({ getText: () => 't', pack: async (t, n) => (/.uds$/.test(n) ? 'PK' : t), win: {}, timers: timers(), store: memStore(), suggest: () => 'a.uds', download: (t, n) => { dl = [t, n]; }, ask: (d) => d });
+  ok(await P.saveAs() && dl[0] === 'PK' && dl[1] === 'a.uds', '파일 API 없음 = .uds 다운로드'); }
 process.exitCode = fail ? 1 : 0;

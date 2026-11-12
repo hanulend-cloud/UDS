@@ -1,7 +1,9 @@
 // 프로젝트 파일(2026-11-02) — 파일 이름 표시 · 다른 이름으로 저장 · 고른 파일에 실시간 저장(File System Access API: Edge·Chrome).
 // 브라우저 저장(localStorage)은 main.js persist 가 그대로 함 — 이 모듈은 그 위에 '실제 파일'을 더함. 파일 핸들은 IndexedDB 에 보관해 새로고침 뒤에도 이어 씀
 // (브라우저가 권한을 다시 물으면 perm = 'prompt' → 머리의 단추로 다시 허용). API 가 없는 브라우저 = 다운로드로 저장, 실시간 파일 저장 없음
-const TYPES = [{ description: 'UDS 프로젝트 (JSON)', accept: { 'application/json': ['.json'] } }];
+// .uds = 프로젝트 + STEP 도면 통합(2026-11-12, project-bundle.js) · .json = 프로젝트만(옛 형식, 계속 열리고 그 파일엔 JSON 으로 저장)
+const TYPES = [{ description: 'UDS 프로젝트 (도면 포함)', accept: { 'application/octet-stream': ['.uds'] } }, { description: 'UDS 프로젝트 (JSON · 도면 없음)', accept: { 'application/json': ['.json'] } }];
+const EXT = /\.(uds|json)$/i;
 const isAbort = (e) => e?.name === 'AbortError';
 
 function handleDb() {
@@ -10,8 +12,9 @@ function handleDb() {
   return { get: () => tx('readonly', (s) => s.get('cur')), put: (v) => tx('readwrite', (s) => s.put(v, 'cur')), del: () => tx('readwrite', (s) => s.delete('cur')) };
 }
 
+// pack(text, name) = 실제로 쓸 내용(통합 파일이면 Blob) · extra() = 바뀜 비교에 더할 값(도면 목록) · read(file) = 연 파일을 onOpen 에 넘길 값
 // getText() = 저장할 내용, onOpen(text, name) = 연 파일 적용(실패면 던짐), onState(state) = 표시 갱신, suggest() = 저장 창의 기본 이름
-export function createProjectFile({ getText, onOpen, onState = () => {}, suggest = () => 'uds-project.json', delay = 1000, win = globalThis, timers = globalThis, store = null, download = null, ask = null }) {
+export function createProjectFile({ getText, onOpen, onState = () => {}, suggest = () => 'uds-project.json', pack = async (t) => t, extra = () => '', read = (f) => f.text(), delay = 1000, win = globalThis, timers = globalThis, store = null, download = null, ask = null }) {
   const db = store ?? (typeof indexedDB !== 'undefined' ? handleDb() : null);
   const S = { name: null, hasFile: false, perm: 'none', saving: false, savedAt: null, browserAt: null, err: '' };
   let handle = null, lastText = null, t = null, again = false;
@@ -22,13 +25,13 @@ export function createProjectFile({ getText, onOpen, onState = () => {}, suggest
   async function write() {
     if (!handle || S.perm !== 'granted') return false;
     if (S.saving) { again = true; return false; }
-    const text = getText();
-    if (text === lastText) return true;
+    const text = getText(), key = `${text}\u0000${extra()}`;
+    if (key === lastText) return true;
     S.saving = true; emit();
     try {
       const w = await handle.createWritable();
-      await w.write(text); await w.close();
-      lastText = text; S.savedAt = Date.now(); S.err = '';
+      await w.write(await pack(text, handle.name)); await w.close();
+      lastText = key; S.savedAt = Date.now(); S.err = '';
     } catch (e) {
       S.err = e?.message ?? String(e);
       if (e?.name === 'NotAllowedError') S.perm = 'prompt';
@@ -52,8 +55,8 @@ export function createProjectFile({ getText, onOpen, onState = () => {}, suggest
       if (!win.showSaveFilePicker) {   // 파일 API 없음 = 다운로드
         const nm = (ask ?? ((d) => win.prompt?.('저장할 파일 이름', d)))(S.name ?? suggest());
         if (!nm) return false;
-        const name = /\.json$/i.test(nm) ? nm : `${nm}.json`;
-        download?.(getText(), name);
+        const name = EXT.test(nm) ? nm : `${nm}${(suggest().match(EXT) ?? ['.json'])[0]}`;
+        download?.(await pack(getText(), name), name);
         S.name = name; S.savedAt = Date.now(); emit();
         return true;
       }
@@ -75,9 +78,9 @@ export function createProjectFile({ getText, onOpen, onState = () => {}, suggest
       if (!win.showOpenFilePicker) return false;
       let h;
       try { [h] = await win.showOpenFilePicker({ types: TYPES, multiple: false }); } catch (e) { if (isAbort(e)) return true; S.err = e?.message ?? String(e); emit(); return true; }
-      await onOpen(await (await h.getFile()).text(), h.name);
+      await onOpen(await read(await h.getFile()), h.name);
       if (t != null) { timers.clearTimeout(t); t = null; }
-      setHandle(h); lastText = getText();
+      setHandle(h); lastText = `${getText()}\u0000${extra()}`;
       S.perm = await askWrite(h);
       emit();
       return true;

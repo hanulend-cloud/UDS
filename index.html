@@ -21,7 +21,7 @@
       <div id="proj-file" class="proj-file" aria-live="polite"><b data-pf="name"></b><span data-pf="st"></span><button type="button" data-pf="act" hidden></button></div>
     </div>
     <!-- 메뉴가 쓰는 파일 선택(숨김) -->
-    <input type="file" id="file-import" accept="application/json,.json" hidden />
+    <input type="file" id="file-import" accept=".uds,application/json,.json" hidden />
     <input type="file" id="file-materials" accept="application/json,.json" hidden />
     <input type="file" id="file-mech3d" accept=".stp,.step" hidden />
     <input type="file" id="file-led" accept=".stp,.step" hidden />
@@ -120,8 +120,8 @@
           </button>
           <label class="m3-start-opt">
             <b>기존 파일 불러오기</b>
-            <span>프로젝트(.json) 또는 기구 STEP(.stp·.step)</span>
-            <input type="file" id="file-mech3d-start" accept=".json,.stp,.step" hidden />
+            <span>프로젝트(.uds·.json) 또는 기구 STEP(.stp·.step)</span>
+            <input type="file" id="file-mech3d-start" accept=".uds,.json,.stp,.step" hidden />
           </label>
           <button type="button" id="btn-sample-project" class="m3-start-opt">
             <b>예제 불러오기</b>

@@ -33,6 +33,8 @@ import { installErrorLog, openErrorLog, reportError } from './ui/error-log.js';
 import { mountMenubar } from './ui/menubar.js';
 import { APP_VERSION, APP_DATE } from './version.js';
 import { createProjectFile, projectFileLabel } from './ui/project-file.js';
+import { packBundle, isBundle, unpackBundle } from './ui/project-bundle.js';
+import { pickSources, sourcesKey, keepStepSource, loadStepSources, onStepSourcesChange } from './ui/step-sources.js';
 import { createTabLock, openChannel } from './ui/tab-lock.js';
 
 const LS_KEY = 'uds.spec.v11';
@@ -133,7 +135,7 @@ function buildForm() {
   }
   $('#btn-sample-project').onclick = () => openSampleMenu();
   $('#btn-blank-project').onclick = () => openBlankProject();
-  $('#file-mech3d-start').onchange = (e) => { const f = e.target.files?.[0]; if (f && /\.json$/i.test(f.name)) { importJson(e); return; } if (f) importMech3d(f); e.target.value = ''; };   // 시작 화면 = 프로젝트·STEP 모두
+  $('#file-mech3d-start').onchange = (e) => { const f = e.target.files?.[0]; if (f && /\.(json|uds)$/i.test(f.name)) { importJson(e); return; } if (f) importMech3d(f); e.target.value = ''; };   // 시작 화면 = 프로젝트·STEP 모두
   $('#file-materials').onchange = (e) => { const f = e.target.files?.[0]; if (f) importMaterials(f); e.target.value = ''; };
   $('#file-mech3d').onchange = (e) => { const f = e.target.files?.[0], noSplit = nextNoSplit; nextNoSplit = false; if (f) importMech3d(f, null, { noSplit }); e.target.value = ''; };
   $('#file-led').onchange = (e) => { const f = e.target.files?.[0]; if (f) m3app.importLed(f); e.target.value = ''; };
@@ -433,12 +435,13 @@ async function loadSampleProject(ask = true, url = 'data/projects/v3.json') {
 const slowTip = (tm, info) => ((tm?.transfer ?? 0) > 120000 && !info?.cut
   ? ' · 빨리 열려면 CAD 에서 빛과 무관한 부품(나사·보스·브래킷 등)을 빼고 내보내세요(부품이 하나로 합쳐진 파일은 나눠 읽을 수 없음). 같은 파일은 다음부터 저장본으로 바로 열림' : '');
 let nextNoSplit = false, restoring = null;   // restoring = { pend, parts } 여러 파일 프로젝트 복원 중 지금까지 읽은 부품
-function importMech3d(file, onDone = null, { noSplit = false } = {}) {
+function importMech3d(file, onDone = null, { noSplit = false, onMore = null } = {}) {
   const say = (t) => { if (m3app.isMounted()) m3app.setStatus(t); else $('#timing').textContent = t; };
   const adding = !!spec.mech3d?.parts?.length && !!getMech3d();   // 도면이 열려 있으면 그 도면에 추가(교체 없음 — 다른 도면은 새 프로젝트에서)
   if (adding && m3app.isRefining()) { say('정밀 메시를 만드는 중입니다 — 끝난 뒤 Import 하세요'); return; }
   if (adding && sourcesOf(spec.mech3d).some((s) => s.name === file.name) && !confirm(`${file.name} 은(는) 이미 이 도면에 있습니다. 같은 부품이 겹칠 수 있습니다. 그래도 추가할까요?`)) return;
   say(`${file.name} 읽는 중…`);
+  keepStepSource('mech', file).catch(() => {});   // 통합 프로젝트 파일(.uds)에 넣을 원본(압축 보관)
   // 2 MB 이상 = 불러오기 화면(진행률·경과 시간·취소·저해상도 미리보기). 작은 파일은 금방 끝나 깜빡이기만 함
   let w = null, ov = null;
   if (file.size >= 2e6) ov = showStepLoad(file, { onCancel: () => { w?.terminate(); say('불러오기 취소'); } });
@@ -515,6 +518,7 @@ function importMech3d(file, onDone = null, { noSplit = false } = {}) {
           if (st.status === 'more') {
             restoring.parts.push(...parts); ov?.close();
             const t = `${file.name} 읽음 (${st.k}/${st.n}) — 다음 파일을 Import 하세요: ${st.next}`; say(t); $('#m3-start-msg').textContent = t;
+            onMore?.();   // 통합 파일에서 여는 중이면 다음 파일을 바로
             return;
           }
           if (st.status === 'done') { parts = [...restoring.parts, ...parts]; prep = null; sceneName = srcs[0].name; }
@@ -910,7 +914,7 @@ function persist() { tabLock.write('spec', () => { try { localStorage.setItem(LS
 function load() { try { return JSON.parse(localStorage.getItem(LS_KEY)); } catch { return null; } }
 function downloadJson(text, name) {
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+  a.href = URL.createObjectURL(new Blob([text], { type: /\.uds$/i.test(name) ? 'application/octet-stream' : 'application/json' }));
   a.download = name; a.click(); URL.revokeObjectURL(a.href);
 }
 function applyProjectText(text) {
@@ -922,13 +926,32 @@ function applyProjectText(text) {
 }
 function importJson(e) {   // 파일 API 가 없는 브라우저 — 이름만 표시, 저장은 다운로드
   const f = e.target.files[0]; if (!f) return;
-  const r = new FileReader();
-  r.onload = () => { try { applyProjectText(r.result); projFile?.opened(f.name); } catch { alert('JSON 파싱 실패'); } };
-  r.readAsText(f);
   e.target.value = '';
+  openProjectFile(f).then(() => projFile?.opened(f.name)).catch((x) => alert(`프로젝트 열기 실패: ${x?.message ?? x}`));
+}
+// 통합 프로젝트 파일(.uds, 2026-11-12) — 프로젝트 + 기구·LED STEP 원본. 옛 .json = 프로젝트만(STEP 은 따로 다시 불러옴)
+async function packProject(text, name) {
+  if (!/\.uds$/i.test(name)) return text;
+  const { files, missing } = pickSources(spec);
+  if (missing.length) { const t = `도면 원본이 없어 빼고 저장: ${missing.join(', ')} — 그 STEP 을 한 번 다시 불러오면 다음 저장부터 포함됩니다`; if (m3app.isMounted()) m3app.setStatus(t); else $('#timing').textContent = t; }
+  return packBundle(text, files);
+}
+async function openProjectFile(f) {
+  if (!(await isBundle(f))) { applyProjectText(await f.text()); return; }
+  const U = await unpackBundle(f);
+  applyProjectText(U.text);
+  for (const s of U.files) await keepStepSource(s.role, s.file, s.gz);
+  const mech = U.files.filter((s) => s.role === 'mech').map((s) => s.file), led = U.files.find((s) => s.role === 'led')?.file ?? null;
+  const ledNow = async () => {   // 기구가 열린 뒤 — 같은 이름 LED STEP = 저장된 기준 LED 로 재인식
+    for (let i = 0; i < 200 && !m3app.isMounted(); i++) await new Promise((r) => setTimeout(r, 100));
+    if (led && getLedMesh()?.name !== led.name) m3app.importLed(led);
+  };
+  if (!spec.mech3dPending || !mech.length) { ledNow(); return; }   // 지금 메쉬가 같은 기구면 다시 읽지 않음
+  const next = (k) => importMech3d(mech[k], ledNow, { onMore: () => next(k + 1) });   // 여러 파일 = 저장 순서대로
+  next(0);
 }
 async function openProject() {
-  try { if (await projFile.open()) return; } catch { alert('JSON 파싱 실패'); return; }
+  try { if (await projFile.open()) return; } catch (x) { alert(`프로젝트 열기 실패: ${x?.message ?? x}`); return; }
   $('#file-import').click();
 }
 // 프로젝트 파일 이름·저장 상태(머리) + 탭 제목
@@ -945,7 +968,8 @@ function renderProjFile(st) {
 }
 function setupProjectFile() {
   const mechName = () => String(spec?.mech3d?.name ?? spec?.mech3dPending?.name ?? 'uds-project').replace(/\.(stp|step)$/i, '');
-  projFile = createProjectFile({ getText: () => JSON.stringify(spec, null, 2), onOpen: (text) => applyProjectText(text), onState: renderProjFile, suggest: () => `${mechName()}.json`, download: downloadJson });
+  projFile = createProjectFile({ getText: () => JSON.stringify(spec, null, 2), onOpen: (f) => openProjectFile(f), read: (f) => f, pack: packProject, extra: () => sourcesKey(spec), onState: renderProjFile, suggest: () => `${mechName()}.uds`, download: downloadJson });
+  onStepSourcesChange(() => projFile?.touched());   // STEP 원본 압축이 끝나면 통합 파일에도
   window.addEventListener('keydown', (e) => {   // 어느 칸에 있어도(브라우저의 페이지 저장 대신)
     if (!(e.ctrlKey || e.metaKey) || e.code !== 'KeyS') return;
     e.preventDefault(); m3app.flush();
@@ -1073,6 +1097,7 @@ if (spec.body.shape.source === 'step' && !(await loadBodyIDB({ flipZ: spec.body.
 if (isBlankMech3d(spec.mech3d)) setBlankMech3d();
 else if (spec.mode === 'mech3d' && spec.mech3d && !(await loadMech3dIDB())) { shelveMech3d(); persist(); }
 if (spec.mech3d?.light?.step) await loadLedIDB();   // 검증은 m3app.mount 에서
+loadStepSources().then(() => projFile?.touched?.());   // .uds 에 넣을 STEP 원본(지난 세션에 불러온 것)
 // 평판 계산 Worker — 평판 모드로 시작할 때만 지금 만든다(3D 모드면 평판 계산이 처음 필요할 때 run() 이 만든다)
 if (spec.mode !== 'mech3d') startSolver();
 mount();

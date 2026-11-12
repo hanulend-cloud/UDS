@@ -61,6 +61,7 @@ import { scaleMoveMesh, isIdentityXform } from '../../engine/mech3d/xform.js';
 import { defaultChecks } from '../../engine/mech3d/defs.js';
 import { validAdjust } from '../../engine/mech3d/led-adjust.js';
 import { beamSpec, ledOfHit, ledClashItems, dropStaleAdjust, setLedAdjust } from './led-select.js';
+import { keepStepSource } from '../step-sources.js';
 
 const $ = (s) => document.querySelector(s);
 const VIEWS = [['top', '평면 (XY)', 'bottom', '아래에서 본 평면 (−Z 쪽)'], ['front', '정면 (XZ)', 'back', '뒤에서 본 정면 (+Y 쪽)'], ['side', '측면 (YZ)', 'side2', '반대쪽 측면 (−X 쪽)'], ['iso', '등각']];   // 셋째·넷째 = 반대쪽 보기(2026-11-06)
@@ -1909,6 +1910,7 @@ export function openMaterialDb(tab = 'milky') {
 function importLedStep(file) {
   const st = A.store, say = (t) => { if (A?.store === st) st.update('session', (_, x) => { x.ledInfo = t; }); };
   say(`${file.name} 읽는 중…`);
+  keepStepSource('led', file).catch(() => {});   // 통합 프로젝트 파일(.uds)에 넣을 원본
   file.text().then((text) => {
     const w = new Worker(new URL('../../engine/mech3d/mech3d-worker.js', import.meta.url), { type: 'module' });
     w.onmessage = (m) => {
