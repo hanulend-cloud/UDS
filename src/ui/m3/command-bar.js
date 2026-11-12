@@ -38,8 +38,8 @@ export function mountCommandBar(el, h) {
   el.innerHTML = `<button type="button" class="m3-step" data-c="led" aria-pressed="false"><i>1</i> LED 지정</button><span class="m3-arrow">›</span>
     <button type="button" class="m3-step" data-c="obs" aria-pressed="false"><i>2</i> 관측면 지정</button><span class="m3-arrow">›</span>
     <button type="button" class="m3-step" data-c="tgt" aria-pressed="false"><i>3</i> 목표 설정 <span class="mut" data-tgt></span></button><span class="m3-arrow">›</span>
-    <button type="button" class="m3-step m3-flow" data-c="sim" title="누르면 광분포 시뮬레이션 창(진행 현황 · 2D · 1D) — 지금 설계의 빛 분포·균일도를 자동 계산"><i>4</i> 광분포 시뮬레이션 <span data-flow="sim"></span></button><span class="m3-arrow">›</span>
-    <button type="button" class="m3-step m3-flow" data-c="opt" title="목표 미달이면 Milky·LED 위치·형상 후보를 찾아 최종 화질로 판정 — 적용하면 그 값이 4 광분포 시뮬레이션에 그대로 나옴"><i>5</i> 기구 최적화 <span data-flow="opt"></span></button>`;
+    <button type="button" class="m3-step m3-flow" data-c="sim" title="창 열기/닫기 — 광분포 시뮬레이션 창(진행 현황 · 2D · 1D 크게). 계산은 늘 자동으로 돌고 결과는 오른쪽에 나옴"><i>4</i> 광분포 시뮬레이션 <span data-flow="sim"></span><span class="m3-winic" aria-hidden="true">⧉</span></button><span class="m3-arrow">›</span>
+    <button type="button" class="m3-step m3-flow" data-c="opt" title="창 열기/닫기 — 목표 미달이면 Milky·LED 위치·형상 후보를 찾아 최종 화질로 판정, 적용하면 그 값이 4 광분포 시뮬레이션에 그대로 나옴"><i>5</i> 기구 최적화 <span data-flow="opt"></span><span class="m3-winic" aria-hidden="true">⧉</span></button>`;
   const b = (k) => el.querySelector(`[data-c="${k}"]`);
   b('led').onclick = () => h.onLed();
   b('obs').onclick = () => h.onObs();

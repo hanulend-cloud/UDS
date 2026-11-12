@@ -963,3 +963,10 @@ done();
   okS(simStateText('done', 'converged') === '완료 — 목표 정확도 도달' && simStateText('done', 'adopted') === '완료 — 기구 최적화 최종 판정 값' && simStateText('done', 'limit') === '계산 한도 도달 — 정확도 미달', '완료 이유별 글');
   okS(simStateText('running', '', false, true) === '기구 최적화 중 — 일시정지(끝나면 이어서)' && simStateText('') === '', '기구 최적화 중 · 상태 없음');
 }
+{ // 판정 배지 옆 '다음 할 일' 단추(2026-11-12) — 미달·근처 = 기구 최적화 창, 통과 = 크게 보기, 계산 중·결과 없음 = 없음
+  const okN = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
+  const { nextAction } = await import('../src/ui/m3/results-panel.js');
+  okN(nextAction('bad')?.k === 'opt' && /기구 최적화/.test(nextAction('bad').label) && nextAction('near')?.k === 'opt', '미달·근처 → 기구 최적화로 개선');
+  okN(nextAction('ok')?.k === 'big' && /크게/.test(nextAction('ok').label), '통과 → 크게 보기');
+  okN(nextAction('busy') === null && nextAction('') === null, '계산 중·결과 없음 → 단추 없음');
+}

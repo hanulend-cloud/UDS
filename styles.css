@@ -1441,3 +1441,9 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 #mech3d-wrap[data-theme="dark"] .m3-big-hd, #mech3d-wrap[data-theme="dark"] .m3-mon-hd { background: color-mix(in srgb, var(--win-tint) 20%, var(--m3-head)); }
 .m3-big-hd > b, .m3-mon-hd > b { color: color-mix(in srgb, var(--win-tint) 45%, var(--m3-headtx)); }
 .m3-big-hd .m3-fl, .m3-mon-hd .m3-fl { background: var(--win-tint); }
+/* 판정 배지 옆 '다음 할 일' 단추 · ④⑤ 창 열림 표시(2026-11-12) */
+.m3-next { flex: none; min-height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--m3-line); background: var(--m3-panel, #fff); color: inherit; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.m3-next[hidden] { display: none; }
+#mech3d-wrap .m3-next.opt { background: #6a4fc8; border-color: #6a4fc8; color: #fff; }
+#mech3d-wrap[data-theme="dark"] .m3-res-h button.m3-next.opt.opt.opt { background: #a08cf0; border-color: #a08cf0; color: #0b1220; }   /* 어두운 테마 단추 일괄 규칙보다 우선 */
+.m3-cmd .m3-winic { margin-left: 4px; font-size: 11px; opacity: .65; }
