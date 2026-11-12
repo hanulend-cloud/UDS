@@ -214,6 +214,7 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
     const rn = snap.stats?.relNoise;
     if (state === 'running') prog = nextProgress(prog, photons, rn, goal());
     if (state === 'running' && doneChunks >= o.bins && rn != null && rn <= goal()) { finish('converged'); return; }
+    if (state === 'running') pumpAll(gen);   // 쉬던 포트가 깨어났으면(GPU 꺼짐 → CPU 포트) 그 포트도 돌림(2026-11-12)
     emit();
   }
   function finish(r) { state = 'done'; reason = r; stopTick(); snap = compute(); emit(); }

@@ -89,4 +89,19 @@ const same = (a, b) => a.length === b.length && a.every((v, k) => v === b[k]);
   const small = (await host.handle({ type: 'chunk', sceneKey: 'g1', seed: 1, N: 2000, cpuMax: 50000 })).reply;
   ok(small.acc?.length > 0 && !small.gpuRetry, 'GPU 실패 + 작은 청크 → 그대로 CPU 로 계산');
 }
+{   // GPU 자동 복구(2026-11-12) — GPU 가 멈춰 꺼지면 잠시 뒤 새로 만들어 다시 씀(최대 max 번). 복구되면 onBack 알림
+  const host = makeChunkHost({ getTable: () => table, getDb: () => null });
+  const timers = []; const T = { setTimeout: (f, ms) => timers.push({ f, ms }) };
+  const bad = () => ({ lost: false, trace: () => Promise.reject(new Error('GPU 응답 없음 (20초)')) });
+  let made = 0, back = 0;
+  host.setGpu(bad(), () => {}, { make: async () => { made++; return bad(); }, onBack: () => back++, delayMs: 3000, max: 2, timers: T });
+  host.handle({ type: 'scene', sceneKey: 'r1', mechParts: [fx.plate], mspec: fx.mspec, ledParts: null, lineData: lightData(fx.line), G: fx.G, obs: fx.obs, emitters: fx.emitters });
+  await host.handle({ type: 'chunk', sceneKey: 'r1', seed: 1, N: 500 });
+  ok(host.gpu === null && timers.length === 1 && timers[0].ms === 3000, 'GPU 실패 → 끄고 3초 뒤 다시 만들기 예약');
+  await timers.shift().f(); await Promise.resolve();
+  ok(made === 1 && back === 1 && host.gpu !== null, 'GPU 다시 만듦 → 다시 씀, onBack 알림');
+  await host.handle({ type: 'chunk', sceneKey: 'r1', seed: 2, N: 500 }); await timers.shift()?.f(); await Promise.resolve();
+  await host.handle({ type: 'chunk', sceneKey: 'r1', seed: 3, N: 500 });
+  ok(made === 2 && timers.length === 0 && host.gpu === null, `복구 최대 2번 — 그 뒤로는 CPU 로 계속 (만든 횟수 ${made}, 예약 ${timers.length})`);
+}
 done();

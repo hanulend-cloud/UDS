@@ -10,7 +10,9 @@ export const REC = 24;
 const WG = 64;
 const OPT = 14;   // 부품 광학 표 한 줄: n, mus, g, mua, 투과, 위상표 번호, 0, 0, 경계 상자(lo, hi)
 const PART_BOX_MARGIN = 0.1;   // 맞붙은 면 틈(COIN_GAP 0.04)보다 넉넉히
-const TIR_TRAP = 2000;   // 산란 없는 매질에서 이만큼 연달아 전반사 = 갇힘(직육면체 투명판은 방향이 몇 개로 닫혀 영영 못 나옴)
+const TIR_TRAP = 2000;
+const SW = 56;   // 이어 돌리기 상태 한 줄(u32 개수) — 셰이더 ST 배치와 같게
+export const EV_BUDGET = 2048;   // 한 번의 GPU 실행에서 광자마다 따라가는 사건 수 상한(넘으면 다음 실행에서 이어 감)   // 산란 없는 매질에서 이만큼 연달아 전반사 = 갇힘(직육면체 투명판은 방향이 몇 개로 닫혀 영영 못 나옴)
 const KIND = { whiteDiffuse: 0, metal: 1, black: 2, gloss: 3 };
 
 const WGSL = /* wgsl */`
@@ -20,12 +22,24 @@ struct Prm {
   oP: u32, oNM: u32, oBOX: u32, oPH: u32,
   oOPT: u32, oFIN: u32, oT: u32, oTI: u32,
   oMETA: u32, oORD: u32, oCON: u32, nOrd: u32,
+  round: u32, budget: u32, pad0: u32, pad1: u32,
 };
 @group(0) @binding(0) var<uniform> prm: Prm;
 @group(0) @binding(1) var<storage, read> F: array<f32>;
 @group(0) @binding(2) var<storage, read> U: array<u32>;
 @group(0) @binding(3) var<storage, read> SRC: array<f32>;
 @group(0) @binding(4) var<storage, read_write> OUT: array<f32>;
+// 이어 돌리기(2026-11-12) — 한 번의 실행(dispatch)에서 광자마다 사건 budget 개까지만 따라가고 상태를 ST 에 남김. 다음 실행(round>0)이 이어 감.
+// 갇혀 오래 도는 광자 하나가 dispatch 를 수 초 붙잡아 Windows GPU 감시(약 2초)에 걸려 장치가 멈추던 것을 막음. 난수 상태까지 저장 → 결과는 한 번에 돈 것과 비트 일치
+@group(0) @binding(5) var<storage, read_write> ST: array<u32>;
+@group(0) @binding(6) var<storage, read_write> CNT: array<atomic<u32>>;   // [0] = 이번 실행 뒤에도 남은 광자 수
+const SW: u32 = ${SW}u;
+fn stF(k: u32, v: f32) { ST[k] = bitcast<u32>(v); }
+fn stV(k: u32, v: vec3f) { stF(k, v.x); stF(k + 1u, v.y); stF(k + 2u, v.z); }
+fn stI(k: u32, v: i32) { ST[k] = bitcast<u32>(v); }
+fn ldF(k: u32) -> f32 { return bitcast<f32>(ST[k]); }
+fn ldV(k: u32) -> vec3f { return vec3f(ldF(k), ldF(k + 1u), ldF(k + 2u)); }
+fn ldI(k: u32) -> i32 { return bitcast<i32>(ST[k]); }
 
 const T_MIN: f32 = 2e-5;
 const BIG: f32 = 1e30;
@@ -256,8 +270,33 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   sn = 0; stkOver = false; nSeq = 0; refl = false;
   var exitPart = -1; var exitFace = -1; var exitX = vec3f(0.0);
   var esc = 0.0; var absS: f32 = 0.0; var absV: f32 = 0.0; var lost: f32 = 0.0; var rrL: f32 = 0.0; var rrG: f32 = 0.0;
-  for (var e = 0u; ; e = e + 1u) {
+  let b = i * SW; var e0 = 0u;
+  if (prm.round > 0u) {   // 지난 실행에서 남긴 상태로 이어 감(끝난 광자는 그대로 둠)
+    if (ST[b + 55u] != 0u) { return; }
+    rs = ST[b]; x = ldV(b + 1u); d = ldV(b + 4u); E = ldV(b + 7u); w = ldF(b + 10u);
+    skipPA = ldI(b + 11u); skipFA = ldI(b + 12u); skipPB = ldI(b + 13u); skipFB = ldI(b + 14u); skipTol = ldF(b + 15u); skipX = ldV(b + 16u); skipN = ldV(b + 19u);
+    lastTri = ldI(b + 22u); lastTri2 = ldI(b + 23u); tirRun = ST[b + 24u]; tL = ldF(b + 25u); tK = ldF(b + 26u);
+    sn = ldI(b + 27u); stkOver = ST[b + 28u] != 0u; for (var k = 0u; k < 8u; k = k + 1u) { stk[k] = ldI(b + 29u + k); }
+    nSeq = ldI(b + 37u); refl = ST[b + 38u] != 0u; for (var k = 0u; k < 5u; k = k + 1u) { seq[k] = ldI(b + 39u + k); }
+    exitPart = ldI(b + 44u); exitFace = ldI(b + 45u); exitX = ldV(b + 46u);
+    absS = ldF(b + 49u); absV = ldF(b + 50u); lost = ldF(b + 51u); rrL = ldF(b + 52u); rrG = ldF(b + 53u);
+    e0 = ST[b + 54u];
+  }
+  let eStop = e0 + prm.budget;
+  for (var e = e0; ; e = e + 1u) {
     if (e > prm.maxEvents || stkOver) { lost = lost + w; break; }
+    if (e >= eStop) {   // 이번 실행 몫 끝 — 상태를 남기고 다음 실행에서 이어 감
+      ST[b] = rs; stV(b + 1u, x); stV(b + 4u, d); stV(b + 7u, E); stF(b + 10u, w);
+      stI(b + 11u, skipPA); stI(b + 12u, skipFA); stI(b + 13u, skipPB); stI(b + 14u, skipFB); stF(b + 15u, skipTol); stV(b + 16u, skipX); stV(b + 19u, skipN);
+      stI(b + 22u, lastTri); stI(b + 23u, lastTri2); ST[b + 24u] = tirRun; stF(b + 25u, tL); stF(b + 26u, tK);
+      stI(b + 27u, sn); ST[b + 28u] = select(0u, 1u, stkOver); for (var k = 0u; k < 8u; k = k + 1u) { stI(b + 29u + k, stk[k]); }
+      stI(b + 37u, nSeq); ST[b + 38u] = select(0u, 1u, refl); for (var k = 0u; k < 5u; k = k + 1u) { stI(b + 39u + k, seq[k]); }
+      stI(b + 44u, exitPart); stI(b + 45u, exitFace); stV(b + 46u, exitX);
+      stF(b + 49u, absS); stF(b + 50u, absV); stF(b + 51u, lost); stF(b + 52u, rrL); stF(b + 53u, rrG);
+      ST[b + 54u] = e; ST[b + 55u] = 0u;
+      atomicAdd(&CNT[0], 1u);
+      return;
+    }
     let cur = sTop();
     var sFree = BIG;
     if (cur >= 0 && oMus(cur) > 0.0) { sFree = -log(max(1.0 - rnd(), 1e-30)) / oMus(cur); }
@@ -343,6 +382,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
       if (rnd() < 0.1) { rrG = rrG + 9.0 * w; w = w * 10.0; } else { rrL = rrL + w; break; }
     }
   }
+  ST[b + 55u] = 1u;
   let o = i * ${REC}u;
   OUT[o] = esc; OUT[o + 1u] = f32(exitPart); OUT[o + 2u] = f32(exitFace);
   OUT[o + 3u] = exitX.x; OUT[o + 4u] = exitX.y; OUT[o + 5u] = exitX.z;
@@ -418,7 +458,7 @@ export async function createGpuTracer() {
   }
 
   // starts: Float32Array(N·6) 광원 표본(원래 좌표). 슬라이스마다 ≈ targetMs 가 되게 나눠 보냄(GPU 감시 시간 초과 방지)
-  async function trace(S, { starts, N, seed, track = -1, w0, wMin, maxEvents = 100000, targetMs = 120 }) {
+  async function trace(S, { starts, N, seed, track = -1, w0, wMin, maxEvents = 100000, targetMs = 120, evBudget = EV_BUDGET }) {
     if (dead) throw new Error('GPU 장치를 잃음');
     const t0 = performance.now(), sc = upload(S);
     if (sc !== lastSc) { lastSc = sc; slice0 = 1024; }   // 새 장면은 작은 슬라이스부터(이전 장면보다 훨씬 느릴 수 있음 — 한 번의 dispatch 가 길면 GPU 감시 시간 초과)
@@ -426,27 +466,44 @@ export async function createGpuTracer() {
     const src = device.createBuffer({ size: Math.max(16, st.byteLength), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST }); device.queue.writeBuffer(src, 0, st);
     const outBytes = N * REC * 4, out = device.createBuffer({ size: Math.max(16, outBytes), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
     const rb = device.createBuffer({ size: Math.max(16, outBytes), usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
-    const ub = device.createBuffer({ size: 80, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    const ub = device.createBuffer({ size: 96, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    // 이어 돌리기 상태(슬라이스 최대 크기만큼) · 남은 광자 수(+ 되읽기)
+    const stb = device.createBuffer({ size: Math.max(16, Math.min(N, 1 << 16) * SW * 4), usage: GPUBufferUsage.STORAGE });
+    const cnt = device.createBuffer({ size: 16, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
+    const cntRb = device.createBuffer({ size: 16, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST }), zero = new Uint32Array(4);
     const bg = device.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [
       { binding: 0, resource: { buffer: ub } }, { binding: 1, resource: { buffer: sc.F } }, { binding: 2, resource: { buffer: sc.U } },
-      { binding: 3, resource: { buffer: src } }, { binding: 4, resource: { buffer: out } }] });
-    const pb = new ArrayBuffer(80), pu = new Uint32Array(pb), pi = new Int32Array(pb), pf = new Float32Array(pb), O = sc.off;
-    let base = 0, slice = slice0;
+      { binding: 3, resource: { buffer: src } }, { binding: 4, resource: { buffer: out } }, { binding: 5, resource: { buffer: stb } }, { binding: 6, resource: { buffer: cnt } }] });
+    const pb = new ArrayBuffer(96), pu = new Uint32Array(pb), pi = new Int32Array(pb), pf = new Float32Array(pb), O = sc.off;
+    let base = 0, slice = slice0, rounds = 0;
     try {
       while (base < N) {
         const n = Math.min(slice, N - base);
         pu[0] = n; pu[1] = base; pu[2] = seed >>> 0; pi[3] = track; pf[4] = w0; pf[5] = wMin; pu[6] = maxEvents; pu[7] = sc.nCon;
         pu.set([O.oP, O.oNM, O.oBOX, O.oPH, O.oOPT, O.oFIN, O.oT, O.oTI, O.oMETA, O.oORD, O.oCON, sc.nOrd], 8);
-        device.queue.writeBuffer(ub, 0, pb);
-        const enc = device.createCommandEncoder(), pass = enc.beginComputePass();
-        pass.setPipeline(pipe); pass.setBindGroup(0, bg); pass.dispatchWorkgroups(Math.ceil(n / WG)); pass.end();
+        // 실행마다 광자당 사건 evBudget 개까지 — 남은 광자가 없을 때까지 이어 실행(한 번의 실행이 GPU 감시 시간을 넘지 않게)
+        let ms = 0;
+        for (let round = 0; ; round++) {
+          pu[20] = round; pu[21] = evBudget;
+          device.queue.writeBuffer(ub, 0, pb); device.queue.writeBuffer(cnt, 0, zero);
+          const enc = device.createCommandEncoder(), pass = enc.beginComputePass();
+          pass.setPipeline(pipe); pass.setBindGroup(0, bg); pass.dispatchWorkgroups(Math.ceil(n / WG)); pass.end();
+          enc.copyBufferToBuffer(cnt, 0, cntRb, 0, 16);
+          const ts = performance.now();
+          device.queue.submit([enc.finish()]);
+          await guarded(device.queue.onSubmittedWorkDone());
+          if (dead) throw new Error('GPU 장치를 잃음');
+          if (round === 0) ms = performance.now() - ts;   // 슬라이스 크기는 첫 실행(대부분의 광자) 시간으로 잼
+          rounds++;
+          await guarded(cntRb.mapAsync(GPUMapMode.READ));
+          const left = new Uint32Array(cntRb.getMappedRange())[0];
+          cntRb.unmap();
+          if (left === 0) break;
+        }
         // 출력은 슬라이스 자리(base)에 — 셰이더는 i = 슬라이스 안 번호로 쓰므로 여기서 옮김
+        const enc = device.createCommandEncoder();
         enc.copyBufferToBuffer(out, 0, rb, base * REC * 4, n * REC * 4);
-        const ts = performance.now();
         device.queue.submit([enc.finish()]);
-        await guarded(device.queue.onSubmittedWorkDone());
-        if (dead) throw new Error('GPU 장치를 잃음');
-        const ms = performance.now() - ts;
         base += n;
         // 다 찬 슬라이스로만 잼. 한 번에 두 배를 넘기지 않고 6만 5천 광자를 넘기지 않는다 — 크게 잡은 한 번의 실행이 Windows GPU 감시 시간(약 2초)을 넘기면 드라이버가 장치를 멈춤(DXGI_ERROR_DEVICE_HUNG, 2026-11-11)
         if (n >= slice) slice = slice0 = Math.max(1024, Math.min(slice * 2, 1 << 16, Math.round(n * targetMs / Math.max(1, ms))));
@@ -455,8 +512,8 @@ export async function createGpuTracer() {
       const rec = new Float32Array(rb.getMappedRange().slice(0));
       rb.unmap();
       for (let p = 0; p < N; p++) { const o = p * REC; if (rec[o + 1] >= 0) for (let k = 0; k < 3; k++) rec[o + 3 + k] += sc.c[k]; }
-      return { rec, ms: performance.now() - t0 };
-    } finally { src.destroy(); out.destroy(); rb.destroy(); ub.destroy(); }
+      return { rec, ms: performance.now() - t0, rounds };
+    } finally { src.destroy(); out.destroy(); rb.destroy(); ub.destroy(); stb.destroy(); cnt.destroy(); cntRb.destroy(); }
   }
   return { name, trace, get lost() { return dead; } };
 }

@@ -326,4 +326,14 @@ const perPhoton = (s) => Array.from(s.sum, (v) => v / (s.photons / 25000));   //
   ok(s.state === 'running' && s.photons === 0 && chunks(m).length === 2 && chunks(m)[1].N === 1000, `gpuRetry → 실패 없이 다시 보냄, 광자 안 셈 (${s.state}, N=${chunks(m)[1]?.N})`);
   P.dispose();
 }
+{   // 쉬던 포트가 계산 중에 깨어남(2026-11-12, GPU 꺼짐 → CPU 포트가 이어 받음) — 다음 틱에 그 포트에도 청크를 보냄
+  const T = fakeTimers(), a = delayedPort(T, 100), c = delayedPort(T, 100);
+  let off = true; c.off = () => off;
+  const P = createProgressive({ ports: [a, c], timers: T, opts: { ...OPT, targetNoise: 1e-9 } });
+  P.restart(job(1)); await T.advance(500 + 1500);
+  ok(chunks(a).length > 0 && chunks(c).length === 0, '쉬는 포트에는 청크 안 보냄');
+  off = false; await T.advance(1500);
+  ok(chunks(c).length > 0, `깨어난 포트에 다음 틱부터 청크 보냄 (${chunks(c).length}개)`);
+  P.dispose();
+}
 done();

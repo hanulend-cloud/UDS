@@ -6,10 +6,12 @@ import { milkyGridOptics, rwCoeffs } from './reweight.js';
 
 // getTable(): L2 산란 응답표, getDb(): 실측소재 DB(없으면 null)
 export function makeChunkHost({ getTable, getDb = () => null }) {
-  let cache = null, gpu = null, gpuFail = () => {};
+  let cache = null, gpu = null, gpuFail = () => {}, rec = null, recovered = 0;
   return {
     // GPU 추적기(gpu-trace.createGpuTracer) — 있으면 청크를 GPU 로(실패하면 끄고 CPU 로). onFail(메시지) 알림
-    setGpu(t, onFail = () => {}) { gpu = t; gpuFail = onFail; },
+    // recover(선택, 2026-11-12) = { make() → Promise<추적기|null>, onBack(t), delayMs, max, timers } — GPU 가 멈춰 꺼지면 delayMs 뒤 새로 만들어 다시 씀(최대 max 번).
+    // 드라이버가 GPU 를 재설정한 뒤에는 새 장치로 다시 쓸 수 있음 — 한 번 멈췄다고 남은 계산을 모두 CPU 로 하면 몇 배 느려짐
+    setGpu(t, onFail = () => {}, recover = null) { gpu = t; gpuFail = onFail; if (recover) rec = recover; },
     get gpu() { return gpu; },
     get sceneKey() { return cache?.sceneKey ?? null; },
     // 반환 { reply, transfer } — 처리할 메시지가 아니면 null
@@ -54,7 +56,7 @@ export function makeChunkHost({ getTable, getDb = () => null }) {
           // GPU 가 청크 중에 멈추면 GPU 를 끄고 CPU 로 — 단 cpuMax(점진 계산이 줌)보다 큰 GPU 몫 청크는 CPU 로 통째 돌리면 청크 제한 시간을 넘기므로
           // gpuRetry 로 돌려보내 호출 쪽이 CPU 크기로 다시 보내게 함(2026-11-12, 'Worker 응답 없음' 원인)
           return runChunkGpu(gpu, args).then((r) => pack(m, r), (e) => {
-            const msg = String(e?.message ?? e); gpu = null; gpuFail(msg);
+            const msg = String(e?.message ?? e); gpu = null; gpuFail(msg); scheduleRecover();
             if (m.cpuMax > 0 && m.N > m.cpuMax) return { reply: { sceneKey: m.sceneKey, gpuRetry: true }, transfer: [] };
             return pack(m, runChunk(args));
           });
@@ -64,6 +66,15 @@ export function makeChunkHost({ getTable, getDb = () => null }) {
       return null;
     },
   };
+  function scheduleRecover() {
+    if (!rec || recovered >= (rec.max ?? 3)) return;
+    recovered++;
+    const T = rec.timers ?? globalThis;
+    T.setTimeout(async () => {
+      let t = null; try { t = await rec.make(); } catch { t = null; }
+      if (t && !gpu) { gpu = t; rec.onBack?.(t); }
+    }, rec.delayMs ?? 3000);
+  }
   function pack(m, r) {
     const reply = { sceneKey: m.sceneKey, acc: r.acc, accAll: r.accAll, cnt: r.cnt, ledger: r.ledger, leak: r.leak, escObs: r.escObs, paths: r.paths, ms: r.ms, ...(r.gpu ? { gpu: true } : {}) };
     const transfer = [r.acc.buffer, r.accAll.buffer, r.cnt.buffer];

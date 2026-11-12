@@ -1,0 +1,39 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>GPU resume check</title>
+<!-- GPU 추적을 짧게 나눠 이어 돌려도(evBudget) 한 번에 끝까지 돈 결과와 비트 일치하는지 — 브라우저(WebGPU) 점검. 서버로 열기: /test/gpu-resume.html -->
+<pre id="out">running…</pre>
+<script type="module">
+import { createGpuTracer } from '../src/engine/mech3d/gpu-trace.js';
+import { createTable } from '../src/engine/l2/slab-table.js';
+import { unpackTable, TABLE_ENCODING } from '../src/engine/l2/table-codec.js';
+import { plateFixture } from './m3-fixture.mjs';
+import { ledSources } from '../src/engine/mech3d/job.js';
+const out = document.getElementById('out'), lines = [];
+const ok = (c, m) => lines.push(`${c ? 'PASS' : 'FAIL'} ${m}`);
+try {
+  const base = '../src/engine/l2/data/', meta = await (await fetch(base + 'slab-meta.json')).json();
+  if (meta.encoding !== TABLE_ENCODING) throw new Error('표 인코딩 다름');
+  const gz = await fetch(base + 'slab-table.f32z'), u8 = new Uint8Array(await new Response(gz.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
+  const fx = plateFixture(createTable(meta, unpackTable(u8)));
+  const gpu = await createGpuTracer();
+  if (!gpu) throw new Error('WebGPU 없음');
+  const N = 20000, src = ledSources(fx.emitters, fx.ledSpec), starts = new Float32Array(N * 6);
+  let s = 12345; const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+  for (let p = 0; p < N; p++) starts.set(src.sample(rnd), p * 6);
+  const w0 = src.flux / N, opt = { starts, N, seed: 777, w0, wMin: w0 * 1e-3 };
+  const O = await gpu.trace(fx.S, { ...opt, evBudget: 1e9 });   // 예전 방식(끝까지 한 번에)
+  const A = await gpu.trace(fx.S, { ...opt });
+  const B = await gpu.trace(fx.S, { ...opt, evBudget: 5 });
+  ok(B.rounds > A.rounds, `짧게 나눔(evBudget 5) → 더 여러 번 이어 실행 (${A.rounds} → ${B.rounds}번)`);
+  let diff = 0; for (let k = 0; k < A.rec.length; k++) if (!Object.is(A.rec[k], B.rec[k])) diff++;
+  ok(diff === 0, `이어 돈 기록 = 한 번에 돈 기록(비트 일치, 다른 값 ${diff}개 / ${A.rec.length})`);
+  let d0 = 0; for (let k = 0; k < O.rec.length; k++) if (!Object.is(O.rec[k], A.rec[k])) d0++;
+  ok(d0 === 0, `기본 나눔(EV_BUDGET) = 예전 한 번에 돈 기록(비트 일치, 다른 값 ${d0}개)`);
+  let esc = 0; for (let p = 0; p < N; p++) esc += A.rec[p * 24];
+  ok(esc > 0, `탈출 광자 있음 (${esc})`);
+  lines.push(lines.every((l) => l.startsWith('PASS')) ? 'all PASS' : 'FAIL');
+} catch (e) { lines.push(`ERROR ${e?.stack ?? e}`); }
+out.textContent = lines.join('\n');
+window.__result = out.textContent;
+</script>

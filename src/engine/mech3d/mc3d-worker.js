@@ -26,7 +26,9 @@ self.onmessage = async (ev) => {
       if (m.gpu) {
         let t = null, err = null;
         try { t = await createGpuTracer(); } catch (e) { err = String(e?.message ?? e); }
-        if (t) host.setGpu(t, (msg) => self.postMessage({ gpu: { ok: false, name: t.name, error: msg } }));
+        // GPU 가 멈추면 끄고(CPU 포트가 이어 받음) 3초 뒤 새 장치로 다시 — 되면 ok:true 로 알려 다시 GPU 로(최대 3번, 2026-11-12)
+        if (t) host.setGpu(t, (msg) => self.postMessage({ gpu: { ok: false, name: t.name, error: msg } }),
+          { make: createGpuTracer, onBack: (g) => self.postMessage({ gpu: { ok: true, name: g.name, error: null, recovered: true } }), delayMs: 3000, max: 3 });
         self.postMessage({ gpu: { ok: !!t, name: t?.name ?? null, error: err } });
       }
       return;

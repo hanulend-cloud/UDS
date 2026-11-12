@@ -9,7 +9,7 @@ const SLEEP_MS = 600000, BEAT_MS = 2000, DEAD_MS = 6000;   // 절전에서 깨�
 export const isNoise = (m) => /ResizeObserver loop|기구 최적화 중지|AbortError/.test(String(m ?? ''));
 // 오류 문구 → 기구설계자가 읽을 설명(순수). level warn = 계산은 계속됨 · error = 그 작업이 멈춤
 const RULES = [
-  [/GPU|DEVICE_HUNG|DXGI/i, 'warn', 'GPU 드라이버가 멈춰 GPU 를 끔', '그래픽 드라이버가 오래 걸리는 계산을 끊은 것으로 보임', '계산은 CPU 로 계속됩니다(느려짐). 새로고침하면 GPU 를 다시 씁니다.'],
+  [/GPU|DEVICE_HUNG|DXGI/i, 'warn', 'GPU 드라이버가 멈춰 GPU 를 끔', '그래픽 드라이버가 오래 걸리는 계산을 끊은 것으로 보임', '계산은 CPU 로 계속됩니다(느려짐). 몇 초 뒤 GPU 를 자동으로 다시 켭니다(최대 3번).'],
   [/out of memory|allocation failed|Array buffer allocation|Invalid (typed )?array length/i, 'error', '메모리 부족', '도면·계산 자료가 메모리에 다 들어가지 않음', '다른 탭·프로그램을 닫고 새로고침하거나, 화질을 낮추세요.'],
   [/Worker 응답 없음|시간 초과/, 'error', '계산이 제한 시간 안에 끝나지 않음', '계산 Worker 가 답하지 않음(계산이 아주 오래 걸리거나 멈춤)', '다시 실행하세요. 반복되면 Milky·화질을 낮추거나 아래 내용을 전달해 주세요.'],
   [/Worker 오류|Worker 초기화|Worker 다시 띄움|모듈을 불러오지|파일을 불러오지|Failed to fetch|Importing a module/i, 'error', '프로그램 파일을 받지 못함', '서버 창이 닫혔거나 응답이 없음', '서버 창(run.bat)이 켜져 있는지 확인하고 Ctrl+F5 를 누르세요.'],
