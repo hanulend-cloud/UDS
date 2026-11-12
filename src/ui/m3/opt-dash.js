@@ -49,6 +49,10 @@ export function evalSparkSvg(evals, tgLen, tgWid, bestIdx = -1, w = 220, h = 70)
 // 아래 인자별 한 줄(상태 · 지금 → 최고). 그래프는 .fb-plot 자리의 실제 크기로 factorChartSvg 가 그림(스크롤 없이 칸에 맞춤)
 const FB_COL = { milky: '#3b82f6', position: '#f59e0b', shape: '#a855f7', housing: '#10b981' };
 // cfg(k) → { on, box(체크 상자), opt(설정 html), why } — 줄 앞에서 바로 켜고 끔(2026-10-29, 최적화 타일에서 옮김). 없으면 표시만
+// 중지 — 돌던 항목은 '중지됨'(진행 % 가 남아 아직 도는 것처럼 보이지 않게, 2026-11-12)
+export function stopTiles(S) { for (const t of Object.values(S?.tiles ?? {})) if (t.status === 'run' || t.status === 'wait') t.status = 'stop'; }
+// 항목 카드 한 줄 설명 — 무엇을 어디까지 바꾸는지(2026-11-12 평가)
+const FB_DESC = { position: 'LED 개수·간격·폭 위치·높이를 바꿈 — 부품과 겹치는 안은 뺌', shape: '광경로 위 부품의 입광면 모양을 바꿈 — 최소 살두께는 지킴', milky: '확산도(Milky)를 0~5 안에서 찾음 — 5 초과는 투과율이 크게 떨어져 적용 안 함' };
 export function factorBoardHtml(S, nw = {}, cfg = null, res = null) {
   const tl = S?.tgLen ?? nw.tgLen, tw = S?.tgWid ?? nw.tgWid;
   const row = (k, name, nowTxt) => {
@@ -60,10 +64,10 @@ export function factorBoardHtml(S, nw = {}, cfg = null, res = null) {
     const c = cfg?.(k), t = S?.tiles?.[k], on = c ? !!c.on : t ? t.status !== 'off' : !!nw.on?.[k];
     const ev = (t?.evals ?? []).filter((e) => e.ok !== false && Number.isFinite(e.Ulen)); let b = null;
     for (const e of ev) if (!b || scoreOf(e, tl, tw) > scoreOf(b, tl, tw)) b = e;
-    const [chipC, chipT] = t && t.status !== 'off' ? { wait: ['st-wait', '대기'], run: ['st-run', `진행 ${fmtProg(t.frac * 100)}%`], done: ['st-done', '✓ 완료'] }[t.status] : on ? ['st-on', '켜짐'] : ['st-off', '꺼짐'];
+    const [chipC, chipT] = t && t.status !== 'off' ? { wait: ['st-wait', '대기'], run: ['st-run', `진행 ${fmtProg(t.frac * 100)}%`], done: ['st-done', '✓ 완료'], stop: ['st-off', '중지됨'] }[t.status] : on ? ['st-on', '켜짐'] : ['st-off', '꺼짐'];
     const txt = `지금 ${nowTxt}${b ? ` → ${b.label} (${fmtJudge(b.Ulen)}/${fmtJudge(b.Uwid)})` : ''}`;
     const box = c?.box ? `<label class="fb-sw" title="${esc(c.why || '최적화에 사용')}">${c.box}</label>` : '<span class="fb-sw"></span>';
-    return `<div class="fb-card${on ? ' fb-on' : ' fb-off'}${t?.status === 'run' ? ' fb-run' : ''}" style="--fb:${FB_COL[k]}" title="${esc(txt)}">${head(box, chipC, chipT)}<div class="fb-in"><div class="fb-val"><span class="mut">지금</span> ${esc(nowTxt)}</div>${c?.opt ? `<div class="fb-opt">${c.opt}</div>` : ''}</div></div>`;
+    return `<div class="fb-card${on ? ' fb-on' : ' fb-off'}${t?.status === 'run' ? ' fb-run' : ''}" style="--fb:${FB_COL[k]}" title="${esc(txt)}">${head(box, chipC, chipT)}<div class="fb-in">${FB_DESC[k] ? `<div class="fb-desc mut">${FB_DESC[k]}</div>` : ''}<div class="fb-val"><span class="mut">지금</span> ${esc(nowTxt)}</div>${c?.opt ? `<div class="fb-opt">${c.opt}</div>` : ''}</div></div>`;
   };
   // 그래프는 오른쪽 모니터로(2026-10-30) — 여기는 입력(체크·옵션)과 상태만
   const nowOf = { position: nw.leds ?? '–', housing: nw.housing ?? '–', shape: nw.shape ?? '원래 형상', milky: Number.isFinite(nw.milky) ? `Milky ${f2(nw.milky)}` : '확산 부품 없음' };
@@ -138,6 +142,7 @@ export function monitorHtml(S, sec = 0, { chart = true } = {}) {
     else if (t.status === 'run') steps.push(step('run', name, `${fmtProg(t.frac * 100)}%`));
     else if (t.status === 'done') steps.push(step('done', name, `✓${uv(stageBest(t, tl, tw))}`));
     else if (t.status === 'wait') steps.push(step('wait', name, '대기'));
+    else if (t.status === 'stop') steps.push(step('wait', name, '중지됨'));
   }
   steps.push(S.ended != null ? step('done', '검증', '✓') : busy && S.verFrac != null ? step('run', '검증', `${fmtProg(S.verFrac * 100)}%`) : step('wait', '검증', ''));
   const b0 = S.before ?? {};
@@ -161,7 +166,7 @@ export function monitorHtml(S, sec = 0, { chart = true } = {}) {
     : S.stopped ? '<p><b>중지했습니다.</b> 찾던 안은 설계에 반영되지 않았습니다.</p>'
     : '';
   const pct = fmtProg(S.ended != null ? 100 : Math.max(0, Math.min(1, S.overall ?? 0)) * 100);
-  return `<div class="om-kpi">${kpi('길이 균일도', tl, cur?.Ulen ?? b0.Ulen, b0.Ulen, lastE?.Ulen)}${kpi('폭 균일도', tw, cur?.Uwid ?? b0.Uwid, b0.Uwid, lastE?.Uwid)}${effK}</div>
+  return `<div class="om-kpi">${kpi('길이 균일도', tl, cur?.Ulen ?? b0.Ulen, b0.Ulen, lastE?.Ulen)}${kpi('폭 균일도', tw, cur?.Uwid ?? b0.Uwid, b0.Uwid, lastE?.Uwid)}${effK}</div>${busy && !fin0 ? '<div class="mut om-kpi-note">큰 숫자 = 지금까지 최고(빠른 계산 대략값 · 길이·폭 중 목표에 더 모자란 쪽 기준) — 끝나면 정밀 재계산 값으로 조금 바뀔 수 있음</div>' : ''}
     <div class="od-pct om-pct"><b>${pct}%</b><div class="od-bar od-bar-big" role="progressbar" aria-label="기구 최적화 진행" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div><span class="mut od-simst">${busy ? `${S.pauseAt ? '일시정지' : '진행'} ${mmss(sec)}` : S.stopped ? '중지됨' : `끝남 ${mmss((S.endSec ?? sec))}`} · 후보 ${nEval}개</span></div>
     <div class="om-steps">${steps.join('<i class="om-ar">→</i>')}</div>
     <div class="om-say">${say}</div>
@@ -198,7 +203,7 @@ export function histTableHtml(list, tl, tw, busy, { pick = 'h', max = 0 } = {}) 
   const cell = (v, t) => (Number.isFinite(v) ? `<b class="${Number.isFinite(t) ? (v + 1e-9 >= t ? 'od-ok' : 'od-bad') : ''}">${fmtJudge(v)}</b>` : '–');
   const rows = list.map((e, i) => ({ e, i })).sort((a, b) => mg(b.e) - mg(a.e) || sum(b.e) - sum(a.e) || (b.e.eff || 0) - (a.e.eff || 0)).slice(0, max > 0 ? max : undefined).map(({ e, i }, n) =>
     `<tr${e.applied ? ' class="om-h-on"' : ''}><td>${n + 1}</td><td class="om-mx-l" title="${esc(e.label)}">${esc(e.label)}${e.kind === 'final' ? '' : ' <span class="mut">(대안)</span>'}</td><td>${cell(e.Ulen, tl)}</td><td>${cell(e.Uwid, tw)}</td><td>${Number.isFinite(e.eff) ? `${(e.eff * 100).toFixed(1)}%` : '–'}</td><td class="mut">${esc(e.at ?? '')}</td>`
-    + `<td><button type="button" ${pick === 'ad' ? `data-ad="hpick" data-v="${i}"` : `data-hpick="${i}"`}${busy ? ' disabled title="최적화가 끝난 뒤 고르세요"' : ''}>${e.applied ? '적용됨' : '적용'}</button></td></tr>`);
+    + `<td><button type="button" ${pick === 'ad' ? `data-ad="hpick" data-v="${i}"` : `data-hpick="${i}"`}${busy ? ' disabled title="최적화가 끝난 뒤 고르세요"' : e.applied ? ' disabled title="지금 설계에 적용된 안"' : ''}>${e.applied ? '적용됨' : '적용'}</button></td></tr>`);
   if (pick === 'ad') return `<div class="om-hist-sc rs-histt"><table class="om-mx-t"><colgroup><col style="width:26px"><col><col style="width:58px"><col style="width:58px"><col style="width:52px"><col style="width:48px"><col style="width:58px"></colgroup><tr><th>#</th><th>사양</th><th>길이</th><th>폭</th><th>효율</th><th>시각</th><th></th></tr>${rows.join('')}</table></div>`;   // 결과 화면 안(머리는 결과 화면이 씀)
   return `<div class="om-mx om-hist"><div class="om-lh" title="값 = 정밀 재계산 · 원하는 사양을 골라 [적용]"><b>지난 후보</b> <span class="mut">균일도 순 · ${list.length}개</span></div><div class="om-hist-sc"><table class="om-mx-t"><tr><th>#</th><th>사양</th><th>길이</th><th>폭</th><th>효율</th><th>시각</th><th></th></tr>${rows.join('')}</table></div></div>`;
 }
@@ -252,7 +257,7 @@ export function createOptDash(el, h = {}) {
   if (typeof ResizeObserver !== 'undefined') { let w0 = 0; new ResizeObserver(() => { if (el.clientWidth !== w0) { w0 = el.clientWidth; draw(); } }).observe(el); if (h.chart) { let cw = 0, ch = 0; new ResizeObserver(() => { const b = h.chart; if (b.clientWidth !== cw || b.clientHeight !== ch) { cw = b.clientWidth; ch = b.clientHeight; draw(); } }).observe(h.chart); } }
   if (typeof setInterval !== 'undefined') setInterval(() => { if (S && S.ended == null && !S.stopped && el.isConnected && el.offsetParent) draw(); }, 1000);   // 걸린 시간 갱신
   render(); renderBoard();
-  function stop() { if (S) { S.stopped = true; S.pauseAt = null; draw(); } }
+  function stop() { if (S) { S.stopped = true; S.pauseAt = null; stopTiles(S); draw(); } }
   // 일시정지한 시간은 걸린 시간에서 뺌
   function setPaused(on) { if (!S) return; if (on) S.pauseAt ??= performance.now(); else if (S.pauseAt) { S.t0 += performance.now() - S.pauseAt; S.pauseAt = null; } draw(); }
   // 고르기만 바뀜(실행 전) — 다시 그림. 실행 결과가 남아 있으면 그대로 두고 스위치만 갱신

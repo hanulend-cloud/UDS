@@ -31,7 +31,11 @@ export function overallFrac(stages, stage, frac) {
   return Math.min(1, (before + ws[i][1] * f) / total);
 }
 // 남은 시간 — 진행 10% 이상부터 경과 ÷ 진행률로 추정
-export const etaText = (elapsedMs, frac) => (frac >= 0.1 && frac < 1 ? `남은 약 ${Math.max(1, Math.round((elapsedMs * (1 - frac)) / frac / 1000))}초` : '');
+export const etaText = (elapsedMs, frac) => {   // 90 초 넘으면 분 단위(2026-11-12)
+  if (!(frac >= 0.1 && frac < 1)) return '';
+  const sec = Math.max(1, Math.round((elapsedMs * (1 - frac)) / frac / 1000));
+  return sec > 90 ? `남은 약 ${Math.round(sec / 60)}분` : `남은 약 ${sec}초`;
+};
 // ① 현재안 재사용 — 점진 계산이 같은 장면(집계 격자 G 동일)에서 노이즈 목표에 도달('done')했으면 { stats, eff }, 아니면 null
 export function reusableCurrent(snap, G) {
   const s = snap?.stats, eff = snap?.photometry?.eff;
@@ -281,7 +285,7 @@ export function milkyTableHtml(rows, chosen, tg = {}) {
 export function peekText(pk) {
   if (!pk) return '';
   const b = pk.best;
-  if (!b) return `참고: Milky 를 ${pk.cap} 보다 높여도 균일도가 오르지 않음`;
+  if (!b) return `참고: Milky ${pk.cap} 초과로 대략 계산해 봐도 균일도가 더 오르지 않음 — 확산도로는 여기까지`;
   return `참고: Milky ${b.milky}이면 길이 약 ${Math.round(b.Ulen * 100)}%${b.Uwid == null ? '' : ` · 폭 약 ${Math.round(b.Uwid * 100)}%`}, 광 효율 약 ${Math.round(b.eff * 100)}% (대략값 · 최적화에는 쓰지 않음)`;
 }
 export function loweredText(l, unchanged = false) {
@@ -445,8 +449,11 @@ export function resultViewHtml(r, { applied = null, effects = null, hist = null,
   const histBox = hist?.length ? `<div class="rs-hist"><div class="rs-h">지난 후보 <span class="mut">균일도 순 · 골라서 [적용]</span><span class="rs-hn mut">${hist.length}개</span></div>${histTableHtml(hist, tg.len, tg.wid, busy, { pick: 'ad' })}</div>` : '';
   if (!x) return `<div class="rs"><div class="rs-h mut">이번 결과 없음</div>${histBox}</div>`;
   const cards = `<div class="rs-cards">${changeCard('길이 균일도', x.cur?.Ulen, x.best?.Ulen, tg.len)}${changeCard('폭 균일도', x.cur?.Uwid, x.best?.Uwid, tg.wid)}${changeCard('광 효율', x.cur?.eff, x.best?.eff, NaN, true)}</div>`;
-  if (!r) return `<div class="rs">${cards}<div class="rs-vd ok"><b>✓ 적용됨</b> <span class="mut">${esc(applied.at ?? '')} · 되돌리기 전까지 유지</span></div>
+  if (!r) {   // 적용 뒤에도 판정·경고·다음 할 일 메모는 남김(2026-11-12 평가: 적용하면 메모가 사라짐)
+    const va = verdictOf(applied), effDrop = Number.isFinite(applied.cur?.eff) && Number.isFinite(applied.best?.eff) && applied.best.eff - applied.cur.eff <= -0.02 ? `<div class="rs-note warn">⚠ 광 효율 ${((applied.cur.eff - applied.best.eff) * 100).toFixed(1)}%p 감소 — 같은 광속이면 그만큼 어두워짐</div>` : '';
+    return `<div class="rs">${cards}<div class="rs-vd ok"><b>✓ 적용됨</b> <span class="mut">${esc(applied.at ?? '')} · 되돌리기 전까지 유지</span>${va?.[0] && va[0] !== 'ok' ? ` <span class="rs-lim">· ${esc(va[1])}</span>` : ''}</div>${effDrop}${notesLines(applied)}
     <div class="rs-btn"><button type="button" data-ad="revert" title="적용 전 값으로">↶ 되돌리기</button></div>${histBox}</div>`;
+  }
   const v = verdictOf(r), lim = limitText(r.reason);
   const warn = [r.clash > 0 ? `<div class="m3-clash" role="alert">LED 몸체가 부품과 겹침(${r.clash}개) — 적용 불가</div>` : '',
     r.best?.rows === 2 && r.cur?.rows !== 2 ? '<div class="rs-note warn">⚠ 2열 배치 = LED PCB 새로 설계</div>' : '',
@@ -454,7 +461,7 @@ export function resultViewHtml(r, { applied = null, effects = null, hist = null,
   const alt = r.unchanged && r.alt ? `<div class="rs-note">찾은 후보 ${fmtJudge(r.alt.Ulen)}/${fmtJudge(r.alt.Uwid)} — 지금보다 뚜렷이 낫지 않음</div>` : '';
   return `<div class="rs">${cards}<div class="rs-vd ${v[0]}"><b>${v[1]}</b> <span class="mut">${v[2]}</span>${lim ? ` <span class="rs-lim">· 한계: ${clip(lim, 40)}</span>` : ''}</div>
     ${warn}${alt}${notesLines(r)}
-    <div class="rs-btn">${applyBtn(r, 'LED 몸체가 부품과 겹침')}${altBtn(r)}${shapeDeepBtn(r)}${r.clash > 0 ? '' : `<button type="button" data-ad="continue" title="${r.unchanged ? '지금 설계 그대로' : '이 안을 적용한 뒤'}, 체크했지만 이번에 돌리지 않은 항목을 이어서 최적화">이 안에서 이어서 ▸</button>`}<span class="m3-ad-sp"></span>${r.shape ? '<button type="button" data-ad="step">STEP 내보내기</button>' : ''}<button type="button" data-ad="view" title="프로파일 비교 · Milky 표 · 전체 비교표">프로파일·표</button><button type="button" data-ad="cancel" title="이 결과 버리기">버리기</button></div>
+    <div class="rs-btn">${applyBtn(r, 'LED 몸체가 부품과 겹침')}${altBtn(r)}${shapeDeepBtn(r)}${r.clash > 0 ? '' : `<button type="button" data-ad="continue" title="${r.unchanged ? '지금 설계 그대로' : '이 안을 적용한 뒤'}, 체크했지만 이번에 돌리지 않은 항목을 이어서 최적화">이 안에서 이어서 ▸</button>`}<span class="m3-ad-sp"></span>${r.shape ? '<button type="button" data-ad="step">STEP 내보내기</button>' : ''}<button type="button" data-ad="view" title="프로파일 비교 · Milky 표 · 전체 비교표">프로파일·표</button><button type="button" data-ad="cancel" title="이 결과를 설계에 적용하지 않고 닫기 — 지난 후보 표에는 남음">적용 안 함</button></div>
     ${histBox}</div>`;
 }
 // 참고 문구·Milky 표는 접어 둠(2026-11-08) — 메인 카드는 판정·값·단추만

@@ -1477,3 +1477,5 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
   #m3-axes { top: auto; bottom: 30px; }
   .m3-section { left: 10px; right: auto; }
 }
+.om-kpi-note { font-size: 11px; margin: -4px 0 6px; }
+.fb-desc { font-size: 11px; line-height: 1.35; margin-bottom: 2px; }

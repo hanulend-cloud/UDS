@@ -164,7 +164,7 @@ ok(judgeText(0.8004, 0.8009).cls === 'ok' && judgeText(0.7999, 0.8).cls === 'bad
       ok(/형상만으로는 목표 미달/.test(miss) && /위치/.test(miss) && /Milky/.test(miss) && !/형상만으로는/.test(all) && !/형상만으로는/.test(pass) && !/형상만으로는/.test(other), '형상 미달 안내: 형상만 돌렸을 때 다음 항목을 알려 줌'); }
     const pk = { cap: 5, rows: [], best: { milky: 7, Ulen: 0.84, Uwid: 0.66, eff: 0.31 } };
     ok(/Milky 7.*길이 약 84%.*폭 약 66%.*광 효율 약 31%.*대략값/.test(peekText(pk)) && /최적화에는 쓰지 않음/.test(peekText(pk)), `참고 문구: ${peekText(pk)}`);
-    ok(/5 보다 높여도.*오르지 않음/.test(peekText({ cap: 5, rows: [], best: null })) && peekText(null) === '', '참고 문구: 이득 없음 · 없음');
+    ok(/Milky 5 초과.*더 오르지 않음/.test(peekText({ cap: 5, rows: [], best: null })) && peekText(null) === '', '참고 문구: 이득 없음 · 없음(5 초과로 대략 계산해 봤다는 뜻이 보이게, 2026-11-12)');
     ok(/Milky 7\.00? → 5/.test(loweredText({ from: 7, to: 5 }, false)) && /낫지 않음/.test(loweredText({ from: 7, to: 5 }, true)) && loweredText(null) === '' && /현재 값은 대략값/.test(loweredText({ from: 7, to: 5, rough: true }, false)) && !/대략값/.test(loweredText({ from: 7, to: 5 }, false)), `낮춤 문구: ${loweredText({ from: 7, to: 5 }, false)}`);
     const base = { best: { Ulen: 0.7, Uwid: 0.7 }, cur: { Ulen: 0.6, Uwid: 0.6 }, reason: 'x', targets: {} };
     const hBad = resultLineHtml({ ...base, feasible: false, peek: pk }), hOk = resultLineHtml({ ...base, feasible: true, peek: pk }), hLow = resultLineHtml({ ...base, feasible: true, lowered: { from: 7, to: 5 } });
@@ -1007,4 +1007,47 @@ done();
   okW(clampRect({ x: 100, y: 0, w: 400, h: 300 }, 1600, 900, 56).y === 56 && fitRect({ x: 100, y: 0, w: 400, h: 300 }, 1600, 900, 56).y === 56, '위 경계 = 상단 바 아래');
   okW(clampRect({ x: 100, y: 0, w: 400, h: 300 }, 1600, 900).y === 8, '위 경계를 안 주면 예전처럼 8');
   okW(fitRect({ x: 0, y: 0, w: 400, h: 2000 }, 1600, 900, 56).h <= 900 - 56 - 8, '높이도 상단 바 아래 공간에 맞춤');
+}
+{ // 최종 판정(몇 분)에도 남은 시간 — 90초 넘으면 분 단위(2026-11-12 평가: 검증 2~3분 동안 남은 시간 없음)
+  const { etaText } = await import('../src/ui/m3/autodesign-panel.js');
+  console.log(etaText(120000, 0.5) === '남은 약 2분' && etaText(60000, 0.5) === '남은 약 60초' ? 'PASS 남은 시간 분 단위' : (process.exitCode = 1, `FAIL 남은 시간 분 단위: ${etaText(120000, 0.5)}`));
+  const { readFileSync } = await import('node:fs'), app = readFileSync(new URL('../src/ui/m3/app.js', import.meta.url), 'utf8');
+  console.log(!/\/몇 분\/\.test\(text\) \? ''/.test(app) ? 'PASS 몇 분 걸리는 단계에도 남은 시간 표시' : (process.exitCode = 1, 'FAIL 몇 분 단계에서 남은 시간을 숨김'));
+}
+{ // 실행 중 큰 숫자 = 대략값 안내(2026-11-12 평가: 실행 중 51.3/37.7 → 최종 53.6/46.1 이유 없음)
+  const { monitorHtml, STAGES } = await import('../src/ui/m3/opt-dash.js');
+  const tiles = Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', evals: [] }])); tiles.milky = { status: 'run', frac: 0.4, evals: [] };
+  const base = { tgLen: 0.8, tgWid: 0.8, before: { Ulen: 0.2, Uwid: 0.2 }, tiles, seq: [{ k: 'milky', Ulen: 0.5, Uwid: 0.4 }] };
+  const run = monitorHtml(base, 5), end = monitorHtml({ ...base, ended: true, endSec: 9, final: { Ulen: 0.53, Uwid: 0.46 } }, 9);
+  console.log(/om-kpi-note/.test(run) && /대략값/.test(run) && /정밀 재계산/.test(run) && /목표에 더 모자란/.test(run) && !/om-kpi-note/.test(end) ? 'PASS 실행 중 큰 숫자 = 대략값 · 최고 기준 안내' : (process.exitCode = 1, 'FAIL 대략값 안내'));
+}
+{ // 항목 카드 한 줄 설명(2026-11-12 평가: 무엇을 얼마나 바꾸는지 없음)
+  const { factorBoardHtml, STAGES } = await import('../src/ui/m3/opt-dash.js');
+  const tiles = Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', evals: [] }]));
+  const h = factorBoardHtml({ tgLen: 0.8, tgWid: 0.8, tiles }, { on: {} }, (k) => ({ on: true, box: `<input type="checkbox" data-ad="${k}">`, opt: '', why: '' }));
+  const d = [...h.matchAll(/class="fb-desc[^"]*">([^<]*)</g)].map((x) => x[1]);
+  console.log(d.length === 3 && /LED/.test(d.join()) && /입광면/.test(d.join()) && /0~5/.test(d.join()) ? `PASS 항목 카드 설명 3개` : (process.exitCode = 1, `FAIL 항목 카드 설명: ${d.join(' | ')}`));
+}
+{ // 중지하면 돌던 항목 = '중지됨'(2026-11-12 평가: 중지 뒤에도 '진행 90.0%' 가 남음)
+  const { stopTiles, factorBoardHtml, STAGES } = await import('../src/ui/m3/opt-dash.js');
+  const tiles = Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', evals: [] }])); tiles.milky = { status: 'run', frac: 0.9, evals: [] }; tiles.position = { status: 'done', frac: 1, evals: [] };
+  const S = { tgLen: 0.8, tgWid: 0.8, tiles }; stopTiles(S);
+  const h = factorBoardHtml(S, { on: {} }, (k) => ({ on: true, box: '', opt: '', why: '' }));
+  console.log(S.tiles.milky.status === 'stop' && /중지됨/.test(h) && !/진행 90/.test(h) && S.tiles.position.status === 'done' ? 'PASS 중지 = 돌던 항목 중지됨' : (process.exitCode = 1, `FAIL 중지 표시: ${S.tiles.milky.status}`));
+}
+{ // 적용 뒤에도 판정·참고 메모가 남음 · 적용한 후보는 '적용됨'(눌러도 같은 것 다시 적용 안 함)(2026-11-12 평가)
+  const { resultViewHtml } = await import('../src/ui/m3/autodesign-panel.js');
+  const applied = { at: '12:00 적용', feasible: false, stages: { milky: true }, cur: { Ulen: 0.2, Uwid: 0.2, eff: 0.18 }, best: { Ulen: 0.536, Uwid: 0.461, eff: 0.115 }, targets: { len: 0.8, wid: 0.8 }, reason: '' };
+  const hist = [{ label: 'Milky 4.50', kind: 'final', Ulen: 0.536, Uwid: 0.461, eff: 0.115, applied: true }];
+  const h = resultViewHtml(null, { applied, hist });
+  console.log(/적용됨/.test(h) && /남은 차이/.test(h) && /광 효율 .*감소/.test(h) && /data-v="0" disabled/.test(h) ? 'PASS 적용 뒤 메모 유지 · 적용한 후보 단추 잠금' : (process.exitCode = 1, 'FAIL 적용 뒤 메모·후보 단추'));
+}
+{ // ⑤ 단계 글: 적용한 뒤 = '적용됨 · 목표 미달'(2026-11-12 평가: '필요 — 목표 미달' 로 돌아가 적용이 안 된 줄 앎)
+  const { flowState } = await import('../src/ui/m3/command-bar.js'), M = { observe: { targetLen: 0.8, targetWid: 0.8 } };
+  const f = flowState({ state: 'done' }, { Ulen: 0.536, Uwid: 0.461 }, M, { applied: true }), g = flowState({ state: 'done' }, { Ulen: 0.85, Uwid: 0.9 }, M, { applied: true });
+  console.log(f.opt.text === '적용됨 · 목표 미달' && f.opt.cls === 'need' && g.opt.text === '적용됨 · 목표 통과' && g.opt.done ? 'PASS ⑤ 적용됨 표시' : (process.exitCode = 1, `FAIL ⑤ 적용됨: ${f.opt.text} / ${g.opt.text}`));
+}
+{ // 문구 정리(2026-11-12 평가): '버리기' → '적용 안 함', 일시정지 '조각' 없음
+  const { readFileSync } = await import('node:fs'), pn = readFileSync(new URL('../src/ui/m3/autodesign-panel.js', import.meta.url), 'utf8'), ap = readFileSync(new URL('../src/ui/m3/app.js', import.meta.url), 'utf8');
+  console.log(!/>버리기</.test(pn) && />적용 안 함</.test(pn) && !/조각까지만 받음/.test(ap) ? 'PASS 문구: 적용 안 함 · 조각 없음' : (process.exitCode = 1, 'FAIL 문구 정리'));
 }

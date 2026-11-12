@@ -44,7 +44,7 @@ import { renderAutoPanel, seedFits, milkyTable, stageAvailability, clampCap, ove
 import { ledHeightRange, heightCandidates, catalogOf, finishCandidatesFor, setReflMaterial, partFinishEdit } from '../../engine/mech3d/housing-led.js';
 import { migrateFinishCatalog, reflectPatch, copyAsUser, entryFromForm, addSamples, parsePercents, uniqueReflId } from '../../model/reflect-db.js';
 import { intersectRay } from '../../engine/mech3d/bvh.js';
-import { runAutoDesign, shapeTotal, shapeBudget } from '../../engine/mech3d/autodesign.js';
+import { runAutoDesign, shapeTotal, shapeBudget, sameDesign } from '../../engine/mech3d/autodesign.js';
 import { milkyRows } from '../../engine/mech3d/milky-search.js';
 import { candidateGrid } from '../../engine/mech3d/basis.js';
 import { ledAtS, clampRowGap, rowGapOptions, wrapS } from '../../engine/mech3d/placement.js';
@@ -758,7 +758,7 @@ function adStop() { const st = adState(); if (!st.running || !st.runner) return;
 function adPause(on) {
   const st = adState(); if (!st.running || !st.runner) return;
   st.paused = on; on ? st.runner.pause() : st.runner.resume(); A.optDash?.setPaused(on);
-  setStatus(on ? '기구 최적화 일시정지 — 지금 계산 중인 조각까지만 받음' : '기구 최적화 이어서 실행'); renderAuto();
+  setStatus(on ? '기구 최적화 일시정지 — 지금 계산하던 부분까지만 끝내고 멈춤' : '기구 최적화 이어서 실행'); renderAuto();
 }
 function adCtl(k) {
   const st = adState();
@@ -1138,7 +1138,7 @@ async function adRun(opt = {}) {
   let shapeI = 0, shapeScr = 0, shapeTot = 1;
   const progress = (stage, frac, text) => {   // 전체 진행률(단계 무게) + 남은 시간
     if (A !== a || R.stopped) return;
-    const f = Math.max(st.running?.frac ?? 0, overallFrac(stages, stage, frac)), eta = /몇 분/.test(text) ? '' : etaText(R.now() - t0, f);
+    const f = Math.max(st.running?.frac ?? 0, overallFrac(stages, stage, frac)), eta = etaText(R.now() - t0, f);   // 몇 분 걸리는 최종 판정에도 남은 시간(2026-11-12 평가)
     const tx = opt.added?.length ? `보완 ${opt.step ?? ''} (${opt.added.join(' + ')}) · ${text}` : text;
     A.optDash?.progress(stage, frac, tx, f);
     st.running = { frac: f, text: eta ? `${tx} · ${eta}` : tx }; renderAuto();
@@ -1392,6 +1392,7 @@ function adApply() {
   if (dzCh) A.store.update('light', (m) => { applyDz(m, d.dz, r.ctx.line.frame.d); });   // STEP: 발광점도 같은 이동(재인식과 같음)
   A.hist?.release();
   A.adSeedSealed = true;
+  for (const x of st.hist ?? []) x.applied = x.kind === 'final' && !!x.design && sameDesign(x.design, d);   // 지난 후보 표: 적용한 안 = '적용됨'(2026-11-12)
   setStatus(undo.milky || undo.manual || undo.stepVirt || undo.shape || undo.finish || undo.dz ? (A.adSeed || A.adSeedLine ? '적용함 — 최종 판정 값을 화면에 표시' : '적용함 — 다시 계산 중') : '적용할 변경이 없음(지금 설계와 같음)');
   renderAuto();
 }
@@ -1462,6 +1463,8 @@ function adRevert() {
   if (u.shape) A.store.update('material', (m) => { if (u.shape[1]) m.parts[u.shape[0]].shapeMod = adClone(u.shape[1]); else delete m.parts[u.shape[0]].shapeMod; applyPartMods(m.parts); m.contacts = redetectContacts(m.contacts); });
   if (u.finish) A.store.update('material', (m) => { const q = { ...m.parts[u.finish[0]], finish: adClone(u.finish[1]) }; if (u.finish[2]) q.coating = u.finish[2]; else delete q.coating; m.parts[u.finish[0]] = q; });
   if (u.dz) A.store.update('light', (m) => { if (u.dz.step) Object.assign(m.light.step, adClone(u.dz.step)); else m.light.manual.pcb.depth = u.dz.depth; });
+  for (const x of st.hist ?? []) x.applied = false;
+  dashReset(); setStatus('되돌림 — 적용 전 설계로 다시 계산합니다');   // 지난 실행의 '✓ 완료'·'적용함' 문구가 남지 않게(2026-11-12 평가)
   renderView(); renderAuto();
 }
 function adStep() {
@@ -1975,7 +1978,7 @@ function cmdHandlers() {
     // 흐름 4·5단계 단추 — 해당 칸을 보여 주고 잠깐 강조(모니터가 열려 있으면 그 안에서)
     onSim: () => A.results.toggleBig(),
     onOpt: () => { if (!monitor) return; if (monitor.isOpen()) monitor.close(); else { monitor.open(); monitor.expand(); } },   // ⑤ 단추 = 내용이 보이게(지난번 접어 둔 상태로 열지 않음)   // ⑤ 기구 최적화 창 열고 닫기(기본 화면에는 최적화 칸 없음)
-    adFlow: () => ({ running: !!A?.ad?.running, result: !!A?.ad?.result }),
+    adFlow: () => ({ running: !!A?.ad?.running, result: !!A?.ad?.result, applied: !!A?.ad?.undo }),   // undo 가 있으면 적용한 상태(되돌리면 없어짐)
   };
 }
 

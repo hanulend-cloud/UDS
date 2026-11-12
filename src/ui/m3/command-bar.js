@@ -28,6 +28,7 @@ export function flowState(calc, stats, M, ad = {}) {
   const opt = ad.running ? { text: '진행 중', cls: 'run', done: false }
     : ad.result ? { text: '결과 확인 · 적용', cls: 'run', done: false }
     : !sim.done ? { text: '시뮬레이션 뒤', cls: '', done: false }
+    : ad.applied ? (pass ? { text: '적용됨 · 목표 통과', cls: 'ok', done: true } : { text: `적용됨 · ${J === 'near' ? '목표 근처' : '목표 미달'}`, cls: J === 'near' ? 'near' : 'need', done: false })   // 적용한 뒤(2026-11-12)
     : pass ? { text: '불필요(목표 통과)', cls: 'ok', done: true }
     : J === 'near' ? { text: '선택 — 목표 근처', cls: 'near', done: false }
     : { text: '필요 — 목표 미달', cls: 'need', done: false };
