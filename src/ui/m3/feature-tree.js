@@ -27,21 +27,20 @@ export function treeNodes(M, S, lay, leds = []) {
   // 관측면 = 맨 위(무엇을 어떻게 맞출지 먼저, 부품·광원과 성격이 달라 밑줄로 구분) · 목표는 관측면 속성에 포함(2026-11-03)
   const ln = S.line, goal = `목표 ${Math.round(O.targetLen * 100)}/${Math.round(O.targetWid * 100)}%`;
   node('obs', '◎ 관측면', ln ? `${LINE_KIND[ln.kind] ?? ln.kind} ${ln.length.toFixed(0)}×${ln.width.toFixed(0)} mm · ${goal}` : S.lineErr && O.faces.length ? '라인 인식 실패' : O.faces.length ? `면 ${O.faces.length}개 · 인식 중` : '미지정 — 클릭', false, '', undefined, { top: true });
-  node('parts', '부품', String(M.parts.length + (stepPcb(L) ? 1 : 0)), false, '', hid.size || S.hideLeds || hl.size || S.hidePcb ? 'all' : undefined, { fold: fold('parts') ? 'closed' : 'open' });
+  node('parts', '부품', String(M.parts.filter((p) => p.role !== 'light').length + (stepPcb(L) ? 1 : 0)), false, '', hid.size || S.hideLeds || hl.size || S.hidePcb ? 'all' : undefined, { fold: fold('parts') ? 'closed' : 'open' });
   // 그룹(2026-10-30): 사용자 그룹(M.groups) = 첫 부품 자리에 머리 + 펼치면 부품(들여쓰기 2단) · 그룹 밖 광원으로 옮긴 부품 = 자동 묶음 '_light'(기본 접힘)
   const gOf = new Map(), G = [...(M.groups ?? [])];
   for (const g of G) for (const i of g.parts) if (i < M.parts.length && !gOf.has(i)) gOf.set(i, g);
-  const lightFree = M.parts.map((p, i) => i).filter((i) => M.parts[i].role === 'light' && !gOf.has(i));
-  if (lightFree.length) { const g = { id: '_light', name: '광원으로 옮긴 부품', parts: lightFree, auto: true }; G.push(g); for (const i of lightFree) gOf.set(i, g); }
+  // 광원으로 옮긴 부품(role 'light') = 부품 리스트에 안 보임(2026-11-12) — 같은 LED 가 아래 광원 노드에 있음. 해제도 광원 노드에서
   const shown = new Set();
   // 도면에서 광원으로 옮긴 부품 = '→ 광원'(보기는 광원 그룹이 함) · 추적 제외 = '제외 ·' 접두
   const partNode = (p, i, depth) => node(`part:${i}`, p.name, p.role === 'light' ? '→ 광원' : `${p.untrace ? '제외 · ' : ''}${p.shapeMod ? '형상 변경 · ' : ''}${partBadge(p)}`, true, p.role === 'light' ? 'led' : p.untrace ? 'off' : p.material.kind, p.role === 'light' ? undefined : hid.has(i) ? 'off' : 'on', { depth, strike: !!p.untrace, bstyle: badgeStyle(p) });   // 빛 계산 제외 = 취소선
   if (!fold('parts')) M.parts.forEach((p, i) => {
-    if (p.role === 'pcb') return;   // PCB 는 아래 PCB 메뉴에
+    if (p.role === 'pcb' || p.role === 'light') return;   // PCB 는 아래 PCB 메뉴에 · 광원으로 옮긴 부품은 광원 노드에
     const g = gOf.get(i);
     if (!g) { partNode(p, i, 1); return; }
     if (shown.has(g.id)) return; shown.add(g.id);
-    const mem = g.parts.filter((k) => k < M.parts.length), allHid = mem.length && mem.every((k) => hid.has(k)), closed = fold(g.id, !!g.auto);
+    const mem = g.parts.filter((k) => k < M.parts.length && M.parts[k].role !== 'light'), allHid = mem.length && mem.every((k) => hid.has(k)), closed = fold(g.id, !!g.auto);
     node(`group:${g.id}`, g.name, String(mem.length), true, 'group', g.auto ? undefined : allHid ? 'off' : 'on', { fold: closed ? 'closed' : 'open', depth: 1, auto: !!g.auto, strike: !g.auto && mem.length > 0 && mem.every((k) => M.parts[k].untrace) });
     if (!closed) for (const k of mem) if (M.parts[k].role !== 'pcb') partNode(M.parts[k], k, 2);
   });

@@ -763,10 +763,11 @@ done();
   const P = (name, role) => ({ ...setPartMaterial(defaultPart(0, name, 1), 'opaque'), ...(role ? { role } : {}) });
   const MM = { ...M, parts: [P('A'), P('B'), P('C'), P('D'), P('L1', 'light'), P('L2', 'light')], groups: [{ id: 'g1', name: '커버류', parts: [1, 2] }] };
   const ids = (S) => treeNodes(MM, { node: null, line: null, ...S }).map((n) => n.id).filter((i) => i.startsWith('part') || i.startsWith('group'));
-  // 그룹은 첫 부품 자리에 · 펼침 = 부품 들여쓰기(depth 2) · 접힘 = 숨김 · 광원으로 옮긴 부품 = 자동 묶음(기본 접힘)
+  // 그룹은 첫 부품 자리에 · 펼침 = 부품 들여쓰기(depth 2) · 접힘 = 숨김 · 광원으로 옮긴 부품 = 부품 리스트에 안 보임(아래 광원 노드에 있음, 2026-11-12)
   const N = treeNodes(MM, { node: null, line: null }), g = N.find((n) => n.id === 'group:g1');
-  const okT = ids({}).join() === 'parts,part:0,group:g1,part:1,part:2,part:3,group:_light' && g.fold === 'open' && g.badge === '2' && N.find((n) => n.id === 'part:1').depth === 2
-    && ids({ fold: { g1: true } }).join() === 'parts,part:0,group:g1,part:3,group:_light' && ids({ fold: { _light: false } }).includes('part:5') && ids({ fold: { parts: true } }).join() === 'parts';
+  const okT = ids({}).join() === 'parts,part:0,group:g1,part:1,part:2,part:3' && g.fold === 'open' && g.badge === '2' && N.find((n) => n.id === 'part:1').depth === 2 && N.find((n) => n.id === 'parts').badge === '4'
+    && ids({ fold: { g1: true } }).join() === 'parts,part:0,group:g1,part:3' && ids({ fold: { parts: true } }).join() === 'parts'
+    && treeNodes({ ...MM, groups: [{ id: 'g2', name: '섞임', parts: [3, 4] }] }, { node: null, line: null }).find((n) => n.id === 'group:g2')?.badge === '1';
   // 그룹 만들기: 다른 그룹에서 빼고, 빈 그룹은 지움 · 풀기 · 멤버
   const a = makeGroup(MM.groups, [2, 3], '새 그룹'), b = ungroup(a.groups, 'g1');
   const okG = a.groups.find((x) => x.id === 'g1').parts.join() === '1' && a.groups.find((x) => x.id === a.id).parts.join() === '2,3' && b.length === 1 && makeGroup([{ id: 'g1', name: 'x', parts: [1] }], [1], 'y').groups.length === 1
