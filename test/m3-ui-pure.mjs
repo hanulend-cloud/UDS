@@ -1,5 +1,9 @@
 // CAD UI 순수 도우미(DOM 없이): node test/m3-ui-pure.mjs
-import { treeNodes, partBadge, renderFeatureTree, treeHtml, toggleVisibility, esc as escT } from '../src/ui/m3/feature-tree.js';
+import { treeNodes as treeNodes0, partBadge, renderFeatureTree as renderFeatureTree0, treeHtml as treeHtml0, toggleVisibility, esc as escT } from '../src/ui/m3/feature-tree.js';
+// 예전 시험은 광원이 펼쳐진 상태를 봄 — 2026-11-12 부터 광원은 처음 접힘이라 시험에서는 펼친 상태로 둠(접힘 시험은 맨 아래 '구성 트리')
+const lightOpen = (S = {}) => ({ ...S, fold: { light: false, ...(S.fold ?? {}) } });
+const treeNodes = (M, S, ...r) => treeNodes0(M, lightOpen(S), ...r), treeHtml = (M, S, ...r) => treeHtml0(M, lightOpen(S), ...r);
+const renderFeatureTree = (el, M, S, ...r) => renderFeatureTree0(el, M, lightOpen(S), ...r);
 import { judgeText, lumCard, needText, fmtU, buildLut, NO_DATA_RGB, DEFAULT_GUIDE } from '../src/ui/m3/results-panel.js';
 import { checkLabels, statusWord, statusIcon, checkAria, isActivateKey, esc as escS } from '../src/ui/m3/status-bar.js';
 import { ramp, NO_DATA } from '../src/ui/m3/colormap.js';
@@ -445,7 +449,7 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
   ok(big.changed && big.nOrig === 40 && big.nCur === 18 && !big.pitchCur.uniform && h.includes('원설계에서 변경됨') && h.includes('40개 · 피치 10 mm') && h.includes('18개 · 피치 18~25.8 mm (간격 불규칙)'), `실제 도면: ${pitchText(big.pitchOrig)} → ${pitchText(big.pitchCur)}`);
   ok(big.moved + big.added === 18 && big.removed + big.moved === 40, `개수 맞음: 옮김 ${big.moved} · 추가 ${big.added} · 없어짐 ${big.removed}`);
   ok(pitchOf(grid(2, 7)).uniform && pitchOf(grid(1, 7)).p === null && ledChangeHtml(null) === '', '간격 요약 · 기준 없음');
-  const { treeNodes } = await import('../src/ui/m3/feature-tree.js');
+  // treeNodes = 위 lightOpen 감싸개
   const M = { parts: [], groups: [], contacts: [], observe: { faces: [], targetLen: 0.8, targetWid: 0.8 }, light: { kind: 'manual', spec: { beam: 120 }, manual: { count: 18, pitch: 22.7, rows: 1 } } };
   const nd = treeNodes(M, { hidden: [], fold: {}, multi: [], ledChange: big }, undefined, []).find((x) => x.id === 'leds');
   ok(nd.chg && JSON.stringify(nd).includes('원설계 40 → 18개'), '트리: 변경 표시');
@@ -480,7 +484,7 @@ ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCa
 { // 부품 리스트 정리(2026-11-03): 관측면 맨 위 · 목표 노드 없음 · LED 줄 = 원설계 대비 Δx Δy Δz 만
   const { ledDeltaXYZ, ledChange } = await import('../src/ui/m3/led-change.js');
   const N0 = treeNodes(M, { node: null, line: { kind: 'line', length: 100, width: 7 }, hidden: [], hideLeds: false });
-  ok(N0[0].id === 'obs' && N0[0].top && N0[0].badge.includes('100×7 mm') && N0[0].badge.includes('목표') && !N0.some((n) => n.id === 'target') && N0.filter((n) => n.id === 'obs').length === 1, `관측면 맨 위 · 목표 포함: ${N0[0].badge}`);
+  ok(N0[0].id === 'obs' && N0[0].grp0 && N0[0].badge.includes('100×7 mm') && N0[0].badge.includes('목표') && !N0.some((n) => n.id === 'target') && N0.filter((n) => n.id === 'obs').length === 1, `관측면 맨 위 · 목표 포함: ${N0[0].badge}`);
   const c = ledChange([{ s: 0, w: 0, pos: [0, 0, 0] }, { s: 10, w: 0, pos: [10, 0, 0] }], [{ s: 0, w: 0, pos: [0, 0, 0], n: 0 }, { s: 12, w: -1, pos: [12, 0, -1], n: 1 }, { s: 40, w: 0, pos: [40, 0, 0], n: 2 }]);
   ok(ledDeltaXYZ(c.rows[0]) === '' && ledDeltaXYZ(c.rows[1]) === 'Δx +2 Δz −1' && ledDeltaXYZ(c.rows[2]) === '추가' && ledDeltaXYZ(null) === '', `Δ 표시: ${ledDeltaXYZ(c.rows[1])}`);
   ok(ledDeltaXYZ({ state: 'same', d: [0, 0, 3] }) === 'Δz +3', '높이만 바뀌어도 표시');
@@ -759,7 +763,7 @@ done();
   const base = { feasible: false, reason: '', targets: { len: 0.8, wid: 0.8 }, cur: { milky: 1, Ulen: 0.6, Uwid: 0.6, eff: 0.1 }, best: { milky: 2, Ulen: 0.7, Uwid: 0.6, eff: 0.09 } };
   const a = resultLineHtml(base), b = resultLineHtml({ ...base, unchanged: true }), c = resultLineHtml({ ...base, clash: 2 });
   console.log(a.includes('data-ad="continue"') && b.includes('지금 설계 그대로') && !c.includes('data-ad="continue"') ? 'PASS 결과 카드 [이 안에서 이어서] — 현재안 유지도(적용 없이), 겹침 = 없음' : (process.exitCode = 1, 'FAIL 이어서 단추')); }
-{ const { treeNodes, makeGroup, ungroup, groupMembers, toggleVisibility } = await import('../src/ui/m3/feature-tree.js');
+{ const { makeGroup, ungroup, groupMembers, toggleVisibility } = await import('../src/ui/m3/feature-tree.js');
   const P = (name, role) => ({ ...setPartMaterial(defaultPart(0, name, 1), 'opaque'), ...(role ? { role } : {}) });
   const MM = { ...M, parts: [P('A'), P('B'), P('C'), P('D'), P('L1', 'light'), P('L2', 'light')], groups: [{ id: 'g1', name: '커버류', parts: [1, 2] }] };
   const ids = (S) => treeNodes(MM, { node: null, line: null, ...S }).map((n) => n.id).filter((i) => i.startsWith('part') || i.startsWith('group'));
@@ -829,7 +833,7 @@ done();
   ok(b.node === 'obs' && b.pick === null, `이미 지정 = 메뉴만 (${JSON.stringify(b)})`);
   ok(c.pick === null && d.pick === null, '대기 중 다시 누름 = 끝내기 · 다른 클릭 대기도 끝냄'); }
 { // 부품 리스트(2026-11-11): 소재 칸만 3D 색 배경, 이름은 그대로 · 계산 제외는 색 없이 흐리게(k-off)
-  const { treeHtml } = await import('../src/ui/m3/feature-tree.js'), { defaultLight, defaultObserve } = await import('../src/engine/mech3d/defs.js');
+  const { defaultLight, defaultObserve } = await import('../src/engine/mech3d/defs.js');
   const M = { parts: [{ name: 'A', material: { kind: 'milky', milky: 2 } }, { name: 'B', material: { kind: 'milky', milky: 2 }, untrace: true }], light: defaultLight(), observe: defaultObserve(), groups: [] };
   const h = treeHtml(M, { node: null, line: null }), a = h.match(/data-node="part:0">.*?<\/div>/s)?.[0] ?? '', b = h.match(/data-node="part:1">.*?<\/div>/s)?.[0] ?? '';
   ok(/class="m3-badge k-milky" style="background:#[0-9a-f]{6};color:#[0-9a-f]{6}"/.test(a) && !/m3-lbl"[^>]*style/.test(a), `소재 칸만 3D 색: ${a.slice(-120)}`);
@@ -842,7 +846,7 @@ done();
     && k({ selPart: 2, hidden: [2] }) === 'show,all' && k({ isLed: true }) === 'led' && k({ hideLeds: true }) === 'led,all' && k({}) === '';
   console.log(ok3 ? 'PASS 3D 우클릭 메뉴' : (process.exitCode = 1, `FAIL 3D 우클릭 메뉴 ${k({ part: 1 })} | ${k({ part: 1, multi: [0, 1] })} | ${k({ selPart: 2, hidden: [2] })}`)); }
 { // LED 한 개씩 보기·취소선·제목(2026-11-02)
-  const { toggleLed, viewCtxItems, treeNodes, treeHtml, treeHead, toggleVisibility: tv } = await import('../src/ui/m3/feature-tree.js');
+  const { toggleLed, viewCtxItems, treeHead, toggleVisibility: tv } = await import('../src/ui/m3/feature-tree.js');
   const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b), okL = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
   okL(eq(toggleLed(1, [0, 1, 2], [], false), { hiddenLeds: [1], hideLeds: false }) && eq(toggleLed(1, [0, 1, 2], [1], false).hiddenLeds, []), 'LED 한 개 끄기·켜기');
   okL(eq(toggleLed(1, [0, 1, 2], [], true), { hiddenLeds: [0, 2], hideLeds: false }) && eq(toggleLed(1, [0, 1, 2], [], false, true).hiddenLeds, [0, 2]), '전체 끔에서 누름 · Shift = 그 LED 만');
@@ -860,7 +864,7 @@ done();
   okL(treeNodes(M0, { node: null, hidden: [], fold: { leds: true } }, undefined, rows).every((x) => !x.id.startsWith('led:')), 'LED 접기');
   okL(treeNodes(M0, { node: null, hidden: [] }, undefined, Array.from({ length: 31 }, (_, i) => ({ n: i, rank: i + 1, s: i }))).every((x) => !x.id.startsWith('led:')), 'LED 31개 = 처음엔 접힘');
   const H = treeHtml(M0, { node: null, hidden: [] }, undefined, rows);
-  okL(/class="m3-node[^"]* untr"[^>]*data-node="part:0"/.test(H) && treeHead().includes('부품 리스트') && !treeHead().includes('설계 트리'), 'untr 클래스 · 제목 부품 리스트'); }
+  okL(/class="m3-node[^"]* untr"[^>]*data-node="part:0"/.test(H) && treeHead().includes('구성') && !treeHead().includes('설계 트리'), 'untr 클래스 · 제목 구성'); }
 { // 우클릭 빛 계산 제외(2026-11-02)
   const { untraceItem, treeCtxItems, viewCtxItems } = await import('../src/ui/m3/feature-tree.js');
   const okU = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
@@ -926,3 +930,18 @@ done();
   const { readFileSync } = await import('node:fs'), view = readFileSync(new URL('../src/ui/mech3d-view.js', import.meta.url), 'utf8');
   const mat = view.match(/obsMesh = new THREE\.Mesh\(g, new THREE\.MeshBasicMaterial\(\{([^}]*)\}/)?.[1] ?? '';
   console.log(/transparent:\s*true/.test(mat) ? 'PASS 관측면 색지도: 투명 부품 위에 그림' : (process.exitCode = 1, `FAIL 관측면 색지도 재질 ${mat}`)); }
+{ // 구성 트리(2026-11-12 화면 다시 그리기 3단계): 관측면·부품·광원 = 같은 단계 묶음(아이콘·개수) · 광원은 처음 접힘(접혀도 LED 개수 보임)
+  const okG = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
+  const { treeNodes: tn, treeHtml: th, treeHead: hd } = await import('../src/ui/m3/feature-tree.js');
+  const N = tn(M, { node: null, line: { kind: 'line', closed: false, length: 116, width: 16 } });
+  const top = N.filter((n) => n.grp0);
+  okG(top.map((n) => n.id).join() === 'obs,parts,light' && top.every((n) => n.icon && !n.child), `같은 단계 묶음: ${top.map((n) => n.id).join()}`);
+  okG(N[0].label === '관측면' && !N.some((n) => n.top), '관측면 이름에 기호 없음 · 밑줄 구분 없음');
+  const lt = N.find((n) => n.id === 'light');
+  okG(lt.fold === 'closed' && !N.some((n) => n.id === 'leds') && /LED ×10/.test(lt.badge), `광원 처음 접힘 · 배지에 개수: ${lt.badge}`);
+  const open = tn(M, { node: null, line: null, fold: { light: false } });
+  okG(open.some((n) => n.id === 'leds') && !/LED ×/.test(open.find((n) => n.id === 'light').badge), '펼치면 LED 줄이 따로 보이고 배지엔 개수 없음');
+  okG(tn(M, { node: 'leds', line: null }).some((n) => n.id === 'leds'), 'LED 를 고르면(3D·트리) 광원이 접혀 있어도 펼쳐 보임');
+  const H = th(M, { node: null, line: null });
+  okG(/m3-node[^"]* g0[^"]*"[^>]*data-node="obs"/.test(H) && /class="m3-gi[^"]*"/.test(H) && hd().includes('구성'), 'HTML: 묶음 줄(g0) · 아이콘 · 제목 구성');
+}

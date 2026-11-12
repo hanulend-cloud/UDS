@@ -35,5 +35,12 @@
 - `src/ui/theme.js` `themeButton(t)` (시험 `test/ui-theme.mjs`), `src/ui/m3/app.js` `toggleTheme()` = 3D 보기 단추·메뉴와 같은 동작
 - `src/main.js`: `<html data-theme>` 를 지켜보며 ☀/☾ 모양 맞춤
 
-## 3~7단계
+## 3단계 — 왼쪽 구성 트리 + 단계 막대 (완료)
+- `src/ui/m3/feature-tree.js`: 관측면·부품·광원 = `grp0` 묶음(아이콘 `GI`), 제목 '구성', 광원 기본 접힘(배지 `LED ×n · 종류`), LED 를 고르면 펼침(직접 접고 편 것이 우선)
+- `src/ui/m3/app.js` onFold: 광원 기본값 반영
+- `styles.css`: `.m3-node.g0` 묶음 줄(배지 길면 줄바꿈), 단계 막대 높이·상태색 토큰
+- 시험: `test/m3-ui-pure.mjs` 끝 '구성 트리' 블록, 예전 시험은 `lightOpen` 감싸개로 펼친 상태
+- 참고: `test:mech3d` 의 mech3d-autodesign 실패 3건은 이 작업 전부터 있음(엔진 쪽)
+
+## 4~7단계
 설계 문서의 단계 2~7 을 같은 형식(파일·시험·확인·커밋)으로, 앞 단계가 끝난 뒤 이 문서에 덧붙여 진행한다.

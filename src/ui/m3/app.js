@@ -2081,7 +2081,7 @@ function renderAll(tag = 'all') {
       if (x.pick === 'mpcb' && id !== 'pcbs') x.pick = null;   // PCB 메뉴를 벗어나면 수동 선택 끝(버튼이 안 보이는데 클릭이 PCB 를 바꾸지 않게)
     }),
     onEye: (id, only) => st.update('view', (m, x) => Object.assign(x, id === 'pcbs' ? togglePcb(m, x) : id.startsWith('led:') ? toggleLed(+id.slice(4), ledsNow().list.map((it) => it.n), x.hiddenLeds, x.hideLeds, only) : toggleVisibility(id, only, m.parts.length, x.hidden, x.hideLeds, id.startsWith('group:') ? groupMembers(m, id.slice(6)) : []))),
-    onFold: (id) => st.update('session', (_, x) => { const k = id === 'parts' || id === 'leds' || id === 'light' ? id : id.slice(6), def = k === '_light' || (k === 'leds' && ledFoldDefault(A.ledTotal)); x.fold = { ...x.fold, [k]: !(x.fold?.[k] ?? def) }; }),   // 접기·펼치기(세션)
+    onFold: (id) => st.update('session', (_, x) => { const k = id === 'parts' || id === 'leds' || id === 'light' ? id : id.slice(6), def = k === '_light' || (k === 'light' && !(x.node === 'leds' || x.node?.startsWith?.('led:'))) || (k === 'leds' && ledFoldDefault(A.ledTotal)); x.fold = { ...x.fold, [k]: !(x.fold?.[k] ?? def) }; }),   // 접기·펼치기(세션)
     // 우클릭: 고른 것에 없으면 그것만 고름(고른 것 위에서 우클릭하면 여러 개 그대로)
     onCtxSelect: (id) => st.update('session', (_, x) => {
       if (id.startsWith('led:')) { x.multi = []; x.node = 'leds'; x.sel = null; x.ledSel = +id.slice(4); return; }

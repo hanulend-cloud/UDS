@@ -26,8 +26,9 @@ export function treeNodes(M, S, lay, leds = []) {
   const fold = (k, def = false) => (S.fold?.[k] ?? def);   // 접힘 상태(세션) — 광원으로 옮긴 부품 묶음은 기본 접힘
   // 관측면 = 맨 위(무엇을 어떻게 맞출지 먼저, 부품·광원과 성격이 달라 밑줄로 구분) · 목표는 관측면 속성에 포함(2026-11-03)
   const ln = S.line, goal = `목표 ${Math.round(O.targetLen * 100)}/${Math.round(O.targetWid * 100)}%`;
-  node('obs', '◎ 관측면', ln ? `${LINE_KIND[ln.kind] ?? ln.kind} ${ln.length.toFixed(0)}×${ln.width.toFixed(0)} mm · ${goal}` : S.lineErr && O.faces.length ? '라인 인식 실패' : O.faces.length ? `면 ${O.faces.length}개 · 인식 중` : '미지정 — 클릭', false, '', undefined, { top: true });
-  node('parts', '부품', String(M.parts.filter((p) => p.role !== 'light').length + (stepPcb(L) ? 1 : 0)), false, '', hid.size || S.hideLeds || hl.size || S.hidePcb ? 'all' : undefined, { fold: fold('parts') ? 'closed' : 'open' });
+  // 관측면 · 부품 · 광원 = 같은 단계 묶음(grp0, 아이콘)(2026-11-12 화면 다시 그리기 3단계)
+  node('obs', '관측면', ln ? `${LINE_KIND[ln.kind] ?? ln.kind} ${ln.length.toFixed(0)}×${ln.width.toFixed(0)} mm · ${goal}` : S.lineErr && O.faces.length ? '라인 인식 실패' : O.faces.length ? `면 ${O.faces.length}개 · 인식 중` : '미지정 — 클릭', false, '', undefined, { grp0: true, icon: 'obs' });
+  node('parts', '부품', String(M.parts.filter((p) => p.role !== 'light').length + (stepPcb(L) ? 1 : 0)), false, '', hid.size || S.hideLeds || hl.size || S.hidePcb ? 'all' : undefined, { fold: fold('parts') ? 'closed' : 'open', grp0: true, icon: 'parts' });
   // 그룹(2026-10-30): 사용자 그룹(M.groups) = 첫 부품 자리에 머리 + 펼치면 부품(들여쓰기 2단) · 그룹 밖 광원으로 옮긴 부품 = 자동 묶음 '_light'(기본 접힘)
   const gOf = new Map(), G = [...(M.groups ?? [])];
   for (const g of G) for (const i of g.parts) if (i < M.parts.length && !gOf.has(i)) gOf.set(i, g);
@@ -53,12 +54,15 @@ export function treeNodes(M, S, lay, leds = []) {
     for (const i of pcbIds) partNode(M.parts[i], i, 2);
   }
   // 광원 머리 눈 단추 = 광원 그룹(LED 몸체·PCB·지향각) 한 번에 켜기/끄기
-  node('light', '광원', L.kind === 'step' && L.step?.fromMech ? '3D 도면' : { none: '지정 안 함', step: 'LED STEP', manual: '직접 배치' }[L.kind], false, '', L.kind === 'step' ? (S.hideLeds ? 'off' : 'on') : undefined, L.kind !== 'none' ? { fold: fold('light') ? 'closed' : 'open' } : {});
-  if (L.kind !== 'none' && !fold('light')) {
-    const ex = L.step?.excluded ?? [], vt = L.kind === 'step' ? L.step?.virtual : null;
-    const failed = !!vt && lay !== undefined && !lay?.virtual && (!!lay?.err || !!S.line);   // 라인 대기 중은 실패 아님
-    const nr = (o) => (Array.isArray(o.positions) ? o.positions.length : o.count * (o.rows === 2 ? 2 : 1)), rw = (o) => (o.rows === 2 ? `2열 × ${o.count}개` : `${o.count}개`);   // 총 LED = 열 수 × 열당 개수(spec P4 §2.2b)
-    const n = vt && !failed ? (lay?.virtual ? lay.leds.length : nr(vt)) : L.kind === 'step' ? (L.step?.leds ?? []).filter((i) => !ex.includes(i)).length : nr(L.manual);
+  // 광원 = 처음엔 접힘(2026-11-12) — 접혀 있어도 배지에 LED 개수
+  const ex = L.step?.excluded ?? [], vt = L.kind === 'step' ? L.step?.virtual : null;
+  const failed = !!vt && lay !== undefined && !lay?.virtual && (!!lay?.err || !!S.line);   // 라인 대기 중은 실패 아님
+  const nr = (o) => (Array.isArray(o.positions) ? o.positions.length : o.count * (o.rows === 2 ? 2 : 1)), rw = (o) => (o.rows === 2 ? `2열 × ${o.count}개` : `${o.count}개`);   // 총 LED = 열 수 × 열당 개수(spec P4 §2.2b)
+  const n = L.kind === 'none' ? 0 : vt && !failed ? (lay?.virtual ? lay.leds.length : nr(vt)) : L.kind === 'step' ? (L.step?.leds ?? []).filter((i) => !ex.includes(i)).length : nr(L.manual);
+  const ledPicked = S.node === 'leds' || !!S.node?.startsWith?.('led:'), lightShut = L.kind !== 'none' && fold('light', !ledPicked),   // 기본 접힘, LED 를 고르면 펼쳐 보임(직접 접고 편 것이 우선)
+    lightKind = L.kind === 'step' && L.step?.fromMech ? '3D 도면' : { none: '지정 안 함', step: 'LED STEP', manual: '직접 배치' }[L.kind];
+  node('light', '광원', lightShut ? `LED ×${n} · ${lightKind}` : lightKind, false, '', L.kind === 'step' ? (S.hideLeds ? 'off' : 'on') : undefined, { grp0: true, icon: 'light', ...(L.kind !== 'none' ? { fold: lightShut ? 'closed' : 'open' } : {}) });
+  if (L.kind !== 'none' && !lightShut) {
     const pit = (p) => (p > 0 ? `피치 ${+(+p).toFixed(1)}` : '균등');
     const chg = S.ledChange?.changed ? S.ledChange : null;
     node('leds', `LED ×${n}`, chg ? `원설계 ${chg.nOrig} → ${chg.nCur}개${chg.pitchCur.uniform ? '' : ' · 불규칙'}` : L.kind === 'manual' ? (L.manual.rows === 2 ? `${rw(L.manual)} ${pit(L.manual.pitch)}` : pit(L.manual.pitch)) : failed ? '배치 편집 실패' : vt ? (Array.isArray(vt.positions) ? '배치 편집' : `자동 ${rw(vt)} ${pit(vt.pitch)}`) : `${L.spec.beam}°`, true, 'led', S.hideLeds ? 'off' : 'on', leds.length ? { fold: fold('leds', ledFoldDefault(leds.length)) ? 'closed' : 'open', sel: S.node === 'leds' && S.ledSel == null, ...(chg ? { chg: true } : {}) } : (chg ? { chg: true } : {}));
@@ -200,11 +204,14 @@ const EYE = { on: ['👁', '보기 끄기 (Shift+클릭: 이 부품만 보기)',
 const eyeHtml = (n) => n.eye ? `<span class="m3-eye ${n.eye}" role="button" tabindex="0" data-eye="${esc(n.id)}" title="${EYE[n.eye][1]}" aria-label="${esc(n.label)} ${EYE[n.eye][1]}" aria-pressed="${EYE[n.eye][2]}">${EYE[n.eye][0]}</span>` : '';
 // 노드: 접기 ▸/▾(data-fold) · 이름(data-lbl — 더블클릭 = 이름 바꾸기, 부품·사용자 그룹만) · 깊이(d1·d2 들여쓰기). 머리 = 그룹 단추
 const caret = (n) => (n.fold ? `<span class="m3-fold" role="button" tabindex="-1" data-fold="${esc(n.id)}" aria-label="${n.fold === 'open' ? '접기' : '펼치기'}" aria-expanded="${n.fold === 'open'}">${n.fold === 'open' ? '▾' : '▸'}</span>` : '');
+// 묶음 아이콘(선 그림, 글자색 따라감)
+const svg = (d) => `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const GI = { obs: svg('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/>'), parts: svg('<path d="M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10"/>'), light: svg('<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z"/>') };
 const renamable = (n) => n.id.startsWith('part:') || (n.id.startsWith('group:') && !n.auto);
 export function treeHead() {   // 그룹 단추는 우클릭 메뉴로 옮김(2026-10-30)
-  return '<div class="m3-h" title="클릭 = 속성 편집 · Ctrl+클릭 = 여러 개 · Shift+클릭 = 범위 · 우클릭 = 그룹 만들기·해제·이름 바꾸기">부품 리스트 <span class="mut m3-tree-tip">우클릭 = 그룹</span></div>';
+  return '<div class="m3-h" title="클릭 = 속성 편집 · Ctrl+클릭 = 여러 개 · Shift+클릭 = 범위 · 우클릭 = 그룹 만들기·해제·이름 바꾸기">구성 <span class="mut m3-tree-tip">우클릭 = 그룹</span></div>';
 }
-export const treeHtml = (M, S, lay, leds) => `${treeHead(M, S)}${treeNodes(M, S, lay, leds).map((n) => `<div class="m3-node ${n.chg ? 'chg ' : ''}${n.child ? 'child' : ''} d${n.depth ?? 0}${n.id.startsWith('group:') ? ' grp' : ''} ${n.sel ? 'sel' : ''} ${n.eye === 'off' ? 'hid' : ''}${n.strike ? ' untr' : ''}${n.top ? ' m3-top' : ''}" role="button" tabindex="0"${n.sel ? ' aria-current="true"' : ''} data-node="${esc(n.id)}">${caret(n)}${eyeHtml(n)}<span class="m3-lbl"${renamable(n) ? ' data-lbl title="더블클릭: 이름 바꾸기"' : ''}>${esc(n.label)}</span> <span class="${n.child && !n.id.startsWith('group:') ? `m3-badge k-${esc(n.kind)}` : 'b'}"${n.bstyle ? ` style="background:${n.bstyle.bg};color:${n.bstyle.fg}"` : ''}>${esc(n.badge)}</span></div>`).join('')}`;
+export const treeHtml = (M, S, lay, leds) => `${treeHead(M, S)}${treeNodes(M, S, lay, leds).map((n) => `<div class="m3-node ${n.chg ? 'chg ' : ''}${n.child ? 'child' : ''} d${n.depth ?? 0}${n.id.startsWith('group:') ? ' grp' : ''} ${n.sel ? 'sel' : ''} ${n.eye === 'off' ? 'hid' : ''}${n.strike ? ' untr' : ''}${n.grp0 ? ' g0' : ''}" role="button" tabindex="0"${n.sel ? ' aria-current="true"' : ''} data-node="${esc(n.id)}">${n.grp0 && !n.fold ? '<span class="m3-fold" aria-hidden="true"></span>' : caret(n)}${n.icon ? `<span class="m3-gi gi-${n.icon}" aria-hidden="true">${GI[n.icon]}</span>` : ''}${eyeHtml(n)}<span class="m3-lbl"${renamable(n) ? ' data-lbl title="더블클릭: 이름 바꾸기"' : ''}>${esc(n.label)}</span> <span class="${n.child && !n.id.startsWith('group:') ? `m3-badge k-${esc(n.kind)}` : 'b'}"${n.grp0 ? ` title="${esc(n.badge)}"` : ''}${n.bstyle ? ` style="background:${n.bstyle.bg};color:${n.bstyle.fg}"` : ''}>${esc(n.badge)}</span></div>`).join('')}`;
 // 작은 우클릭 메뉴(화면 고정 위치) — 바깥 클릭·Esc·창 벗어남 = 닫기
 export function showCtxMenu(doc, x, y, items, onPick, host = doc.body) {   // host = 테마 변수를 물려받을 곳
   doc.querySelector('.m3-ctx')?.remove();

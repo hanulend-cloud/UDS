@@ -1316,3 +1316,20 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .m3-mon .om-k > div:first-child { grid-column: 1 / -1; }
 .m3-mon .om-k > .om-v { grid-column: 1; align-self: baseline; }
 .m3-mon .om-k > div:last-child:not(:first-child) { grid-column: 2; justify-self: end; align-self: baseline; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
+/* ---- 화면 다시 그리기 3단계(2026-11-12): 구성 트리 — 관측면·부품·광원 = 같은 단계 묶음 ---- */
+.m3-node.g0 { min-height: 34px; padding: 4px 6px; margin-top: 4px; font-weight: 700; font-size: 14px; }
+.m3-node.g0:first-of-type { margin-top: 0; }
+.m3-node.g0 .m3-fold { width: 14px; font-size: 12px; }
+.m3-gi { display: inline-flex; width: 18px; justify-content: center; color: var(--m3-acc); flex: none; }
+.m3-node.g0 > .b { min-width: 22px; padding: 1px 8px; border-radius: 10px; background: var(--m3-head); color: var(--m3-mut); font-size: 12px; font-weight: 500; text-align: center; white-space: normal; line-height: 1.35; flex: 0 1 auto; min-width: 0; margin-left: auto; }   /* 길면 줄바꿈 — 관측면 크기·목표가 잘리지 않게 */
+.m3-node.g0 > .m3-lbl { flex: none; white-space: nowrap; }
+.m3-node.g0.sel > .b { background: transparent; color: inherit; }
+/* 위쪽 작업 단계 막대 한 줄 — 높이·상태색 통일(통과 초록·미달 빨강·주의 주황) */
+.m3-cmd { flex-wrap: nowrap; overflow-x: auto; min-height: 48px; box-sizing: border-box; }
+.m3-cmd .m3-step { min-height: 36px; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+.m3-cmd .m3-step i { width: 20px; height: 20px; font-size: 11.5px; }
+.m3-cmd .m3-step.done i { background: var(--m3-ok); }
+.m3-cmd .m3-fs.ok, .m3-cmd .m3-now b.ok { color: var(--m3-ok); } .m3-cmd .m3-fs.bad, .m3-cmd .m3-now b.bad { color: var(--m3-bad); } .m3-cmd .m3-fs.need { color: var(--m3-warn); }
+.m3-cmd .m3-step.need { border-color: var(--m3-warn); background: color-mix(in srgb, var(--m3-warn) 12%, transparent); }
+.m3-cmd .m3-step.need i { background: var(--m3-warn); }
