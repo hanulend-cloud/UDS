@@ -1430,3 +1430,14 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 @media (max-width: 1200px) { header h1 small { display: none; } }
 @media (max-width: 900px) { header { flex-wrap: wrap; } .hd-left { flex-wrap: wrap; } }
 @media (max-width: 900px) { .m3-cmd { flex-wrap: wrap; overflow-x: visible; } }   /* 좁으면 단계 막대는 두 줄로(옆으로 숨지 않게) */
+
+/* 떠 있는 두 창 구분(2026-11-12 사용자) — 같은 머리 모양에 옅은 색 기운만: 광분포 시뮬레이션 = 청록, 기구 최적화 = 보라. 밝은·어두운 테마마다 채도를 따로 */
+.m3-big-in { --win-tint: #0f8f84; }
+.m3-mon { --win-tint: #6a4fc8; }
+#mech3d-wrap[data-theme="dark"] .m3-big-in { --win-tint: #3cc8b8; }
+#mech3d-wrap[data-theme="dark"] .m3-mon { --win-tint: #a08cf0; }
+.m3-big-in, .m3-mon { background: color-mix(in srgb, var(--win-tint) 4%, var(--m3-panel)); border: 1.5px solid color-mix(in srgb, var(--win-tint) 55%, var(--m3-edge)); }
+.m3-big-hd, .m3-mon-hd { background: color-mix(in srgb, var(--win-tint) 14%, var(--m3-head)); border-bottom-color: color-mix(in srgb, var(--win-tint) 35%, var(--m3-edge)); }
+#mech3d-wrap[data-theme="dark"] .m3-big-hd, #mech3d-wrap[data-theme="dark"] .m3-mon-hd { background: color-mix(in srgb, var(--win-tint) 20%, var(--m3-head)); }
+.m3-big-hd > b, .m3-mon-hd > b { color: color-mix(in srgb, var(--win-tint) 45%, var(--m3-headtx)); }
+.m3-big-hd .m3-fl, .m3-mon-hd .m3-fl { background: var(--win-tint); }
