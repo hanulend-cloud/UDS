@@ -945,3 +945,14 @@ done();
   const H = th(M, { node: null, line: null });
   okG(/m3-node[^"]* g0[^"]*"[^>]*data-node="obs"/.test(H) && /class="m3-gi[^"]*"/.test(H) && hd().includes('구성'), 'HTML: 묶음 줄(g0) · 아이콘 · 제목 구성');
 }
+{ // 결과 요약 카드 종합 판정(2026-11-12 화면 다시 그리기 5단계) — judgeText 를 그대로 묶음(숫자·판정 규칙 안 바뀜)
+  const okV = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
+  const { overallVerdict } = await import('../src/ui/m3/results-panel.js'), O = { targetLen: 0.8, targetWid: 0.8 };
+  okV(overallVerdict({ Ulen: 0.85, Uwid: 0.9, relNoise: 0.01 }, O).cls === 'ok' && /통과/.test(overallVerdict({ Ulen: 0.85, Uwid: 0.9, relNoise: 0.01 }, O).text), '둘 다 합격 = 목표 통과');
+  okV(overallVerdict({ Ulen: 0.5, Uwid: 0.9, relNoise: 0.01 }, O).cls === 'bad' && /미달/.test(overallVerdict({ Ulen: 0.5, Uwid: 0.9, relNoise: 0.01 }, O).text), '하나라도 미달 = 목표 미달');
+  okV(overallVerdict({ Ulen: 0.5, Uwid: 0.5, relNoise: 0.2 }, O).cls === 'busy', '노이즈 큼 = 판정 보류');
+  okV(overallVerdict({ Ulen: 0.85, Uwid: null, relNoise: 0.01 }, O).cls === 'ok', '폭 판정 불가 = 길이로만');
+  okV(overallVerdict(null, O).cls === '' && overallVerdict({ empty: true }, O).text === '', '결과 없음 = 배지 없음');
+  const a = overallVerdict({ Ulen: 0.79999, Uwid: 0.9, relNoise: 0.001 }, O), b = judgeText(0.79999, 0.8, null, 0.001);
+  okV(a.cls === b.cls, `경계값도 judgeText 와 같은 판정(${a.cls} / ${b.cls})`);
+}

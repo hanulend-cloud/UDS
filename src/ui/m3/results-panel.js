@@ -27,6 +27,16 @@ export function judgeText(v, tg, se = null, relNoise = null) {
   return { cls: ok ? 'ok' : 'bad', text: `목표 ${fmtTg(Math.floor(tg * 100 + 1e-9) / 100)} · ${ok ? '합격' : `미달 −${(gap / 10).toFixed(1)}%p`}` };
 }
 export { needText } from './progressive.js';
+// 결과 요약 카드 종합 판정 배지(순수, 2026-11-12) — 길이·폭 judgeText 를 그대로 묶음(판정 규칙·숫자 안 바뀜). 폭 판정 불가면 길이로만
+export function overallVerdict(st, O) {
+  if (!st || st.empty || !O) return { cls: '', text: '' };
+  const J = [judgeText(st.Ulen, O.targetLen, st.seLen, st.relNoise), ...(Number.isFinite(st.Uwid) ? [judgeText(st.Uwid, O.targetWid, st.seWid, st.relNoise)] : [])].map((j) => j.cls);
+  if (J.includes('busy')) return { cls: 'busy', text: '… 판정 보류(계산 중)' };
+  if (J.includes('bad')) return { cls: 'bad', text: '✕ 목표 미달' };
+  if (J.includes('near')) return { cls: 'near', text: '≈ 목표 근처' };
+  if (J.length && J.every((c) => c === 'ok')) return { cls: 'ok', text: '✓ 목표 통과' };
+  return { cls: '', text: '' };
+}
 // 평균 광량 카드: 광속이 있으면 cd/m²(목표 대비), 없으면 상대값(길이 프로파일 평균/최대)
 // 광효율 → 계산 부담(순수, 표시 전용, 2026-11-12) — 관측면 원뿔에 닿는 광선이 적을수록 같은 노이즈에 광선이 더 필요(대략 광효율에 반비례).
 // 5% 이상 = 표시 없음 · 1~5% = 노랑 '계산 느림' · 1% 미만 = 빨강 '계산 매우 느림'(글은 짧게, 2026-11-12 사용자 요청). 계산 중이면 남은 시간(경과 × 남은 %/진행 %). 자세한 숫자는 툴팁
@@ -528,18 +538,21 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
   let region = null, regKey = null;   // 선택 영역 { s0, s1, w0, w1 } mm(세션 동안만, 관측면이 바뀌면 지움, 2026-11-12)   // 계산 부담 배지의 경과 시간 기준
   const gaugeHtml = (k) => `<div class="m3-gauge" data-r="${k}"><div class="f"></div><div class="tg"></div></div>`;
   el.innerHTML = `
-    <div class="m3-res-h">시뮬레이션 결과</div>
+    <div class="m3-res-h">시뮬레이션 결과 <span class="m3-verdict" data-r="verdict" aria-live="polite"></span></div>
     <div class="m3-msg" data-r="msg" hidden></div>
+    <div class="m3-sum">
+      <div class="m3-sum-u"><div class="l">길이 균일도</div><div class="v" data-r="ul">–</div>${gaugeHtml('ulg')}<div class="s" data-r="ulj"></div></div>
+      <div class="m3-sum-u"><div class="l">폭 균일도</div><div class="v" data-r="uw">–</div>${gaugeHtml('uwg')}<div class="s" data-r="uwj"></div></div>
+      <div class="m3-sum-c"><div class="l">평균 광량</div><div class="v" data-r="avg" title="cd/m² 값은 보는 각도 설정과 상관없이 정면 ±10° 안의 평균 휘도">–</div><div class="s" data-r="avgs"></div><div class="s m3-need" data-r="need"></div>${gaugeHtml('avgg')}</div>
+      <div class="m3-sum-c"><div class="l">광 효율</div><div class="v sm" data-r="eff">–</div><div class="s">관측면 원뿔 안 / LED 총 방출</div><div class="m3-effload" data-r="effl" hidden></div></div>
+      <div class="m3-sum-x"><div class="m3-regl" data-r="reg" hidden title="큰 창(⤢)에서 고른 영역 — 길이 / 폭 균일도"></div><button type="button" class="m3-leak" data-r="leak" hidden title="누르면 3D 에서 가장 많이 새는 면을 강조"></button></div>
+    </div>
     <div class="m3-blk"><div class="m3-t"><b class="m3-tt">2D 광량 분포 <i class="m3-info" data-r="mapsub" tabindex="0">ⓘ</i></b><span><label class="m3-map-eq" title="가로세로를 같은 축척으로 — 끄면 좁은 폭을 늘려 보여 줌"><input type="checkbox" data-r="mapEq"> 실제 비율</label> <select data-r="quality" title="2D 분포·1D 프로파일 칸 크기(정사각) — 저 1.5 mm(빠름) · 중 1.0 mm(광선 ≈2배) · 고 0.5 mm(광선 ≈4배) · 짧거나 좁은 면은 그 방향만 더 잘게" aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>  <button type="button" class="m3-zoom" data-zoom="map" title="큰 창으로 보기" aria-label="2D 광량 분포 확대">⤢</button></span></div>
-      <div class="m3-withm"><canvas class="m3-g" data-r="map" width="600" height="200"></canvas>
-        <div class="m3-m"><div class="l">평균 광량</div><div class="v" data-r="avg" title="cd/m² 값은 보는 각도 설정과 상관없이 정면 ±10° 안의 평균 휘도">–</div><div class="s" data-r="avgs"></div><div class="s m3-need" data-r="need"></div>${gaugeHtml('avgg')}
-          <div class="l" style="margin-top:6px">광 효율</div><div class="v sm" data-r="eff">–</div><div class="s">관측면 원뿔 안 / LED 총 방출</div><div class="m3-effload" data-r="effl" hidden></div><div class="m3-regl" data-r="reg" hidden title="큰 창(⤢)에서 고른 영역 — 길이 / 폭 균일도"></div><button type="button" class="m3-leak" data-r="leak" hidden title="누르면 3D 에서 가장 많이 새는 면을 강조"></button></div></div></div>
+      <div class="m3-gw"><canvas class="m3-g" data-r="map" width="600" height="200"></canvas></div></div>
     <div class="m3-blk"><div class="m3-t"><b class="m3-tt">길이 방향 1D 프로파일 <i class="m3-info" data-r="psub" tabindex="0">ⓘ</i></b><span><button type="button" class="m3-zoom" data-zoom="prof" title="큰 창으로 보기" aria-label="길이 프로파일 확대">⤢</button></span></div>
-      <div class="m3-withm"><canvas class="m3-g" data-r="prof" width="600" height="150"></canvas>
-        <div class="m3-m"><div class="l">길이 균일도</div><div class="v" data-r="ul">–</div>${gaugeHtml('ulg')}<div class="s" data-r="ulj"></div></div></div></div>
+      <div class="m3-gw"><canvas class="m3-g" data-r="prof" width="600" height="150"></canvas></div></div>
     <div class="m3-blk"><div class="m3-t"><b class="m3-tt">폭 방향 1D 프로파일 <i class="m3-info" data-r="wsub" tabindex="0">ⓘ</i></b><span><button type="button" class="m3-zoom" data-zoom="wprof" title="큰 창으로 보기" aria-label="폭 프로파일 확대">⤢</button></span></div>
-      <div class="m3-withm"><canvas class="m3-g" data-r="wprof" width="600" height="120"></canvas>
-        <div class="m3-m"><div class="l">폭 균일도</div><div class="v" data-r="uw">–</div>${gaugeHtml('uwg')}<div class="s" data-r="uwj"></div></div></div></div>`;
+      <div class="m3-gw"><canvas class="m3-g" data-r="wprof" width="600" height="120"></canvas></div></div>`;
   const q = (k) => el.querySelector(`[data-r="${k}"]`);
   let mapEq = false; try { mapEq = localStorage.getItem('uds.m3.mapEq') === '1'; } catch {}   // 메인 2D 실제 비율 — 이 브라우저에 기억
   const RATIO = { map: 2.6, prof: 2.6, wprof: 3.2 };   // 눈금·색 막대·읽기가 들어가도록 높게
@@ -779,6 +792,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
     for (const k of ['avgg', 'ulg', 'uwg']) resetGauge(q(k));
     q('avgg').hidden = true;
     q('msg').hidden = false; q('msg').textContent = message || DEFAULT_GUIDE;
+    q('verdict').textContent = ''; q('verdict').className = 'm3-verdict';
   }
   function update(args) {
     last = args;
@@ -818,6 +832,7 @@ export function createResultsPanel(el, { onQuality = null, fileName = () => 'uds
       gauge('uw', st.Uwid, observe.targetWid, st.seWid, st.relNoise);
       q('wsub').title = `최저 창 s = ${st.sWorst.toFixed(1)} mm${pp ? ` · 지정 점 s = ${pin.s.toFixed(1)} mm(주황, ${rad} 방향)` : ''}`;
     }
+    { const V = overallVerdict(st, observe); q('verdict').textContent = V.text; q('verdict').className = `m3-verdict ${V.cls}`; }   // 요약 카드 종합 판정(길이·폭 judgeText 그대로)
     const lc = lumCard(st, snap.photometry, observe.targetLum);
     q('avg').textContent = lc.value; q('avgs').textContent = lc.sub; q('avg').className = `v ${lc.pass == null ? '' : lc.pass ? 'ok' : 'bad'}`;
     { const n = requiredFlux(snap.photometry, observe.targetLum); q('need').textContent = needShort(n); q('need').title = n ? `${needText(n)} — 정면 ±10° 기준: 목표 휘도 × 관측면적 × π × sin²10° ÷ ±10° 안 광 효율` : ''; }
