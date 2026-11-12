@@ -432,6 +432,7 @@ export function createSimDash(el, { onCtl = null, bar = null } = {}) {
     const dg = el.querySelector('[data-s="diag"]'); if (dg) { dg.hidden = !diag; set('diag', diag?.html ?? ''); }
     set('svg', svg);
     if (mini) {
+      mini.classList.toggle('od-noplot', !(H.length > 1));   // 추이 기록이 없으면(지난 결과를 그대로 씀 등) 그래프 자리 없이 진행 줄만(2026-11-13: 빈 공간이 큼)
       const pl = mini.querySelector('.od-simplot'), w = Math.max(240, pl?.clientWidth || mini.clientWidth), ph = pl?.clientHeight || 130;   // 칸 크기로 그림 — 그림은 칸을 밀지 않음(.od-sim2 절대 위치)
       mini.innerHTML = `<div class="od-pct"><b>${pctT}%</b><div class="od-bar od-bar-big"><i style="width:${pctT}%"></i></div><span class="od-simcap od-capr">${row}</span></div><div class="od-simplot">${simPlotSvg(H, tgt, obs, w, ph)}</div>`;   // 광선 수 = 진행 막대 오른쪽(그래프 위 줄을 비워 그래프를 크게, 2026-11-08)
     }

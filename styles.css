@@ -1489,3 +1489,7 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .rs-note[title], .rs-lim[title], .rs-h[title], .om-kpi[title] { cursor: help; }
 .rs-note[title] { text-decoration: underline dotted var(--m3-line); text-underline-offset: 3px; }
 .od-toset { margin-left: 6px; }
+/* 큰 창 진행 칸 — 추이 기록이 없으면 진행 줄 한 줄만(손잡이로 정한 높이도 무시, 2026-11-13) */
+.m3-big-prog.od-noplot { height: auto !important; flex: none !important; min-height: 0; }
+.m3-big-prog.od-noplot .od-simplot { display: none; }
+.m3-big-prog.od-noplot + .m3-hsplit { display: none; }

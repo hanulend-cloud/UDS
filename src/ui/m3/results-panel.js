@@ -413,7 +413,7 @@ function drawShapeMap(cv, v, dpr, hover, mode) {
 export function drawMap(cv, v, dpr = 1, hover = null, equal = false) {
   cv._mapv = { v, dpr, equal };
   LUT ??= buildLut();
-  const mode = equal && v.shape ? 'real' : v.G.closed ? 'ring' : null;   // 링 = 링 모양(두께 확대) · 실제 비율 = 실제 모양(모양 정보가 있을 때)
+  const mode = equal && v.shape ? 'real' : v.G.closed && !cv._flat ? 'ring' : null;   // _flat = 큰 창에서 확대·영역 선택하려고 링을 펼침(1:1·더블클릭이면 다시 링)   // 링 = 링 모양(두께 확대) · 실제 비율 = 실제 모양(모양 정보가 있을 때)
   if (mode) return drawShapeMap(cv, v, dpr, hover, mode);
   const { G, map } = v, x = cv.getContext('2d'), W = cv.width, H = cv.height, B = mapBox(cv, G, dpr, equal), { ox, oy, PW, rowH, pitch, K, segL, sA, w0, w1, L, xy } = B;
   x.clearRect(0, 0, W, H);
@@ -668,9 +668,11 @@ export function createResultsPanel(el, { onOpt = null, onQuality = null, fileNam
   // 큰 창 2D: 휠 = 확대(마우스 지점 고정) · 끌기 = 이동 · 영역 선택 켜면 끌기 = 사각형 · 더블클릭 = 전체 보기. 링·실제 모양 그림(M.at)에서는 쓰지 않음
   // 실제 모양 그림(링·실제 비율)이면 펼친 그림으로 바꿈 — 확대·영역 선택은 펼친 그림에서만. 체크 상자를 눈에 보이게 끄고 알림
   function unroll() {
-    const cv = big?.cvs.map; if (!cv?._mapv?.at || !big.equal) return false;
-    big.equal = false; const b = big.el.querySelector('[data-big-eq]'); if (b) b.checked = false;
-    onNote?.('확대·이동·영역 선택은 펼친 그림에서 — [실제 비율]을 껐습니다'); paint('map', cv); return true;
+    const cv = big?.cvs.map; if (!cv?._mapv?.at) return false;
+    if (big.equal) { big.equal = false; const b = big.el.querySelector('[data-big-eq]'); if (b) b.checked = false; paint('map', cv); }
+    if (cv._mapv?.at) { cv._flat = true; paint('map', cv); onNote?.('확대·이동·영역 선택은 펼친 그림에서 — 링을 펼쳐 보여 줍니다(1:1·더블클릭 = 다시 링 모양)'); }   // 링은 실제 비율을 꺼도 링 모양(2026-11-13: 링에선 확대·영역 선택이 아무 반응 없었음)
+    else onNote?.('확대·이동·영역 선택은 펼친 그림에서 — [실제 비율]을 껐습니다');
+    return true;
   }
   function wireBigZoom(cv) {
     const M = () => (cv._mapv && !cv._mapv.at ? cv._mapv : null);
@@ -708,7 +710,7 @@ export function createResultsPanel(el, { onOpt = null, onQuality = null, fileNam
       cv._drag = null; showRegion(); redraw(); paint('map', q('map'));
     };
     cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
-    cv.addEventListener('dblclick', () => { cv._view = null; redraw(); });
+    cv.addEventListener('dblclick', () => { cv._view = null; if (!big.regMode) cv._flat = false; redraw(); });
   }
   // 영역 선택 끄기(버튼·Esc) = 그리기만 끝, 영역·표는 남김(2026-11-12 사용자 요청). 지움 = 관측면 바뀔 때
   function regOff() {
@@ -751,11 +753,11 @@ export function createResultsPanel(el, { onOpt = null, onQuality = null, fileNam
     ov.addEventListener('click', (e) => {
       const one = e.target.closest('[data-big-one]'); if (one) { setFocus(big.focus === one.dataset.bigOne ? null : one.dataset.bigOne); return; }
       if (e.target.closest('[data-big-reg-on]')) { if (big.regMode) regOff(); else { big.regMode = true; unroll(); showRegion(); } return; }
-      if (e.target.closest('[data-big-fit]')) { cvs.map._view = null; paint('map', cvs.map); return; }
+      if (e.target.closest('[data-big-fit]')) { cvs.map._view = null; if (!big.regMode) cvs.map._flat = false; paint('map', cvs.map); return; }
     });
     ov.querySelector('[data-big-close]').onclick = closeBig;
     ov.querySelector('[data-big-q]').onchange = (e) => onQuality?.(e.target.value);
-    const eq = ov.querySelector('[data-big-eq]'); eq.onchange = () => { big.equal = eq.checked; paint('map', cvs.map); };
+    const eq = ov.querySelector('[data-big-eq]'); eq.onchange = () => { big.equal = eq.checked; cvs.map._flat = false; paint('map', cvs.map); };
     wireMapHover(cvs.map); wireBigZoom(cvs.map); cvs.map._region = region; cvs.map._onPin = onPin; cvs.map._onPinOff = pinOff; cvs.map._onMenu = (e, c, cv) => mapMenu(e, c, cv); wireHover(cvs.prof); wireHover(cvs.wprof); cvs.prof._onMenu = plotMenu('prof'); cvs.wprof._onMenu = plotMenu('wprof');
     // 창 안 크기 조절: 2D ↕ 1D(높이) · 길이 1D ↔ 폭 1D(폭) — 끌기 막대(비율 기억). 창 자체 = 오른쪽 아래 모서리(CSS resize)
     const C = (k) => ov.querySelector(`.m3-big-c[data-k="${k}"]`);

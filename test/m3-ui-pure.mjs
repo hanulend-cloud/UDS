@@ -1108,3 +1108,9 @@ done();
   const m = monitorHtml({ ...S, tiles: { ...S.tiles, milky: { status: 'run', frac: 0.5, evals: S.tiles.milky.evals } } }, 5);
   okV(/≈50\.0%/.test(m) && !/81\.0%/.test(m), '진행 지표(지금까지 최고)는 그대로 — 검증 점은 그래프에만');
 }
+{ // 2026-11-13 사용자: 큰 창 2D 확대·영역 선택이 아직 안 됨(링 = 늘 링 모양 그림이라 펼친 그림 조건에 안 걸림) · 진행 칸이 그래프 없이 빈 공간
+  const okR = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
+  const { readFileSync } = await import('node:fs'), rp = readFileSync(new URL('../src/ui/m3/results-panel.js', import.meta.url), 'utf8'), od = readFileSync(new URL('../src/ui/m3/opt-dash.js', import.meta.url), 'utf8'), css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
+  okR(/v\.G\.closed && !cv\._flat \? 'ring'/.test(rp) && /cv\._flat = true/.test(rp), '링도 확대·영역 선택 = 펼친 그림으로 바꿈');
+  okR(/od-noplot/.test(od) && /\.m3-big-prog\.od-noplot/.test(css), '추이 기록이 없으면 진행 칸 = 한 줄로 줄임');
+}
