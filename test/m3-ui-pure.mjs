@@ -1114,3 +1114,29 @@ done();
   okR(/v\.G\.closed && !cv\._flat \? 'ring'/.test(rp) && /cv\._flat = true/.test(rp), '링도 확대·영역 선택 = 펼친 그림으로 바꿈');
   okR(/od-noplot/.test(od) && /\.m3-big-prog\.od-noplot/.test(css), '추이 기록이 없으면 진행 칸 = 한 줄로 줄임');
 }
+{ // 2026-11-13 사용자 묶음: 그래프 인자별 점 수 맞춤 · 지난 후보 한 번만(스크롤 없이) · 2D 영역 표시가 실제 비율·링에서도 · 1:1 → 전체 보기 · 창 크게 · 하단 진행 대신 창
+  const okB = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
+  const { thinSeq, factorChartSvg, STAGES } = await import('../src/ui/m3/opt-dash.js');
+  const seq = [];
+  for (let i = 0; i < 60; i++) seq.push({ k: 'milky', label: `Milky ${i}`, Ulen: 0.5 + (i === 37 ? 0.2 : 0), Uwid: 0.5 + (i === 37 ? 0.1 : 0) });
+  for (let i = 0; i < 6; i++) seq.push({ k: 'leds', label: `폭 ${i}`, Ulen: 0.55, Uwid: 0.5 });
+  for (let i = 0; i < 5; i++) seq.push({ k: 'shape', label: `형상 ${i}`, Ulen: 0.52, Uwid: 0.5 });
+  seq.push({ k: 'verify', vf: true, label: '검증', Ulen: 0.7, Uwid: 0.5 });
+  const T = thinSeq(seq, 0.8, 0.8), cnt = (k) => T.list.filter(({ e }) => e.k === k).length;
+  okB(cnt('milky') <= 12 && cnt('milky') >= 6 && cnt('leds') === 6 && cnt('shape') === 5 && cnt('verify') === 1, `인자별 표시 수 맞춤: Milky ${cnt('milky')} · 위치 ${cnt('leds')} · 형상 ${cnt('shape')} · 검증 ${cnt('verify')}`);
+  okB(T.list.some(({ e }) => e.label === 'Milky 37') && T.list.every((x, n, a) => !n || a[n - 1].i < x.i) && T.cut.milky?.[1] === 60, 'Milky 최고 후보는 남김 · 순서 그대로 · 줄인 수 기록');
+  const S = { tgLen: 0.8, tgWid: 0.8, seq, tiles: Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', evals: [] }])) };
+  const g = factorChartSvg(S, { Ulen: 0.4, Uwid: 0.4 }, 700, 180);
+  okB(/시험한 후보 72개/.test(g) && /Milky 60개 중 \d+개 표시/.test(g), '그래프 아래 글 = 전체 수 + 줄여 보인 인자');
+  const { readFileSync } = await import('node:fs'), rd = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
+  const css = rd('../styles.css'), rp = rd('../src/ui/m3/results-panel.js');
+  okB(/\.m3-mon\[data-mode="result"\] \.om-hist/.test(css) && !/\.rs-histt \{ height: 113px/.test(css), '지난 후보 = 결과 화면에 한 번 · 높이 고정(스크롤) 없앰');
+  const { regionOutline } = await import('../src/ui/m3/results-panel.js');
+  const pts = regionOutline({ s0: 10, s1: 0, w0: -1, w1: 2 }, (s, w) => [s, w], 4);
+  okB(pts.length === 10 && pts[0][0] === 0 && pts[0][1] === 2 && pts.some(([s, w]) => s === 10 && w === -1), `영역 테두리 점(링·실제 모양 그림용): ${pts.length}개`);
+  okB(/regionOutline\(cv\._region/.test(rp) || /for \(const R of \[cv\._region, cv\._drag\]\)[\s\S]{0,300}regionOutline/.test(rp), '실제 모양·링 그림에도 선택 영역 표시');
+  okB(/data-big-fit[^>]*>전체 보기/.test(rp) && !/>1:1</.test(rp), '1:1 → [전체 보기](확대했을 때만 켜짐)');
+  okB(/drawMap\(cv, v, dpr, hover, [^\n]*\n\s*else drawPlot/.test(rp), '그림 그리기 if/else 그대로(전체 보기 단추 갱신 줄이 끼어 1D 가 2D 로 그려지던 실수 막음)');
+  okB(/data-big-max/.test(rp) && /maxRect/.test(rp), '광분포 시뮬레이션 창 [⤢ 크게]');
+  okB(/#m3-run \{ display: none/.test(css) && /\.m3-big-hd \{[^}]*flex-wrap: wrap/.test(css), '하단 진행 줄 숨김 — 실행·중지는 창 머리(좁아도 줄바꿈으로 보임)');
+}

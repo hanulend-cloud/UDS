@@ -1,7 +1,7 @@
 import { shapeLayout } from './map-shape.js';
 import { requiredFlux, fmtProg, needText, needShort } from './progressive.js';
 import { mountSplit, mountHeightHandle } from './pane-split.js';
-import { clampRect, fitRect, winTop, dragBy, raiseWin, mountResizers, COLLAPSED_W } from './monitor.js';
+import { clampRect, fitRect, winTop, dragBy, raiseWin, mountResizers, COLLAPSED_W, maxRect } from './monitor.js';
 import { simPct } from './opt-dash.js';
 import { simCtl, setCtl, setStepMark } from './run-ctl.js';
 import { showCtxMenu } from './feature-tree.js';
@@ -380,6 +380,11 @@ function colorBar(x, W, H, dpr) {
   for (let p = 0; p <= 100; p += 20) x.fillText(`${p}%`, bx + bw + 4 * dpr, cTop + (1 - p / 100) * PH);
 }
 // 모양대로 그리기(2026-11-06): mode 'ring' = 링(두께 확대) · 'real' = 관측면 실제 모양(실제 비율). 칸 값은 그대로 — map-shape.js
+// 선택 영역 테두리 점(순수, 2026-11-13) — 링·실제 모양 그림은 s·w 가 곧은 선이 아니므로 위(큰 w)·아래 변을 n 칸으로 나눠 따라감. toPx(s, w) → [px, py]
+export function regionOutline(R, toPx, n = 32) {
+  const sa = Math.min(R.s0, R.s1), sb = Math.max(R.s0, R.s1), wa = Math.min(R.w0, R.w1), wb = Math.max(R.w0, R.w1), at = (q) => sa + ((sb - sa) * q) / n;
+  return [...Array.from({ length: n + 1 }, (_, q) => toPx(at(q), wb)), ...Array.from({ length: n + 1 }, (_, q) => toPx(at(n - q), wa))];
+}
 function drawShapeMap(cv, v, dpr, hover, mode) {
   const { G, map } = v, x = cv.getContext('2d'), W = cv.width, H = cv.height, VG = mapViewG(G), rows = [VG.jA ?? 0, VG.jB ?? G.nw - 1];
   const box = { x: 14 * dpr, y: MAP_PAD.t * dpr, w: W - (14 + MAP_PAD.r) * dpr, h: H - (MAP_PAD.t + 22) * dpr };
@@ -402,6 +407,11 @@ function drawShapeMap(cv, v, dpr, hover, mode) {
   if (mode === 'ring') { const [i0x, i0y] = Ly.toPx(0, G.w0 + (rows[0] + rows[1] + 1) / 2 * G.cell); x.beginPath(); x.arc(i0x, i0y, 3 * dpr, 0, 2 * Math.PI); x.fillStyle = '#ffffff'; x.fill(); x.textAlign = 'left'; x.textBaseline = 'middle'; x.fillStyle = '#8a93a6'; x.fillText('s 0', i0x + 6 * dpr, i0y); }
   if (kMin >= 0) { const i = Math.floor(kMin / G.nw), j = kMin % G.nw, [cs, cw] = mapCellSW(G, i, j), [px, py] = Ly.toPx(cs, cw); x.beginPath(); x.arc(px, py, minDotR(box.w, box.h, dpr), 0, 2 * Math.PI); x.fillStyle = '#8a8f98'; x.fill(); x.strokeStyle = '#ffffff'; x.lineWidth = dpr; x.stroke(); }
   if (v.pin) { const [px, py] = Ly.toPx(v.pin.s, v.pin.w); x.beginPath(); x.arc(px, py, 4 * dpr, 0, 2 * Math.PI); x.fillStyle = PIN_COLOR; x.fill(); x.strokeStyle = 'rgba(10,14,22,.9)'; x.lineWidth = 1.5 * dpr; x.stroke(); }
+  for (const R of [cv._region, cv._drag]) {   // 선택 영역 — 펼친 그림과 같은 주황 테두리(2026-11-13 사용자: 실제 비율·링으로 돌아가면 어딜 골랐는지 안 보임)
+    if (!R) continue;
+    const pts = regionOutline(R, Ly.toPx); x.beginPath(); x.moveTo(pts[0][0], pts[0][1]); for (const [px, py] of pts.slice(1)) x.lineTo(px, py); x.closePath();
+    x.setLineDash(R === cv._drag ? [5 * dpr, 4 * dpr] : []); x.strokeStyle = 'rgba(10,14,22,.85)'; x.lineWidth = 3.5 * dpr; x.stroke(); x.strokeStyle = PIN_COLOR; x.lineWidth = 1.6 * dpr; x.stroke(); x.setLineDash([]);
+  }
   if (hover && mx > 0) {
     const [i, j] = hover, k = i * G.nw + j, [cs, cw] = mapCellSW(G, i, j), val = G.valid[k] ? `${((map[k] / mx) * 100).toFixed(1)}%` : '관측면 밖', q = Ly.quad(i, j);
     x.beginPath(); x.moveTo(q[0][0], q[0][1]); for (let a = 1; a < 4; a++) x.lineTo(q[a][0], q[a][1]); x.closePath(); x.strokeStyle = '#ffffff'; x.lineWidth = 1.5 * dpr; x.stroke();
@@ -413,7 +423,7 @@ function drawShapeMap(cv, v, dpr, hover, mode) {
 export function drawMap(cv, v, dpr = 1, hover = null, equal = false) {
   cv._mapv = { v, dpr, equal };
   LUT ??= buildLut();
-  const mode = equal && v.shape ? 'real' : v.G.closed && !cv._flat ? 'ring' : null;   // _flat = 큰 창에서 확대·영역 선택하려고 링을 펼침(1:1·더블클릭이면 다시 링)   // 링 = 링 모양(두께 확대) · 실제 비율 = 실제 모양(모양 정보가 있을 때)
+  const mode = equal && v.shape ? 'real' : v.G.closed && !cv._flat ? 'ring' : null;   // _flat = 큰 창에서 확대·영역 선택하려고 링을 펼침(전체 보기·더블클릭이면 다시 링)   // 링 = 링 모양(두께 확대) · 실제 비율 = 실제 모양(모양 정보가 있을 때)
   if (mode) return drawShapeMap(cv, v, dpr, hover, mode);
   const { G, map } = v, x = cv.getContext('2d'), W = cv.width, H = cv.height, B = mapBox(cv, G, dpr, equal), { ox, oy, PW, rowH, pitch, K, segL, sA, w0, w1, L, xy } = B;
   x.clearRect(0, 0, W, H);
@@ -636,6 +646,7 @@ export function createResultsPanel(el, { onOpt = null, onQuality = null, fileNam
     if (!v) { clearCanvas(cv); return; }
     if (kind === 'map') drawMap(cv, v, dpr, hover, cv === big?.cvs.map ? big.equal : mapEq);
     else drawPlot(cv, v.curves, v.tg, v.opt, dpr, hover);
+    if (kind === 'map' && cv === big?.cvs.map) { const f = big.el.querySelector('[data-big-fit]'), on = !!(cv._view || cv._flat); if (f && f.disabled === on) { f.disabled = !on; f.title = on ? '확대를 풀고 전체 보기(더블클릭과 같음)' : '확대하면 켜짐 — 휠 = 확대 · 오른쪽 끌기 = 이동'; } }   // 1:1 → 전체 보기(2026-11-13 사용자: 확대 안 한 채 누르면 아무 일이 없어 고장처럼 보임)
   };
   q('mapEq').checked = mapEq;
   q('mapEq').onchange = (e) => { mapEq = e.target.checked; try { localStorage.setItem('uds.m3.mapEq', mapEq ? '1' : '0'); } catch {} paint('map', q('map')); };
@@ -670,7 +681,7 @@ export function createResultsPanel(el, { onOpt = null, onQuality = null, fileNam
   function unroll() {
     const cv = big?.cvs.map; if (!cv?._mapv?.at) return false;
     if (big.equal) { big.equal = false; const b = big.el.querySelector('[data-big-eq]'); if (b) b.checked = false; paint('map', cv); }
-    if (cv._mapv?.at) { cv._flat = true; paint('map', cv); onNote?.('확대·이동·영역 선택은 펼친 그림에서 — 링을 펼쳐 보여 줍니다(1:1·더블클릭 = 다시 링 모양)'); }   // 링은 실제 비율을 꺼도 링 모양(2026-11-13: 링에선 확대·영역 선택이 아무 반응 없었음)
+    if (cv._mapv?.at) { cv._flat = true; paint('map', cv); onNote?.('확대·이동·영역 선택은 펼친 그림에서 — 링을 펼쳐 보여 줍니다(전체 보기·더블클릭 = 다시 링 모양)'); }   // 링은 실제 비율을 꺼도 링 모양(2026-11-13: 링에선 확대·영역 선택이 아무 반응 없었음)
     else onNote?.('확대·이동·영역 선택은 펼친 그림에서 — [실제 비율]을 껐습니다');
     return true;
   }
@@ -724,18 +735,18 @@ export function createResultsPanel(el, { onOpt = null, onQuality = null, fileNam
     // 떠 있는 창(2026-11-02) — 기구 최적화 창처럼 머리 끌어 옮기기 · 모서리로 크기 · 접기. 뒤 화면을 막지 않음(열어 둔 채 설계·최적화). 위치·크기 = 보는 사람별, 접힘은 열 때마다 펼침
     const rect = fitRect(bigRectLoad(), innerWidth, innerHeight, winTop());
     ov.className = 'm3-big-in'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', '광분포 시뮬레이션');
-    const cell = (k) => `<div class="m3-big-c" data-k="${k}"><div class="m3-big-ct"><b>${TITLE[k]}</b><span class="m3-big-sp"></span>${k === 'map' ? `<label class="m3-big-eq"><input type="checkbox" data-big-eq${eq0 ? ' checked' : ''}> 실제 비율</label><button type="button" data-big-reg-on aria-pressed="false" title="켜 둔 동안 끌 때마다 새 영역 · 그 영역의 균일도를 아래 표로 비교 · 켠 채 클릭 = 영역 지움 · 꺼도 영역은 남음 · 휠 = 확대 · 오른쪽 끌기 = 이동 · 더블클릭 = 전체 보기">▭ 영역 선택</button><button type="button" data-big-fit title="확대를 풀고 전체 보기(더블클릭과 같음)">1:1</button>` : ''}<button type="button" data-big-one="${k}">⤢ 이 그림만</button></div><canvas class="m3-big-cv" data-big-cv="${k}"></canvas>${k === 'map' ? '<div class="m3-big-reg" data-big-reg hidden></div>' : ''}</div>`;
-    ov.innerHTML = `<div class="m3-big-hd" title="끌어서 옮기기"><b title="진행 현황 · 2D · 1D — 2D 클릭 = 그 점 기준 1D 곡선(주황) · 그림 우클릭 = 데이터·이미지 저장"><i class="m3-fl" data-big-step>4</i>광분포 시뮬레이션</b><span class="m3-mon-sum" data-big-sum></span><span class="m3-big-sp"></span><span class="m3-ctl" data-big-ctl></span><label class="m3-big-q">화질 <select data-big-q aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label><button type="button" data-big-min></button><button type="button" data-big-close title="Esc">✕ 닫기</button></div>
+    const cell = (k) => `<div class="m3-big-c" data-k="${k}"><div class="m3-big-ct"><b>${TITLE[k]}</b><span class="m3-big-sp"></span>${k === 'map' ? `<label class="m3-big-eq"><input type="checkbox" data-big-eq${eq0 ? ' checked' : ''}> 실제 비율</label><button type="button" data-big-reg-on aria-pressed="false" title="켜 둔 동안 끌 때마다 새 영역 · 그 영역의 균일도를 아래 표로 비교 · 켠 채 클릭 = 영역 지움 · 꺼도 영역은 남음 · 휠 = 확대 · 오른쪽 끌기 = 이동 · 더블클릭 = 전체 보기">▭ 영역 선택</button><button type="button" data-big-fit disabled title="확대하면 켜짐 — 휠 = 확대 · 오른쪽 끌기 = 이동">전체 보기</button>` : ''}<button type="button" data-big-one="${k}">⤢ 이 그림만</button></div><canvas class="m3-big-cv" data-big-cv="${k}"></canvas>${k === 'map' ? '<div class="m3-big-reg" data-big-reg hidden></div>' : ''}</div>`;
+    ov.innerHTML = `<div class="m3-big-hd" title="끌어서 옮기기"><b title="진행 현황 · 2D · 1D — 2D 클릭 = 그 점 기준 1D 곡선(주황) · 그림 우클릭 = 데이터·이미지 저장"><i class="m3-fl" data-big-step>4</i>광분포 시뮬레이션</b><span class="m3-mon-sum" data-big-sum></span><span class="m3-big-sp"></span><span class="m3-ctl" data-big-ctl></span><label class="m3-big-q">화질 <select data-big-q aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label><button type="button" data-big-max></button><button type="button" data-big-min></button><button type="button" data-big-close title="Esc">✕ 닫기</button></div>
       <div class="m3-big-grid"><div class="m3-big-prog" data-big-prog></div>${cell('map')}<div class="m3-big-row">${cell('prof')}${cell('wprof')}</div></div>`;
     (el.closest('#mech3d-wrap') ?? document.body).appendChild(ov);   // 설계 화면에 붙임(화면을 바꾸면 함께 숨음)
     const cvs = Object.fromEntries(KINDS.map((k) => [k, ov.querySelector(`[data-big-cv="${k}"]`)]));
     const place = () => {
-      const m = big.min, r = clampRect(m ? { ...rect, w: BIG_MIN_W } : rect, innerWidth, innerHeight, winTop());
-      rect.x = r.x; rect.y = r.y; if (!m) { rect.w = r.w; rect.h = r.h; }
+      const m = big.min, X = big.max && !m, r = X ? maxRect(innerWidth, innerHeight, winTop()) : clampRect(m ? { ...rect, w: BIG_MIN_W } : rect, innerWidth, innerHeight, winTop());   // X = 크게(상단 바 아래 화면 전체) — 원래 크기(rect)는 그대로 둠
+      if (!X) { rect.x = r.x; rect.y = r.y; if (!m) { rect.w = r.w; rect.h = r.h; } }
       Object.assign(ov.style, { left: `${r.x}px`, top: `${r.y}px`, width: `${r.w}px`, height: m ? 'auto' : `${r.h}px` });
     };
     const setMin = (v) => {
-      big.min = v; ov.classList.toggle('min', v);
+      big.min = v; ov.classList.toggle('min', v); updMax();
       const b = ov.querySelector('[data-big-min]'); b.textContent = v ? '▾ 펼치기' : '▴ 접기'; b.title = v ? '2D·1D 그림 보기' : '제목 줄만 남기기';
       place(); if (!v) paintBig();
     };
@@ -746,10 +757,15 @@ export function createResultsPanel(el, { onOpt = null, onQuality = null, fileNam
       rs: () => { place(); paintBig(); } };
     document.addEventListener('keydown', big.key); document.addEventListener('pointerdown', big.down, true); window.addEventListener('resize', big.rs);
     ov.addEventListener('pointerdown', () => raiseWin(ov), true);
-    const snap = () => ({ ...rect }), keep = () => bigRectSave(rect);
+    // 크게(2026-11-13 사용자: 기구 최적화 창처럼) — 크게 한 채로 끌거나 크기를 바꾸면 그 크기에서 보통 창으로
+    const updMax = () => { const b = ov.querySelector('[data-big-max]'), on = big.max && !big.min; b.textContent = on ? '⤡ 원래 크기' : '⤢ 크게'; b.title = on ? '크게 하기 전 크기로' : '상단 바 아래 화면 전체로 넓히기'; };
+    const unmax = () => { if (big.max && !big.min) { Object.assign(rect, maxRect(innerWidth, innerHeight, winTop())); big.max = false; updMax(); } };
+    const setMax = (v) => { big.max = !!v; if (v && big.min) setMin(false); updMax(); place(); paintBig(); raiseWin(ov); };
+    const snap = () => (unmax(), { ...rect }), keep = () => bigRectSave(rect);
     dragBy(ov.querySelector('.m3-big-hd'), snap, (dx, dy, s0) => { rect.x = s0.x + dx; rect.y = s0.y + dy; place(); }, (e) => !e.target.closest('button, select, label, input'), keep);
-    mountResizers(ov, { rect: () => rect, apply: (r) => { Object.assign(rect, r); place(); }, ok: () => !big.min, end: keep, minW: 480, minH: 360 });
+    mountResizers(ov, { rect: () => (unmax(), rect), apply: (r) => { Object.assign(rect, r); place(); }, ok: () => !big.min, end: keep, minW: 480, minH: 360 });
     ov.querySelector('[data-big-min]').onclick = () => setMin(!big.min);
+    ov.querySelector('[data-big-max]').onclick = () => setMax(!big.max || big.min); updMax();
     ov.addEventListener('click', (e) => {
       const one = e.target.closest('[data-big-one]'); if (one) { setFocus(big.focus === one.dataset.bigOne ? null : one.dataset.bigOne); return; }
       if (e.target.closest('[data-big-reg-on]')) { if (big.regMode) regOff(); else { big.regMode = true; unroll(); showRegion(); } return; }

@@ -1263,8 +1263,9 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .rs-hist { border-top: 1px solid var(--m3-line); padding-top: 6px; margin-top: 4px; }
 .rs-hist .rs-h { display: flex; align-items: center; gap: 6px; color: inherit; }
 .rs-link2 { border: 0; background: none; color: var(--m3-acc); cursor: pointer; font-size: 12px; margin-left: auto; padding: 0; }
-/* 지난 후보 표 = 늘 같은 크기(2026-11-08): 머리 + 3줄 높이 고정 · 넘치면 스크롤 · 열 폭 고정(긴 사양은 …) */
-.rs-histt { height: 113px; max-height: none; overflow-y: auto; scrollbar-gutter: stable; border: 1px solid var(--m3-line); }
+/* 지난 후보 표 = 결과 화면에 한 번만 · 스크롤 없이 전부(2026-11-13 사용자 — 전엔 3줄 높이 고정 + 진행 기록에 같은 표가 또 있었음). 열 폭 고정(긴 사양은 …) */
+.rs-histt { height: auto; max-height: none; overflow: visible; border: 1px solid var(--m3-line); }
+.m3-mon[data-mode="result"] .om-hist { display: none !important; }
 .rs-histt .om-mx-t td.om-mx-l { white-space: nowrap !important; text-align: left; }
 .rs-histt .om-mx-t { table-layout: fixed; }
 .rs-histt .om-mx-t td, .rs-histt .om-mx-t th { overflow: hidden; text-overflow: ellipsis; height: 24px; box-sizing: border-box; }
@@ -1386,6 +1387,9 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 @media (min-width: 1025px) { .m3-res { overflow-y: auto; } }
 
 /* ---- 화면 다시 그리기 6단계(2026-11-12): 아래 상태줄 = [실행·일시정지·중지 · 진행률 · 광선 수 · 상태] + 조립·성형 점검 ---- */
+/* 하단 시뮬레이션 진행 줄 숨김(2026-11-13 사용자 제안) — 실행·일시정지·중지·진행률은 광분포 시뮬레이션 창에서. 창 머리는 좁으면 줄바꿈(단추가 잘려 안 눌리지 않게) */
+#m3-run { display: none !important; }
+.m3-big-hd { flex-wrap: wrap; row-gap: 4px; }
 .m3-foot { display: flex; align-items: center; min-height: 44px; border-top: 1px solid var(--m3-line); background: var(--m3-panel, transparent); min-width: 0; }
 .m3-foot > .m3-status { flex: 1 1 auto; border-top: 0; min-width: 0; }
 .m3-run { display: flex; align-items: center; gap: 10px; padding: 4px 12px; font-size: 13px; flex: 0 1 auto; min-width: 0; border-right: 1px solid var(--m3-line); }
