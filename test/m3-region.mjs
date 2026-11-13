@@ -36,10 +36,19 @@ const accs = [0, 1, 2].map(mk), obs = { targetLen: 0.8, targetWid: 0.8 };
   ok(Math.abs(V.xy(2, 1)[0] - V.ox) < 1e-9 && Math.abs(V.xy(6, -1)[0] - (V.ox + V.PW)) < 1e-9, '보이는 범위 양끝 = 상자 양끝');
   const n = mapLayout(G, 800, 300, 1, false, null); ok(n.xy(4, 0).join() === A.xy(4, 0).join(), 'view 없음 = 기존과 같음');
 }
-{   // 비교 표(전체 | 선택 영역) — fmtJudge(0.1% 내림), 목표 대비 색, 평균 = 전체 대비
-  const h = regionTableHtml({ Ulen: 0.2249, Uwid: 0.176 }, { Ulen: 0.8139, Uwid: null, meanRatio: 1.1236, mm: [5, 45, -4, 4] }, { targetLen: 0.8, targetWid: 0.8 });
-  ok(h.includes('선택 영역 (40×8 mm)') && h.includes('22.4%') && h.includes('81.3%') && h.includes('112.3%'), '표: 크기·값(0.1% 내림)·평균 비');
-  ok(/class="ok">81.3%/.test(h) && /class="bad">22.4%/.test(h) && />–</.test(h), '목표 대비 색 · 폭 없음 = –');
+{   // 선택 영역 한 줄(2026-11-13 사용자) — 선택 영역만: 길이·폭·면적 균일도(전체 값·평균 없음), 가로 한 줄, 목표 대비 색
+  const h = regionTableHtml({ Ulen: 0.2249, Uwid: 0.176 }, { Ulen: 0.8139, Uwid: null, Uarea: 0.6012, meanRatio: 1.1236, mm: [5, 45, -4, 4] }, { targetLen: 0.8, targetWid: 0.8 });
+  ok(h.includes('40×8 mm') && h.includes('81.3%') && h.includes('60.1%') && !h.includes('22.4%') && !h.includes('112.3%') && !/평균|전체/.test(h), '선택 영역 값만(전체·평균 없음) · 면적 균일도');
+  ok(/class="ok"[^>]*>[^<]*81.3%/.test(h) && /폭[^<]*<\/span>\s*<b[^>]*>–/.test(h) && !/<table|<tr/.test(h), '가로 한 줄(표 아님) · 목표 대비 색 · 폭 없음 = –');
   ok(regionTableHtml({ Ulen: 0.5 }, null, {}) === '', '영역 없음 → 빈칸');
+}
+{   // 면적 균일도 = 영역 안 칸 밝기 최소/최대
+  const r1 = regionStats(G, accs, obs, { s0: 5, s1: 10, w0: -2, w1: 2 });   // i 5..9, j 0..3 → 최소 0.5·1.5 / 최대 1.9
+  ok(Math.abs(r1.Uarea - (0.5 * 1.5) / 1.9) < 1e-9, `면적 균일도 = 칸 최소/최대 (${r1.Uarea})`);
+}
+{   // 영역 선택을 끄면 영역 결과·테두리 숨김(영역은 기억 — 다시 켜면 보임, 2026-11-13 사용자)
+  const { readFileSync } = await import('node:fs'), rp = readFileSync(new URL('../src/ui/m3/results-panel.js', import.meta.url), 'utf8');
+  const sr = rp.match(/function showRegion[\s\S]*?\n  \}/)?.[0] ?? '';
+  ok(/const R = big\?\.regMode \? region : null/.test(sr) && !/if \(region && st/.test(sr) && /_region = R/.test(sr), '영역 선택 꺼짐 = 영역 결과·테두리 안 보임');
 }
 console.log(fail ? `${fail} FAIL` : 'all PASS'); process.exit(fail ? 1 : 0);

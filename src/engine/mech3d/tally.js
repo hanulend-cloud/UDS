@@ -167,7 +167,11 @@ export function regionStats(G, accs, obs, rect) {
   const g = { ...G, ns, nw, valid: crop(G.valid), area: crop(G.area), w0: G.w0 + j0 * G.cell, L: ns * G.ds, closed: false, validAll: undefined, areaAll: undefined };
   const sub = accs.map(crop), st = tallyStats(g, sub, obs);
   const avg = (gg, as) => { let s = 0, ar = 0; for (const a of as) for (let k = 0; k < a.length; k++) if (gg.valid[k]) { s += a[k]; ar += gg.area[k]; } return ar > 0 ? s / ar : NaN; };
-  return { ...st, cells: [i0, i1, j0, j1], mm: [i0 * G.ds, i1 * G.ds, G.w0 + j0 * G.cell, G.w0 + j1 * G.cell], meanRatio: avg(g, sub) / avg(G, accs) };
+  // 면적 균일도(2026-11-13 사용자) = 영역 안 칸 밝기(칸 합 ÷ 칸 면적) 최소/최대 — 길이·폭 단면 평균이 아니라 칸 하나하나
+  let mn = Infinity, mx = -Infinity;
+  for (let k = 0; k < ns * nw; k++) if (g.valid[k] && g.area[k] > 0) { let v = 0; for (const a of sub) v += a[k]; v /= g.area[k]; mn = Math.min(mn, v); mx = Math.max(mx, v); }
+  const Uarea = mx > 0 && Number.isFinite(mn) ? mn / mx : null;
+  return { ...st, Uarea, cells: [i0, i1, j0, j1], mm: [i0 * G.ds, i1 * G.ds, G.w0 + j0 * G.cell, G.w0 + j1 * G.cell], meanRatio: avg(g, sub) / avg(G, accs) };
 }
 export function tallyStats(G, accs, obs, cnts = null) {
   const B = accs.length, nCell = G.ns * G.nw, { ns, nw, ds, area, valid } = G;
