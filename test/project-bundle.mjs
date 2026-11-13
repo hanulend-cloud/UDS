@@ -102,3 +102,21 @@ process.exitCode = fail ? 1 : 0;
   ok(/serve\.py/.test(fetchFailText(new TypeError('Failed to fetch'), 'x')), '연결 실패 = 서버 꺼짐 안내');
   ok(/500/.test(fetchFailText({ status: 500 }, 'x')), '그 밖의 응답 = 상태 번호'); }
 process.exitCode = fail ? 1 : 0;
+// 변환 결과 저장 — 큰 배열은 조각으로 나눠 저장(2026-11-13: IndexedDB 한 값 ≈133 MB 한계, 432만 삼각형 도면이 말없이 저장 안 됨)
+{ const { splitBig, joinBig } = await import('../src/engine/mech3d/step-cache.js');
+  const pos = new Float32Array(1000).map((_, i) => i * 0.5), tri = new Uint32Array(700).map((_, i) => i), small = new Float32Array([1, 2, 3]);
+  const data = { prep: { parts: [{ positions: pos, triangles: tri, name: 'a' }], small, n: 3 }, info: { fast: true } };
+  const S = splitBig(data, { min: 256, chunk: 1024 });   // 256 바이트 넘는 배열 = 조각(1 KB 씩)
+  ok(S.chunks.length === Math.ceil(4000 / 1024) + Math.ceil(2800 / 1024) && S.chunks.every((c) => c.byteLength <= 1024), '큰 배열 = 조각(크기 한도 안)');
+  ok(S.head.prep.small instanceof Float32Array && S.head.prep.n === 3 && S.head.info.fast, '작은 배열·값은 머리에 그대로');
+  const J = joinBig(S.head, S.chunks);
+  ok(J.prep.parts[0].positions instanceof Float32Array && J.prep.parts[0].positions.length === 1000 && J.prep.parts[0].positions[999] === 499.5, '되살림: Float32Array 값 같음');
+  ok(J.prep.parts[0].triangles instanceof Uint32Array && J.prep.parts[0].triangles[699] === 699 && J.prep.parts[0].name === 'a', '되살림: Uint32Array·이름');
+  const view = new Float32Array(new Float32Array(400).fill(7).buffer, 400, 50);   // 다른 배열의 일부(view)
+  const V = joinBig(...Object.values(splitBig({ v: view }, { min: 16, chunk: 64 })));
+  ok(V.v.length === 50 && V.v.every((x) => x === 7), 'view(일부) 도 그 부분만'); }
+// 예제 .uds 는 수정 시각 0 으로 담김 — 열 때마다 지금 시각으로 바뀌면 변환 결과 저장 키가 매번 달라 다시 읽음
+{ const S = { role: 'mech', name: 'z.stp', size: 4, lastModified: 0, gz: await gzipBlob(new Blob(['ABCD'])) };
+  const U = await unpackBundle(await packBundle('{}', [S]));
+  ok(U.files[0].file.lastModified === 0, '.uds 안 STEP 수정 시각 0 = 그대로 0(열 때마다 같은 키)'); }
+process.exitCode = fail ? 1 : 0;

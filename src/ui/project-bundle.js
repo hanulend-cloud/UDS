@@ -26,7 +26,7 @@ export async function unpackBundle(blob) {
   for (const f of head.files ?? []) {
     if (at + f.gz > blob.size) throw new Error(`파일이 잘렸음(${f.name})`);
     const gz = blob.slice(at, at + f.gz); at += f.gz;
-    files.push({ role: f.role, name: f.name, size: f.size, lastModified: f.lastModified, gz, file: new File([await gunzip(gz)], f.name, { lastModified: f.lastModified || Date.now() }) });
+    files.push({ role: f.role, name: f.name, size: f.size, lastModified: f.lastModified, gz, file: new File([await gunzip(gz)], f.name, { lastModified: f.lastModified ?? Date.now() }) });
   }
   return { text: head.project, files };
 }
