@@ -95,3 +95,10 @@ process.exitCode = fail ? 1 : 0;
 { const { cacheWorthy } = await import('../src/engine/mech3d/step-cache.js');
   ok(cacheWorthy({ size: 3e6 }) && cacheWorthy({ size: 2e6 }) && !cacheWorthy({ size: 1.9e6 }), '2 MB 이상 STEP = 변환 결과 저장'); }
 process.exitCode = fail ? 1 : 0;
+// 예제·목록을 못 받을 때 안내(2026-11-13) — 서버는 켜져 있는데 파일만 없으면(404) 'serve.py 꺼짐' 이 아니라 '파일 없음'
+{ const { fetchFailText } = await import('../src/ui/fetch-fail.js');
+  const nf = fetchFailText({ status: 404 }, 'examples/a/a.uds');
+  ok(/파일이 없습니다/.test(nf) && /examples\/a\/a\.uds/.test(nf) && !/serve\.py/.test(nf), '404 = 파일 없음(경로) — 서버 꺼짐이라 하지 않음');
+  ok(/serve\.py/.test(fetchFailText(new TypeError('Failed to fetch'), 'x')), '연결 실패 = 서버 꺼짐 안내');
+  ok(/500/.test(fetchFailText({ status: 500 }, 'x')), '그 밖의 응답 = 상태 번호'); }
+process.exitCode = fail ? 1 : 0;

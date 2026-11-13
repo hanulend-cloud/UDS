@@ -35,6 +35,7 @@ import { APP_VERSION, APP_DATE } from './version.js';
 import { createProjectFile, projectFileLabel } from './ui/project-file.js';
 import { isBundle, unpackBundle } from './ui/project-bundle.js';
 import { pendingBanner } from './ui/pending-banner.js';
+import { NO_SERVER, fetchFailText } from './ui/fetch-fail.js';
 import { pickSources, sourcesKey, keepStepSource, loadStepSources, onStepSourcesChange, bundleProject, setStepSourcePins } from './ui/step-sources.js';
 import { createTabLock, openChannel } from './ui/tab-lock.js';
 import { readTheme, applyPageTheme, themeButton } from './ui/theme.js';
@@ -235,7 +236,7 @@ function clearShape() {
 
 // ---- 상단 메뉴(파일·편집·보기·계산·설정·도움말) ----
 function resetAll() { projFile?.clear(); spec = structuredClone(DEFAULT_SPEC); markSoloReset(); mount(); m3app.unmount(); m3app.resetWorkers(); applyMode(); schedule(); }
-const NO_SERVER = '프로그램 서버에 연결되지 않습니다 — serve.py 가 꺼져 있을 수 있습니다. 서버를 다시 켠 뒤 새로고침(Ctrl+F5) 하세요.';
+
 async function newProject() {
   if (!confirm('지금 프로젝트를 닫고 빈 화면에서 새로 시작할까요?\n(파일로 저장하지 않은 작업은 사라집니다 — 먼저 [파일 › 다른 이름으로 저장] 권장)')) return;
   projFile?.clear(); m3app.unmount(); spec.mech3d = null; spec.mech3dPending = null; spec.mode = 'mech3d'; persist(); applyMode(); $('#m3-start-msg').textContent = '';   // 예제를 자동으로 열지 않음 — 시작 화면에서 고름(2026-11-05)
@@ -250,16 +251,16 @@ function openBlankProject() {
 // 메뉴·시작 화면의 [예제 불러오기…] — examples/index.json 목록에서 골라 엶(2026-11-07). 지금 프로젝트를 닫으므로 확인 후. 목록·예제를 못 받으면 지금 프로젝트를 닫지 않음
 async function openSampleMenu() {
   let list;
-  try { const r = await fetch('examples/index.json', { cache: 'no-store' }); if (!r.ok) throw new Error(String(r.status)); list = await r.json(); }
-  catch { alert(`예제 목록을 열 수 없습니다. 지금 프로젝트는 그대로 둡니다.
-${NO_SERVER}`); return; }
+  try { const r = await fetch('examples/index.json', { cache: 'no-store' }); if (!r.ok) throw { status: r.status }; list = await r.json(); }
+  catch (e) { alert(`예제 목록을 열 수 없습니다. 지금 프로젝트는 그대로 둡니다.
+${fetchFailText(e, 'examples/index.json')}`); return; }
   const ex = await pickExample(list); if (!ex) return;
   if ((spec.mech3d || spec.mech3dPending) && !confirm(`지금 프로젝트를 닫고 예제 '${ex.title}'를 불러올까요?
 (파일로 저장하지 않은 작업은 사라집니다)`)) return;
   let file;   // 예제 = 통합 프로젝트 파일(.uds, 2026-11-12) — 프로젝트 열기와 같은 경로
-  try { const r = await fetch(ex.project, { cache: 'no-store' }); if (!r.ok) throw new Error(String(r.status)); file = new File([await r.blob()], ex.project.split('/').pop()); }
-  catch { alert(`예제를 열 수 없습니다. 지금 프로젝트는 그대로 둡니다.
-${NO_SERVER}`); return; }
+  try { const r = await fetch(ex.project, { cache: 'no-store' }); if (!r.ok) throw { status: r.status }; file = new File([await r.blob()], ex.project.split('/').pop()); }
+  catch (e) { alert(`예제를 열 수 없습니다. 지금 프로젝트는 그대로 둡니다.
+${fetchFailText(e, ex.project)}`); return; }
   try { if (ex.theme && !localStorage.getItem('uds.m3.theme')) localStorage.setItem('uds.m3.theme', ex.theme); } catch {}
   projFile?.clear(); m3app.unmount(); spec.mech3d = null; spec.mech3dPending = null; spec.mode = 'mech3d'; persist(); applyMode();
   openProjectFile(file).catch((e) => { $('#m3-start-msg').textContent = `예제 열기 실패: ${e.message ?? e}`; });
