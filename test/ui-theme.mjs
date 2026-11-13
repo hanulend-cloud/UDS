@@ -14,4 +14,9 @@ ok(nextTheme('dark') === 'light' && nextTheme('light') === 'dark' && nextTheme(u
 { const d = themeButton('dark'), l = themeButton('light');
   ok(d.icon === '☀' && /밝은 화면/.test(d.title) && d.pressed === 'true', '어두울 때 단추 = ☀ 밝은 화면으로');
   ok(l.icon === '☾' && /어두운 화면/.test(l.title) && l.pressed === 'false', '밝을 때 단추 = ☾ 어두운 화면으로'); }
+{ // 3D 화면이 아직 없을 때(시작·파일 불러오는 중·새 프로젝트)도 작업 화면 패널이 같은 테마(2026-11-13 사용자: 불러올 때 어두운 테마가 무너짐)
+  const wrap = { dataset: {} }, vp = { dataset: {} }, el = { dataset: {}, style: {} };
+  const doc = { documentElement: el, querySelector: (q) => (q === '#mech3d-wrap' ? wrap : q === '#mech3d-canvas' ? { parentElement: vp } : null) };
+  applyPageTheme(doc, 'dark'); ok(wrap.dataset.theme === 'dark' && vp.dataset.theme === 'dark', '작업 화면·3D 칸도 어둡게(3D 보기 만들기 전에도)');
+  applyPageTheme(doc, 'light'); ok(wrap.dataset.theme === 'light' && vp.dataset.theme === 'light', '밝게로 바꾸면 같이 밝게'); }
 done();
