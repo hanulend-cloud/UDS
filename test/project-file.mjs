@@ -56,4 +56,14 @@ const memStore = () => { let v = null; return { get: async () => v, put: async (
   ok(await P.saveAs() && dl[0] === 'PK' && dl[1] === 'a.uds', '파일 API 없음 = .uds 다운로드');
   const P2 = createProjectFile({ getText: () => 't', pack: async (t, n) => (/.uds$/.test(n) ? 'PK' : t), win: {}, timers: timers(), store: memStore(), download: (t, n) => { dl = [t, n]; }, ask: () => '옛.json' });
   ok(await P2.saveAs() && dl[0] === 'PK' && dl[1] === '옛.uds', '이름을 .json 으로 적어도 .uds 로'); }
+// STEP 도면이 빠지면 파일에 쓰지 않음(2026-11-13) — pack 이 missingStep 오류를 던지면 [STEP 원본 지정] · pack 에 덮어쓸 파일을 넘김
+{ let miss = ['기구.stp'], prevSeen = null; const H = fakeHandle('도면.uds', 'OLD'), tm = timers();
+  const pack = async (t, n, prev) => { prevSeen = prev ? await prev.text() : null; if (miss.length) { const e = new Error('STEP 없음'); e.missingStep = miss; throw e; } return 'PK:' + t; };
+  const P = createProjectFile({ getText: () => 'p', pack, win: { showSaveFilePicker: async () => H }, timers: tm, store: memStore() });
+  ok(!(await P.saveAs()) && H.text === 'OLD' && H.writes === 0 && P.state().missing?.join() === '기구.stp', '도면 없음 = 파일 안 건드림');
+  ok(prevSeen === 'OLD', 'pack 에 덮어쓸 파일 내용을 넘김');
+  const L = projectFileLabel(P.state()); ok(L.action === 'pickStep' && L.kind === 'warn' && /기구\.stp/.test(L.status), `표시 = [${L.actionText}] ${L.status}`);
+  miss = []; P.touched(); await tm.run(); ok(H.text === 'PK:p' && !P.state().missing?.length && !P.state().err, '도면을 지정하면 다시 저장');
+  let dl = null; miss = ['x.stp']; const D = createProjectFile({ getText: () => 't', pack, win: {}, timers: timers(), store: memStore(), download: (t) => { dl = t; }, ask: (d) => d, suggest: () => 'a.uds' });
+  ok(!(await D.saveAs()) && dl === null && D.state().missing?.join() === 'x.stp', '다운로드 저장도 도면 없으면 안 함'); }
 process.exitCode = fail ? 1 : 0;

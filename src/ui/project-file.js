@@ -19,7 +19,7 @@ function handleDb() {
 // getText() = 저장할 내용, onOpen(text, name) = 연 파일 적용(실패면 던짐), onState(state) = 표시 갱신, suggest() = 저장 창의 기본 이름
 export function createProjectFile({ getText, onOpen, onState = () => {}, suggest = () => 'uds-project.uds', pack = async (t) => t, extra = () => '', read = (f) => f.text(), delay = 1000, win = globalThis, timers = globalThis, store = null, download = null, ask = null }) {
   const db = store ?? (typeof indexedDB !== 'undefined' ? handleDb() : null);
-  const S = { name: null, hasFile: false, perm: 'none', saving: false, savedAt: null, browserAt: null, err: '' };
+  const S = { name: null, hasFile: false, perm: 'none', saving: false, savedAt: null, browserAt: null, err: '', missing: [] };
   let handle = null, lastText = null, t = null, again = false;
   const emit = () => onState({ ...S });
   const keep = (fn) => { try { fn()?.catch?.(() => {}); } catch { /* 핸들 보관 실패 = 다음 실행에서 다시 고르면 됨 */ } };
@@ -32,11 +32,13 @@ export function createProjectFile({ getText, onOpen, onState = () => {}, suggest
     if (key === lastText) return true;
     S.saving = true; emit();
     try {
+      const prev = await handle.getFile?.().catch(() => null) ?? null;   // 덮어쓸 파일 — 그 안의 STEP 도면을 되살릴 수 있게
+      const body = await pack(text, handle.name, prev);   // STEP 도면이 빠지면 여기서 던짐 = 파일을 열지도 않음
       const w = await handle.createWritable();
-      await w.write(await pack(text, handle.name)); await w.close();
-      lastText = key; S.savedAt = Date.now(); S.err = '';
+      await w.write(body); await w.close();
+      lastText = key; S.savedAt = Date.now(); S.err = ''; S.missing = [];
     } catch (e) {
-      S.err = e?.message ?? String(e);
+      S.err = e?.message ?? String(e); S.missing = e?.missingStep ?? [];
       if (e?.name === 'NotAllowedError') S.perm = 'prompt';
     }
     S.saving = false;
@@ -59,8 +61,9 @@ export function createProjectFile({ getText, onOpen, onState = () => {}, suggest
         const nm = (ask ?? ((d) => win.prompt?.('저장할 파일 이름', d)))(asUds(S.name ?? suggest()));
         if (!nm) return false;
         const name = asUds(nm);
-        download?.(await pack(getText(), name), name);
-        S.name = name; S.savedAt = Date.now(); emit();
+        let body; try { body = await pack(getText(), name, null); } catch (e) { S.err = e?.message ?? String(e); S.missing = e?.missingStep ?? []; emit(); return false; }
+        download?.(body, name);
+        S.name = name; S.savedAt = Date.now(); S.err = ''; S.missing = []; emit();
         return true;
       }
       let h;
@@ -115,6 +118,7 @@ export function createProjectFile({ getText, onOpen, onState = () => {}, suggest
 export function projectFileLabel(S, clock = (t) => new Date(t).toTimeString().slice(0, 8)) {
   const name = S.name ?? '이름 없는 프로젝트';
   if (S.saving) return { name, status: '저장 중…', kind: 'busy', action: null };
+  if (S.missing?.length) return { name, status: `STEP 도면이 없어 파일 저장 멈춤: ${S.missing.join(', ')}`, title: '도면이 빠진 .uds 는 저장하지 않습니다 — [STEP 원본 지정]으로 그 STEP 파일을 고르면 함께 저장됩니다(브라우저에는 저장됨)', kind: 'warn', action: 'pickStep', actionText: 'STEP 원본 지정' };
   if (S.err) return { name, status: '파일 저장 실패 — 브라우저에는 저장됨', title: S.err, kind: 'warn', action: S.hasFile ? 'regrant' : 'saveAs', actionText: '다시 저장' };
   if (S.hasFile && S.perm !== 'granted') return { name, status: '파일 저장 멈춤 · 브라우저에만 저장 중', kind: 'warn', action: 'regrant', actionText: '파일 저장 다시 켜기' };
   if (S.hasFile) return { name, status: S.savedAt ? `자동 저장됨 ${clock(S.savedAt)}` : '자동 저장 켜짐', kind: 'ok', action: null };

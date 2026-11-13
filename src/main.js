@@ -33,8 +33,8 @@ import { installErrorLog, openErrorLog, reportError } from './ui/error-log.js';
 import { mountMenubar } from './ui/menubar.js';
 import { APP_VERSION, APP_DATE } from './version.js';
 import { createProjectFile, projectFileLabel } from './ui/project-file.js';
-import { packBundle, isBundle, unpackBundle } from './ui/project-bundle.js';
-import { pickSources, sourcesKey, keepStepSource, loadStepSources, onStepSourcesChange } from './ui/step-sources.js';
+import { isBundle, unpackBundle } from './ui/project-bundle.js';
+import { pickSources, sourcesKey, keepStepSource, loadStepSources, onStepSourcesChange, bundleProject, setStepSourcePins } from './ui/step-sources.js';
 import { createTabLock, openChannel } from './ui/tab-lock.js';
 import { readTheme, applyPageTheme, themeButton } from './ui/theme.js';
 // 화면 전체 테마를 3D 화면이 뜨기 전에 먼저 적용(상단 바가 깜빡이지 않게)
@@ -943,11 +943,44 @@ function importJson(e) {   // 파일 API 가 없는 브라우저 — 이름만 �
   openProjectFile(f).then(() => projFile?.opened(f.name)).catch((x) => alert(`프로젝트 열기 실패: ${x?.message ?? x}`));
 }
 // 통합 프로젝트 파일(.uds, 2026-11-12) — 프로젝트 + 기구·LED STEP 원본. 옛 .json = 프로젝트만(STEP 은 따로 다시 불러옴)
-async function packProject(text, name) {
+// STEP 도면은 반드시 함께(2026-11-13) — 원본이 없으면 덮어쓸 .uds 안의 도면을 되살리고, 그래도 없으면 저장하지 않음(머리 [STEP 원본 지정])
+async function packProject(text, name, prev = null) {
   if (!/\.uds$/i.test(name)) return text;
-  const { files, missing } = pickSources(spec);
-  if (missing.length) { const t = `도면 원본이 없어 빼고 저장: ${missing.join(', ')} — 그 STEP 을 한 번 다시 불러오면 다음 저장부터 포함됩니다`; if (m3app.isMounted()) m3app.setStatus(t); else $('#timing').textContent = t; }
-  return packBundle(text, files);
+  return bundleProject(spec, text, prev, undefined, undefined, stepFromScreen);
+}
+// STEP 원본이 없으면 화면에 보이는 형상(불러온 그대로의 부품 메쉬)을 STEP 으로 만들어 보관 — 묻지 않음(2026-11-13 사용자 결정).
+// 부품 수정(크기·위치·형상)은 프로젝트 설정에 있어 열 때 다시 반영되므로 원본 메쉬(raw)로 만든다. 삼각형 근사라 원본보다 거침
+const meshStepText = (parts) => new Promise((res, rej) => {
+  const w = new Worker(new URL('./export/assembly-step-worker.js', import.meta.url), { type: 'module' });
+  w.onmessage = (ev) => { w.terminate(); if (ev.data.type === 'done') res(ev.data.stepText); else rej(new Error(ev.data.message)); };
+  w.onerror = (e) => { w.terminate(); rej(new Error(e.message ?? 'STEP 만들기 실패')); };
+  w.postMessage({ meshes: parts.map((p) => ({ positions: p.positions, triangles: p.triangles })) });
+});
+async function stepFromScreen(lack) {
+  const M = spec.mech3d, raw = getMech3d()?.raw, made = [];
+  for (const l of lack) {
+    let parts = null;
+    if (l.role === 'mech' && M && raw) { let off = 0; for (const s of sourcesOf(M)) { if (s.name === l.name) { parts = raw.parts.slice(off, off + s.parts); break; } off += s.parts; } }
+    else if (l.role === 'led' && getLedMesh()) parts = getLedMesh().parts;
+    if (!parts?.length) continue;
+    try { await keepStepSource(l.role, new File([await meshStepText(parts)], l.name, { lastModified: Date.now() })); made.push(l.name); } catch { /* 못 만들면 저장 멈춤 표시 */ }
+  }
+  if (made.length && m3app.isMounted()) m3app.setStatus(`STEP 원본이 없어 화면 형상으로 만들어 함께 저장: ${made.join(', ')} (삼각형 근사)`);
+}
+setStepSourcePins(() => spec);
+// [STEP 원본 지정] — 빠진 도면과 같은 이름의 STEP 을 골라 보관 → 바로 다시 저장
+function pickMissingStep() {
+  const lack = pickSources(spec).lack; if (!lack.length) { projFile.save(); return; }
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.stp,.step'; inp.multiple = true;
+  inp.onchange = async () => {
+    const got = [...inp.files], wrong = [];
+    for (const f of got) { const l = lack.find((x) => x.name.toLowerCase() === f.name.toLowerCase()); if (l) await keepStepSource(l.role, f); else wrong.push(f.name); }
+    const still = pickSources(spec).missing;
+    if (wrong.length || still.length) alert(`${wrong.length ? `이름이 다른 파일은 넣지 않음: ${wrong.join(', ')}
+` : ''}${still.length ? `아직 필요한 STEP: ${still.join(', ')} (같은 이름의 파일)` : ''}`);
+    projFile.save();
+  };
+  inp.click();
 }
 async function openProjectFile(f) {
   if (!(await isBundle(f))) { applyProjectText(await f.text()); return; }
@@ -976,7 +1009,7 @@ function renderProjFile(st) {
   el.dataset.kind = d.kind; el.title = d.title ?? (st.hasFile ? '이 파일에 실시간 저장됨' : '파일 › 다른 이름으로 저장 — 고른 파일에 실시간 저장');
   el.querySelector('[data-pf="name"]').textContent = d.name;
   { const n = el.querySelector('[data-pf="st"]'); n.textContent = d.status; n.title = d.status; }   // 좁은 화면에서 … 로 잘려도 마우스를 올리면 전체
-  const b = el.querySelector('[data-pf="act"]'); b.hidden = !d.action; b.textContent = d.actionText ?? ''; b.onclick = () => { m3app.flush(); if (d.action === 'regrant') projFile.regrant(); else projFile.saveAs(); };
+  const b = el.querySelector('[data-pf="act"]'); b.hidden = !d.action; b.textContent = d.actionText ?? ''; b.onclick = () => { m3app.flush(); if (d.action === 'regrant') projFile.regrant(); else if (d.action === 'pickStep') pickMissingStep(); else projFile.saveAs(); };
   document.title = `${d.name} — Uniform Design Simulator`;
 }
 function setupProjectFile() {

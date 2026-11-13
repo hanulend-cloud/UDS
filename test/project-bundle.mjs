@@ -20,6 +20,27 @@ const E = await unpackBundle(await packBundle(text, []));
 ok(E.text === text && E.files.length === 0, '도면 없는 통합 파일');
 let threw = false; try { await unpackBundle(new Blob([B.slice(0, 20)])); } catch { threw = true; }
 ok(threw, '잘린 파일 = 오류');
+// STEP 도면은 반드시 함께(2026-11-13 사용자 결정): 빠지면 저장 안 함 · 덮어쓸 파일 안의 도면은 되살림 · 쓰는 도면은 보관 한도에서 안 밀림
+{ const { pickSources, bundleProject, dropKeys } = await import('../src/ui/step-sources.js');
+  const gz = await gzipBlob(new Blob(['MECH;\n'])), M = { name: 'c.stp', parts: [1], light: { kind: 'none' } };
+  ok(JSON.stringify(pickSources({ mech3d: M }, new Map()).lack) === JSON.stringify([{ role: 'mech', name: 'c.stp' }]), '빠진 도면 = 역할·이름');
+  let err = null; try { await bundleProject({ mech3d: M }, '{}', null, new Map()); } catch (e) { err = e; }
+  ok(err?.missingStep?.join() === 'c.stp', `원본 없음 = 저장 거부(${err?.message})`);
+  const prev = await packBundle('{"old":1}', [{ role: 'mech', name: 'c.stp', size: 6, lastModified: 5, gz }]), have = new Map(), kept = [];
+  const keep = async (role, file, g) => { kept.push(role + ':' + file.name); have.set(`${role}:${file.name}`, { role, name: file.name, size: file.size, lastModified: file.lastModified, gz: g }); };
+  const B = await bundleProject({ mech3d: M }, '{"new":1}', prev, have, keep), U = await unpackBundle(B);
+  ok(kept.join() === 'mech:c.stp' && U.text === '{"new":1}' && U.files.length === 1 && await U.files[0].file.text() === 'MECH;\n', '덮어쓸 .uds 안의 도면을 되살려 함께 저장');
+  err = null; try { await bundleProject({ mech3d: { ...M, name: 'd.stp' } }, '{}', prev, new Map(), keep); } catch (e) { err = e; }
+  ok(err?.missingStep?.join() === 'd.stp', '덮어쓸 파일에도 없으면 거부');
+  ok(await bundleProject({ mode: 'flat' }, 'T', null, new Map()) instanceof Blob, '도면 없는 프로젝트 = 그대로 저장');
+  ok(dropKeys(['a', 'b', 'c', 'd'], new Set(['a', 'b']), 2).join() === 'c,d', '보관 한도: 오래된 것부터 버리되');
+  ok(dropKeys(['a', 'b', 'c'], new Set(['a', 'b', 'c']), 2).length === 0, '지금 쓰는 도면은 한도를 넘어도 안 버림'); }
+// 원본도 덮어쓸 파일도 없으면 묻지 않고 화면 형상으로 만든 STEP 을 넣음(fallback) — 그것도 없을 때만 거부
+{ const { bundleProject } = await import('../src/ui/step-sources.js');
+  const M = { name: 'e.stp', parts: [1], light: { kind: 'none' } }, have = new Map(), asked = [];
+  const fb = async (lack) => { for (const l of lack) { asked.push(l.name); have.set(`${l.role}:${l.name}`, { role: l.role, name: l.name, size: 4, lastModified: 1, gz: await gzipBlob(new Blob(['SCR;'])) }); } };
+  const U = await unpackBundle(await bundleProject({ mech3d: M }, 'T', null, have, undefined, fb));
+  ok(asked.join() === 'e.stp' && U.files.length === 1 && await U.files[0].file.text() === 'SCR;', '원본 없음 = 화면 형상 STEP 으로 함께 저장(묻지 않음)'); }
 process.exitCode = fail ? 1 : 0;
 // 저장할 도면 고르기(순수) — 기구 STEP(합친 순서) + 따로 불러온 LED STEP. 도면 안 LED(fromMech)·원본 없는 도면은 뺌
 { const { pickSources } = await import('../src/ui/step-sources.js');
@@ -40,4 +61,25 @@ process.exitCode = fail ? 1 : 0;
     let same = true; for (const f of U.files) same &&= readFileSync(f.role === 'mech' ? P.mech : P.led).equals(Buffer.from(await f.file.arrayBuffer()));
     ok(/\.uds$/.test(ex.project) && roles === want && same && S.mode === 'mech3d' && !S.mech3d && JSON.stringify(S.mech3dPending ?? null) === JSON.stringify(P.mech3d ?? null), `예제 ${ex.id}: .uds · 도면 ${roles} · 설정 보관분`);
   } }
+// STEP 도면은 반드시 함께(2026-11-13 사용자 결정): 빠지면 저장 안 함 · 덮어쓸 파일 안의 도면은 되살림 · 쓰는 도면은 보관 한도에서 안 밀림
+{ const { pickSources, bundleProject, dropKeys } = await import('../src/ui/step-sources.js');
+  const gz = await gzipBlob(new Blob(['MECH;\n'])), M = { name: 'c.stp', parts: [1], light: { kind: 'none' } };
+  ok(JSON.stringify(pickSources({ mech3d: M }, new Map()).lack) === JSON.stringify([{ role: 'mech', name: 'c.stp' }]), '빠진 도면 = 역할·이름');
+  let err = null; try { await bundleProject({ mech3d: M }, '{}', null, new Map()); } catch (e) { err = e; }
+  ok(err?.missingStep?.join() === 'c.stp', `원본 없음 = 저장 거부(${err?.message})`);
+  const prev = await packBundle('{"old":1}', [{ role: 'mech', name: 'c.stp', size: 6, lastModified: 5, gz }]), have = new Map(), kept = [];
+  const keep = async (role, file, g) => { kept.push(role + ':' + file.name); have.set(`${role}:${file.name}`, { role, name: file.name, size: file.size, lastModified: file.lastModified, gz: g }); };
+  const B = await bundleProject({ mech3d: M }, '{"new":1}', prev, have, keep), U = await unpackBundle(B);
+  ok(kept.join() === 'mech:c.stp' && U.text === '{"new":1}' && U.files.length === 1 && await U.files[0].file.text() === 'MECH;\n', '덮어쓸 .uds 안의 도면을 되살려 함께 저장');
+  err = null; try { await bundleProject({ mech3d: { ...M, name: 'd.stp' } }, '{}', prev, new Map(), keep); } catch (e) { err = e; }
+  ok(err?.missingStep?.join() === 'd.stp', '덮어쓸 파일에도 없으면 거부');
+  ok(await bundleProject({ mode: 'flat' }, 'T', null, new Map()) instanceof Blob, '도면 없는 프로젝트 = 그대로 저장');
+  ok(dropKeys(['a', 'b', 'c', 'd'], new Set(['a', 'b']), 2).join() === 'c,d', '보관 한도: 오래된 것부터 버리되');
+  ok(dropKeys(['a', 'b', 'c'], new Set(['a', 'b', 'c']), 2).length === 0, '지금 쓰는 도면은 한도를 넘어도 안 버림'); }
+// 원본도 덮어쓸 파일도 없으면 묻지 않고 화면 형상으로 만든 STEP 을 넣음(fallback) — 그것도 없을 때만 거부
+{ const { bundleProject } = await import('../src/ui/step-sources.js');
+  const M = { name: 'e.stp', parts: [1], light: { kind: 'none' } }, have = new Map(), asked = [];
+  const fb = async (lack) => { for (const l of lack) { asked.push(l.name); have.set(`${l.role}:${l.name}`, { role: l.role, name: l.name, size: 4, lastModified: 1, gz: await gzipBlob(new Blob(['SCR;'])) }); } };
+  const U = await unpackBundle(await bundleProject({ mech3d: M }, 'T', null, have, undefined, fb));
+  ok(asked.join() === 'e.stp' && U.files.length === 1 && await U.files[0].file.text() === 'SCR;', '원본 없음 = 화면 형상 STEP 으로 함께 저장(묻지 않음)'); }
 process.exitCode = fail ? 1 : 0;
