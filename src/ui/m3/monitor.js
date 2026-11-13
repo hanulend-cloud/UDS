@@ -1,4 +1,4 @@
-import { setCtl, setStepMark } from './run-ctl.js';
+import { setCtl, setStepMark, iconLabel } from './run-ctl.js';
 // ⑤ 기구 최적화 창 — 화면 안에 떠 있는 창(2026-10-29). 기본 화면에는 설계와 ④ 광분포 시뮬레이션만 두고,
 // 기구 최적화에 관한 칸('설계 인자 현황' · 기구 최적화 실행·항목·결과)은 처음부터 이 창 안에 옮겨 둔다(같은 DOM — 연결·갱신 그대로).
 // 명령줄 [5 기구 최적화] 로 열고 닫음(닫으면 숨김 — 기본 화면으로 돌아가지 않음). 끌어서 옮기기(머리) · 크기 조절(상하좌우·모서리) · 접기(제목과 현재 결과만).
@@ -76,10 +76,10 @@ export function createMonitor({ host, items, onChange = () => {}, onTab = () => 
   st.max = !!sv.max && !old;
   const persist = () => save({ lay: LAY, open: st.open, min: st.min, max: st.max, x: st.x, y: st.y, w: st.w, h: st.h });
   const el = document.createElement('div');
-  const place = () => { const r = st.max && !st.min ? maxRect(innerWidth, innerHeight, winTop()) : clampRect(st.min ? { ...st, w: COLLAPSED_W } : st, innerWidth, innerHeight, winTop()); st.x = r.x; st.y = r.y; if (!st.min) { st.w = r.w; st.h = r.h; } el.style.left = `${r.x}px`; el.style.top = `${r.y}px`; el.style.width = `${r.w}px`; el.style.height = st.min ? 'auto' : `${r.h}px`; };
+  const place = () => { const r = st.max && !st.min ? maxRect(innerWidth, innerHeight, winTop()) : clampRect(st.min ? { ...st, w: COLLAPSED_W } : st, innerWidth, innerHeight, winTop()); st.x = r.x; st.y = r.y; if (!st.min) { st.w = r.w; st.h = r.h; } el.style.left = `${r.x}px`; el.style.top = `${r.y}px`; el.style.width = st.min ? 'max-content' : `${r.w}px`; el.style.height = st.min ? 'auto' : `${r.h}px`; };
   const kick = () => window.dispatchEvent(new Event('resize'));   // 담은 칸의 그래프·캔버스 크기 다시
   el.className = 'm3-mon'; el.hidden = true; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', '기구 최적화');
-  el.innerHTML = `<div class="m3-mon-hd" title="끌어서 옮기기 · ④ 광분포 결과가 목표 미달이면 여기서 후보를 찾아 최종 판정 → [적용]"><b><i class="m3-fl" data-mon-step>5</i>기구 최적화</b><span class="m3-mon-steps" data-mon-steps aria-live="polite"></span><span class="m3-mon-sum" data-mon-sum></span><span class="m3-mon-sp"></span><span class="m3-ctl" data-mon-ctl></span><button type="button" data-mon-max></button><button type="button" data-mon-min></button><button type="button" data-mon-close title="창 닫기(진행 중인 최적화는 계속)">✕ 닫기</button></div><div class="m3-mon-body"></div>`;
+  el.innerHTML = `<div class="m3-mon-hd" title="끌어서 옮기기 · ④ 광분포 결과가 목표 미달이면 여기서 후보를 찾아 최종 판정 → [적용]"><b><i class="m3-fl" data-mon-step>5</i><span class="m3-tx">기구 최적화</span></b><span class="m3-mon-steps" data-mon-steps aria-live="polite"></span><span class="m3-mon-sum" data-mon-sum></span><span class="m3-mon-sp"></span><span class="m3-ctl" data-mon-ctl></span><button type="button" data-mon-max></button><button type="button" data-mon-min></button><button type="button" data-mon-close title="창 닫기(진행 중인 최적화는 계속)" aria-label="닫기">✕<span class="m3-tx"> 닫기</span></button></div><div class="m3-mon-body"></div>`;
   const body = el.querySelector('.m3-mon-body');
   for (const it of items.filter(Boolean)) body.appendChild(it);   // 기본 화면에서 빼서 창 안으로(닫아도 여기 그대로)
   host.appendChild(el);
@@ -90,7 +90,7 @@ export function createMonitor({ host, items, onChange = () => {}, onTab = () => 
   el.addEventListener('pointerdown', () => raiseWin(el), true);
   el.querySelector('[data-mon-min]').onclick = () => setMin(!st.min);
   el.querySelector('[data-mon-max]').onclick = () => setMax(!st.max || st.min);
-  function updMax() { const b = el.querySelector('[data-mon-max]'), on = st.max && !st.min; b.textContent = on ? '⤡ 원래 크기' : '⤢ 전체화면'; b.title = on ? '크게 하기 전 크기로' : '상단 바 아래 화면 전체로 넓히기'; }
+  function updMax() { const b = el.querySelector('[data-mon-max]'), on = st.max && !st.min; iconLabel(b, on ? '⤡' : '⤢', on ? '원래 크기' : '전체화면', on ? '크게 하기 전 크기로' : '상단 바 아래 화면 전체로 넓히기'); }
   function setMax(v) {
     if (v && !st.max) { st.prev = { x: st.x, y: st.y, w: st.w, h: st.h }; }   // 원래 크기로 돌아갈 자리
     else if (!v && st.prev) { Object.assign(st, st.prev); st.prev = null; }
@@ -112,7 +112,7 @@ export function createMonitor({ host, items, onChange = () => {}, onTab = () => 
     v = !!v;   // 저장값에 min 이 없으면 undefined → classList.toggle 이 뒤집기로 동작해 몸통은 숨고 단추는 '접기'로 남았음(펼칠 방법 없음, 2026-11-08)
     st.min = v; persist();
     el.classList.toggle('min', v);
-    const b = el.querySelector('[data-mon-min]'); b.textContent = v ? '▾ 펼치기' : '▴ 접기'; b.title = v ? '모든 칸 보기' : '제목과 현재 결과만 남기기';
+    const b = el.querySelector('[data-mon-min]'); iconLabel(b, v ? '▾' : '▴', v ? '펼치기' : '접기', v ? '모든 칸 보기' : '제목과 현재 결과만 남기기');
     updMax(); place(); kick();
   }
   function open() {

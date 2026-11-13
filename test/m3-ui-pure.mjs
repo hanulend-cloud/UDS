@@ -1150,7 +1150,7 @@ done();
   okC(/\.m3-node\.d1\.grp \.m3-fold \{[^}]*margin-left: -1\dpx/.test(css), '그룹 접기 화살표는 왼쪽 여백으로 — 눈·이름이 일반 부품과 같은 단계');
   okC(/\.m3-node\.untr \.m3-badge[^{]*\{[^}]*line-through/.test(css) || /\.m3-node\.untr \.m3-lbl, [^{]*\.m3-node\.untr \.m3-badge[^{]*\{[^}]*line-through/.test(css), '빛 계산 제외 = 소재 배지에도 취소선');
   okC(!/v\.toFixed\(2\)/.test(rp.match(/data-big-sum[\s\S]{0,600}/)?.[0] ?? 'v.toFixed(2)') && /u = \(t, v, g\) => [^\n]*fmtJudge\(v\)/.test(rp), '광분포 창 머리 균일도 = % (fmtJudge)');
-  okC(/'⤢ 전체화면'/.test(rp) && /'⤢ 전체화면'/.test(mon) && !/'⤢ 크게'/.test(rp + mon), '[⤢ 크게] → [⤢ 전체화면]');
+  okC(/'⤢', on \? '원래 크기' : '전체화면'/.test(rp) && /'⤢', on \? '원래 크기' : '전체화면'/.test(mon) && !/'⤢ 크게'/.test(rp + mon), '[⤢ 크게] → [⤢ 전체화면]');
   const { setCtl } = await import('../src/ui/m3/run-ctl.js'), rc = rd('../src/ui/m3/run-ctl.js');
   okC(/\['stop', '■'\]/.test(rc) && /k === 'stop' \? '중지'/.test(rc), '중지 단추 = ■ 만(마우스 설명·읽기 이름 = 중지)');
   okC(/\.m3-big-hd \.m3-ctl button\[data-ctl="run"\][^{]*\{[^}]*font-size: 11px/.test(css) && /\.m3-mon-hd \.m3-ctl button\[data-ctl="run"\]/.test(css), '시뮬레이션 실행·최적화 시작 글씨 작게');
@@ -1168,4 +1168,19 @@ done();
   const m = monitorHtml(S, 5);
   okU(/class="om-k om-u1"[^>]*>[\s\S]*?길이 균일도/.test(m) && /class="om-k om-u2"[^>]*>[\s\S]*?폭 균일도/.test(m), '길이·폭 카드에 그래프 색 구분 표시');
   okU(/\.om-k\.om-u1 \{[^}]*var\(--od-s1\)/.test(css) && /\.om-k\.om-u2 \{[^}]*var\(--od-s2\)/.test(css), '길이 = 그래프 파랑 · 폭 = 그래프 주황');
+}
+{ // 접은 창(기구 최적화·광분포 시뮬레이션) = 진행 상태 + 아이콘만(글씨 빼고), 폭 = 내용만큼(2026-11-13 사용자)
+  const { iconLabel, setCtl } = await import('../src/ui/m3/run-ctl.js'), { readFileSync } = await import('node:fs');
+  const rd = (p) => readFileSync(new URL(p, import.meta.url), 'utf8'), css = rd('../styles.css'), mon = rd('../src/ui/m3/monitor.js'), rp = rd('../src/ui/m3/results-panel.js');
+  let f = 0; const okI = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) { f++; process.exitCode = 1; } };
+  const b = { innerHTML: '', title: '', attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } };
+  iconLabel(b, '⤢', '전체화면', '넓히기');
+  okI(b.innerHTML === '⤢<span class="m3-tx"> 전체화면</span>' && b.attrs['aria-label'] === '전체화면' && b.title === '넓히기', `아이콘 + 글씨(접으면 숨길 칸): ${b.innerHTML}`);
+  okI(/\.m3-mon\.min \.m3-tx, \.m3-big-in\.min \.m3-tx \{[^}]*display: none/.test(css), '접으면 글씨 숨김');
+  okI(/m3-fl" data-mon-step>5<\/i><span class="m3-tx">기구 최적화<\/span>/.test(mon) && /m3-fl" data-big-step>4<\/i><span class="m3-tx">광분포 시뮬레이션<\/span>/.test(rp), '창 제목 글씨도 접으면 숨김(번호 아이콘은 남음)');
+  okI([mon, rp].every((x) => /iconLabel\(b, on \? '⤡' : '⤢'/.test(x) && /iconLabel\(b, v \? '▾' : '▴'/.test(x)) && !/>✕ 닫기</.test(mon + rp), '전체화면·접기·닫기 단추 = iconLabel');
+  okI(/width = st\.min \? 'max-content'/.test(mon) && /width: m \? 'max-content'/.test(rp), '접은 창 폭 = 내용만큼');
+  const box = { _h: '', set innerHTML(v) { this._h = v; this.btn = {}; for (const k of ['run', 'pause', 'stop']) this.btn[k] = { innerHTML: '', title: '', attrs: {}, setAttribute(a, x) { this.attrs[a] = x; } }; }, get innerHTML() { return this._h; }, querySelector(q) { const m = q.match(/data-ctl="(\w+)"/); return m ? this.btn?.[m[1]] : (this.btn ? {} : null); } };
+  setCtl(box, { run: true, runLabel: '▶ 최적화 시작' }, () => {});
+  okI(box.btn.run.innerHTML === '▶<span class="m3-tx"> 최적화 시작</span>', `실행 단추도 아이콘 + 글씨: ${box.btn.run.innerHTML}`);
 }

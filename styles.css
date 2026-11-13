@@ -1512,3 +1512,7 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .m3-mon .om-k.om-u1 { background: color-mix(in srgb, var(--od-s1) 10%, transparent); } .m3-mon .om-k.om-u2 { background: color-mix(in srgb, var(--od-s2) 10%, transparent); }
 .om-k.om-u1 > div:first-child { color: var(--od-s1); } .om-k.om-u2 > div:first-child { color: var(--od-s2); }
 .om-kpi { margin-top: 6px; }
+/* 접은 창 = 진행 상태 + 아이콘만(글씨 숨김, 폭 = 내용만큼, 2026-11-13) */
+.m3-mon.min .m3-tx, .m3-big-in.min .m3-tx { display: none; }
+.m3-mon.min .m3-mon-hd, .m3-big-in.min .m3-big-hd { flex-wrap: nowrap; white-space: nowrap; }
+.m3-mon.min .m3-mon-sp, .m3-big-in.min .m3-big-sp { flex: 0 0 4px; }

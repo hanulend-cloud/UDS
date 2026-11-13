@@ -29,6 +29,12 @@ export function rerunAsk(best) {
   const n = fmtJudge;
   return `적용하지 않은 최적화 결과가 있습니다${best ? ` (길이 균일도 ${n(best.Ulen)} · 폭 균일도 ${n(best.Uwid)})` : ''}.\n버리고 처음부터 다시 실행할까요?`;
 }
+// 단추 = 아이콘 + 글씨(접은 창에서는 글씨 숨김 · 읽기 이름은 늘 글씨, 2026-11-13 사용자)
+export function iconLabel(b, icon, text, title) {
+  const h = `${icon}<span class="m3-tx"> ${text}</span>`;
+  if (b.innerHTML !== h) b.innerHTML = h;
+  b.setAttribute('aria-label', text); if (title != null && b.title !== title) b.title = title;
+}
 // 단추 틀(한 번만 만듦) + 상태 갱신 — fn(k) k = run | pause | stop
 export function setCtl(box, c, fn) {
   if (!box) return;
@@ -36,6 +42,6 @@ export function setCtl(box, c, fn) {
   for (const [k] of LABEL) {
     const b = box.querySelector(`[data-ctl="${k}"]`), title = c[`${k}Title`] || (k === 'pause' ? '일시정지' : k === 'stop' ? '중지' : '');
     b.disabled = !c[k]; if (b.title !== title) b.title = title; b.onclick = () => fn(k);
-    if (k === 'run' && c.runLabel && b.textContent !== c.runLabel) b.textContent = c.runLabel;
+    if (k === 'run' && c.runLabel) { const [ic, ...tx] = c.runLabel.split(' '); iconLabel(b, ic, tx.join(' ')); }
   }
 }

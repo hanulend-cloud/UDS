@@ -3,7 +3,7 @@ import { requiredFlux, fmtProg, needText, needShort } from './progressive.js';
 import { mountSplit, mountHeightHandle } from './pane-split.js';
 import { clampRect, fitRect, winTop, dragBy, raiseWin, mountResizers, COLLAPSED_W, maxRect, DEF_RECT } from './monitor.js';
 import { simPct } from './opt-dash.js';
-import { simCtl, setCtl, setStepMark } from './run-ctl.js';
+import { simCtl, setCtl, setStepMark, iconLabel } from './run-ctl.js';
 import { showCtxMenu } from './feature-tree.js';
 // 결과 패널 — spec 2026-10-15 m3-cad-ui §2(시안 m3-ui-mockup 오른쪽):
 // ① 2D 광량 분포(관측면 펼침 s×w) + 평균 광량(목표 대비)·광 효율 ② 길이 1D 프로파일(목표선) + 길이 균일도 ③ 폭 1D 프로파일(최저 창) + 폭 균일도.
@@ -736,18 +736,18 @@ export function createResultsPanel(el, { onOpt = null, onQuality = null, fileNam
     const rect = fitRect(bigRectLoad(), innerWidth, innerHeight, winTop());
     ov.className = 'm3-big-in'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', '광분포 시뮬레이션');
     const cell = (k) => `<div class="m3-big-c" data-k="${k}"><div class="m3-big-ct"><b>${TITLE[k]}</b><span class="m3-big-sp"></span>${k === 'map' ? `<label class="m3-big-eq"><input type="checkbox" data-big-eq${eq0 ? ' checked' : ''}> 실제 비율</label><button type="button" data-big-reg-on aria-pressed="false" title="켜 둔 동안 끌 때마다 새 영역 · 그 영역의 균일도를 아래 표로 비교 · 켠 채 클릭 = 영역 지움 · 끄면 영역 결과를 숨김(다시 켜면 보임) · 휠 = 확대 · 오른쪽 끌기 = 이동 · 더블클릭 = 전체 보기">▭ 영역 선택</button><button type="button" data-big-fit disabled title="확대하면 켜짐 — 휠 = 확대 · 오른쪽 끌기 = 이동">전체 보기</button>` : ''}<button type="button" data-big-one="${k}">⤢ 이 그림만</button></div><canvas class="m3-big-cv" data-big-cv="${k}"></canvas>${k === 'map' ? '<div class="m3-big-reg" data-big-reg hidden></div>' : ''}</div>`;
-    ov.innerHTML = `<div class="m3-big-hd" title="끌어서 옮기기"><b title="진행 현황 · 2D · 1D — 2D 클릭 = 그 점 기준 1D 곡선(주황) · 그림 우클릭 = 데이터·이미지 저장"><i class="m3-fl" data-big-step>4</i>광분포 시뮬레이션</b><span class="m3-mon-sum" data-big-sum></span><span class="m3-big-sp"></span><span class="m3-ctl" data-big-ctl></span><label class="m3-big-q">화질 <select data-big-q aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label><button type="button" data-big-max></button><button type="button" data-big-min></button><button type="button" data-big-close title="Esc">✕ 닫기</button></div>
+    ov.innerHTML = `<div class="m3-big-hd" title="끌어서 옮기기"><b title="진행 현황 · 2D · 1D — 2D 클릭 = 그 점 기준 1D 곡선(주황) · 그림 우클릭 = 데이터·이미지 저장"><i class="m3-fl" data-big-step>4</i><span class="m3-tx">광분포 시뮬레이션</span></b><span class="m3-mon-sum" data-big-sum></span><span class="m3-big-sp"></span><span class="m3-ctl" data-big-ctl></span><label class="m3-big-q">화질 <select data-big-q aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label><button type="button" data-big-max></button><button type="button" data-big-min></button><button type="button" data-big-close title="Esc" aria-label="닫기">✕<span class="m3-tx"> 닫기</span></button></div>
       <div class="m3-big-grid"><div class="m3-big-prog" data-big-prog></div>${cell('map')}<div class="m3-big-row">${cell('prof')}${cell('wprof')}</div></div>`;
     (el.closest('#mech3d-wrap') ?? document.body).appendChild(ov);   // 설계 화면에 붙임(화면을 바꾸면 함께 숨음)
     const cvs = Object.fromEntries(KINDS.map((k) => [k, ov.querySelector(`[data-big-cv="${k}"]`)]));
     const place = () => {
       const m = big.min, X = big.max && !m, r = X ? maxRect(innerWidth, innerHeight, winTop()) : clampRect(m ? { ...rect, w: BIG_MIN_W } : rect, innerWidth, innerHeight, winTop());   // X = 크게(상단 바 아래 화면 전체) — 원래 크기(rect)는 그대로 둠
       if (!X) { rect.x = r.x; rect.y = r.y; if (!m) { rect.w = r.w; rect.h = r.h; } }
-      Object.assign(ov.style, { left: `${r.x}px`, top: `${r.y}px`, width: `${r.w}px`, height: m ? 'auto' : `${r.h}px` });
+      Object.assign(ov.style, { left: `${r.x}px`, top: `${r.y}px`, width: m ? 'max-content' : `${r.w}px`, height: m ? 'auto' : `${r.h}px` });
     };
     const setMin = (v) => {
       big.min = v; ov.classList.toggle('min', v); updMax();
-      const b = ov.querySelector('[data-big-min]'); b.textContent = v ? '▾ 펼치기' : '▴ 접기'; b.title = v ? '2D·1D 그림 보기' : '제목 줄만 남기기';
+      const b = ov.querySelector('[data-big-min]'); iconLabel(b, v ? '▾' : '▴', v ? '펼치기' : '접기', v ? '2D·1D 그림 보기' : '제목 줄만 남기기');
       place(); if (!v) paintBig();
     };
     // Esc = 이 창을 마지막으로 눌렀을 때만(뒤 화면에서 작업 중인 Esc 를 가로채지 않게)
@@ -758,7 +758,7 @@ export function createResultsPanel(el, { onOpt = null, onQuality = null, fileNam
     document.addEventListener('keydown', big.key); document.addEventListener('pointerdown', big.down, true); window.addEventListener('resize', big.rs);
     ov.addEventListener('pointerdown', () => raiseWin(ov), true);
     // 크게(2026-11-13 사용자: 기구 최적화 창처럼) — 크게 한 채로 끌거나 크기를 바꾸면 그 크기에서 보통 창으로
-    const updMax = () => { const b = ov.querySelector('[data-big-max]'), on = big.max && !big.min; b.textContent = on ? '⤡ 원래 크기' : '⤢ 전체화면'; b.title = on ? '크게 하기 전 크기로' : '상단 바 아래 화면 전체로 넓히기'; };
+    const updMax = () => { const b = ov.querySelector('[data-big-max]'), on = big.max && !big.min; iconLabel(b, on ? '⤡' : '⤢', on ? '원래 크기' : '전체화면', on ? '크게 하기 전 크기로' : '상단 바 아래 화면 전체로 넓히기'); };
     const unmax = () => { if (big.max && !big.min) { Object.assign(rect, maxRect(innerWidth, innerHeight, winTop())); big.max = false; updMax(); } };
     const setMax = (v) => { big.max = !!v; if (v && big.min) setMin(false); updMax(); place(); paintBig(); raiseWin(ov); };
     const snap = () => (unmax(), { ...rect }), keep = () => bigRectSave(rect);
