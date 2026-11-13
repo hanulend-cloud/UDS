@@ -5,8 +5,8 @@ import { loadOc } from '../shape/oc-loader.js';
 import { readStepParts, stepProfile, BIG_MESH, mergeMeshes } from '../shape/step-import.js';
 import { splitTransfer, planSplit, splitRough, splitFine } from '../shape/step-split.js';
 import { stepRootEstimate, stepRootProfile } from '../shape/step-roots.js';
-import { cutStep } from '../shape/step-cut.js';
-import { readStepPartsFast, shouldUseFastStep, FAST_BIG_MESH } from '../shape/fast-step-import.js';
+import { cutStep, cutStepUnits } from '../shape/step-cut.js';
+import { readStepPartsFast, shouldUseFastStep, FAST_BIG_MESH, fastWorkers, mergeFastPieces } from '../shape/fast-step-import.js';
 import { prepScene, prepTransfer } from './scene-prep.js';
 
 const meshBufs = (m) => [m.positions.buffer, m.triangles.buffer, m.faceIds.buffer];
@@ -42,6 +42,38 @@ export function splitWorkers(profile, nav = self.navigator ?? {}) {
   let K = Math.min(6, Math.max(1, (nav.hardwareConcurrency ?? 4) - 2));
   if ((nav.deviceMemory ?? 8) < 8) K = Math.min(K, 3);
   return Math.max(1, K);
+}
+
+// ---- 고속 엔진 조각 동시 읽기(2026-11-13) ----
+// 108 MB 타공 그릴 도면: 한 번에 읽으면 해석 4분 30초 + 그릴 8장 메시 = 15분. 무거운 부품이 서로 독립이라 조각마다 작업자 하나가 맡으면 가장 느린 조각 시간으로 끝남
+// 보조 작업자: { fastPiece: 글자 } → { h: 'stage' | 'part' } … → { h: 'fast', parts(읽은 순서, c = 무게중심) }
+async function fastPiece(d) {
+  const parts = await readStepPartsFast(d.fastPiece, { sorted: false, onStage: (key) => self.postMessage({ h: 'stage', key }), onPart: (i, n) => self.postMessage({ h: 'part', i, n }) });
+  self.postMessage({ h: 'fast', parts }, parts.flatMap(meshBufs));
+}
+function fastSplitLoad(texts, units, go, post) {
+  const K = texts.length;
+  return new Promise((resolve, reject) => {
+    const ws = texts.map(() => new Worker(new URL('./mech3d-worker.js', import.meta.url), { type: 'module' }));
+    const kill = () => ws.forEach((w) => w.terminate());
+    const lists = new Array(K), frac = new Array(K).fill(0);
+    let fin = 0, meshing = false, tP = 0;
+    const tell = (force = false) => { if (!meshing || (!force && Date.now() - tP < 300)) return; tP = Date.now(); post({ key: 'mesh', frac: frac.reduce((a, b) => a + b, 0) / K, text: `조각 ${fin}/${K} 완료 · 작업자 ${K}개 · 고속 엔진` }); };
+    ws.forEach((w, h) => {
+      w.onerror = (e) => { kill(); reject(new Error(`조각 읽기 작업자 오류: ${e.message ?? e}`)); };
+      w.onmessage = (m) => {
+        const d = m.data;
+        if (d.error) { kill(); reject(new Error(d.error)); return; }
+        if (d.h === 'stage') { if (d.key === 'mesh' && !meshing) { meshing = true; go('mesh'); tell(true); } return; }
+        if (d.h === 'part') { frac[h] = 0.95 * d.i / d.n; tell(); return; }
+        if (d.h === 'fast') {
+          lists[h] = d.parts; frac[h] = 1; fin++; w.terminate(); tell(true);
+          if (fin === K) { try { resolve(mergeFastPieces(lists, units)); } catch (e) { reject(e); } }
+        }
+      };
+      w.postMessage({ fastPiece: texts[h] });
+    });
+  });
 }
 
 // ---- 합치는 쪽 ----
@@ -93,6 +125,7 @@ function splitLoad(pieces, profile, early, go, post) {
 }
 
 self.onmessage = async (ev) => {
+  if (ev.data.fastPiece) { try { await fastPiece(ev.data); } catch (e) { self.postMessage({ error: String(e?.message ?? e) }); } return; }
   if (ev.data.helper || ev.data.qs) { try { await helper(ev); } catch (e) { self.postMessage({ error: String(e?.message ?? e) }); } return; }
   try {
     if (ev.data.prep) {   // 복원: 저장된 부품 메쉬 → BVH·합친 메쉬(접촉면은 저장된 설정에 있음)
@@ -111,7 +144,20 @@ self.onmessage = async (ev) => {
     // 지원하지 않는 STEP 변형이나 초기화 오류가 나면 아래 기존 경로로 자동 복귀한다.
     if (shouldUseFastStep(ev.data.bytes ?? text.length)) {
       self.postMessage({ key: 'oc', text: '대용량 고속 엔진 준비' });
-      try {
+      // 부품 단위로 잘라 작업자 여럿이 동시에(2026-11-13) — 자를 수 없거나(부품 하나) 작업자를 못 쓰면 아래에서 한 번에 읽음
+      const KF = ev.data.noSplit ? 1 : fastWorkers(self.navigator ?? {});
+      if (KF >= 2) {
+        try {
+          go('read'); self.postMessage({ key: 'read', text: '부품 단위로 자르는 중' });
+          const cut = cutStepUnits(text, KF);
+          if (cut?.texts.length >= 2) {
+            self.postMessage({ key: 'read', text: `조각 ${cut.texts.length}개 동시 해석 · 작업자 ${cut.texts.length}개 · 고속 엔진` });
+            parts = await fastSplitLoad(cut.texts, cut.units, go, post);
+            info = { workers: cut.texts.length, fast: true, cut: true, roots: rootsEst || null, noSplit: false };
+          }
+        } catch (e) { console.warn('[불러오기] 고속 조각 읽기 실패 — 한 번에 읽기로', e); parts = null; self.postMessage({ key: 'read', text: '조각 읽기 실패 — 한 번에 읽는 중' }); }
+      }
+      if (!parts) try {
         parts = await readStepPartsFast(text, { onStage: go, onPart: (i, n) => self.postMessage({ key: 'mesh', frac: i / n, text: `부품 ${i}/${n} · 고속 엔진` }) });
         info = { workers: 1, fast: true, roots: rootsEst || null, noSplit: !!ev.data.noSplit };
       } catch (e) {

@@ -31,7 +31,10 @@ const refsOf = (s) => { const out = []; const eq = s.indexOf('='); for (const m 
 // 단위보다 위(조립품 골격: 그 제품 정의·형상 표현)는 모든 조각에 복사 — 조각마다 '골격 + 일부 하위 부품'인 작은 조립품이 되어
 // 위치 변환(CONTEXT_DEPENDENT_SHAPE_REPRESENTATION)이 그대로 맞음. 같은 부품을 여러 곳에 쓴 것(인스턴스)은 그 부품 정의와 함께 한 조각으로.
 // 무게(개체 수)가 고르게 되도록 큰 단위부터 가장 가벼운 조각에 배정. 여러 단위에 걸친 표시용 개체(색·레이어)는 뺌(형상에 안 쓰임)
-export function cutStep(text, K) {
+export const cutStep = (text, K) => cutStepUnits(text, K)?.texts ?? null;
+// { texts: [조각 글자], units: [조각마다 나누는 단위(제품 정의)의 개체 번호, 오름차순 = 원본 파일 순서] } | null
+// units 는 조각을 따로 읽은 뒤 부품을 원본 순서로 되돌릴 때 씀(고속 경로 — 부피가 같은 부품의 순서)
+export function cutStepUnits(text, K) {
   const E = stepEntities(text);
   if (!E || K < 2) return null;
   const { head, tail, ents } = E;
@@ -83,5 +86,11 @@ export function cutStep(text, K) {
   }
   for (const [U, c] of shared) for (const g of new Set([...U].map((u) => groupOf[u]))) for (const x of c) groups[g].add(x);
   for (const id of skeleton) for (const g of groups) closure(id, g);
-  return groups.filter((g) => g.size).map((g) => [head, ...[...g].sort((x, y) => x - y).map((id) => ents.get(id)), tail].join(String.fromCharCode(10)));
+  const texts = [], units = [];
+  groups.forEach((g, gi) => {
+    if (!g.size) return;
+    texts.push([head, ...[...g].sort((x, y) => x - y).map((id) => ents.get(id)), tail].join(String.fromCharCode(10)));
+    units.push(level.filter((_, u) => groupOf[u] === gi).sort((x, y) => x - y));
+  });
+  return { texts, units };
 }
