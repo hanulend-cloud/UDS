@@ -82,4 +82,16 @@ process.exitCode = fail ? 1 : 0;
   const fb = async (lack) => { for (const l of lack) { asked.push(l.name); have.set(`${l.role}:${l.name}`, { role: l.role, name: l.name, size: 4, lastModified: 1, gz: await gzipBlob(new Blob(['SCR;'])) }); } };
   const U = await unpackBundle(await bundleProject({ mech3d: M }, 'T', null, have, undefined, fb));
   ok(asked.join() === 'e.stp' && U.files.length === 1 && await U.files[0].file.text() === 'SCR;', '원본 없음 = 화면 형상 STEP 으로 함께 저장(묻지 않음)'); }
+// 여는 중 안내 띠(2026-11-13) — .uds 안의 STEP 을 읽는 동안 '찾을 수 없음' 대신 '읽는 중'
+{ const { pendingBanner } = await import('../src/ui/pending-banner.js');
+  const P = { name: 'a.stp', parts: [1, 2] };
+  ok(pendingBanner(null, null).hidden, '보관 설정 없음 = 띠 숨김');
+  const miss = pendingBanner(P, null);
+  ok(!miss.hidden && !miss.reading && /찾을 수 없음/.test(miss.text), '읽는 중 아님 = 찾을 수 없음 + 단추');
+  const rd = pendingBanner(P, { name: 'a.stp', size: 6.2e6 });
+  ok(!rd.hidden && rd.reading && /읽는 중/.test(rd.text) && /a\.stp/.test(rd.text) && /6\.2 MB/.test(rd.text) && !/찾을 수 없음/.test(rd.text), '.uds 안 STEP 읽는 중 = 읽는 중 안내(이름·크기), 단추 숨김'); }
+process.exitCode = fail ? 1 : 0;
+// 변환 결과 저장 기준(2026-11-13) — 2 MB 이상(불러오기 화면이 뜨는 크기)이면 저장해 두고, 같은 .uds 를 다시 열 때 바로
+{ const { cacheWorthy } = await import('../src/engine/mech3d/step-cache.js');
+  ok(cacheWorthy({ size: 3e6 }) && cacheWorthy({ size: 2e6 }) && !cacheWorthy({ size: 1.9e6 }), '2 MB 이상 STEP = 변환 결과 저장'); }
 process.exitCode = fail ? 1 : 0;

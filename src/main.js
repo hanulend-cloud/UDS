@@ -34,6 +34,7 @@ import { mountMenubar } from './ui/menubar.js';
 import { APP_VERSION, APP_DATE } from './version.js';
 import { createProjectFile, projectFileLabel } from './ui/project-file.js';
 import { isBundle, unpackBundle } from './ui/project-bundle.js';
+import { pendingBanner } from './ui/pending-banner.js';
 import { pickSources, sourcesKey, keepStepSource, loadStepSources, onStepSourcesChange, bundleProject, setStepSourcePins } from './ui/step-sources.js';
 import { createTabLock, openChannel } from './ui/tab-lock.js';
 import { readTheme, applyPageTheme, themeButton } from './ui/theme.js';
@@ -407,11 +408,15 @@ function applyMode() {
   else m3app.unmount();
   renderPendingBanner();
 }
+let stepReading = null;   // .uds 안의 기구 STEP 을 읽는 중 { name, size } — 띠가 '찾을 수 없음' 대신 '읽는 중'
 // 메쉬 없이 남은 3D 설정(spec.mech3dPending) 안내 띠 — 같은 기구 STEP 을 다시 불러오면 복원
 function renderPendingBanner() {
-  const el = $('#m3-pending'), P = spec.mech3dPending;
-  el.hidden = !P;
-  if (!P) return;
+  const el = $('#m3-pending'), P = spec.mech3dPending, B = pendingBanner(P, stepReading);
+  el.hidden = B.hidden;
+  if (B.hidden) return;
+  el.querySelector('[data-text]').textContent = B.text;
+  for (const q of ['[data-tail]', '[data-reload]', '[data-drop]']) el.querySelector(q).hidden = B.reading;   // 읽는 동안 = 단추 없음
+  if (B.reading) { el.querySelector('[data-name]').textContent = ''; return; }
   el.querySelector('[data-name]').textContent = P.name ? ` (${sourcesOf(P).map((s) => s.name).join(' → ')} · 부품 ${P.parts?.length ?? 0}개)` : '';
   el.querySelector('[data-reload]').onclick = () => $('#file-mech3d').click();
   el.querySelector('[data-drop]').onclick = () => {
@@ -457,7 +462,7 @@ function importMech3d(file, onDone = null, { noSplit = false, onMore = null } = 
   keepStepSource('mech', file).catch(() => {});   // 통합 프로젝트 파일(.uds)에 넣을 원본(압축 보관)
   // 2 MB 이상 = 불러오기 화면(진행률·경과 시간·취소·저해상도 미리보기). 작은 파일은 금방 끝나 깜빡이기만 함
   let w = null, ov = null;
-  if (file.size >= 2e6) ov = showStepLoad(file, { onCancel: () => { w?.terminate(); say('불러오기 취소'); } });
+  if (file.size >= 2e6) ov = showStepLoad(file, { onCancel: () => { w?.terminate(); say('불러오기 취소'); if (stepReading) { stepReading = null; renderPendingBanner(); } } });
   (async () => {
     // 변환 결과 저장(2026-11-06) — 같은 파일(이름·크기·수정 시각)이면 파일을 읽기 전에 저장본으로(충돌 검사 구조까지 저장 — 작업자 없이 바로)
     const ck = stepCacheKey(file), hit = cacheWorthy(file) && !noSplit ? await stepCacheGet(ck) : null, text = hit?.prep ? null : await file.text();
@@ -483,6 +488,7 @@ function importMech3d(file, onDone = null, { noSplit = false, onMore = null } = 
         ov?.stage(m.data.key, m.data.frac ?? 0, m.data.text ?? ''); if (!ov) say(`${LOAD_LABEL[m.data.key] ?? ''}${m.data.text ? ` — ${m.data.text}` : ''}`); return;
       }
       w.terminate();
+      if (stepReading) { stepReading = null; renderPendingBanner(); }   // 읽기 끝(다음 파일이 있으면 next 가 다시 켬)
       if (m.data.error) { ov?.close(); if (opened) m3app.setRefining(false); say(`불러오기 실패: ${m.data.error}${opened ? ' — 지금 화면은 거친 메시라 계산하지 않음. 다시 불러오세요' : ''}`); return; }
       const info = m.data.info ?? {};
       const after = () => `${m.data.relaxed ? ` · 큰 파일이라 메시 간격을 ${m.data.relaxed.linDefl} mm 로 넓힘(곡면 값이 조금 달라질 수 있음)` : ''}${info.cached ? ` · 저장해 둔 변환 결과로 엶${m.data.timing ? `(처음 불러올 때 ${stepTimingText(m.data.timing)})` : ''}` : `${ov ? ` · 걸린 시간: ${stepTimingText(m.data.timing)}` : ''}${info.fast ? ' · 대용량 고속 엔진으로 읽음' : info.cut ? ` · 부품 단위 ${info.workers}조각으로 나눠 읽음(모양이 이상하면 관리자 모드의 파일 › 3D 기구 STEP Import, 나누지 않고 읽기)` : info.noSplit ? ' · 나누지 않고 읽음' : ''}${info.roots && cacheWorthy(file) ? ` · STEP 부품(루트) ${info.roots}개` : ''}${info.slow?.ms > 5000 ? ` · 가장 오래 걸린 부품 변환 ${stepTimingText({ transfer: info.slow.ms }).replace('형상 변환 ', '')}` : ''}${slowTip(m.data.timing, info)}`}`;
@@ -993,7 +999,7 @@ async function openProjectFile(f) {
     if (led && getLedMesh()?.name !== led.name) m3app.importLed(led);
   };
   if ((!spec.mech3dPending && spec.mech3d) || !mech.length) { ledNow(); return; }   // 지금 메쉬가 같은 기구면 다시 읽지 않음(설정 없는 파일 = 새 기구로 읽음)
-  const next = (k) => importMech3d(mech[k], ledNow, { onMore: () => next(k + 1) });   // 여러 파일 = 저장 순서대로
+  const next = (k) => { stepReading = { name: mech[k].name, size: mech[k].size }; renderPendingBanner(); importMech3d(mech[k], ledNow, { onMore: () => next(k + 1) }); };   // 여러 파일 = 저장 순서대로
   next(0);
 }
 async function openProject() {

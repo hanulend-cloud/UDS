@@ -1,9 +1,9 @@
-// 변환 결과 저장(2026-11-06) — 큰 STEP(10 MB 이상)을 한 번 불러오면 메시·접촉면을 브라우저(IndexedDB)에 두고, 같은 파일을 다시 열면 바로 씀.
+// 변환 결과 저장(2026-11-06) — 큰 STEP(2 MB 이상)을 한 번 불러오면 메시·접촉면을 브라우저(IndexedDB)에 두고, 같은 파일을 다시 열면 바로 씀.
 // 같은 파일 = 이름·크기·수정 시각이 같음. 메시 규칙이 바뀌면 RULES 를 올려 옛 저장을 쓰지 않게. 최근 KEEP 개만 보관(용량)
 const RULES = 'mesh-2026-11-06b',   // b = 충돌 검사 구조(BVH)·합친 메시까지 저장
   KEEP = 2, DB = 'uds-step-cache', STORE = 'c', INDEX = '__index';
 export const stepCacheKey = (file) => `${RULES}|${file.name}|${file.size}|${file.lastModified ?? 0}`;
-export const cacheWorthy = (file) => (file?.size ?? 0) >= 10e6;
+export const cacheWorthy = (file) => (file?.size ?? 0) >= 2e6;   // 2026-11-13: 10 MB → 2 MB(.uds 를 다시 열 때도 바로)
 
 function open() {
   return new Promise((res, rej) => {
