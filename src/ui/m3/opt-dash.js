@@ -159,7 +159,9 @@ const partialHtml = (P) => {
   const names = (P?.done ?? []).map((k) => DONE_NAME[k]).filter(Boolean);
   return names.length ? `<p><button type="button" class="od-partial" data-adpartial title="끝난 항목의 결과만 넣은 안을 최종 화질로 판정합니다 — 끝나지 않은 항목은 지금 값 그대로 · [적용]을 눌러야 설계에 반영">끝난 항목(${names.join(' · ')})까지 반영한 안 정밀 판정</button> <span class="mut">몇 분 걸림</span></p>` : '';
 };
-export function monitorHtml(S, sec = 0, { chart = true } = {}) {
+export const monitorHtml = (S, sec = 0, o = {}) => monitorParts(S, sec, o).main;
+// 본문(main)과 균일도 카드(kpi) — 그래프를 따로 그리면(chart = false) 균일도는 그 그래프 칸 아래로(2026-11-13 사용자)
+export function monitorParts(S, sec = 0, { chart = true } = {}) {
   const tl = S.tgLen, tw = S.tgWid, ok = (e) => !e.vf && e.ok !== false && Number.isFinite(e.Ulen);   // 정밀 검증 점(vf)은 그래프에만 — 지표는 후보에서
   let best = null; for (const e of S.seq ?? []) if (ok(e) && (!best || scoreOf(e, tl, tw) > scoreOf(best, tl, tw))) best = e;
   const busy = S.ended == null && !S.stopped, fin0 = S.final;
@@ -201,13 +203,13 @@ export function monitorHtml(S, sec = 0, { chart = true } = {}) {
     : '';
   const pct = fmtProg(S.ended != null ? 100 : Math.max(0, Math.min(1, S.overall ?? 0)) * 100);
   const est = busy && !fin0 && !!cur, kt = busy && !fin0 ? ' title="큰 숫자 = 지금까지 최고(빠른 계산 대략값 · 길이·폭 중 목표에 더 모자란 쪽 기준) — 끝나면 정밀 재계산 값으로 조금 바뀔 수 있음"' : '';
-  // 균일도 = 진행 줄·단계·지금 문장 아래, 그래프 바로 위(진행 값과 섞이지 않게, 2026-11-13 사용자)
-  return `<div class="od-pct om-pct"><b>${pct}%</b><div class="od-bar od-bar-big" role="progressbar" aria-label="기구 최적화 진행" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div><span class="mut od-simst">${busy ? `${S.pauseAt ? '일시정지' : '진행'} ${mmss(sec)}` : S.stopped ? '중지됨' : `끝남 ${mmss((S.endSec ?? sec))}`} · 후보 ${nEval}개</span></div>
+  // 균일도 = 그래프 아래(그래프를 읽고 바로 값 확인, 2026-11-13 사용자)
+  const kpiH = `<div class="om-kpi"${kt}>${kpi('길이 균일도', tl, cur?.Ulen ?? b0.Ulen, b0.Ulen, lastE?.Ulen, est, 'om-u1')}${kpi('폭 균일도', tw, cur?.Uwid ?? b0.Uwid, b0.Uwid, lastE?.Uwid, est, 'om-u2')}${effK}</div>`;
+  return { main: `<div class="od-pct om-pct"><b>${pct}%</b><div class="od-bar od-bar-big" role="progressbar" aria-label="기구 최적화 진행" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div><span class="mut od-simst">${busy ? `${S.pauseAt ? '일시정지' : '진행'} ${mmss(sec)}` : S.stopped ? '중지됨' : `끝남 ${mmss((S.endSec ?? sec))}`} · 후보 ${nEval}개</span></div>
     <div class="om-steps">${steps.join('<i class="om-ar">→</i>')}</div>
     <div class="om-say">${say}</div>
-    <div class="om-kpi"${kt}>${kpi('길이 균일도', tl, cur?.Ulen ?? b0.Ulen, b0.Ulen, lastE?.Ulen, est, 'om-u1')}${kpi('폭 균일도', tw, cur?.Uwid ?? b0.Uwid, b0.Uwid, lastE?.Uwid, est, 'om-u2')}${effK}</div>
-    ${chart ? chartHtml() : ''}
-    <details class="om-more" data-keep="mx"><summary>상세 — 항목별 현황</summary>${optMatrixHtml(S)}</details>`;
+    ${chart ? chartHtml() + kpiH : ''}
+    <details class="om-more" data-keep="mx"><summary>상세 — 항목별 현황</summary>${optMatrixHtml(S)}</details>`, kpi: chart ? '' : kpiH };
 }
 // 최적화 현황 표(순수, 2026-11-03) — 항목 × (상태 · 시험 후보 · 그 항목 최고 길이·폭 · 최고안). 마지막 줄 = 최종 판정(최종 화질)
 export function optMatrixHtml(S) {
@@ -285,8 +287,9 @@ export function createOptDash(el, h = {}) {
     // 바뀐 것만 갱신(2026-11-07) — 전에는 초당 3~4번 통째로 다시 만들고 그래프 칸을 비웠다가 그려 화면이 깜빡였음
     const put = (node, html) => { if (node && node._html !== html) { const op = keepOpen(node); node.innerHTML = html; node._html = html; op(); } };
     if (!S) { put(el, histHtml()); if (h.chart) put(h.chart, ''); return; }   // 실행 전 = 비움(항목 켜기는 왼쪽 설계 인자 체크) — 지난 후보만
-    put(el, monitorHtml(S, ((S.pauseAt ?? performance.now()) - S.t0) / 1000, { chart: !h.chart }) + histHtml());
-    if (h.chart) put(h.chart, chartHtml());   // 틀은 한 번 — 같은 글이면 그대로
+    const P = monitorParts(S, ((S.pauseAt ?? performance.now()) - S.t0) / 1000, { chart: !h.chart });
+    put(el, P.main + histHtml());
+    if (h.chart) { put(h.chart, chartHtml() + '<div class="om-kpi-host"></div>'); put(h.chart.querySelector('.om-kpi-host'), P.kpi); }   // 틀은 한 번 — 같은 글이면 그대로 · 균일도 = 그래프 아래
     const p = (h.chart ?? el).querySelector('.od-plot');
     if (p && h.chart) { const hh = `${chartHeight(p.clientWidth)}px`; if (p.style.height !== hh) p.style.height = hh; }
     if (p && p.clientWidth > 40 && p.clientHeight > 30) put(p, factorChartSvg(S, { ...(S.before ?? {}), tgLen: S.tgLen, tgWid: S.tgWid }, p.clientWidth, p.clientHeight));

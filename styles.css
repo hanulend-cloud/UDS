@@ -1078,7 +1078,7 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 .m3-big-ct b { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .m3-big-ct button, .m3-big-ct label { flex: none; white-space: nowrap; }
 /* 설계 인자 = 상자: 머리(체크 · 색 · 이름 · 상태) + 내용(지금 값 · 설정). 체크·상태 위치와 모양은 네 항목 모두 같게 */
 .fb-card { flex: none; margin: 0 0 7px; border: 1px solid #cfd5e0; border-left: 4px solid var(--fb, #888); border-radius: 8px; background: #fff; color: #20262f; overflow: hidden; }   /* 밝은 카드 — 어두운 테마에서도 글자 진하게 */
-.fb-head { display: grid; grid-template-columns: 18px 9px minmax(0, 1fr) auto; gap: 6px; align-items: center; padding: 6px 8px; background: color-mix(in srgb, var(--fb, #888) 13%, #fff); color: #20262f; }
+.fb-head { display: grid; grid-template-columns: 18px 9px minmax(0, max-content) minmax(0, 1fr) auto; gap: 6px; align-items: center; padding: 6px 8px; background: color-mix(in srgb, var(--fb, #888) 13%, #fff); color: #20262f; }
 .fb-in { padding: 5px 8px 6px 8px; font-size: 11.5px; color: #20262f; }
 .fb-card.fb-off .fb-head { background: #f1f3f7; } .fb-card.fb-off .fb-in { opacity: .6; }
 .fb-sw { justify-content: center; margin: 0; width: 18px; }
@@ -1518,3 +1518,5 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .m3-mon.min .m3-mon-sp, .m3-big-in.min .m3-big-sp { flex: 0 0 4px; }
 .m3-tx-s { display: none; }   /* 접은 창의 짧은 창 이름 */
 .m3-mon.min .m3-tx-s, .m3-big-in.min .m3-tx-s { display: inline; }
+.fb-head .od-chip { grid-column: 5; }   /* ⓘ 가 없어도 칩은 같은 줄 오른쪽 끝(2026-11-13: 칩이 다음 줄로 밀려 배경 밖으로 넘침) */
+.om-kpi-host .om-kpi { margin: 8px 0 4px; }

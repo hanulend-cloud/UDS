@@ -1161,9 +1161,14 @@ done();
   const css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
   const S = { tgLen: 0.8, tgWid: 0.8, before: { Ulen: 0.3, Uwid: 0.3 }, tiles: Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', evals: [] }])), seq: [{ k: 'milky', Ulen: 0.5, Uwid: 0.4 }] };
   let f = 0; const okU = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) { f++; process.exitCode = 1; } };
-  for (const chart of [true, false]) {
-    const m = monitorHtml(S, 5, { chart }), k = m.indexOf('om-kpi'), st = m.indexOf('om-steps'), sy = m.indexOf('om-say'), pl = m.indexOf('od-plot');
-    okU(k > st && k > sy && (!chart || k < pl), `균일도 = 진행 줄·단계·지금 문장 아래${chart ? ' · 그래프 위' : '(그래프 없어도)'}`);
+  { // 2026-11-13 사용자: 균일도는 그래프 아래(그래프를 읽기 쉽게)
+    const { monitorParts } = await import('../src/ui/m3/opt-dash.js');
+    const m = monitorHtml(S, 5), k = m.indexOf('om-kpi'), sy = m.indexOf('om-say'), lg = m.indexOf('od-legend');
+    okU(k > sy && k > lg, '균일도 = 그래프(범례 포함) 아래');
+    const P = monitorParts(S, 5, { chart: false });
+    okU(!P.main.includes('om-kpi') && P.kpi.includes('om-kpi') && P.kpi.includes('길이 균일도'), '그래프를 따로 그리면 균일도도 그래프 칸으로(본문에는 없음)');
+    const src = (await import('node:fs')).readFileSync(new URL('../src/ui/m3/opt-dash.js', import.meta.url), 'utf8');
+    okU(/om-kpi-host/.test(src) && /put\(h\.chart\.querySelector\('\.om-kpi-host'\), P\.kpi\)/.test(src), '그래프 칸 = 그래프 + 그 아래 균일도');
   }
   const m = monitorHtml(S, 5);
   okU(/class="om-k om-u1"[^>]*>[\s\S]*?길이 균일도/.test(m) && /class="om-k om-u2"[^>]*>[\s\S]*?폭 균일도/.test(m), '길이·폭 카드에 그래프 색 구분 표시');
@@ -1184,4 +1189,10 @@ done();
   const box = { _h: '', set innerHTML(v) { this._h = v; this.btn = {}; for (const k of ['run', 'pause', 'stop']) this.btn[k] = { innerHTML: '', title: '', attrs: {}, setAttribute(a, x) { this.attrs[a] = x; } }; }, get innerHTML() { return this._h; }, querySelector(q) { const m = q.match(/data-ctl="(\w+)"/); return m ? this.btn?.[m[1]] : (this.btn ? {} : null); } };
   setCtl(box, { run: true, runLabel: '▶ 최적화 시작' }, () => {});
   okI(box.btn.run.innerHTML === '▶<span class="m3-tx"> 최적화 시작</span>', `실행 단추도 아이콘 + 글씨: ${box.btn.run.innerHTML}`);
+}
+{ // 설계 인자 카드 머리: ⓘ 가 생겨 칸이 5개 — 진행 칩이 다음 줄 18px 칸으로 밀려 배경 밖으로 넘침(2026-11-13 사용자)
+  const css = (await import('node:fs')).readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
+  const g = css.match(/\.fb-head \{[^}]*grid-template-columns: ([^;]+);/)?.[1] ?? '';
+  const ok = g.trim().split(/\s+(?![^(]*\))/).length === 5 && /\.fb-head \.od-chip \{[^}]*grid-column: 5/.test(css);
+  console.log(`${ok ? 'PASS' : 'FAIL'} 카드 머리 칸 5개 · 진행 칩 = 같은 줄 오른쪽 끝 (${g})`); if (!ok) process.exitCode = 1;
 }
