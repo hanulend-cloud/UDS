@@ -1516,3 +1516,5 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .m3-mon.min .m3-tx, .m3-big-in.min .m3-tx { display: none; }
 .m3-mon.min .m3-mon-hd, .m3-big-in.min .m3-big-hd { flex-wrap: nowrap; white-space: nowrap; }
 .m3-mon.min .m3-mon-sp, .m3-big-in.min .m3-big-sp { flex: 0 0 4px; }
+.m3-tx-s { display: none; }   /* 접은 창의 짧은 창 이름 */
+.m3-mon.min .m3-tx-s, .m3-big-in.min .m3-tx-s { display: inline; }

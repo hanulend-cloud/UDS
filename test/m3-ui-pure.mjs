@@ -1177,6 +1177,7 @@ done();
   iconLabel(b, '⤢', '전체화면', '넓히기');
   okI(b.innerHTML === '⤢<span class="m3-tx"> 전체화면</span>' && b.attrs['aria-label'] === '전체화면' && b.title === '넓히기', `아이콘 + 글씨(접으면 숨길 칸): ${b.innerHTML}`);
   okI(/\.m3-mon\.min \.m3-tx, \.m3-big-in\.min \.m3-tx \{[^}]*display: none/.test(css), '접으면 글씨 숨김');
+  okI(/<span class="m3-tx-s">최적화<\/span>/.test(mon) && /<span class="m3-tx-s">광분포<\/span>/.test(rp) && /\.m3-tx-s \{[^}]*display: none/.test(css) && /\.m3-mon\.min \.m3-tx-s, \.m3-big-in\.min \.m3-tx-s \{[^}]*display: inline/.test(css), '접으면 짧은 창 이름(최적화·광분포)은 남김(2026-11-13 사용자)');
   okI(/m3-fl" data-mon-step>5<\/i><span class="m3-tx">기구 최적화<\/span>/.test(mon) && /m3-fl" data-big-step>4<\/i><span class="m3-tx">광분포 시뮬레이션<\/span>/.test(rp), '창 제목 글씨도 접으면 숨김(번호 아이콘은 남음)');
   okI([mon, rp].every((x) => /iconLabel\(b, on \? '⤡' : '⤢'/.test(x) && /iconLabel\(b, v \? '▾' : '▴'/.test(x)) && !/>✕ 닫기</.test(mon + rp), '전체화면·접기·닫기 단추 = iconLabel');
   okI(/width = st\.min \? 'max-content'/.test(mon) && /width: m \? 'max-content'/.test(rp), '접은 창 폭 = 내용만큼');
