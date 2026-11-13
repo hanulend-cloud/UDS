@@ -1,0 +1,8 @@
+{
+ "version": "examples-2026-11-13",
+ "about": "모니터 뒷면 링 조명 — 뒷커버(미세 타공 그릴 8장) + 링 PCB + 도면 안 LED 72개 + 링 확산판. 약 100 MB 대용량 STEP (소재·관측면은 직접 지정)",
+ "mech": "examples/monitor-ring-72led/monitor-ring-72led.stp",
+ "led": null,
+ "theme": "dark",
+ "mech3d": null
+}

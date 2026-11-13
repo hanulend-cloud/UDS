@@ -15,4 +15,4 @@ test/fixtures/ring-12led.stp
 test/fixtures/one-root-asm.stp
 
 # 대용량 시험 STEP(≈100 MB, test/fixtures/monitor-ring-72led.mjs 로 다시 만듦)
-examples/monitor-ring-72led/
+examples/monitor-ring-72led/*.stp
