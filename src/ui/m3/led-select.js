@@ -23,6 +23,11 @@ export function ledOfHit(hit, nMech, lay) {
   const k = lay.leds.indexOf(hit.part - nMech);
   return k >= 0 ? k : null;
 }
+// 3D 클릭에서 빛 원뿔이 이기는가(순수, 2026-11-13) — 더 가까우면 원뿔(LED). 단 맞은 부품이 PCB 면 PCB(원뿔이 PCB 를 덮어 PCB 를 고를 수 없었음)
+// pp = { part, t } | null, cone = { distance } | null, isPcb(i)
+export const coneWins = (pp, cone, isPcb = () => false) => !!cone && (!pp || (cone.distance <= pp.t && !isPcb(pp.part)));
+// LED STEP 안 PCB 를 클릭 = PCB 메뉴('pcbs')(순수) — 기구 부품·LED 면 null
+export const pcbNodeOfHit = (hit, nMech, lay) => (hit?.part != null && hit.part >= nMech && lay && lay.pcb >= 0 && hit.part - nMech === lay.pcb ? 'pcbs' : null);
 // 간섭 점검 ① 항목 중 LED 번호 n 의 것 — 발광점 항목 led = 발광점 배열 위치(→ e.led ?? 위치), 몸체 항목(overlap·body-inside) led = 배치 부품 번호(→ lay.leds 위치)
 export function ledClashItems(items, n, emitters, lay) {
   return (items ?? []).filter((it) => {

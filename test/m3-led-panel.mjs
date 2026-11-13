@@ -108,3 +108,11 @@ done();
   const a = coneDims(30, 4), b = coneDims(80, 4), c = coneDims(90, 4), d = coneDims(85, 4);
   ok(Math.abs(a.ax - 4) < 1e-9 && Math.abs(a.r - 4 * Math.tan(Math.PI / 6)) < 1e-9, '좁은 원뿔 = 길이 그대로');
   ok(b.r < 9 && d.r > b.r && c.r > d.r && c.ax > 0 && c.ax < d.ax, `넓을수록 더 퍼지고 유한(80°:${b.r.toFixed(1)} 85°:${d.r.toFixed(1)} 90°:${c.r.toFixed(2)}/${c.ax.toFixed(3)})`); }
+// 3D 클릭: PCB 는 앞의 빛 원뿔보다 우선(2026-11-13 사용자: PCB 가 일반 부품처럼 선택이 안 됨 — 원뿔이 PCB 를 덮어 LED 가 잡혔음)
+{ const { coneWins, pcbNodeOfHit } = await import('../src/ui/m3/led-select.js');
+  const isPcb = (i) => i === 4;
+  ok(coneWins({ part: 2, t: 10 }, { distance: 5 }, isPcb), '일반 부품 앞 원뿔 = LED');
+  ok(!coneWins({ part: 4, t: 10 }, { distance: 5 }, isPcb), 'PCB 앞 원뿔 = PCB 가 잡힘');
+  ok(!coneWins({ part: 2, t: 3 }, { distance: 5 }, isPcb), '부품이 더 가까우면 부품');
+  ok(coneWins(null, { distance: 5 }, isPcb) && !coneWins({ part: 2, t: 3 }, null, isPcb), '부품 없음 = 원뿔 · 원뿔 없음 = 부품');
+  ok(pcbNodeOfHit({ part: 13 }, 10, { pcb: 3 }) === 'pcbs' && pcbNodeOfHit({ part: 12 }, 10, { pcb: 3 }) === null && pcbNodeOfHit({ part: 2 }, 10, { pcb: 3 }) === null, 'LED STEP 안 PCB 클릭 = PCB 메뉴'); }

@@ -11,6 +11,7 @@ import { intersectRay } from '../engine/mech3d/bvh.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { coneWins } from './m3/led-select.js';   // 3D 클릭: 원뿔 vs 부품(PCB 우선)
 
 const KIND_COLOR = { milky: 0xf072aa, clear: 0x2a93fb, whiteTrans: 0xf2efe6, opaque: 0x8a909c, pcb: 0x2f6b3a, led: 0xffcf3f };
 const KIND_OPACITY = { milky: 0.85, clear: 0.35, whiteTrans: 0.95, opaque: 1, pcb: 1, led: 1 };
@@ -310,6 +311,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   }
 
   // 바뀐 부품만 재착색
+  const isPcb = (i) => kinds[i] === 'pcb' || !!looks[i]?.pcb;   // PCB = 원뿔보다 우선해서 클릭(2026-11-13)
   function setKinds(kindsOf, lookOf = []) {
     const old = kinds, oldL = looks; kinds = kindsOf.slice(); looks = lookOf;
     meshes.forEach((_, i) => { if (old[i] !== kinds[i] || oldL[i]?.color !== looks[i]?.color || oldL[i]?.opacity !== looks[i]?.opacity || oldL[i]?.line !== looks[i]?.line) colorize(i); }); render();
@@ -727,7 +729,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     const r = canvas.getBoundingClientRect();
     ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
     // 원뿔과 부품 중 더 가까운 쪽 — 왼쪽 클릭 판정과 같은 규칙(2026-11-11)
-    const pp = pickPart(null), cone = ray.intersectObjects([...coneMeshes].reverse(), false)[0], ch = cone && (!pp || cone.distance <= pp.t) ? cone : null;
+    const pp = pickPart(null), cone = ray.intersectObjects([...coneMeshes].reverse(), false)[0], ch = coneWins(pp, cone, isPcb) ? cone : null;
     const led = ch ? ch.object.userData.nums[Math.floor(ch.faceIndex / CONE_SEG)] : null;
     const hp = pp ? pp.part : null;
     onContext({ obs: !ch && !!obsHitOf(), part: hp, face: hp != null ? partsRef[hp]?.faceIds?.[pp.tri] ?? null : null, led, x: e.clientX, y: e.clientY });
@@ -742,7 +744,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     // 원뿔과 부품 중 더 가까운 쪽을 고른다(2026-11-11) — 원뿔이 부품 뒤에 있으면 앞 부품이 잡힌다(예전엔 원뿔이 무조건 먼저라 LED 가 자주 잡혔음)
     const pp = pickPart(pickable ? (i) => pickable(i) : null);
     const ch = pickable ? null : ray.intersectObjects([...coneMeshes].reverse(), false)[0];
-    if (ch && (!pp || ch.distance <= pp.t)) { onPick({ part: null, face: null, led: ch.object.userData.nums[Math.floor(ch.faceIndex / CONE_SEG)] }); return; }
+    if (coneWins(pp, ch, isPcb)) { onPick({ part: null, face: null, led: ch.object.userData.nums[Math.floor(ch.faceIndex / CONE_SEG)] }); return; }
     const add = e.shiftKey || e.ctrlKey || e.metaKey;   // Shift(Ctrl)+클릭 = 여러 개 고르기(끌면 화면 이동) — 2026-11-06
     if (!pickable && !add && obsHitOf()) { onPick({ obs: true }); return; }   // 관측면 클릭 = 관측면 선택(앞 부품에 가려도)
     // 선택 모드(pickable 지정)에서는 클릭 광선도 넘긴다 — 빈 곳 클릭이어도 { part: null, face: null, ray } (가까운 LED 맞춤용)

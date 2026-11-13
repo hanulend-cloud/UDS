@@ -60,7 +60,7 @@ import { pacer } from '../../engine/mech3d/yield.js';
 import { scaleMoveMesh, isIdentityXform } from '../../engine/mech3d/xform.js';
 import { defaultChecks } from '../../engine/mech3d/defs.js';
 import { validAdjust } from '../../engine/mech3d/led-adjust.js';
-import { beamSpec, ledOfHit, ledClashItems, dropStaleAdjust, setLedAdjust } from './led-select.js';
+import { beamSpec, ledOfHit, ledClashItems, dropStaleAdjust, setLedAdjust, pcbNodeOfHit } from './led-select.js';
 import { keepStepSource } from '../step-sources.js';
 import { viewBarHtml, oppositeView, baseView } from './view-bar.js';
 import { readTheme, nextTheme, applyPageTheme, THEME_KEY } from '../theme.js';
@@ -1684,6 +1684,7 @@ function onPick(s) {
     });
     return;
   }
+  if (!pick && pcbNodeOfHit(s, nMech, M.light.kind === 'step' ? L.stepLayout(M, S.line) : null)) { st.update('session', (_, x) => { x.node = 'pcbs'; x.sel = null; x.multi = []; x.ledSel = null; }); return; }   // LED STEP 안 PCB = PCB 메뉴
   st.update('session', (_, x) => {
     const again = s && s.part < nMech && !(x.multi?.length > 1) && x.node === `part:${s.part}`;   // 고른 부품 다시 클릭 = 해제(2026-11-06)
     x.sel = again ? null : s && s.part < nMech ? s : null; x.multi = []; x.ledSel = null;
@@ -2165,7 +2166,7 @@ function renderView() {
   const lay = stp ? L.stepLayout(pv?.M ?? M, S.line) : null, lp = lay?.parts ?? null;   // 원래/가상 배치(캐시 객체) — 미리보기면 최적안 배치(몸체 = 화살표)
   const ledSet = new Set(lay?.leds ?? []), exSet = new Set(lay?.excluded ?? []);   // 제외된 LED 는 회색(불투명) — 발광 화살표도 빠짐
   const kinds = [...M.parts.map((p) => p.material.kind), ...(lp ?? []).map((_, i) => (i === lay.pcb ? 'pcb' : ledSet.has(i) && !exSet.has(i) ? 'led' : 'opaque'))];
-  const looks = M.parts.map((p) => ({ ...partLook(p), line: lineLook(p) }));
+  const looks = M.parts.map((p) => ({ ...partLook(p), line: lineLook(p), pcb: p.role === 'pcb' }));
   const meshKey = [pv ?? cur, lp];   // 기구·LED 메쉬(위치 보정 포함 — 캐시 객체)가 바뀌면 다시 그림. 카메라는 기구가 바뀔 때만 맞춤
   if (!A.meshShown || A.meshShown.some((x, i) => x !== meshKey[i])) {
     // 도면 원본을 따로 기억 — meshShown 은 최적화 시작·취소·적용·되돌리기에도 비워져서, 그것과 비교하면 그때마다 숨긴 부품이 풀리고 카메라가 돌아갔음(2026-11-05)
