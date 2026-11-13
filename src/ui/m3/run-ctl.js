@@ -1,7 +1,7 @@
 import { fmtJudge } from '../../engine/mech3d/tally.js';
 // 실행 · 일시정지 · 중지 단추(2026-11-04) — 광분포 시뮬레이션과 기구 최적화가 같은 세 단추. 지금 쓸 수 없는 단추는 흐리게
 // 실행 = 일시정지면 이어서, 그 밖에는 처음부터 · 일시정지 = 나중에 이어서 · 중지 = 끝냄(이어서 못 함)
-const LABEL = [['run', '▶ 실행'], ['pause', '⏸'], ['stop', '■ 중지']];   // 일시정지 = 표시만(글씨 빼고 마우스 설명·읽기 이름으로, 2026-11-08)
+const LABEL = [['run', '▶ 실행'], ['pause', '⏸'], ['stop', '■']];   // 일시정지·중지 = 표시만(글씨 빼고 마우스 설명·읽기 이름으로, 2026-11-08 · 중지 2026-11-13)
 const NAME = { run: '실행', pause: '일시정지', stop: '중지' };
 
 // 실행 단추 이름 = 무엇을 실행하는지(2026-11-12 평가: 상태줄·최적화 창의 '▶ 실행' 두 개가 같아 헷갈림)
@@ -34,7 +34,7 @@ export function setCtl(box, c, fn) {
   if (!box) return;
   if (!box.querySelector('[data-ctl]')) box.innerHTML = LABEL.map(([k, t]) => `<button type="button" data-ctl="${k}" aria-label="${NAME[k]}">${t}</button>`).join('');
   for (const [k] of LABEL) {
-    const b = box.querySelector(`[data-ctl="${k}"]`), title = c[`${k}Title`] || (k === 'pause' ? '일시정지' : '');
+    const b = box.querySelector(`[data-ctl="${k}"]`), title = c[`${k}Title`] || (k === 'pause' ? '일시정지' : k === 'stop' ? '중지' : '');
     b.disabled = !c[k]; if (b.title !== title) b.title = title; b.onclick = () => fn(k);
     if (k === 'run' && c.runLabel && b.textContent !== c.runLabel) b.textContent = c.runLabel;
   }

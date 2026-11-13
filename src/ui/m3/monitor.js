@@ -90,7 +90,7 @@ export function createMonitor({ host, items, onChange = () => {}, onTab = () => 
   el.addEventListener('pointerdown', () => raiseWin(el), true);
   el.querySelector('[data-mon-min]').onclick = () => setMin(!st.min);
   el.querySelector('[data-mon-max]').onclick = () => setMax(!st.max || st.min);
-  function updMax() { const b = el.querySelector('[data-mon-max]'), on = st.max && !st.min; b.textContent = on ? '⤡ 원래 크기' : '⤢ 크게'; b.title = on ? '크게 하기 전 크기로' : '상단 바 아래 화면 전체로 넓히기'; }
+  function updMax() { const b = el.querySelector('[data-mon-max]'), on = st.max && !st.min; b.textContent = on ? '⤡ 원래 크기' : '⤢ 전체화면'; b.title = on ? '크게 하기 전 크기로' : '상단 바 아래 화면 전체로 넓히기'; }
   function setMax(v) {
     if (v && !st.max) { st.prev = { x: st.x, y: st.y, w: st.w, h: st.h }; }   // 원래 크기로 돌아갈 자리
     else if (!v && st.prev) { Object.assign(st, st.prev); st.prev = null; }

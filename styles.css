@@ -343,7 +343,7 @@ main:has(#mech3d-wrap:not([hidden])) { grid-template-rows: minmax(0, 1fr); }
 .m3-eye:hover, .m3-eye:focus-visible { background: #e3e8f2; }
 .m3-eye.off { color: var(--m3-mut); }
 .m3-node.hid { color: var(--m3-mut); }
-.m3-node.untr .m3-lbl, .m3-title.m3-untr { text-decoration: line-through; }
+.m3-node.untr .m3-lbl, .m3-node.untr .m3-badge, .m3-title.m3-untr { text-decoration: line-through; }   /* 빛 계산 제외 = 이름·소재 모두(2026-11-13) */
 .m3-node:not(.child) .m3-eye { order: 9; font-size: 11px; }
 .m3-badge { margin-left: auto; font-size: 10px; padding: 1px 5px; border-radius: 4px; background: #e9ecf2; color: #3c4455; }
 .m3-badge.k-off { background: transparent !important; color: var(--m3-mut) !important; border: 1px dashed currentColor; opacity: .7; }   /* 빛 계산 제외(2026-11-11) — 색 없이 흐리게 */
@@ -546,7 +546,7 @@ main:has(#m3-start:not([hidden])) { grid-template-rows: minmax(0, 1fr); }
 .m3-zoom { border: 1px solid var(--m3-line); background: transparent; color: var(--m3-mut); border-radius: 4px; padding: 0 5px; font-size: 12px; line-height: 16px; cursor: pointer; margin-left: 4px; }
 .m3-zoom:hover { color: var(--m3-acc); border-color: var(--m3-acc); }
 .m3-big-in { position: fixed; z-index: 61; overflow: hidden; background: #fff; color: #20262f; border: 1px solid var(--m3-line, #d3d8e0); border-radius: 10px; display: grid; grid-template-rows: auto minmax(0, 1fr); padding: 0 14px 14px; box-shadow: 0 10px 34px rgba(16,24,40,.28); }   /* 떠 있는 창 — 위치·크기 = results-panel */
-.m3-big-hd { display: flex; align-items: center; gap: 12px; margin: 0 -14px 8px; padding: 6px 8px 6px 14px; background: #f3f6fa; border-bottom: 1px solid var(--m3-line, #d3d8e0); font-size: 14px; cursor: move; user-select: none; touch-action: none; }
+.m3-big-hd { display: flex; align-items: center; gap: 12px; margin: 0 -14px 8px; padding: 6px 8px 6px 14px; background: #f3f6fa; border-bottom: 1px solid var(--m3-line, #d3d8e0); font-size: 13px; cursor: move; user-select: none; touch-action: none; }
 .m3-big-hd b { white-space: nowrap; }
 .m3-big-in.min { grid-template-rows: auto; padding-bottom: 0; }   /* 접기 = 제목 줄만 */
 .m3-big-in.min .m3-big-hd { margin-bottom: 0; border-bottom: 0; }
@@ -819,6 +819,9 @@ body.booting::after { content: "불러오는 중…"; position: fixed; left: 50%
 /* 피처 트리 그룹(2026-10-30) — 접기 ▸▾ · 깊이 들여쓰기 · 그룹 단추 · 이름 고치기 입력칸 */
 .m3-node.d2 { padding-left: 38px; }
 .m3-node.grp { font-weight: 600; }
+.m3-node.d1.grp .m3-fold { margin-left: -18px; }   /* 그룹 줄 = 일반 부품과 같은 단계(화살표는 왼쪽 여백, 2026-11-13) */
+.m3-node .gi-group { display: inline-flex; flex: none; color: var(--m3-mut); }
+.m3-node .gi-group svg { width: 14px; height: 14px; }
 .m3-fold { display: inline-block; width: 12px; text-align: center; color: var(--m3-mut); cursor: pointer; font-size: 11px; flex: none; }
 .m3-node.d0 .m3-fold { margin-left: -2px; }
 .m3-tree-act { float: right; display: inline-flex; gap: 4px; }
@@ -1399,6 +1402,8 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .m3-run .m3-ctl button[data-ctl="run"]:not(:disabled) { background: var(--m3-acc); border-color: var(--m3-acc); color: #fff; font-weight: 600; }
 #mech3d-wrap[data-theme="dark"] .m3-run .m3-ctl button[data-ctl="run"]:not(:disabled) { background: var(--m3-acc); border-color: var(--m3-acc); color: #0b1220; }
 .m3-run .m3-ctl button:disabled { opacity: .45; cursor: default; }
+/* 창 머리 실행 단추 글씨 작게(2026-11-13) — 광분포 시뮬레이션·기구 최적화 같음 */
+.m3-big-hd .m3-ctl button[data-ctl="run"], .m3-mon-hd .m3-ctl button[data-ctl="run"] { font-size: 11px; padding: 3px 8px; }
 .m3-run b[data-b="pct"] { font-size: 16px; min-width: 48px; text-align: right; font-variant-numeric: tabular-nums; }
 .m3-run-bar { display: inline-block; width: 140px; height: 6px; border-radius: 3px; background: var(--m3-line); overflow: hidden; flex: none; }
 .m3-run-bar > i { display: block; height: 100%; background: var(--m3-acc); }

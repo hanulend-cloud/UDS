@@ -1,7 +1,7 @@
 import { shapeLayout } from './map-shape.js';
 import { requiredFlux, fmtProg, needText, needShort } from './progressive.js';
 import { mountSplit, mountHeightHandle } from './pane-split.js';
-import { clampRect, fitRect, winTop, dragBy, raiseWin, mountResizers, COLLAPSED_W, maxRect } from './monitor.js';
+import { clampRect, fitRect, winTop, dragBy, raiseWin, mountResizers, COLLAPSED_W, maxRect, DEF_RECT } from './monitor.js';
 import { simPct } from './opt-dash.js';
 import { simCtl, setCtl, setStepMark } from './run-ctl.js';
 import { showCtxMenu } from './feature-tree.js';
@@ -537,8 +537,7 @@ const BIG_KEY = 'uds.m3.bigWin', BIG_MIN_W = COLLAPSED_W;
 function bigRectLoad() {
   let r = null; try { r = JSON.parse(localStorage.getItem(BIG_KEY)); } catch { r = null; }
   if (Number.isFinite(r?.x) && Number.isFinite(r?.y) && r.w >= 480 && r.h >= 360) return r;
-  const w = Math.round(Math.min(1600, innerWidth * 0.94));
-  return { x: Math.round((innerWidth - w) / 2), y: 56, w, h: Math.max(360, innerHeight - 72) };
+  return fitRect(DEF_RECT, innerWidth, innerHeight, winTop());   // 기본 크기 = 기구 최적화 창과 같음(2026-11-13)
 }
 function bigRectSave(r) { try { localStorage.setItem(BIG_KEY, JSON.stringify({ x: r.x, y: r.y, w: r.w, h: r.h })); } catch {} }
 let PIN_OUTSIDE = null, pinOutsideOn = false;   // 패널을 다시 만들어도 문서 처리는 하나
@@ -758,7 +757,7 @@ export function createResultsPanel(el, { onOpt = null, onQuality = null, fileNam
     document.addEventListener('keydown', big.key); document.addEventListener('pointerdown', big.down, true); window.addEventListener('resize', big.rs);
     ov.addEventListener('pointerdown', () => raiseWin(ov), true);
     // 크게(2026-11-13 사용자: 기구 최적화 창처럼) — 크게 한 채로 끌거나 크기를 바꾸면 그 크기에서 보통 창으로
-    const updMax = () => { const b = ov.querySelector('[data-big-max]'), on = big.max && !big.min; b.textContent = on ? '⤡ 원래 크기' : '⤢ 크게'; b.title = on ? '크게 하기 전 크기로' : '상단 바 아래 화면 전체로 넓히기'; };
+    const updMax = () => { const b = ov.querySelector('[data-big-max]'), on = big.max && !big.min; b.textContent = on ? '⤡ 원래 크기' : '⤢ 전체화면'; b.title = on ? '크게 하기 전 크기로' : '상단 바 아래 화면 전체로 넓히기'; };
     const unmax = () => { if (big.max && !big.min) { Object.assign(rect, maxRect(innerWidth, innerHeight, winTop())); big.max = false; updMax(); } };
     const setMax = (v) => { big.max = !!v; if (v && big.min) setMin(false); updMax(); place(); paintBig(); raiseWin(ov); };
     const snap = () => (unmax(), { ...rect }), keep = () => bigRectSave(rect);
@@ -790,7 +789,7 @@ export function createResultsPanel(el, { onOpt = null, onQuality = null, fileNam
     if (!big) return;
     const s = big.el.querySelector('[data-big-q]');
     if (document.activeElement !== s) s.value = last?.observe?.quality ?? 'low';
-    const su = big.el.querySelector('[data-big-sum]'), st0 = last?.snap?.stats, O = last?.observe, u = (t, v, g) => `<b class="${Number.isFinite(v) && Number.isFinite(g) ? (v + 1e-9 >= g ? 'ok' : 'bad') : ''}">${t} ${Number.isFinite(v) ? v.toFixed(2) : '–'}</b>`;
+    const su = big.el.querySelector('[data-big-sum]'), st0 = last?.snap?.stats, O = last?.observe, u = (t, v, g) => `<b class="${Number.isFinite(v) && Number.isFinite(g) ? (v + 1e-9 >= g ? 'ok' : 'bad') : ''}">${t} ${fmtJudge(v)}</b>`;
     const pr = last?.snap?.state === 'done' ? 100 : last?.snap?.progress ?? simPct(st0?.relNoise, last?.snap?.targetNoise ?? 0.01);
     setStepMark(big.el.querySelector('[data-big-step]'), 4, last?.snap?.state === 'done');
     setCtl(big.el.querySelector('[data-big-ctl]'), simCtl(last?.snap, calcBusy()), (k) => onCalc?.(k));

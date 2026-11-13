@@ -1140,3 +1140,19 @@ done();
   okB(/data-big-max/.test(rp) && /maxRect/.test(rp), '광분포 시뮬레이션 창 [⤢ 크게]');
   okB(/#m3-run \{ display: none/.test(css) && /\.m3-big-hd \{[^}]*flex-wrap: wrap/.test(css), '하단 진행 줄 숨김 — 실행·중지는 창 머리(좁아도 줄바꿈으로 보임)');
 }
+// 2026-11-13 사용자: 그룹 줄 = 일반 부품과 같은 단계 + 그룹 아이콘 · 빛 계산 제외 = 소재 배지에도 취소선 · 창 단추 정리
+{ const okC = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
+  const { readFileSync } = await import('node:fs'), rd = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
+  const css = rd('../styles.css'), rp = rd('../src/ui/m3/results-panel.js'), mon = rd('../src/ui/m3/monitor.js');
+  const MG = { ...M, groups: [{ id: 'g1', name: '그룹 1', parts: [1] }] };
+  const h = treeHtml(MG, { node: null, line: null }), gRow = h.match(/<div class="m3-node[^"]*grp[^"]*"[^>]*>.*?<\/div>/s)?.[0] ?? '';
+  okC(/gi-group/.test(gRow) && /<svg/.test(gRow), '그룹 줄 = 그룹 아이콘');
+  okC(/\.m3-node\.d1\.grp \.m3-fold \{[^}]*margin-left: -1\dpx/.test(css), '그룹 접기 화살표는 왼쪽 여백으로 — 눈·이름이 일반 부품과 같은 단계');
+  okC(/\.m3-node\.untr \.m3-badge[^{]*\{[^}]*line-through/.test(css) || /\.m3-node\.untr \.m3-lbl, [^{]*\.m3-node\.untr \.m3-badge[^{]*\{[^}]*line-through/.test(css), '빛 계산 제외 = 소재 배지에도 취소선');
+  okC(!/v\.toFixed\(2\)/.test(rp.match(/data-big-sum[\s\S]{0,600}/)?.[0] ?? 'v.toFixed(2)') && /u = \(t, v, g\) => [^\n]*fmtJudge\(v\)/.test(rp), '광분포 창 머리 균일도 = % (fmtJudge)');
+  okC(/'⤢ 전체화면'/.test(rp) && /'⤢ 전체화면'/.test(mon) && !/'⤢ 크게'/.test(rp + mon), '[⤢ 크게] → [⤢ 전체화면]');
+  const { setCtl } = await import('../src/ui/m3/run-ctl.js'), rc = rd('../src/ui/m3/run-ctl.js');
+  okC(/\['stop', '■'\]/.test(rc) && /k === 'stop' \? '중지'/.test(rc), '중지 단추 = ■ 만(마우스 설명·읽기 이름 = 중지)');
+  okC(/\.m3-big-hd \.m3-ctl button\[data-ctl="run"\][^{]*\{[^}]*font-size: 11px/.test(css) && /\.m3-mon-hd \.m3-ctl button\[data-ctl="run"\]/.test(css), '시뮬레이션 실행·최적화 시작 글씨 작게');
+  okC(/function bigRectLoad[\s\S]{0,300}DEF_RECT/.test(rp), '광분포 창 기본 크기 = 기구 최적화 창과 같음(DEF_RECT)');
+  okC(/\.m3-big-hd \{[^}]*font-size: 13px/.test(css), '두 창 머리 글자 크기 같음(13px)'); }

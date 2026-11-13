@@ -42,7 +42,7 @@ export function treeNodes(M, S, lay, leds = []) {
     if (!g) { partNode(p, i, 1); return; }
     if (shown.has(g.id)) return; shown.add(g.id);
     const mem = g.parts.filter((k) => k < M.parts.length && M.parts[k].role !== 'light'), allHid = mem.length && mem.every((k) => hid.has(k)), closed = fold(g.id, !!g.auto);
-    node(`group:${g.id}`, g.name, String(mem.length), true, 'group', g.auto ? undefined : allHid ? 'off' : 'on', { fold: closed ? 'closed' : 'open', depth: 1, auto: !!g.auto, strike: !g.auto && mem.length > 0 && mem.every((k) => M.parts[k].untrace) });
+    node(`group:${g.id}`, g.name, String(mem.length), true, 'group', g.auto ? undefined : allHid ? 'off' : 'on', { fold: closed ? 'closed' : 'open', depth: 1, auto: !!g.auto, gicon: true, strike: !g.auto && mem.length > 0 && mem.every((k) => M.parts[k].untrace) });
     if (!closed) for (const k of mem) if (M.parts[k].role !== 'pcb') partNode(M.parts[k], k, 2);
   });
   // PCB 메뉴(2026-11-05) — 광원이 있으면 PCB 를 못 찾았어도 늘 보임. 수동 선택·반사율은 여기서. 도면 PCB = 부품 그대로 이 아래에
@@ -206,12 +206,13 @@ const eyeHtml = (n) => n.eye ? `<span class="m3-eye ${n.eye}" role="button" tabi
 const caret = (n) => (n.fold ? `<span class="m3-fold" role="button" tabindex="-1" data-fold="${esc(n.id)}" aria-label="${n.fold === 'open' ? '접기' : '펼치기'}" aria-expanded="${n.fold === 'open'}">${n.fold === 'open' ? '▾' : '▸'}</span>` : '');
 // 묶음 아이콘(선 그림, 글자색 따라감)
 const svg = (d) => `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
-const GI = { obs: svg('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/>'), parts: svg('<path d="M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10"/>'), light: svg('<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z"/>') };
+const GI = { obs: svg('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/>'), parts: svg('<path d="M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10"/>'), light: svg('<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z"/>'),
+  group: svg('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>') };   // 그룹 = 폴더(2026-11-13)
 const renamable = (n) => n.id.startsWith('part:') || (n.id.startsWith('group:') && !n.auto);
 export function treeHead() {   // 그룹 단추는 우클릭 메뉴로 옮김(2026-10-30)
   return '<div class="m3-h" title="클릭 = 속성 편집 · Ctrl+클릭 = 여러 개 · Shift+클릭 = 범위 · 우클릭 = 그룹 만들기·해제·이름 바꾸기">구성 <span class="mut m3-tree-tip">우클릭 = 그룹</span></div>';
 }
-export const treeHtml = (M, S, lay, leds) => `${treeHead(M, S)}${treeNodes(M, S, lay, leds).map((n) => `<div class="m3-node ${n.chg ? 'chg ' : ''}${n.child ? 'child' : ''} d${n.depth ?? 0}${n.id.startsWith('group:') ? ' grp' : ''} ${n.sel ? 'sel' : ''} ${n.eye === 'off' ? 'hid' : ''}${n.strike ? ' untr' : ''}${n.grp0 ? ' g0' : ''}" role="button" tabindex="0"${n.sel ? ' aria-current="true"' : ''} data-node="${esc(n.id)}">${n.grp0 && !n.fold ? '<span class="m3-fold" aria-hidden="true"></span>' : caret(n)}${n.icon ? `<span class="m3-gi gi-${n.icon}" aria-hidden="true">${GI[n.icon]}</span>` : ''}${eyeHtml(n)}<span class="m3-lbl"${renamable(n) ? ' data-lbl title="더블클릭: 이름 바꾸기"' : ''}>${esc(n.label)}</span> <span class="${n.child && !n.id.startsWith('group:') ? `m3-badge k-${esc(n.kind)}` : 'b'}"${n.grp0 ? ` title="${esc(n.badge)}"` : ''}${n.bstyle ? ` style="background:${n.bstyle.bg};color:${n.bstyle.fg}"` : ''}>${esc(n.badge)}</span></div>`).join('')}`;
+export const treeHtml = (M, S, lay, leds) => `${treeHead(M, S)}${treeNodes(M, S, lay, leds).map((n) => `<div class="m3-node ${n.chg ? 'chg ' : ''}${n.child ? 'child' : ''} d${n.depth ?? 0}${n.id.startsWith('group:') ? ' grp' : ''} ${n.sel ? 'sel' : ''} ${n.eye === 'off' ? 'hid' : ''}${n.strike ? ' untr' : ''}${n.grp0 ? ' g0' : ''}" role="button" tabindex="0"${n.sel ? ' aria-current="true"' : ''} data-node="${esc(n.id)}">${n.grp0 && !n.fold ? '<span class="m3-fold" aria-hidden="true"></span>' : caret(n)}${n.icon ? `<span class="m3-gi gi-${n.icon}" aria-hidden="true">${GI[n.icon]}</span>` : ''}${eyeHtml(n)}${n.gicon ? `<span class="m3-gi gi-group" aria-hidden="true" title="그룹">${GI.group}</span>` : ''}<span class="m3-lbl"${renamable(n) ? ' data-lbl title="더블클릭: 이름 바꾸기"' : ''}>${esc(n.label)}</span> <span class="${n.child && !n.id.startsWith('group:') ? `m3-badge k-${esc(n.kind)}` : 'b'}"${n.grp0 ? ` title="${esc(n.badge)}"` : ''}${n.bstyle ? ` style="background:${n.bstyle.bg};color:${n.bstyle.fg}"` : ''}>${esc(n.badge)}</span></div>`).join('')}`;
 // 작은 우클릭 메뉴(화면 고정 위치) — 바깥 클릭·Esc·창 벗어남 = 닫기
 export function showCtxMenu(doc, x, y, items, onPick, host = doc.body) {   // host = 테마 변수를 물려받을 곳
   doc.querySelector('.m3-ctx')?.remove();
