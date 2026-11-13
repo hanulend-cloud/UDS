@@ -1506,3 +1506,9 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .m3-big-prog.od-noplot { height: auto !important; flex: none !important; min-height: 0; }
 .m3-big-prog.od-noplot .od-simplot { display: none; }
 .m3-big-prog.od-noplot + .m3-hsplit { display: none; }
+/* 최적화 창 균일도 카드 = 그래프 선 색(길이 파랑 · 폭 주황) — 진행 값과 구분(2026-11-13) */
+.om-k.om-u1 { border-left: 3px solid var(--od-s1); background: color-mix(in srgb, var(--od-s1) 10%, transparent); }
+.om-k.om-u2 { border-left: 3px solid var(--od-s2); background: color-mix(in srgb, var(--od-s2) 10%, transparent); }
+.m3-mon .om-k.om-u1 { background: color-mix(in srgb, var(--od-s1) 10%, transparent); } .m3-mon .om-k.om-u2 { background: color-mix(in srgb, var(--od-s2) 10%, transparent); }
+.om-k.om-u1 > div:first-child { color: var(--od-s1); } .om-k.om-u2 > div:first-child { color: var(--od-s2); }
+.om-kpi { margin-top: 6px; }

@@ -1156,3 +1156,16 @@ done();
   okC(/\.m3-big-hd \.m3-ctl button\[data-ctl="run"\][^{]*\{[^}]*font-size: 11px/.test(css) && /\.m3-mon-hd \.m3-ctl button\[data-ctl="run"\]/.test(css), '시뮬레이션 실행·최적화 시작 글씨 작게');
   okC(/function bigRectLoad[\s\S]{0,300}DEF_RECT/.test(rp), '광분포 창 기본 크기 = 기구 최적화 창과 같음(DEF_RECT)');
   okC(/\.m3-big-hd \{[^}]*font-size: 13px/.test(css), '두 창 머리 글자 크기 같음(13px)'); }
+{ // 최적화 창: 균일도는 진행 줄 아래(그래프 바로 위)로 · 그래프 색(길이 파랑·폭 주황)으로 구분(2026-11-13 사용자)
+  const { monitorHtml, STAGES } = await import('../src/ui/m3/opt-dash.js'), { readFileSync } = await import('node:fs');
+  const css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
+  const S = { tgLen: 0.8, tgWid: 0.8, before: { Ulen: 0.3, Uwid: 0.3 }, tiles: Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', evals: [] }])), seq: [{ k: 'milky', Ulen: 0.5, Uwid: 0.4 }] };
+  let f = 0; const okU = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) { f++; process.exitCode = 1; } };
+  for (const chart of [true, false]) {
+    const m = monitorHtml(S, 5, { chart }), k = m.indexOf('om-kpi'), st = m.indexOf('om-steps'), sy = m.indexOf('om-say'), pl = m.indexOf('od-plot');
+    okU(k > st && k > sy && (!chart || k < pl), `균일도 = 진행 줄·단계·지금 문장 아래${chart ? ' · 그래프 위' : '(그래프 없어도)'}`);
+  }
+  const m = monitorHtml(S, 5);
+  okU(/class="om-k om-u1"[^>]*>[\s\S]*?길이 균일도/.test(m) && /class="om-k om-u2"[^>]*>[\s\S]*?폭 균일도/.test(m), '길이·폭 카드에 그래프 색 구분 표시');
+  okU(/\.om-k\.om-u1 \{[^}]*var\(--od-s1\)/.test(css) && /\.om-k\.om-u2 \{[^}]*var\(--od-s2\)/.test(css), '길이 = 그래프 파랑 · 폭 = 그래프 주황');
+}

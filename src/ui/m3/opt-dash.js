@@ -180,10 +180,10 @@ export function monitorHtml(S, sec = 0, { chart = true } = {}) {
   const b0 = S.before ?? {};
   // 방금 시험한 후보(작은 글씨) — 큰 숫자는 시작값 포함 '지금까지 최고'라 흔들리지 않음(2026-11-12 평가)
   const lastE = busy ? [...(S.seq ?? [])].reverse().find(ok) : null;
-  const kpi = (label, tg, v, v0, vLast, est = false) => {   // est = 후보에서 고른 대략값(≈) — 끝나면 정밀 재계산 값
+  const kpi = (label, tg, v, v0, vLast, est = false, cls = '') => {   // cls = 그래프 색 구분(om-u1 길이 파랑 · om-u2 폭 주황)   // est = 후보에서 고른 대략값(≈) — 끝나면 정밀 재계산 값
     const pass = Number.isFinite(v) && Number.isFinite(tg) ? (v + 1e-9 >= tg ? 'ok' : 'bad') : '';
     const d = Number.isFinite(v) && Number.isFinite(v0) ? v - v0 : NaN;
-    return `<div class="om-k"><div class="mut">${label}${Number.isFinite(tg) ? ` · 목표 ${fmtTg(tg)}` : ''}</div><b class="om-v ${pass}">${est ? '≈' : ''}${fmtJudge(v)}</b><div class="mut">시작 ${fmtJudge(v0)}${Number.isFinite(d) && Math.abs(d) >= 0.0005 ? ` → ${d > 0 ? '▲' : '▼'}${fmtDp(Math.abs(d)).slice(1)}` : ''}${Number.isFinite(vLast) ? ` <span class="om-last" title="방금 시험한 후보(대략값) — 큰 숫자는 시작값을 포함한 지금까지 최고">· 방금 후보 ${fmtJudge(vLast)}</span>` : ''}</div></div>`;
+    return `<div class="om-k${cls ? ` ${cls}` : ''}"><div class="mut">${label}${Number.isFinite(tg) ? ` · 목표 ${fmtTg(tg)}` : ''}</div><b class="om-v ${pass}">${est ? '≈' : ''}${fmtJudge(v)}</b><div class="mut">시작 ${fmtJudge(v0)}${Number.isFinite(d) && Math.abs(d) >= 0.0005 ? ` → ${d > 0 ? '▲' : '▼'}${fmtDp(Math.abs(d)).slice(1)}` : ''}${Number.isFinite(vLast) ? ` <span class="om-last" title="방금 시험한 후보(대략값) — 큰 숫자는 시작값을 포함한 지금까지 최고">· 방금 후보 ${fmtJudge(vLast)}</span>` : ''}</div></div>`;
   };
   const better = best && (!Number.isFinite(b0.Ulen) || scoreOf(best, tl, tw) > scoreOf(b0, tl, tw)) ? best : null;   // 시작보다 나은 후보만 '최고'
   // 광 효율 — 끝나면 확정값, 도는 동안 = 지금까지 최고안의 대략값(≈, 2026-11-12 평가 4: 끝나야 7%p 떨어진 걸 알았음)
@@ -201,10 +201,11 @@ export function monitorHtml(S, sec = 0, { chart = true } = {}) {
     : '';
   const pct = fmtProg(S.ended != null ? 100 : Math.max(0, Math.min(1, S.overall ?? 0)) * 100);
   const est = busy && !fin0 && !!cur, kt = busy && !fin0 ? ' title="큰 숫자 = 지금까지 최고(빠른 계산 대략값 · 길이·폭 중 목표에 더 모자란 쪽 기준) — 끝나면 정밀 재계산 값으로 조금 바뀔 수 있음"' : '';
-  return `<div class="om-kpi"${kt}>${kpi('길이 균일도', tl, cur?.Ulen ?? b0.Ulen, b0.Ulen, lastE?.Ulen, est)}${kpi('폭 균일도', tw, cur?.Uwid ?? b0.Uwid, b0.Uwid, lastE?.Uwid, est)}${effK}</div>
-    <div class="od-pct om-pct"><b>${pct}%</b><div class="od-bar od-bar-big" role="progressbar" aria-label="기구 최적화 진행" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div><span class="mut od-simst">${busy ? `${S.pauseAt ? '일시정지' : '진행'} ${mmss(sec)}` : S.stopped ? '중지됨' : `끝남 ${mmss((S.endSec ?? sec))}`} · 후보 ${nEval}개</span></div>
+  // 균일도 = 진행 줄·단계·지금 문장 아래, 그래프 바로 위(진행 값과 섞이지 않게, 2026-11-13 사용자)
+  return `<div class="od-pct om-pct"><b>${pct}%</b><div class="od-bar od-bar-big" role="progressbar" aria-label="기구 최적화 진행" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div><span class="mut od-simst">${busy ? `${S.pauseAt ? '일시정지' : '진행'} ${mmss(sec)}` : S.stopped ? '중지됨' : `끝남 ${mmss((S.endSec ?? sec))}`} · 후보 ${nEval}개</span></div>
     <div class="om-steps">${steps.join('<i class="om-ar">→</i>')}</div>
     <div class="om-say">${say}</div>
+    <div class="om-kpi"${kt}>${kpi('길이 균일도', tl, cur?.Ulen ?? b0.Ulen, b0.Ulen, lastE?.Ulen, est, 'om-u1')}${kpi('폭 균일도', tw, cur?.Uwid ?? b0.Uwid, b0.Uwid, lastE?.Uwid, est, 'om-u2')}${effK}</div>
     ${chart ? chartHtml() : ''}
     <details class="om-more" data-keep="mx"><summary>상세 — 항목별 현황</summary>${optMatrixHtml(S)}</details>`;
 }
