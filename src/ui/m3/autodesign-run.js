@@ -24,10 +24,12 @@ export function createAdRunner({ ports, now: now0 = () => globalThis.performance
   };
   // Worker 루프 하나 — 오류면 ctl.err 를 세워 다른 루프가 멈추게
   const guard = (ctl, fn) => async (p) => { try { await fn(p); } catch (e) { ctl.err ??= e; throw e; } };
+  // 장면 제한 시간 = 기본 + 삼각형 100만 개마다 60초(큰 도면은 처음 만들 때 느린 PC 에서 60초를 넘을 수 있음, 2026-11-14)
+  const sceneMs = (job) => { let n = 0; for (const q of job.scene?.mechParts ?? []) n += (q.triangles?.length ?? 0) / 3; return sceneTimeoutMs + Math.ceil(n / 1e6) * 60000; };
   async function prepare(job) {
     check();
     const ctl = { err: null };
-    await Promise.all(ports.map(guard(ctl, (p) => withTimeout(p.send({ type: 'scene', sceneKey: job.sceneKey, ...job.scene }), 'scene', sceneTimeoutMs))));
+    await Promise.all(ports.map(guard(ctl, (p) => withTimeout(p.send({ type: 'scene', sceneKey: job.sceneKey, ...job.scene }), 'scene', sceneMs(job)))));
   }
   const send = async (job, msg) => {
     if (gate) await Promise.race([gate, stopP]);

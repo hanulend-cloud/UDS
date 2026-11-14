@@ -19,9 +19,13 @@ export function buildSceneMesh(name, rawParts, pre = null, previousBvh = null) {
   return { name, parts, combined, bvh: previousBvh ? refitBvh(combined.positions, combined.triangles, previousBvh) : buildBvh(combined.positions, combined.triangles) };
 }
 // 빛 추적용(계산 Worker) — 합친 메쉬와 합친 BVH 하나만. 부품별 BVH 는 추적에 안 씀(부품마다 또 만들면 Worker 15개 몫만큼 메모리·시간 낭비)
-export function buildTraceMesh(name, parts) {
+// prev = 앞 장면의 결과 — 삼각형 연결이 같으면(LED·형상 후보처럼 점만 움직임) BVH 를 다시 만들지 않고 상자만 고침(refit).
+//   173만 삼각형 재구축 = 이 PC 9초, 느린 PC Worker 여럿 동시면 60초 넘어 'scene 60초' 로 멈췄음(2026-11-14). 구조는 처음 만든 것을 계속 씀(고친 것을 또 고치지 않음)
+const sameTopo = (a, b) => { if (!a || a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+export function buildTraceMesh(name, parts, prev = null) {
   const combined = combineParts(parts);
-  return { name, parts, combined, bvh: buildBvh(combined.positions, combined.triangles) };
+  const reuse = prev?.bvh?.meta && sameTopo(prev.combined?.triangles, combined.triangles);
+  return { name, parts, combined, bvh: reuse ? refitBvh(combined.positions, combined.triangles, prev.bvh) : buildBvh(combined.positions, combined.triangles) };
 }
 export function setMech3dMesh(name, rawParts, pre = null) {
   raw = buildSceneMesh(name, rawParts, pre); raw.raw = raw; xkey = ''; pmemo = [];

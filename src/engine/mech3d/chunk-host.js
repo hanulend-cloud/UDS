@@ -22,9 +22,10 @@ export function makeChunkHost({ getTable, getDb = () => null }) {
         try {
           const table = getTable();
           if (!table) throw new Error('L2 산란 응답표가 없음');
+          const prev = cache?.S ?? null;   // 앞 장면 — LED 만 움직였으면 BVH 를 고쳐 씀(다시 만들지 않음)
           cache = null;   // 실패하면 이전 장면도 쓰지 않음
           const db = getDb(), rt = { name: 'mech', parts: m.mechParts }, line = lineFromData(m.lineData);   // 합친 메쉬·BVH 는 composeScene 이 한 번만
-          const S = composeScene({ rt, mspec: m.mspec, ledParts: m.ledParts, table, db, line });
+          const S = composeScene({ rt, mspec: m.mspec, ledParts: m.ledParts, table, db, line, prev });
           cache = { sceneKey: m.sceneKey, db, S, line, G: m.G, obs: m.obs, emitters: m.emitters, ledSpec: m.mspec.light.spec, mspec: m.mspec };
           return { reply: { sceneKey: m.sceneKey, ready: true }, transfer: [] };
         } catch (e) { cache = null; return { reply: { sceneKey: m.sceneKey, error: String(e?.message ?? e) }, transfer: [] }; }

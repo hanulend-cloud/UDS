@@ -13,7 +13,7 @@ import { REC } from './gpu-trace.js';
 
 // ledParts 는 변환 전 원본이고 composeScene 이 st.offset/rot 로 변환한다. emitters 는 이미 변환된 좌표여야 한다(xform.transformEmitters).
 // rt: 기구 장면(getMech3d()), mspec: spec.mech3d, ledParts: LED STEP 원본 메쉬(없으면 null), line: 인식된 관측 라인(가상 PCB 용)
-export function composeScene({ rt, mspec, ledParts, table, db, line }) {
+export function composeScene({ rt, mspec, ledParts, table, db, line, prev = null }) {   // prev = 앞 장면(S) — 기구가 같고 LED 만 움직였으면 BVH 를 고쳐 씀
   const L = mspec.light, extraMeshes = [], extraSpecs = [], solderFin = { kind: 'whiteDiffuse', R: L.pcbR ?? 0.3 };
   const base = rt.parts.length;
   if (L.kind === 'step' && !ledParts) throw new Error('LED STEP 메쉬가 없음 — LED STEP 을 다시 불러오세요');
@@ -29,8 +29,10 @@ export function composeScene({ rt, mspec, ledParts, table, db, line }) {
     extraSpecs.push(setPartFinish(defaultPart(base, 'PCB', 0), null, solderFin));
   }
   // 합친 BVH 는 LED 까지 합쳐 한 번만(rt 에 합친 메쉬가 없으면 여기서 처음 만듦)
-  const rt2 = extraMeshes.length ? buildTraceMesh('job', [...rt.parts, ...extraMeshes]) : rt.combined ? rt : buildTraceMesh('job', rt.parts);
-  return buildTraceScene(rt2, { ...mspec, parts: [...mspec.parts, ...extraSpecs] }, { table, db });
+  const rt2 = extraMeshes.length ? buildTraceMesh('job', [...rt.parts, ...extraMeshes], prev?.mesh) : rt.combined ? rt : buildTraceMesh('job', rt.parts, prev?.mesh);
+  const S = buildTraceScene(rt2, { ...mspec, parts: [...mspec.parts, ...extraSpecs] }, { table, db });
+  S.mesh = rt2;
+  return S;
 }
 
 // 발광점 목록 → 합친 광원(runJob·runChunk 공용)
