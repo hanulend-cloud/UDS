@@ -1222,3 +1222,15 @@ done();
   const g2 = factorChartSvg(S, { Ulen: 0.7, Uwid: 0.16 }, 700, 200);   // 시작(현재 설계)보다 못한 후보는 '올림' 이 아님
   say((g2.match(/class="od-up"/g) ?? []).length === 6 && /od-upl[^>]*>① \+6\.6%p</.test(g2) && /길이 70\.0% → 76\.6%/.test(g2), `시작값을 넘긴 갱신만 표시 · 올린 폭은 시작 대비 (${(g2.match(/class="od-up"/g) ?? []).length})`);
 }
+{ // 2026-11-16: 계산이 실패(Worker 응답 없음 등)해도 진행 화면이 '진행 중' 으로 남고 시간이 계속 올라감 → 실패로 멈춤
+  const { applyProgress, monitorHtml, failRun } = await import('../src/ui/m3/opt-dash.js');
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const T = () => ({ status: 'wait', frac: 0, text: '', evals: [] }), S = { tgLen: 0.8, tgWid: 0.8, t0: 0, tiles: { position: { ...T(), status: 'off' }, shape: { ...T(), status: 'off' }, milky: T() }, seq: [], log: [], before: { Ulen: 0.44, Uwid: 0.12 } };
+  applyProgress(S, 'current', 1, '현재안', 0.1, 0);
+  applyProgress(S, 'milky', 0.5, 'Milky', 0.4, 60000);
+  say(typeof failRun === 'function', 'failRun 있음');
+  failRun?.(S, 'Worker 응답 없음 (chunk 90초)', 90000);
+  const a = monitorHtml(S, 100), b = monitorHtml(S, 400), vis = (h) => h.replace(/<[^>]+>/g, ' ');
+  say(S.stopped === true && S.tm?.milky === 30000 && a === b, '실패 = 멈춤 — 시간이 더 올라가지 않음');
+  say(/끝나지 못했습니다/.test(vis(a)) && /Worker 응답 없음 \(chunk 90초\)/.test(vis(a)) && !/중지했습니다/.test(vis(a)) && /실패/.test(vis(a)) && !/진행 0/.test(vis(a)) && /data-adset/.test(a), `실패 문구와 이유를 진행 화면에 표시: ${vis(a).replace(/\s+/g, ' ').slice(0, 120)}`);
+}

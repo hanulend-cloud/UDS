@@ -1278,7 +1278,7 @@ async function adRun(opt = {}) {
       shapeStart: stages.shape && M0.parts[sp]?.shapeMod ? (({ dt, h, R, e, c, kL, kW, kF }) => ({ dt, h, R, e, c, kL, kW, kF }))(M0.parts[sp].shapeMod) : null,   // 이미 적용한 형상에서 이어서
       lateral, rowsOptions: st.sel.oneRow ? [1] : [1, 2], currentVerified: opt.partial?.currentVerified ?? currentVerified, partial: opt.partial?.d ?? null, screenGrid: !lowQ, currentScreen, heightRange: hInfo?.range ?? null, housingPart: hp, finishCands, ledsAtCurrentMilky: !!opt.added?.length,
     }, io);
-  } catch (e) { if (A === a && !R.stopped) setStatus(`기구 최적화 실패: ${e.message}`); }
+  } catch (e) { if (A === a && !R.stopped) { setStatus(`기구 최적화 실패: ${e.message}`); A.optDash?.fail(e.message); } }
   if (A !== a) return;   // 그사이 이탈
   const clashN = res && !res.cancelled && !R.stopped ? await designClash(res.best, ctx, M0, rt, line) : 0;   // running 을 끄기 전에 — 양보하는 동안 다시 실행되지 않게
   if (A !== a) return;

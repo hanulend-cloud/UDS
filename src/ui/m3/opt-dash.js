@@ -56,6 +56,8 @@ export function evalSparkSvg(evals, tgLen, tgWid, bestIdx = -1, w = 220, h = 70)
 const FB_COL = { milky: '#3b82f6', position: '#f59e0b', shape: '#a855f7', housing: '#10b981' };
 // cfg(k) → { on, box(체크 상자), opt(설정 html), why } — 줄 앞에서 바로 켜고 끔(2026-10-29, 최적화 타일에서 옮김). 없으면 표시만
 // 중지 — 돌던 항목은 '중지됨'(진행 % 가 남아 아직 도는 것처럼 보이지 않게, 2026-11-12)
+// 계산 실패(예외) — 멈춤으로 두고 이유를 남김(전에는 '진행 중' 으로 남아 시간이 계속 올라갔음, 2026-11-16)
+export function failRun(S, text, now) { closePhase(S, now); S.stopped = true; S.failed = text || '알 수 없는 오류'; S.pauseAt = null; stopTiles(S); }
 export function stopTiles(S) { for (const t of Object.values(S?.tiles ?? {})) if (t.status === 'run' || t.status === 'wait') t.status = 'stop'; }
 // 항목 카드 한 줄 설명 — 무엇을 어디까지 바꾸는지(2026-11-12 평가)
 const FB_DESC = { position: 'LED 개수·간격·폭 위치·높이를 바꿈 — 부품과 겹치는 안은 뺌', shape: '광경로 위 부품의 입광면 모양을 바꿈 — 최소 살두께는 지킴', milky: '확산도(Milky)를 0~5 안에서 찾음 — 5 초과는 투과율이 크게 떨어져 적용 안 함' };
@@ -196,7 +198,7 @@ export function monitorParts(S, sec = 0, { chart = true } = {}) {
     else if (t.status === 'run') steps.push(step('run', name, `${fmtProg(t.frac * 100)}%${tm(k)}`));
     else if (t.status === 'done') steps.push(step('done', name, `✓${uv(stageBest(t, tl, tw))}${tm(k)}`));
     else if (t.status === 'wait') steps.push(step('wait', name, '대기'));
-    else if (t.status === 'stop') steps.push(step('wait', name, `중지됨${tm(k)}`));
+    else if (t.status === 'stop') steps.push(step('wait', name, `${S.failed ? '실패' : '중지됨'}${tm(k)}`));
   }
   steps.push(S.ended != null ? step('done', '검증', `✓${tm('verify')}`) : busy && S.verFrac != null ? step('run', '검증', `${fmtProg(S.verFrac * 100)}%${tm('verify')}`) : step('wait', '검증', ''));
   const b0 = S.before ?? {};
@@ -219,13 +221,14 @@ export function monitorParts(S, sec = 0, { chart = true } = {}) {
   const doing = S.note || (S.cur ? S.tiles[S.cur].text : '') || '준비하는 중';
   // 판정은 한 줄만 — 값은 아래 지표 카드에(같은 값을 여러 곳에 쓰지 않음, 2026-11-08)
   const say = busy ? `<p><b>지금</b> ${esc(doing)}</p>`
+    : S.failed ? `<p><b>계산이 끝나지 못했습니다.</b> ${esc(S.failed)} — 찾던 안은 설계에 반영되지 않았습니다. 다시 시작해 보세요. <button type="button" class="od-toset" data-adset title="항목을 다시 고르고 새로 최적화">⚙ 설정 바꾸기</button></p>`
     : S.stopped ? `<p><b>중지했습니다.</b> 찾던 안은 설계에 반영되지 않았습니다. <button type="button" class="od-toset" data-adset title="항목을 다시 고르고 새로 최적화">⚙ 설정 바꾸기</button></p>${partialHtml(S.partial)}`
     : '';
   const pct = fmtProg(S.ended != null ? 100 : Math.max(0, Math.min(1, S.overall ?? 0)) * 100);
   const est = busy && !fin0 && !!cur, kt = busy && !fin0 ? ' title="큰 숫자 = 지금까지 최고(빠른 계산 대략값 · 길이·폭 중 목표에 더 모자란 쪽 기준) — 끝나면 정밀 재계산 값으로 조금 바뀔 수 있음"' : '';
   // 균일도 = 그래프 아래(그래프를 읽고 바로 값 확인, 2026-11-13 사용자)
   const kpiH = `<div class="om-kpi"${kt}>${kpi('길이 균일도', tl, cur?.Ulen ?? b0.Ulen, b0.Ulen, lastE?.Ulen, est, 'om-u1')}${kpi('폭 균일도', tw, cur?.Uwid ?? b0.Uwid, b0.Uwid, lastE?.Uwid, est, 'om-u2')}${effK}</div>`;
-  return { main: `<div class="od-pct om-pct"><b>${pct}%</b><div class="od-bar od-bar-big" role="progressbar" aria-label="기구 최적화 진행" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div><span class="mut od-simst">${busy ? `${S.pauseAt ? '일시정지' : '진행'} ${mmss(sec)}` : S.stopped ? '중지됨' : `끝남 ${mmss((S.endSec ?? sec))}`} · 후보 ${nEval}개</span></div>
+  return { main: `<div class="od-pct om-pct"><b>${pct}%</b><div class="od-bar od-bar-big" role="progressbar" aria-label="기구 최적화 진행" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div><span class="mut od-simst">${busy ? `${S.pauseAt ? '일시정지' : '진행'} ${mmss(sec)}` : S.failed ? '실패' : S.stopped ? '중지됨' : `끝남 ${mmss((S.endSec ?? sec))}`} · 후보 ${nEval}개</span></div>
     <div class="om-steps">${steps.join('<i class="om-ar">→</i>')}</div>
     <div class="om-say">${say}</div>
     ${chart ? chartHtml() + kpiH : ''}
@@ -321,6 +324,7 @@ export function createOptDash(el, h = {}) {
   if (typeof setInterval !== 'undefined') setInterval(() => { if (S && S.ended == null && !S.stopped && el.isConnected && el.offsetParent) draw(); }, 1000);   // 걸린 시간 갱신
   render(); renderBoard();
   function stop() { if (S) { closePhase(S, S.pauseAt ?? performance.now()); S.stopped = true; S.pauseAt = null; stopTiles(S); draw(); } }
+  function fail(text) { if (S && S.ended == null && !S.stopped) { failRun(S, text, S.pauseAt ?? performance.now()); draw(); } }
   function setPartial(P) { if (S) { S.partial = P; draw(); } }   // 중지 뒤 끝난 항목까지 반영한 안(정밀 판정 단추)
   // 일시정지한 시간은 걸린 시간에서 뺌
   function setPaused(on) { if (!S) return; if (on) S.pauseAt ??= performance.now(); else if (S.pauseAt) { if (S.phT != null) S.phT += performance.now() - S.pauseAt; S.t0 += performance.now() - S.pauseAt; S.pauseAt = null; } draw(); }
@@ -330,7 +334,7 @@ export function createOptDash(el, h = {}) {
   // 단계별 최고(실제 계산값) — 결과 화면의 항목별 효과
   function stageBests() { if (!S) return null; const o = {}; for (const [k] of STAGES) { const t = S.tiles[k]; if (t.status !== 'off') { const e = stageBest(t, S.tgLen, S.tgWid); if (e && !e.est) o[k] = { Ulen: e.Ulen, Uwid: e.Uwid }; } } return o; }
   const hasRun = () => !!S;
-  return { stageBests, hasRun, reset, addStages, progress, evals, finish, stop, setPartial, setPaused, refresh, clear };
+  return { stageBests, hasRun, reset, addStages, progress, evals, finish, stop, fail, setPartial, setPaused, refresh, clear };
 }
 
 // 광경로 순위(순수) — paths = { 'R:2>1': 가중 합 } → [{ parts:[번호], refl, share }] 비중 큰 순(기구 부품만, 같은 경로 합침)
