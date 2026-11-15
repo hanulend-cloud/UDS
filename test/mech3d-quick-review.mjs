@@ -64,18 +64,30 @@ const near = (a, b, e = 0.005) => Math.abs(a - b) < e;
   const z = debiasU(mk(ripple, 3));
   ok(z.se > 0.15, `노이즈에 묻힌 값은 오차가 큼(±${pc(z.se)}%p) — 유력으로 안 나옴`);
   ok(debiasU(V.slice(0, 2)) === null, '묶음 3개 미만 = 추정 안 함');
-  // tallyStats 는 요청할 때만 보정 추정(est)을 함께 냄 — 판정 값(Ulen·Uwid)은 그대로
+  // 판정 값(Ulen·Uwid) = 보정값(2026-11-15 사용자: 정밀 판정에도 보정값) — 그대로 값은 rawUlen·rawUwid. 묶음 3개 미만이면 그대로
   const G = { ns: n, nw: 1, ds: 1, cell: 1, w0: -0.5, L: n, closed: true, winS: 5, area: new Float64Array(n).fill(1), valid: new Uint8Array(n).fill(1) };
   const acc = V.map((v) => Float64Array.from(v)), o = { targetLen: 0.8, targetWid: 0.6 };
-  const st = tallyStats(G, acc, o, null, { est: true });
-  ok(Math.abs(st.Ulen - raw) < 1e-9 && Math.abs(st.est.Ulen - e.U) < 1e-9 && st.est.seLen === e.se && st.est.Uwid == null && tallyStats(G, acc, o).est === null, '통계에 est(보정값·오차) — 판정 값은 그대로 · 요청 없으면 없음');
+  const st = tallyStats(G, acc, o), s2 = tallyStats(G, acc.slice(0, 2), o);
+  ok(Math.abs(st.rawUlen - raw) < 1e-9 && Math.abs(st.Ulen - e.U) < 1e-9 && st.seLen === e.se && st.Uwid == null && st.passLen === (st.Ulen >= 0.8), '판정 값 = 보정값 · 오차 · rawUlen 은 그대로 값');
+  ok(s2.Ulen === s2.rawUlen, '묶음 3개 미만 = 그대로 값');
 }
-{ // 폭 추정 = 모든 창을 합친 폭 단면(창 하나는 광자가 적어 0% 로 나왔음)
+{ // 폭 = 가장 나쁜 창 그대로 — 창 값을 길이 방향으로 노이즈 보정(창 하나는 광자가 적어 따로 내면 0% 로 나왔음)
   let sd = 99; const rnd = () => { sd = (sd + 0x6D2B79F5) | 0; let t = Math.imul(sd ^ (sd >>> 15), 1 | sd); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }, gauss = () => Math.sqrt(-2 * Math.log(rnd() + 1e-12)) * Math.cos(2 * Math.PI * rnd());
-  const ns = 200, nw = 10, G = { ns, nw, ds: 1, cell: 1, w0: -5, L: ns, closed: true, winS: 5, area: new Float64Array(ns * nw).fill(1), valid: new Uint8Array(ns * nw).fill(1) };
-  const wprof = (j) => 0.5 + 0.5 * Math.sin((Math.PI * (j + 0.5)) / nw);   // 폭 가장자리 어두움 — 참값 약 57.8 ÷ 99.4 = 58%
-  const acc = Array.from({ length: 10 }, () => Float64Array.from({ length: ns * nw }, (_, k) => wprof(k % nw) * (1 + 1.5 * gauss())));
-  const st = tallyStats(G, acc, { targetLen: 0.8, targetWid: 0.8 }, null, { est: true }), truth = wprof(0) / wprof(4);
-  ok(st.Uwid < 0.3 && Math.abs(st.est.Uwid - truth) < 0.12, `폭: 그대로 ${(st.Uwid * 100).toFixed(1)}% → 보정 ${(st.est.Uwid * 100).toFixed(1)}% ±${(st.est.seWid * 100).toFixed(1)}%p (참값 ${(truth * 100).toFixed(1)}%)`);
+  const ns = 400, nw = 10, G = { ns, nw, ds: 1, cell: 1, w0: -5, L: ns, closed: true, winS: 5, area: new Float64Array(ns * nw).fill(1), valid: new Uint8Array(ns * nw).fill(1) };
+  const wprof = (j, dark) => 1 - (dark ? 0.6 : 0.4) * Math.abs(j - 4.5) / 4.5;   // 폭 가장자리 어두움: 보통 60% · s 100~140 구간은 40%
+  const mk = (rel) => Array.from({ length: 10 }, () => Float64Array.from({ length: ns * nw }, (_, k) => wprof(k % nw, Math.floor(k / nw) >= 100 && Math.floor(k / nw) < 140) * (1 + rel * gauss())));
+  const o = { targetLen: 0.8, targetWid: 0.8 }, st = tallyStats(G, mk(0.6), o), truth = wprof(0, true) / wprof(4, true);
+  ok(st.rawUwid < st.Uwid && Math.abs(st.Uwid - truth) < 0.1 && st.seWid > 0.01, `폭: 그대로 ${(st.rawUwid * 100).toFixed(1)}% → 보정 ${(st.Uwid * 100).toFixed(1)}% ±${(st.seWid * 100).toFixed(1)}%p (참값 ${(truth * 100).toFixed(1)}%)`);
+  ok(st.sWorst >= 100 && st.sWorst <= 140, `가장 나쁜 창 = 어두운 구간(s ${st.sWorst})`);
+  const c = tallyStats(G, mk(0), o);
+  ok(Math.abs(c.Uwid - truth) < 1e-6 && Math.abs(c.Uwid - c.rawUwid) < 1e-9, '노이즈 없음 = 그대로');
+}
+{ // 광자가 아주 적을 때(Milky 5 · 10초 실측: 폭이 0% 로 나왔음) — 창별 값을 못 믿는 폭 칸은 전체 평균으로, 0% 로 떨어지지 않음
+  let sd = 5; const rnd = () => { sd = (sd + 0x6D2B79F5) | 0; let t = Math.imul(sd ^ (sd >>> 15), 1 | sd); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const pois = (l) => { const L = Math.exp(-l); let k = 0, p = 1; do { k++; p *= rnd(); } while (p > L); return k - 1; };
+  const ns = 445, nw = 20, G = { ns, nw, ds: 1, cell: 1, w0: -10, L: ns, closed: true, winS: 5, area: new Float64Array(ns * nw).fill(1), valid: new Uint8Array(ns * nw).fill(1) };
+  const wprof = (j) => 1 - 0.85 * Math.abs(j - 9.5) / 9.5, truth = wprof(0) / wprof(9);   // 가장자리 15%
+  const us = []; for (let t = 0; t < 5; t++) { const acc = Array.from({ length: 10 }, () => Float64Array.from({ length: ns * nw }, (_, k) => pois(0.15 * wprof(k % nw)))); us.push(tallyStats(G, acc, { targetLen: 0.8, targetWid: 0.8 })); }
+  ok(us.every((x) => x.Uwid > 0.05 && Math.abs(x.Uwid - truth) < 0.1), `광자 적음: 폭 보정 ${us.map((x) => (x.Uwid * 100).toFixed(1)).join(' · ')}% (참값 ${(truth * 100).toFixed(1)}% · 그대로 ${(us[0].rawUwid * 100).toFixed(1)}%)`);
 }
 done();

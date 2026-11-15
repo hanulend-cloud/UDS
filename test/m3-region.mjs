@@ -11,7 +11,8 @@ const accs = [0, 1, 2].map(mk), obs = { targetLen: 0.8, targetWid: 0.8 };
   const all = tallyStats(G, accs, obs), r0 = regionStats(G, accs, obs, { s0: 0, s1: 10, w0: -2, w1: 2 });
   ok(Math.abs(r0.Ulen - all.Ulen) < 1e-12 && Math.abs(r0.Uwid - all.Uwid) < 1e-12 && Math.abs(r0.meanRatio - 1) < 1e-12, '영역 = 전체 → tallyStats 와 같음');
   const r1 = regionStats(G, accs, obs, { s0: 5, s1: 10, w0: -1, w1: 2 });   // i 5..9, j 1..3 (0.5배 줄 뺌)
-  ok(Math.abs(r1.Ulen - 1.5 / 1.9) < 1e-9 && Math.abs(r1.Uwid - 1) < 1e-9, `영역 길이·폭 균일도 (${r1.Ulen}, ${r1.Uwid})`);
+  ok(Math.abs(r1.Ulen - 1.5 / 1.9) < 2e-3 && Math.abs(r1.Uwid - 1) < 2e-3 && Math.abs(r1.rawUlen - 1.5 / 1.9) < 1e-9,   // 판정 값 = 노이즈 보정값(2026-11-15) — 묶음 간 차이(0.1%) 수준만큼 다를 수 있음 · 그대로 값은 정확
+     `영역 길이·폭 균일도 (${r1.Ulen}, ${r1.Uwid})`);
   ok(r1.cells.join() === '5,10,1,4' && r1.mm.join() === '5,10,-1,2', `칸 범위·mm 범위 (${r1.cells} / ${r1.mm})`);
   ok(regionStats(G, accs, obs, { s0: 0, s1: 10, w0: 0, w1: 1 }).Uwid === null, '폭 1칸 → 폭 균일도 없음');
   ok(regionStats(G, accs, obs, { s0: 3, s1: 3.2, w0: 0, w1: 0.1 }).cells.join() === '3,4,2,3', '칸 하나보다 작은 영역 → 그 칸 하나');

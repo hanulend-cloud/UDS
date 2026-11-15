@@ -219,13 +219,42 @@ export function debiasU(vecs, groups = null) {
   // (실측: Milky 5 · 10초에서 리플이 묻혀 100% 로 나왔음 — 그대로 두면 '유력' 으로 잘못 나옴)
   return { U: Math.max(0, all.U - all.hid), se: Math.hypot(seJ, 2 * all.hid) };
 }
-const estOf = (per, narrow) => {
-  // 폭 = 모든 창을 합친 폭 단면으로(창 하나는 광자가 너무 적어 추정이 안 됨 — 실측: 창별로 내면 0% 로 나왔음). 가장 나쁜 창보다 조금 높게 나올 수 있음
-  const pool = (cols) => cols[0].map((_, j) => { let s = 0, c = 0; for (const w of cols) if (Number.isFinite(w[j])) { s += w[j]; c++; } return c ? s / c : NaN; });
-  const L = debiasU(per.map((x) => x.p)), W = narrow ? null : debiasU(per.map((x) => pool(x.cols)));
-  return L ? { Ulen: L.U, seLen: L.se, Uwid: W?.U ?? null, seWid: W?.se ?? null } : null;
+// 폭 = 가장 나쁜 창(판정 뜻 그대로). 창 하나는 광자가 적어 따로 보정이 안 되므로(실측: 0% 로 나옴) 폭 칸마다 창 값을 길이 방향으로 보정한 뒤
+// 창별 최저÷최고를 냄(창 값은 길이 방향으로 완만 — 이웃 창의 광자를 함께 씀). cols[b][wi][j] · NaN = 안 쓰는 칸
+const WID_TRUST = 0.25;
+const widthEst = (colsB) => {
+  const B = colsB.length, nWin = colsB[0].length, nw = colsB[0][0]?.length ?? 0, D = Array.from({ length: nWin }, () => new Float64Array(nw).fill(NaN));
+  let hs = 0, hc = 0;
+  for (let j = 0; j < nw; j++) {
+    const idx = [], mean = [], nv = [];
+    for (let wi = 0; wi < nWin; wi++) { let s = 0, ok = true; for (const c of colsB) { const v = c[wi][j]; if (!Number.isFinite(v)) { ok = false; break; } s += v; } if (!ok) continue; const m = s / B; let q = 0; for (const c of colsB) q += (c[wi][j] - m) ** 2; idx.push(wi); mean.push(m); nv.push(B > 1 ? q / (B - 1) / B : 0); }
+    if (!idx.length) continue;
+    const m = mean.reduce((x, y) => x + y, 0) / mean.length;
+    // 이 칸의 창별 값을 믿을 수 있을 때만 길이 방향 변화를 씀 — 못 믿으면(못 보는 리플이 평균의 25% 이상) 모든 창의 평균으로(실측: Milky 5 · 10초에 폭 0%)
+    const Vn = nv.reduce((x, y) => x + y, 0) / nv.length;
+    let out = mean, hid = Math.sqrt(Vn);
+    if (idx.length >= 4) { const r = denoiseProfile(mean, nv); if (m > 0 && r.hid / m < WID_TRUST) ({ out, hid } = r); else { out = mean.map(() => m); hid = Math.sqrt(Vn / idx.length); } }
+    idx.forEach((wi, q) => { D[wi][j] = out[q]; });
+    if (m > 0) { hs += hid / m; hc++; }
+  }
+  let U = Infinity, iWin = -1;
+  D.forEach((row, wi) => { let mn = Infinity, mx = -Infinity, c = 0; for (const v of row) if (Number.isFinite(v)) { c++; if (v < mn) mn = v; if (v > mx) mx = v; } if (c < 2) return; const u = mx > 0 ? Math.max(0, mn) / mx : 0; if (u < U) { U = u; iWin = wi; } });
+  return iWin < 0 ? null : { U, iWin, hid: hc ? hs / hc : 0 };
 };
-export function tallyStats(G, accs, obs, cnts = null, { est = false } = {}) {   // est = 노이즈 보정 추정도 냄(빠른 검토용 — 계산이 더 들어 필요할 때만)
+const debiasW = (colsB) => {
+  const B = colsB.length; if (B < 3) return null;
+  const all = widthEst(colsB); if (!all) return null;
+  const jk = []; for (let b = 0; b < B; b++) { const r = widthEst(colsB.filter((_, q) => q !== b)); if (r) jk.push(r.U); }
+  const jm = jk.reduce((x, y) => x + y, 0) / (jk.length || 1), seJ = jk.length > 1 ? Math.sqrt(((jk.length - 1) / jk.length) * jk.reduce((x, y) => x + (y - jm) ** 2, 0)) : 0;
+  return { U: all.U, se: Math.hypot(seJ, 2 * all.hid), iWin: all.iWin };   // 폭은 가장 나쁜 창을 고르는 것만으로 낮은 쪽이라 더 낮추지 않음
+};
+const estOf = (per, narrow) => {
+  const L = debiasU(per.map((x) => x.p)), W = narrow ? null : debiasW(per.map((x) => x.cols));
+  return L ? { Ulen: L.U, seLen: L.se, Uwid: W?.U ?? null, seWid: W?.se ?? null, iWin: W?.iWin ?? -1 } : null;
+};
+// 판정 값 Ulen·Uwid = 노이즈 보정값(2026-11-15 사용자: 정밀 판정에도 보정값) · seLen·seWid = 그 오차. 그대로 값(최저÷최고)은 rawUlen·rawUwid.
+// 묶음이 3개 미만이면 보정하지 않음(그대로 값)
+export function tallyStats(G, accs, obs, cnts = null) {
   const B = accs.length, nCell = G.ns * G.nw, { ns, nw, ds, area, valid } = G;
   let nValid = 0; for (let k = 0; k < nCell; k++) if (valid[k]) nValid++;
   const empty = { empty: true, profile: new Float64Array(ns).fill(NaN), map: new Float64Array(nCell), Ulen: 0, seLen: null, Uwid: null, seWid: null, sWorst: null, passLen: false, passWid: false, counted: 0, nbar: 0, relNoise: null, noiseWarn: true, win: null };
@@ -277,11 +306,12 @@ export function tallyStats(G, accs, obs, cnts = null, { est = false } = {}) {   
   const nr = med(relRows), nc = med(relCols), relNoise = nr === null && nc === null ? relNoiseCell : Math.max(nr ?? 0, nc ?? 0);
   let nbar = 0; if (cnts) { let tot = 0; for (const c of cnts) for (let k = 0; k < nCell; k++) if (valid[k]) tot += c[k]; nbar = tot / nValid / B; }
   const tol = Math.min(Math.max(0.01, 1 - obs.targetLen), Math.max(0.01, 1 - obs.targetWid));
+  const E = B >= 3 ? estOf(per, narrow) : null, eW = !narrow && E?.Uwid != null;
+  const Ulen = E ? E.Ulen : main.Ulen, Uwid = eW ? E.Uwid : main.Uwid, iWin = eW ? E.iWin : main.iWin;
   return {
-    profile: main.p, map: mean, Ulen: main.Ulen, seLen, Uwid: main.Uwid, seWid, sWorst: narrow ? null : ((wins[main.iWin][0] + wins[main.iWin][1]) / 2) * ds, win: narrow ? null : wins[main.iWin], narrow, nbar, relNoise, relNoiseCell,
-    passLen: main.Ulen >= obs.targetLen, passWid: narrow ? null : main.Uwid >= obs.targetWid, counted,
+    profile: main.p, map: mean, Ulen, seLen: E ? E.seLen : seLen, Uwid, seWid: eW ? E.seWid : seWid, rawUlen: main.Ulen, rawUwid: main.Uwid, sWorst: narrow ? null : ((wins[iWin][0] + wins[iWin][1]) / 2) * ds, win: narrow ? null : wins[iWin], narrow, nbar, relNoise, relNoiseCell,
+    passLen: Ulen >= obs.targetLen, passWid: narrow ? null : Uwid >= obs.targetWid, counted,
     noiseWarn: counted === 0 || B < 2 || relNoise === null || 3 * relNoise > tol,
-    est: est ? estOf(per, narrow) : null,
   };
 }
 
