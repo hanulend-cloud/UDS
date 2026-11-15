@@ -125,7 +125,7 @@ const ITEMS = [['milky', '① Milky 레벨'], ['leds', '② LED 개수·피치']
 // 최적화 타일(가운데 칸)의 켜기 스위치·항목 설정(순수) — 고르는 곳 = 진행을 보는 곳(아래 칸 대시보드와 한 자리)
 // state = { avail, sel, running, names, milkyPart, housingMat } → { on, html }(html = 스위치 + 설정, 쓸 수 없으면 이유)
 // 화면의 기구 최적화 = 3 항목: ① Milky · ② 기구 위치(= 엔진 ② LED 배치 + ⑤ LED 높이) · ③ 기구 형상. 케이스 반사율(④)은 부품 속성에서 직접
-export const AD_ITEMS = [['position', '① 위치', ['leds', 'height']], ['shape', '② 형상', ['shape']], ['milky', '③ 확산도(Milky)', ['milky']]];   // 계산 순서(2026-10-30)
+export const AD_ITEMS = [['position', '① 위치/개수', ['leds', 'height']], ['shape', '② 형상', ['shape']], ['milky', '③ 확산도(Milky)', ['milky']]];   // 계산 순서(2026-10-30)
 export const TILE_NOTE = { position: '부족한 방향으로 LED 를 옮기고, 그래도 모자라면 개수를 늘려 피치를 줄임', milky: 'Milky 5 까지에서 균일도 최고점을 찾음(밝기는 줄어듦)', leds: 'LED 개수·피치·열을 바꿈', shape: '도광판 아랫면 형상(두께·끝단·가장자리)', housing: '케이스 반사율(소재 상한 안)', height: 'LED–커버 거리' };
 export function tileConfigHtml(k, { avail, sel, running, names = [], milkyPart = null, housingMat = null, path = null }) {
   const pname = (i) => esc(names[i] ?? `부품 ${i + 1}`), dis = running ? ' disabled' : '';
@@ -133,10 +133,10 @@ export function tileConfigHtml(k, { avail, sel, running, names = [], milkyPart =
   const pathNote = (t) => `<span class="fb-i" title="${path ? '광경로에서 자동 검출 · 빛 많은 순' : '광경로 검출 전 — 쓸 수 있는 부품 전체'} · ${t}">ⓘ</span>`;   // 긴 안내 = 마우스(2026-11-12)
   if (k === 'position') {   // ② 기구 위치 = LED 배치 + LED 높이(쓸 수 있는 것만)
     const okL = !!avail.leds?.ok, okH = !!avail.height?.ok;
-    if (!okL && !okH) { const why = avail.leds?.why ?? avail.height?.why ?? ''; return { on: false, box: '<input type="checkbox" data-ad="position" disabled aria-label="① 위치 사용">', opt: '', why, html: `<label class="od-sw off"><input type="checkbox" data-ad="position" disabled> 사용 안 함</label><div class="od-why mut">${esc(why)}</div>` }; }
+    if (!okL && !okH) { const why = avail.leds?.why ?? avail.height?.why ?? ''; return { on: false, box: '<input type="checkbox" data-ad="position" disabled aria-label="① 위치/개수 사용">', opt: '', why, html: `<label class="od-sw off"><input type="checkbox" data-ad="position" disabled> 사용 안 함</label><div class="od-why mut">${esc(why)}</div>` }; }
     const on = !!(sel.leds || sel.height), why = `${okL ? '부족한 방향으로 LED 이동 → 모자라면 개수 추가(피치 줄임)' : ''}${okL && okH ? ' + ' : ''}${okH ? 'LED–커버 거리(높이)' : ''}`;
     const opt = okL ? `<label class="od-opt" title="LED 를 한 줄로만 배치(PCB·LED 재료비 ↓) — 폭 균일도는 마지막 Milky 단계가 올려 맞춤"><input type="checkbox" data-ad="oneRow"${sel.oneRow !== false ? ' checked' : ''}${dis}> 1열만(재료비 ↓)</label>` : '';
-    return { on, box: `<input type="checkbox" data-ad="position"${on ? ' checked' : ''}${dis} aria-label="① 위치 사용">`, opt, why, html: `<label class="od-sw"><input type="checkbox" data-ad="position"${on ? ' checked' : ''}${dis}> ${on ? '사용' : '사용 안 함'}</label><div class="od-why mut">${esc(why)}</div>` };
+    return { on, box: `<input type="checkbox" data-ad="position"${on ? ' checked' : ''}${dis} aria-label="① 위치/개수 사용">`, opt, why, html: `<label class="od-sw"><input type="checkbox" data-ad="position"${on ? ' checked' : ''}${dis}> ${on ? '사용' : '사용 안 함'}</label><div class="od-why mut">${esc(why)}</div>` };
   }
   const a = avail[k];
   if (!a) return { on: false, box: '', opt: '', why: '', html: '' };
@@ -300,7 +300,7 @@ export const seedFits = (seed, G) => !!seed?.batches?.length && !!G && seed.batc
 export function shapeMissText(r) {
   const s = r.stages;
   if (!s?.shape || r.feasible) return '';
-  const rest = [!s.leds && '① 위치', !s.milky && '③ 확산도(Milky)'].filter(Boolean);
+  const rest = [!s.leds && '① 위치/개수', !s.milky && '③ 확산도(Milky)'].filter(Boolean);
   return rest.length === 2 ? `형상만으로는 목표 미달 — ${rest.join(' · ')} 를 체크하고 [이 안에서 이어서 ▸] 로 실행하세요` : '';
 }
 // 스윙 결과 → 정밀 탐색(2026-11-05) — 형상만 돌렸을 때. 효과가 보이면 권함, 없어도 원하면 돌릴 수 있음
@@ -399,7 +399,7 @@ function changeTableHtml(r, effects) {
 // 짧은 글(2026-11-08) — 상자 안 글자 수 제한. 넘치면 … + 마우스 올리면 전체
 export const clip = (t, n = 22) => { const s = String(t ?? ''); return s.length > n ? `<span title="${esc(s)}">${esc(s.slice(0, n - 1))}…</span>` : esc(s); };
 const ledShort = (x, stepN) => (x?.stepOrig !== false && stepN != null && !x?.layoutText ? `LED ${x?.count ?? stepN}개` : `${x?.rows === 2 ? '2열×' : ''}${x?.count ?? '?'}개${x?.pitch > 0 ? ` · ${(+x.pitch).toFixed(1)}mm` : ''}`);
-const FB = { position: ['① 위치', '#f59e0b'], shape: ['② 형상', '#a855f7'], milky: ['③ Milky', '#3b82f6'] };
+const FB = { position: ['① 위치/개수', '#f59e0b'], shape: ['② 형상', '#a855f7'], milky: ['③ Milky', '#3b82f6'] };
 // 인자별 결과(설계 인자 상자에 넣음) — { chg, chip(바뀜/그대로/고정/안 돌림), body(이전 → 이후, 짧게), eff(효과 ≈) } | null
 export function factorResult(x, effects, locked = {}, k) {
   if (!x || !FB[k]) return null;

@@ -8,10 +8,15 @@ import { judgeStats, uVerdict } from '../../engine/mech3d/tally.js';
 import { simCtl, setCtl, setStepMark } from './run-ctl.js';
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 // 계산 순서대로(엔진: 위치 → 케이스 면 → 형상 → Milky, 2026-10-30) — 번호도 이 순서
-export const STAGES = [['position', '① 위치'], ['shape', '② 형상'], ['milky', '③ 확산도(Milky)']];   // 케이스 면은 부품 속성에서 직접(2026-11-05)
+export const STAGES = [['position', '① 위치/개수'], ['shape', '② 형상'], ['milky', '③ 확산도(Milky)']];   // 케이스 면은 부품 속성에서 직접(2026-11-05)
 // 기구 최적화 진행 단계 이름 → 타일(LED 배치·높이 = ② 기구 위치). 현재안·기준·검증 = 타일 없음(머리 줄 문구로만)
 // 진행 상태 갱신(순수, 2026-11-11) — 전체·단계 % 는 내려가지 않음. 끝난 항목을 다시 돌릴 때만 새로 시작
-export function applyProgress(S, stage, frac, text, overall) {
+// 단계별 걸린 시간(2026-11-15 사용자) — 단계(현재안·기준 Milky·항목·검증)가 바뀔 때 앞 단계 시간을 S.tm 에 쌓음. LED 배치·높이는 같은 항목(위치/개수)
+const phaseOf = (stage) => (stage === 'current' ? 'current' : stage === 'ledsRef' ? 'ref' : stage === 'verify' ? 'verify' : tileOf(stage));
+export function closePhase(S, now) { if (S.ph) { S.tm ??= {}; S.tm[S.ph] = (S.tm[S.ph] ?? 0) + Math.max(0, now - S.phT); } S.ph = null; }
+const fmtMs = (ms) => { const s = Math.round(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+export function applyProgress(S, stage, frac, text, overall, now = typeof performance !== 'undefined' ? performance.now() : 0) {
+  { const p = phaseOf(stage); if (p && p !== S.ph) { closePhase(S, now); S.tm ??= {}; S.ph = p; S.phT = now; } }
   if (Number.isFinite(overall)) S.overall = Math.max(S.overall ?? 0, overall);
   if (stage === 'current') S.curFrac = Math.max(S.curFrac ?? 0, frac ?? 0); else if (stage === 'verify') S.verFrac = Math.max(S.verFrac ?? 0, frac ?? 0);
   else if (stage === 'ledsRef') S.refFrac = Math.max(S.refFrac ?? 0, frac ?? 0);   // 위치 계산용 기준 Milky 찾기 = 진행 줄 따로 칸(2026-11-12 평가 1)
@@ -107,11 +112,25 @@ export function factorChartSvg(S, nw = {}, W = 240, H = 100) {
     s0 = i;
   }
   const hits = Array.from({ length: Math.min(30, n) }, (_, q, m = Math.min(30, n)) => { const i = Math.round((q * (n - 1)) / Math.max(1, m - 1)), e = seq[i], bw = (x1 - x0) / m; return `<rect class="od-hit" x="${(x0 + q * bw).toFixed(1)}" y="${y0}" width="${bw.toFixed(1)}" height="${y1 - y0}"><title>${e.vf ? '검증' : '후보'} ${oi[i] + 1} · ${esc(e.label ?? '')} · 길이 ${okE(e) ? fmtJudge(e.Ulen) : '–'} · 폭 ${okE(e) ? fmtJudge(e.Uwid) : '–'}</title></rect>`; }).join('');
-  const cutT = Object.entries(T.cut).map(([k, [a, b]]) => ` · ${esc({ position: '위치', shape: '형상', milky: 'Milky' }[k] ?? k)} ${b}개 중 ${a}개 표시`).join('');   // 줄여 보인 인자(점 수를 인자끼리 비슷하게)
+  const cutT = Object.entries(T.cut).map(([k, [a, b]]) => ` · ${esc({ position: '위치/개수', shape: '형상', milky: 'Milky' }[k] ?? k)} ${b}개 중 ${a}개 표시`).join('');   // 줄여 보인 인자(점 수를 인자끼리 비슷하게)
   const panel = (key, t, v0, title, s, d) => {
     const fv = fin?.[key], vals = [...seq.filter(okE).map((e) => e[key]), t, v0, fv].filter(Number.isFinite), lo = Math.max(0, Math.floor((Math.min(...vals) - 0.02) * 20) / 20), hi = Math.min(1, Math.ceil((Math.max(...vals) + 0.01) * 20) / 20), Y = (v) => y0 + (1 - (Math.min(hi, Math.max(lo, v)) - lo) / (hi - lo || 1)) * (y1 - y0);
     const dots = seq.map((e, i) => (!okE(e) || !Number.isFinite(e[key]) ? '' : e.vf ? `<rect class="od-vf ${d}${e.est ? ' est' : ''}" x="${(X(i) - 3).toFixed(1)}" y="${(Y(e[key]) - 3).toFixed(1)}" width="6" height="6"/>` : `<circle class="od-cand ${d}" cx="${X(i).toFixed(1)}" cy="${Y(e[key]).toFixed(1)}" r="2"/>`)).join('');   // 네모 = 정밀 검증(지난 후보 표의 값) · 동그라미 = 빠른 후보 계산
     const line = run.map((e, i) => (e && Number.isFinite(e[key]) ? `${X(i).toFixed(1)},${Y(e[key]).toFixed(1)}` : null)).filter(Boolean).join(' '), last = bb?.[key];
+    // 최고가 갱신된 자리(2026-11-15 사용자: 어떤 항목이 균일도를 올리는지) — 항목 색 세모 · 올리면 항목·바꾼 것·값 변화. 항목마다 마지막 자리에 그 항목이 올린 폭(앞 항목 끝 대비)
+    const pv = (v) => (Number.isFinite(v) ? fmtJudge(v) : '–'), nameOf = (k) => STAGES.find(([q]) => q === k)?.[1] ?? '';
+    // 시작(현재 설계)을 넘긴 갱신만 '올림' — Milky 를 낮은 값부터 훑을 때 시작보다 못한 후보끼리의 갱신은 표시하지 않음. 시작값을 모르면 첫 후보가 기준
+    const st0 = Number.isFinite(nw.Ulen) ? nw : (all[0]?.vf && okE(all[0]) ? all[0] : null), s0 = st0 ? scoreOf({ Ulen: st0.Ulen, Uwid: st0.Uwid }, tl, tw) : -Infinity, upAt = [];   // 시뮬레이션 값이 없으면 맨 앞 검증 점(현재 설계 다시 계산)이 시작
+    run.forEach((e, i) => { if (e && Number.isFinite(e[key]) && e !== run[i - 1] && scoreOf(e, tl, tw) > s0) upAt.push(i); });
+    let ups = '', prev = Number.isFinite(st0?.[key]) ? st0[key] : null; const lastUp = {}, gain = {};
+    for (const i of upAt) lastUp[run[i].k] = i;
+    { let b = prev; for (const k of Object.keys(lastUp).sort((a, c) => lastUp[a] - lastUp[c])) { const v = run[lastUp[k]][key]; gain[k] = b == null ? null : v - b; b = v; } }
+    for (const i of upAt) {
+      const e = run[i], x = X(i), y = Y(e[key]), col = FB_COL[e.k] ?? '#888';
+      ups += `<path class="od-up" fill="${col}" d="M${x.toFixed(1)},${(y - 5).toFixed(1)}l4.5,7h-9z"><title>${esc(nameOf(e.k))} · ${esc(e.label ?? '')} · ${title.slice(0, 2).trim()} ${pv(prev)} → ${pv(e[key])}</title></path>`;
+      if (lastUp[e.k] === i && Number.isFinite(gain[e.k])) { const d = gain[e.k] * 100; ups += `<text class="od-upl" fill="${col}" x="${(x + (x > (x0 + x1) / 2 ? -6 : 6)).toFixed(1)}" y="${(y - 8 < y0 + 8 ? y + 15 : y - 8).toFixed(1)}" text-anchor="${x > (x0 + x1) / 2 ? 'end' : 'start'}">${nameOf(e.k)[0] ?? ''} ${d < 0 ? '−' : '+'}${Math.abs(d).toFixed(1)}%p</text>`; }
+      prev = e[key];
+    }
     const mark = Number.isFinite(last) ? `<circle class="od-dot ${d}" cx="${X(n - 1).toFixed(1)}" cy="${Y(last).toFixed(1)}" r="3.5"/>` : '';
     // 기준선 이름은 선 위 왼쪽 안 — 두 선이 가까우면 시작선 이름을 선 아래로
     const yT = Number.isFinite(t) ? Y(t) : null, yS = Number.isFinite(v0) ? Y(v0) : null, near = yT != null && yS != null && Math.abs(yT - yS) < 11;
@@ -125,7 +144,7 @@ export function factorChartSvg(S, nw = {}, W = 240, H = 100) {
       + `<rect class="od-frame" x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}"/>`;
     const final = Number.isFinite(fv) ? (() => { const fx = x1 + 8, fy = Y(fv), p = (dx, dy) => `${(fx + dx).toFixed(1)},${(fy + dy).toFixed(1)}`; return `<polygon class="od-final" points="${p(0, -5)} ${p(5, 0)} ${p(0, 5)} ${p(-5, 0)}"/><text class="od-lb od-lb-fin" x="${fx + 7}" y="${(fy - 7 < y0 ? fy + 13 : fy - 7).toFixed(1)}" text-anchor="end">최종 ${fmtJudge(fv)}</text>`; })() : '';
     const ok = Number.isFinite(last) && Number.isFinite(t) ? (last + 1e-9 >= t ? '<span class="od-ok">✓</span>' : '<span class="od-bad">✕</span>') : '';
-    return `<div><div class="od-simt"><b>${title}</b></div><svg class="od-sim" width="${cw}" height="${ch}" viewBox="0 0 ${cw} ${ch}">${bands}${grid}${st}${tg}${dots}${line ? `<polyline class="${s}" points="${line}"/>` : ''}${mark}${final}${hits}<text class="od-ax" x="${((x0 + x1) / 2).toFixed(1)}" y="${ch - 3}" text-anchor="middle">시험한 후보 ${N}개 (시험한 순서 →)${cutT}</text></svg></div>`;
+    return `<div><div class="od-simt"><b>${title}</b></div><svg class="od-sim" width="${cw}" height="${ch}" viewBox="0 0 ${cw} ${ch}">${bands}${grid}${st}${tg}${dots}${line ? `<polyline class="${s}" points="${line}"/>` : ''}${mark}${final}${hits}${ups}<text class="od-ax" x="${((x0 + x1) / 2).toFixed(1)}" y="${ch - 3}" text-anchor="middle">시험한 후보 ${N}개 (시험한 순서 →)${cutT}</text></svg></div>`;
   };
   return `<div class="od-sim2${one ? ' one' : ''}">${panel('Ulen', tl, nw.Ulen, '길이 균일도', 'od-s1', 'od-d1')}${panel('Uwid', tw, nw.Uwid, '폭 균일도', 'od-s2', 'od-d2')}</div>`;
 }
@@ -151,7 +170,7 @@ export function pushEvals(S, stage, list) {
 // 오른쪽 모니터(순수, 2026-10-30) — 진행 줄(계산 순서 · 고정/완료/진행/대기) · 지표 3개(지금까지 최고, 시작 대비) · 그래프 자리(.od-plot) · 기록(최고 갱신만)
 // S = createOptDash 상태, sec = 걸린 초. 그래프는 자리 크기로 factorChartSvg 가 나중에 그림
 export const chartHtml = () => `<div class="od-plot" title="위로 갈수록 좋음 · 빨간 선에 닿으면 목표 통과"></div>
-    <div class="od-legend od-lg"><span><i class="lg-dot"></i>시험한 후보(대략값)</span><span><i class="lg-line"></i>지금까지 최고</span><span><i class="lg-dia"></i>최종 판정(확정값)</span><span><i class="lg-tg"></i>목표</span><span><i class="lg-st"></i>시작</span></div>`;
+    <div class="od-legend od-lg"><span><i class="lg-dot"></i>시험한 후보(대략값)</span><span><i class="lg-line"></i>지금까지 최고</span><span title="최고가 갱신된 자리 — 색 = 올린 항목 · 옆 숫자 = 그 항목이 올린 폭">▲ 최고 갱신(색 = 항목)</span><span><i class="lg-dia"></i>최종 판정(확정값)</span><span><i class="lg-tg"></i>목표</span><span><i class="lg-st"></i>시작</span></div>`;
 // chart = false → 그래프는 따로(창 왼쪽 아래 칸, createOptDash h.chart)
 // 중지 후 — 끝난 항목까지 반영한 안을 최종 판정만 해 볼 수 있게(2026-11-12 평가 9). 판정은 정밀 계산 그대로, 적용은 결과 카드 [적용]
 const DONE_NAME = { leds: 'LED 배치', height: 'LED 높이', housing: '케이스 면', shape: '형상', milky: 'Milky' };   // ① 위치 = LED 배치 + 높이 — 끝난 것만 정확히
@@ -168,17 +187,18 @@ export function monitorParts(S, sec = 0, { chart = true } = {}) {
   const step = (cls, name, sub) => `<div class="om-st om-${cls}"><b>${name}</b><span>${sub}</span></div>`;
   const uv = (e) => (e && Number.isFinite(e.Ulen) ? ` <i class="om-sv">${e.est ? '≈' : ''}${fmtJudge(e.Ulen)}/${fmtJudge(e.Uwid)}</i>` : '');   // 단계 최고(길이/폭) — 현황표 대신 상자 안에(2026-11-08)
   const curDone = !busy || S.seq?.length || S.refFrac != null || S.cur || S.verFrac != null;   // 다음 단계로 넘어갔으면 완료(기준 Milky 찾기는 후보 수에 안 들어감)
-  const steps = [step(curDone ? 'done' : 'run', '현재안', curDone ? '✓' : `${Math.round((S.curFrac ?? 0) * 100)}%`)];
-  if (S.refFrac != null) steps.push(S.cur || !busy ? step('done', '기준 Milky', '✓') : step('run', '기준 Milky', `${fmtProg(S.refFrac * 100)}%`));
+  const tm = (p) => { const ms = (S.tm?.[p] ?? 0) + (S.ph === p && busy ? Math.max(0, S.t0 + sec * 1000 - S.phT) : 0); return ms >= 500 ? ` <i class="om-tm" title="이 단계에 걸린 시간">${fmtMs(ms)}</i>` : ''; };   // 단계별 걸린 시간(분:초)
+  const steps = [step(curDone ? 'done' : 'run', '현재안', (curDone ? '✓' : `${Math.round((S.curFrac ?? 0) * 100)}%`) + tm('current'))];
+  if (S.refFrac != null) steps.push(S.cur || !busy ? step('done', '기준 Milky', `✓${tm('ref')}`) : step('run', '기준 Milky', `${fmtProg(S.refFrac * 100)}%${tm('ref')}`));
   for (const [k, name] of STAGES) {
     const t = S.tiles[k];
     if (S.locked?.[k] && t.status === 'off') steps.push(step('lock', name, '고정 ✓'));
-    else if (t.status === 'run') steps.push(step('run', name, `${fmtProg(t.frac * 100)}%`));
-    else if (t.status === 'done') steps.push(step('done', name, `✓${uv(stageBest(t, tl, tw))}`));
+    else if (t.status === 'run') steps.push(step('run', name, `${fmtProg(t.frac * 100)}%${tm(k)}`));
+    else if (t.status === 'done') steps.push(step('done', name, `✓${uv(stageBest(t, tl, tw))}${tm(k)}`));
     else if (t.status === 'wait') steps.push(step('wait', name, '대기'));
-    else if (t.status === 'stop') steps.push(step('wait', name, '중지됨'));
+    else if (t.status === 'stop') steps.push(step('wait', name, `중지됨${tm(k)}`));
   }
-  steps.push(S.ended != null ? step('done', '검증', '✓') : busy && S.verFrac != null ? step('run', '검증', `${fmtProg(S.verFrac * 100)}%`) : step('wait', '검증', ''));
+  steps.push(S.ended != null ? step('done', '검증', `✓${tm('verify')}`) : busy && S.verFrac != null ? step('run', '검증', `${fmtProg(S.verFrac * 100)}%${tm('verify')}`) : step('wait', '검증', ''));
   const b0 = S.before ?? {};
   // 방금 시험한 후보(작은 글씨) — 큰 숫자는 시작값 포함 '지금까지 최고'라 흔들리지 않음(2026-11-12 평가)
   const lastE = busy ? [...(S.seq ?? [])].reverse().find(ok) : null;
@@ -277,7 +297,7 @@ export function createOptDash(el, h = {}) {
     draw();
   }
   function evals(stage, list) { if (!S) return; pushEvals(S, stage, list); draw(); }
-  function finish(ok, text = '', effBest = NaN, final = null) { if (!S) return; S.effBest = effBest; S.final = final; S.endSec = (performance.now() - S.t0) / 1000; for (const [k] of STAGES) if (S.tiles[k].status === 'run') { S.tiles[k].status = 'done'; S.tiles[k].frac = 1; } S.note = text; S.ended = ok; draw(); }
+  function finish(ok, text = '', effBest = NaN, final = null) { if (!S) return; S.effBest = effBest; S.final = final; closePhase(S, performance.now()); S.endSec = (performance.now() - S.t0) / 1000; for (const [k] of STAGES) if (S.tiles[k].status === 'run') { S.tiles[k].status = 'done'; S.tiles[k].frac = 1; } S.note = text; S.ended = ok; draw(); }
   function draw() { if (raf) return; raf = setTimeout(() => { raf = 0; render(); renderBoard(); }, 40); }   // setTimeout: 화면이 숨겨져도(다른 탭) 갱신 — rAF 는 멈춤
   // 높이 조절 손잡이(.m3-fac-split)는 남기고 내용만 바꿈
   function renderBoard() { if (!h.board) return; let c = h.board.querySelector('.fb-body'); if (!c) { c = document.createElement('div'); c.className = 'fb-body'; h.board.appendChild(c); } const nw = h.now?.() ?? {}; { const html = factorBoardHtml(S, nw, h.config, h.result); if (c._html !== html) { c.innerHTML = html; c._html = html; } } }   // 같으면 그대로(깜빡임·체크 클릭 사라짐 방지)
@@ -300,10 +320,10 @@ export function createOptDash(el, h = {}) {
   if (typeof ResizeObserver !== 'undefined') { let w0 = 0; new ResizeObserver(() => { if (el.clientWidth !== w0) { w0 = el.clientWidth; draw(); } }).observe(el); if (h.chart) { let cw = 0, ch = 0; new ResizeObserver(() => { const b = h.chart; if (b.clientWidth !== cw || b.clientHeight !== ch) { cw = b.clientWidth; ch = b.clientHeight; draw(); } }).observe(h.chart); } }
   if (typeof setInterval !== 'undefined') setInterval(() => { if (S && S.ended == null && !S.stopped && el.isConnected && el.offsetParent) draw(); }, 1000);   // 걸린 시간 갱신
   render(); renderBoard();
-  function stop() { if (S) { S.stopped = true; S.pauseAt = null; stopTiles(S); draw(); } }
+  function stop() { if (S) { closePhase(S, S.pauseAt ?? performance.now()); S.stopped = true; S.pauseAt = null; stopTiles(S); draw(); } }
   function setPartial(P) { if (S) { S.partial = P; draw(); } }   // 중지 뒤 끝난 항목까지 반영한 안(정밀 판정 단추)
   // 일시정지한 시간은 걸린 시간에서 뺌
-  function setPaused(on) { if (!S) return; if (on) S.pauseAt ??= performance.now(); else if (S.pauseAt) { S.t0 += performance.now() - S.pauseAt; S.pauseAt = null; } draw(); }
+  function setPaused(on) { if (!S) return; if (on) S.pauseAt ??= performance.now(); else if (S.pauseAt) { if (S.phT != null) S.phT += performance.now() - S.pauseAt; S.t0 += performance.now() - S.pauseAt; S.pauseAt = null; } draw(); }
   // 고르기만 바뀜(실행 전) — 다시 그림. 실행 결과가 남아 있으면 그대로 두고 스위치만 갱신
   function refresh() { draw(); }
   function clear() { S = null; draw(); }

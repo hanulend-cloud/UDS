@@ -1196,3 +1196,29 @@ done();
   const ok = g.trim().split(/\s+(?![^(]*\))/).length === 5 && /\.fb-head \.od-chip \{[^}]*grid-column: 5/.test(css);
   console.log(`${ok ? 'PASS' : 'FAIL'} 카드 머리 칸 5개 · 진행 칩 = 같은 줄 오른쪽 끝 (${g})`); if (!ok) process.exitCode = 1;
 }
+{ // 2026-11-15 사용자: 진행 줄 상자에 단계별 걸린 시간 · ① 위치 → ① 위치/개수 · 그래프에 '어떤 항목이 균일도를 올렸는지'(최고 갱신 표시 + 항목별 올린 폭)
+  const { STAGES, applyProgress, pushEvals, monitorHtml, factorChartSvg, closePhase } = await import('../src/ui/m3/opt-dash.js');
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  say(STAGES[0][1] === '① 위치/개수', `LED 항목 이름 = ① 위치/개수 (${STAGES[0][1]})`);
+  const T = () => ({ status: 'wait', frac: 0, text: '', evals: [] }), S = { tgLen: 0.8, tgWid: 0.8, t0: 0, tiles: { position: T(), shape: { ...T(), status: 'off' }, milky: T() }, seq: [], log: [], before: { Ulen: 0.44, Uwid: 0.12 } };
+  applyProgress(S, 'current', 0.5, '현재안', 0.01, 0);
+  applyProgress(S, 'ledsRef', 0.5, '기준', 0.05, 62000);
+  applyProgress(S, 'leds', 0.1, 'LED', 0.1, 100000);
+  pushEvals(S, 'leds', [{ label: '70개', Ulen: 0.60, Uwid: 0.15 }, { label: '폭 위치 −1 mm', Ulen: 0.766, Uwid: 0.183 }, { label: '68개', Ulen: 0.5, Uwid: 0.1 }]);
+  applyProgress(S, 'height', 0.5, '높이', 0.3, 400000);   // 같은 항목(위치/개수) 안 — 시간은 이어서
+  applyProgress(S, 'milky', 0.2, 'Milky', 0.5, 475000);
+  pushEvals(S, 'milky', [{ label: 'Milky 3.0', Ulen: 0.70, Uwid: 0.19 }, { label: 'Milky 3.6', Ulen: 0.79, Uwid: 0.209 }]);
+  applyProgress(S, 'verify', 0.1, '검증', 0.9, 520000);
+  say(S.tm.current === 62000 && S.tm.ref === 38000 && S.tm.position === 375000 && S.tm.milky === 45000 && S.ph === 'verify', `단계가 바뀔 때 걸린 시간을 쌓음 (${JSON.stringify(S.tm)})`);
+  const m = monitorHtml(S, 600);   // 진행 중: 지금 단계는 지금까지 걸린 시간
+  say(/현재안<\/b><span>✓ <i class="om-tm"[^>]*>1:02<\/i>/.test(m) && /기준 Milky<\/b><span>✓ <i class="om-tm"[^>]*>0:38<\/i>/.test(m) && /① 위치\/개수<\/b><span>✓.*?<i class="om-tm"[^>]*>6:15<\/i>/.test(m) && /검증<\/b><span>[^<]*<i class="om-tm"[^>]*>1:20<\/i>/.test(m), '진행 줄 상자에 단계별 걸린 시간');
+  closePhase(S, 700000); S.ended = true; S.endSec = 700;
+  say(S.tm.verify === 180000 && /검증<\/b><span>✓ <i class="om-tm"[^>]*>3:00<\/i>/.test(monitorHtml(S, 700)), `끝나면 검증 시간 확정 (${S.tm.verify})`);
+  const g = factorChartSvg(S, S.before, 700, 200);
+  say((g.match(/class="od-up"/g) ?? []).length === 8, `최고가 갱신된 자리마다 표시 — 길이·폭 그래프에 4개씩 (${(g.match(/class="od-up"/g) ?? []).length})`);
+  say(/① 위치\/개수 · 폭 위치 −1 mm · 길이 60\.0% → 76\.6%/.test(g), '표시에 마우스를 올리면 항목 · 바꾼 것 · 값 변화');
+  say(/od-upl[^>]*>① \+32\.6%p</.test(g) && /od-upl[^>]*>③ \+2\.4%p</.test(g) && /od-upl[^>]*>① \+6\.3%p</.test(g) && /od-upl[^>]*>③ \+2\.6%p</.test(g), '항목마다 올린 폭(시작 대비 · 앞 항목 대비)을 그래프에 적음');
+  { const g3 = factorChartSvg({ ...S, seq: [{ k: 'verify', vf: true, label: '현재안', Ulen: 0.7, Uwid: 0.16 }, ...S.seq] }, {}, 700, 200); say((g3.match(/class="od-up"/g) ?? []).length === 6 && /길이 70\.0% → 76\.6%/.test(g3), '시뮬레이션 값이 없으면 현재 설계 다시 계산 값이 시작'); }
+  const g2 = factorChartSvg(S, { Ulen: 0.7, Uwid: 0.16 }, 700, 200);   // 시작(현재 설계)보다 못한 후보는 '올림' 이 아님
+  say((g2.match(/class="od-up"/g) ?? []).length === 6 && /od-upl[^>]*>① \+6\.6%p</.test(g2) && /길이 70\.0% → 76\.6%/.test(g2), `시작값을 넘긴 갱신만 표시 · 올린 폭은 시작 대비 (${(g2.match(/class="od-up"/g) ?? []).length})`);
+}

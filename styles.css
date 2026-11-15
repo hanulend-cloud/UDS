@@ -1060,6 +1060,9 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 .om-q { font-size: 11px; padding: 0 4px; border-radius: 3px; white-space: nowrap; }
 .om-q-likely { background: rgba(46, 160, 67, 0.16); color: #1a7f37; }
 .om-q-maybe { background: rgba(191, 135, 0, 0.16); color: #9a6700; }
+.om-tm { font-style: normal; opacity: 0.75; font-variant-numeric: tabular-nums; }
+.od-up { stroke: var(--m3-bg, #fff); stroke-width: 0.6; }
+.od-upl { font-size: 10px; font-weight: 600; paint-order: stroke; stroke: var(--m3-bg, #fff); stroke-width: 2.5px; }
 .om-q-ref { background: rgba(128, 128, 128, 0.16); color: #6e7781; }
 .om-mx-f td, .om-mx-f th { border-top: 2px solid var(--m3-acc); }
 .m3-mon-hd > b { white-space: nowrap; }
