@@ -1057,6 +1057,9 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 .om-mx-t tr:first-child th { background: var(--m3-head, #e9edf3); color: var(--m3-headtx, #3b4658); font-weight: 600; }
 .om-mx-t tr th:first-child { text-align: left; font-weight: 600; }
 .om-mx-l { text-align: left !important; white-space: normal !important; }
+.om-q { font-size: 11px; padding: 0 4px; border-radius: 3px; white-space: nowrap; }
+.om-q-likely { background: rgba(46, 160, 67, 0.16); color: #1a7f37; }
+.om-q-maybe { background: rgba(191, 135, 0, 0.16); color: #9a6700; }
 .om-mx-f td, .om-mx-f th { border-top: 2px solid var(--m3-acc); }
 .m3-mon-hd > b { white-space: nowrap; }
 

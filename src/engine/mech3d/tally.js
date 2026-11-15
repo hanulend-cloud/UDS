@@ -173,7 +173,59 @@ export function regionStats(G, accs, obs, rect) {
   const Uarea = mx > 0 && Number.isFinite(mn) ? mn / mx : null;
   return { ...st, Uarea, cells: [i0, i1, j0, j1], mm: [i0 * G.ds, i1 * G.ds, G.w0 + j0 * G.cell, G.w0 + j1 * G.cell], meanRatio: avg(g, sub) / avg(G, accs) };
 }
-export function tallyStats(G, accs, obs, cnts = null) {
+// ---- 노이즈 보정 추정(2026-11-15) — 빠른 검토 값에만 씀(판정 값 Ulen·Uwid 는 그대로) ----
+// 최저÷최고는 칸 노이즈만큼 낮게 나옴(실측, 링 조명 예제: 같은 설계 15만 광자 36% · 150만 62% — 광자를 늘릴수록 계속 오름).
+// 칸 값을 주기 성분(DCT)으로 나눠 노이즈 수준(2·ln n × 노이즈 분산)을 넘는 성분만 남기고(LED 간격 리플·완만한 기울기),
+// 남은 차이에서 이어진 칸이 함께 벗어난 곳(끝 어두움 같은 국소 모양, 4.5σ)을 되살린 뒤 최저÷최고를 냄.
+// 실측(같은 예제): 15만 72.8% · 30만 73.3% · 75만 74.0% · 150만 72.4% — 광자 수와 무관하게 같은 값.
+// 오차 = 묶음 하나씩 빼고 다시 낸 값의 퍼짐(잭나이프) ⊕ 노이즈에 묻혀 못 보는 리플 크기. vecs = 묶음마다 칸 값(NaN = 안 쓰는 칸)
+const COS = new Map();
+const cosTab = (n) => { let c = COS.get(n); if (!c) { c = new Float64Array(4 * n); for (let j = 0; j < 4 * n; j++) c[j] = Math.cos((Math.PI * j) / (2 * n)); if (COS.size > 8) COS.clear(); COS.set(n, c); } return c; };
+export function denoiseProfile(mean, nv) {
+  const n = mean.length, C = cosTab(n), M = 4 * n, Vn = nv.reduce((x, y) => x + y, 0) / n, thr = 2 * Math.log(n) * Vn, out = new Float64Array(n), w0 = Math.sqrt(1 / n), w1 = Math.sqrt(2 / n);
+  let s0 = 0; for (let i = 0; i < n; i++) s0 += mean[i];
+  out.fill(s0 / n);
+  for (let k = 1; k < n; k++) {
+    let s = 0; for (let i = 0, j = k; i < n; i++, j = (j + 2 * k) % M) s += mean[i] * C[j];
+    const X = s * w1, p = X * X; if (!(p > thr)) continue;
+    const Y = Math.sign(X) * Math.sqrt(p - Vn) * w1; for (let i = 0, j = k; i < n; i++, j = (j + 2 * k) % M) out[i] += Y * C[j];
+  }
+  for (const w of [16, 8, 4]) for (const off of [0, w >> 1]) for (let i = off; i + w <= n; i += w) {   // 국소 모양 되살리기
+    let r = 0, v = 0; for (let q = i; q < i + w; q++) { r += mean[q] - out[q]; v += nv[q]; }
+    v = Math.max(v, w * Vn);   // 광자가 적으면 칸별 분산 추정이 흔들림 — 전체 평균보다 작게 보지 않음
+    if (v > 0 && Math.abs(r) > 4.5 * Math.sqrt(v)) for (let q = i; q < i + w; q++) out[q] += r / w;
+  }
+  return { out, hid: Math.sqrt((2 * thr) / n), w0 };
+}
+const estU = (vecs) => {
+  const B = vecs.length, n = vecs[0].length, mean = [], nv = [];
+  for (let i = 0; i < n; i++) { let s = 0, ok = true; for (const v of vecs) { if (!Number.isFinite(v[i])) { ok = false; break; } s += v[i]; } if (!ok) continue; const m = s / B; let q = 0; for (const v of vecs) q += (v[i] - m) ** 2; mean.push(m); nv.push(q / (B - 1) / B); }
+  if (mean.length < 2) return null;
+  const m = mean.reduce((x, y) => x + y, 0) / mean.length;
+  if (!(m > 0)) return null;
+  if (mean.length < 4) { const mx = Math.max(...mean); return { U: mx > 0 ? Math.min(...mean) / mx : 0, hid: Math.sqrt(nv.reduce((x, y) => x + y, 0) / nv.length) / m }; }
+  const { out, hid } = denoiseProfile(mean, nv); let mn = Infinity, mx = -Infinity; for (const v of out) { if (v < mn) mn = v; if (v > mx) mx = v; }
+  return { U: mx > 0 ? Math.max(0, mn) / mx : 0, hid: hid / m };
+};
+// groups = 창마다 vecs — 값 = 창 중 가장 낮은 추정값
+export function debiasU(vecs, groups = null) {
+  const G = groups ?? [vecs], B = G[0]?.length ?? 0;
+  if (B < 3) return null;
+  const one = (skip) => { let best = null; for (const g of G) { const r = estU(skip < 0 ? g : g.filter((_, b) => b !== skip)); if (r && (!best || r.U < best.U)) best = r; } return best; };
+  const all = one(-1); if (!all) return null;
+  const jk = []; for (let b = 0; b < B; b++) { const r = one(b); if (r) jk.push(r.U); }
+  const jm = jk.reduce((x, y) => x + y, 0) / (jk.length || 1), seJ = jk.length > 1 ? Math.sqrt(((jk.length - 1) / jk.length) * jk.reduce((x, y) => x + (y - jm) ** 2, 0)) : 0;
+  // 노이즈에 묻혀 못 본 리플(진폭 hid)이 있으면 균일도는 최대 2·hid 만큼 낮음 — 값은 그 절반만큼 낮추고 오차에 2·hid 를 넣음
+  // (실측: Milky 5 · 10초에서 리플이 묻혀 100% 로 나왔음 — 그대로 두면 '유력' 으로 잘못 나옴)
+  return { U: Math.max(0, all.U - all.hid), se: Math.hypot(seJ, 2 * all.hid) };
+}
+const estOf = (per, narrow) => {
+  // 폭 = 모든 창을 합친 폭 단면으로(창 하나는 광자가 너무 적어 추정이 안 됨 — 실측: 창별로 내면 0% 로 나왔음). 가장 나쁜 창보다 조금 높게 나올 수 있음
+  const pool = (cols) => cols[0].map((_, j) => { let s = 0, c = 0; for (const w of cols) if (Number.isFinite(w[j])) { s += w[j]; c++; } return c ? s / c : NaN; });
+  const L = debiasU(per.map((x) => x.p)), W = narrow ? null : debiasU(per.map((x) => pool(x.cols)));
+  return L ? { Ulen: L.U, seLen: L.se, Uwid: W?.U ?? null, seWid: W?.se ?? null } : null;
+};
+export function tallyStats(G, accs, obs, cnts = null, { est = false } = {}) {   // est = 노이즈 보정 추정도 냄(빠른 검토용 — 계산이 더 들어 필요할 때만)
   const B = accs.length, nCell = G.ns * G.nw, { ns, nw, ds, area, valid } = G;
   let nValid = 0; for (let k = 0; k < nCell; k++) if (valid[k]) nValid++;
   const empty = { empty: true, profile: new Float64Array(ns).fill(NaN), map: new Float64Array(nCell), Ulen: 0, seLen: null, Uwid: null, seWid: null, sWorst: null, passLen: false, passWid: false, counted: 0, nbar: 0, relNoise: null, noiseWarn: true, win: null };
@@ -229,6 +281,7 @@ export function tallyStats(G, accs, obs, cnts = null) {
     profile: main.p, map: mean, Ulen: main.Ulen, seLen, Uwid: main.Uwid, seWid, sWorst: narrow ? null : ((wins[main.iWin][0] + wins[main.iWin][1]) / 2) * ds, win: narrow ? null : wins[main.iWin], narrow, nbar, relNoise, relNoiseCell,
     passLen: main.Ulen >= obs.targetLen, passWid: narrow ? null : main.Uwid >= obs.targetWid, counted,
     noiseWarn: counted === 0 || B < 2 || relNoise === null || 3 * relNoise > tol,
+    est: est ? estOf(per, narrow) : null,
   };
 }
 
@@ -243,3 +296,15 @@ export function windowProfile(G, a, s0, s1) {
   }
   return out;
 }
+
+// ---- 빠른 검토의 목표 달성 가능성(2026-11-15 사용자: 유력 75% · 가능성 있음 30%) ----
+// 가능성 = 방향별 Φ((값 − 목표) ÷ 오차) 중 낮은 쪽. 오차(seLen·seWid = 묶음 간 편차)를 모르면 통과 1 · 미달 0
+export const CHANCE_LIKELY = 0.75, CHANCE_MAYBE = 0.3;
+const phi = (z) => { const t = 1 / (1 + 0.2316419 * Math.abs(z)), p = 1 - 0.3989422804 * Math.exp(-z * z / 2) * t * (0.31938153 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429)))); return z >= 0 ? p : 1 - p; };
+export function passChance(s, obs) {
+  if (!s || s.empty || !Number.isFinite(s.Ulen)) return 0;
+  const one = (v, t, se) => (v == null || t == null ? 1 : se > 0 ? phi((v - t) / se) : v + 1e-9 >= t ? 1 : 0);
+  return Math.min(one(s.Ulen, obs.targetLen, s.seLen), one(s.Uwid, obs.targetWid, s.seWid));
+}
+export const chanceGrade = (p) => (p >= CHANCE_LIKELY ? 'likely' : p >= CHANCE_MAYBE ? 'maybe' : 'out');
+export const fmtChance = (p) => `${Math.floor(p * 100 + 1e-9)}%`;

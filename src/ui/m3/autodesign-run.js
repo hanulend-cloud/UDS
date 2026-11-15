@@ -40,7 +40,7 @@ export function createAdRunner({ ports, now: now0 = () => globalThis.performance
   // chunkN 기본 = Worker 마다 청크 2개쯤(후보당 광자가 적어도 모든 Worker 가 일하게)
   // crn(같은 난수 비교, 형상 후보용) = 시드 기준 — 청크 i 의 시드 crn+i · 크기 chunkN · 포트(쓰는 포트 i % 수) · 배치 i % batches 를 고정해
   // 후보마다 같은 광자 난수로 추적(후보 차이만 남음). 시간 제한·적응 청크 없음(N 전부)
-  async function trace(job, { N: N0, maxMs = Infinity, minN = 0, chunkN = Math.max(2000, Math.ceil(N0 / (2 * ports.length))), chunkMs = Math.min(500, maxMs / 5), batches = 8, rw = null, crn = null, keepRaw = false, resume = null, onProgress = null }) {
+  async function trace(job, { N: N0, maxMs = Infinity, minN = 0, chunkN = Math.max(2000, Math.ceil(N0 / (2 * ports.length))), chunkMs = Math.min(500, maxMs / 5), batches = 8, rw = null, crn = null, keepRaw = false, resume = null, onProgress = null, firstN = null }) {   // firstN = 시간 제한일 때 첫 청크 크기(빠른 검토 — 느린 장면에서 첫 청크가 한도를 넘지 않게)
     const N = Math.ceil(N0);   // 광자 수는 정수(소수면 GPU 가 'offset is out of bounds' 로 꺼짐)
     await prepare(job);
     if (crn != null) return traceCrn(job, { N, chunkN, batches, rw, crn });
@@ -63,7 +63,7 @@ export function createAdRunner({ ports, now: now0 = () => globalThis.performance
     }
     const t0 = now(), more = () => issued < N && !(now() - t0 >= maxMs && issued >= minN && k >= batches);
     // 시간 제한이면 첫 청크 = minN(없으면 N/10) 을 Worker 마다 2개로 — 그 뒤 잰 속도로 조절
-    const size0 = timed ? Math.min(chunkN, Math.max(MIN_CHUNK, Math.ceil(Math.max(minN, N / 10) / (2 * ports.length)))) : chunkN;
+    const size0 = timed ? Math.min(chunkN, firstN > 0 ? Math.max(MIN_CHUNK, Math.round(firstN)) : Math.max(MIN_CHUNK, Math.ceil(Math.max(minN, N / 10) / (2 * ports.length)))) : chunkN;
     const ctl = { err: null };
     await Promise.all(ports.map(guard(ctl, async (p) => {
       let size = size0;

@@ -1,7 +1,7 @@
 // P4 자동설계 단계 실행기 — spec §1·§2. 순서 ② → ⑤ LED 높이 → ④ 케이스 면 → ① → ③(§2.3c), 체크 안 한 항목은 현재 값 고정. 계산은 io 가 맡는다(Worker / 시험 가짜).
 // ① 재가중 창은 기준 ±0.25(ESS 한계, spec §2.1). U(Milky) 는 단봉형(§2.1a) — 거친 탐색으로 최고점을 지나면 멈추고, 오르는 구간에서만 할선/이분으로 최소 통과 Milky. ② 는 기준(①·④ 함께면 거친 최고점 Milky ≤ 5·케이스 최고 등급, §2.2c)에서 최소 개수를 구한 뒤 ④·① 이 고른다.
 // io.milkyRows(d, ms, { precise }) — precise = 경계가 든 창의 재추적(광자 많이). 결과 { feasible, best(design), steps:[{stage, …}], reason, verified, current(현재안 io.verify), cancelled }
-import { nearTarget, fmtJudge, JUDGE_NOISE, JUDGE_BAND, fmtTg } from './tally.js';
+import { nearTarget, fmtJudge, JUDGE_NOISE, JUDGE_BAND, fmtTg, passChance } from './tally.js';
 import { hasCurve, hasField } from './shape-opt.js';
 import { milkyAxis } from './reweight.js';
 import { pickMilky, margin } from './milky-search.js';
@@ -481,17 +481,25 @@ export function pickLateral(res, obs) {
 }
 // 정밀 재계산이 미달일 때 1열 개수를 하나씩 늘리는 한도 — 시간 · 나아짐이 이만큼도 없으면 두 번 만에 멈춤(폭 부족은 개수로 안 올라감)
 export const LADDER_MS = 600000, LADDER_GAIN = 0.005;
+// 빠른 검토(2026-11-15 사용자): 후보는 시간 한도(io.verify quick)로 짧게 재고, 오차(묶음 간 편차)로 '목표 달성 가능성' 을 봄.
+// 가능성 30% 이상(값 + 0.524·오차 ≥ 목표)이면 후보로 남김. 정밀 값(stats.quick 없음)은 margin 과 같음 — 최종안·현재안은 정밀 재계산으로 판정
+const CHANCE_Z = 0.5244;   // Φ(−0.5244) = 0.30
+export function quickMargin(s, obs) {
+  const up = (se) => (s.quick && se > 0 ? CHANCE_Z * se : 0);
+  return Math.min(s.Ulen + up(s.seLen) - obs.targetLen, s.Uwid == null || obs.targetWid == null ? Infinity : s.Uwid + up(s.seWid) - obs.targetWid);
+}
 export async function runAutoDesign(cfg, io) {
   const { obs } = cfg, stages = cfg.partial ? {} : cfg.stages, steps = [], sCap = Math.min(cfg.milkyMax ?? MILKY_OPT_MAX, MILKY_OPT_MAX), mCap = sCap;   // partial = 중지 때 받은 안 — 항목은 다시 안 돌리고 최종 판정만(2026-11-12)
   let d = { ...cfg.current }, feasible = true, reason = '', hint = null, peek = null, shapeNote = null, ledAlts = null, ledMore = null, ledLimit = null, ledRows = 1, lateralLayout = null;
   const stop = () => io.cancelled?.();
+  const withChance = (v) => (v?.stats?.quick ? { ...v, chance: passChance(v.stats, obs) } : v), qv = async (e) => withChance(await io.verify(e, { quick: true }));
   if (stop()) return { cancelled: true };
   const clock = io.now ?? Date.now;   // 일시정지한 시간은 빼고 잼
   io.progress?.('current', 0, cfg.currentVerified ? '현재안 계산' : '현재 설계 다시 계산 — 후보와 같은 조건(최적화 격자)으로 비교');   // 이유를 보여 줌(2026-11-12 평가: 왜 다시 재는지 모름) · 비교표 '현재' 열 — 최종안과 같은 추정기(io.verify). 수렴한 점진 결과가 있으면 재사용
   // 지금 Milky 가 상한(5)보다 높으면 '현재' 열은 그 값 그대로(비교용 — 계산마다 시간 한도), 최적화는 상한으로 낮춰서 — 결과에 표시(milkyLowered).
   // Milky 를 체크하지 않아도 같음(2026-11-12 사용자: Milky 5 초과는 투과율이 50% 넘게 떨어져 현실적으로 적용 어려움 — 11-09 의 '체크 해제 = 그대로 고정' 을 되돌림)
   const lowered = cfg.current?.milky > sCap ? { from: cfg.current.milky, to: sCap, rough: !cfg.currentVerified } : null;
-  let currentVerified = cfg.currentVerified ?? await (lowered ? io.verify(d, { maxMs: FAR_MS, rough: true }) : io.verify(d));
+  let currentVerified = cfg.currentVerified ?? await (lowered ? io.verify(d, { maxMs: FAR_MS, rough: true }) : qv(d));
   if (stop()) return { cancelled: true };
   if (lowered) d = { ...d, milky: sCap };
   const hasFin = 'finish' in d, fin0 = d.finish;   // ④ 전에 되돌릴 현재 케이스 면
@@ -700,6 +708,7 @@ export async function runAutoDesign(cfg, io) {
   if (stop()) return halt();
   io.progress?.('verify', 0, '최종안 정밀 재계산');   // 진행 표시만: 긴 최종 계산 시작 = 0.5(예전 0.9 — 남은 몇 분 동안 멈춰 보였음). 판정·계산은 그대로
   const sharpen = async (e, v) => {   // 목표 바로 아래면 노이즈 0.5% 로 다시 재서 판정 — 값이 노이즈로 낮게 나와 통과안을 미달로 판정하는 것을 막음
+    if (v.stats?.quick && !v.sharp && !stop()) v = await io.verify(e);   // 빠른 검토 값은 판정에 쓰지 않음 — 최종안·현재안은 정밀 재계산
     if (v.sharp || !nearTarget(v.stats, obs) || !(v.stats.relNoise > JUDGE_NOISE * 1.1) || stop()) return v;
     io.progress?.('verify', 0.5, `목표 근처 — 노이즈 ${JUDGE_NOISE * 100}% 까지 다시 계산(몇 분 걸림)`);
     return { ...await io.verify(e, { noise: JUDGE_NOISE, from: v }), sharp: true };
@@ -710,7 +719,7 @@ export async function runAutoDesign(cfg, io) {
     if (v.sharp || stop()) return v;
     io.progress?.('verify', 0.5, '최종 화질로 판정(몇 분 걸림)');
     // 목표에서 먼 안(LED 많은 현재안은 효율이 낮아 1% 까지 10 분도 모자람)은 판정이 안 바뀌니 시간 한도까지만
-    const tn = obs.targetNoise ?? 0.01, far = margin(v.stats, obs) < -FAR_MARGIN;
+    const tn = obs.targetNoise ?? 0.01, far = quickMargin(v.stats, obs) < -FAR_MARGIN;
     let r = await io.verify(e, { noise: tn, from: v, screen: true, ...(far ? { maxMs: FAR_MS } : {}) });
     // 광자 수를 짧은 추정으로 정했으면 목표 노이즈에 못 닿을 수 있음 — 같은 계산에 이어서 목표까지(판정 규칙 그대로, 2026-11-12)
     if (!far && r.stats.relNoise > tn * 1.1 && !stop()) r = await io.verify(e, { noise: tn, from: r, screen: true });
@@ -723,28 +732,28 @@ export async function runAutoDesign(cfg, io) {
     return cfg.screenGrid ? { ...await io.verify(cfg.current, { noise: obs.targetNoise ?? 0.01, from: v, screen: true, maxMs: FAR_MS, rough: true }), sharp: true } : v;   // 상한 초과 현재안은 더 정밀하게 재지 않음
   };
   // 현재안이 미달이고 LED 를 늘려 볼 수 있으면 아래 늘리기까지 감(2026-11-11)
-  if (sameDesign(d, cfg.current) && !(ledMore && margin(currentVerified.stats, obs) < 0)) {
+  if (sameDesign(d, cfg.current) && !(ledMore && quickMargin(currentVerified.stats, obs) < 0)) {
     currentVerified = await judgeCurrent(currentVerified);
     if (stop()) return halt();   // 현재안이 최선 — 현재안이 목표 미달이면 이유를 비워 두지 않음
-    const okCur = margin(currentVerified.stats, obs) >= 0, cs = currentVerified.stats;
+    const okCur = quickMargin(currentVerified.stats, obs) >= 0, cs = currentVerified.stats;
     const why = reason || (okCur ? '' : `현재 설계가 최선 — 목표 미달(길이 균일도 ${fmtJudge(cs.Ulen)}${cs.Uwid == null ? '' : ` · 폭 균일도 ${fmtJudge(cs.Uwid)}`})`);
     return { feasible: feasible && okCur, best: { ...cfg.current }, steps, reason: why, verified: currentVerified, current: currentVerified, unchanged: true, cancelled: false, hint, peek, milkyLowered: lowered, shapeNote };
   }
   // LED 재확인이 없으면 저화질 재계산은 화면 격자 판정의 광자 수를 정하는 데만 쓰임 — 짧은 추정으로(최대 45 초 → 약 8 초, 2026-11-12 3번 묶음 A)
-  let verified = await io.verify(d, cfg.screenGrid && !(ledAlts?.length || ledMore) ? { estimate: true } : {});
+  let verified = await io.verify(d, cfg.screenGrid && !(ledAlts?.length || ledMore) ? { estimate: true } : ledAlts?.length || ledMore ? { quick: true } : {}).then(withChance);   // 재확인할 LED 후보가 있을 때만 빠른 검토 — 없으면 바로 정밀 재계산(같은 계산을 두 번 하지 않음)
   // 개수로 고칠 수 있는 방향만 본 여유 — 폭이 어떤 개수로도 못 닿으면(ledLimit) 길이로 판정
-  const mgFix = (s) => (ledLimit ? s.Ulen - obs.targetLen : margin(s, obs));
+  const mgFix = (s) => (ledLimit ? quickMargin({ ...s, Uwid: null }, obs) : quickMargin(s, obs));
   // 늘리기·줄이기 보조(2026-11-07): 열 수의 배수로 맞춤 · 부품과 겹치는 안(io.clash > 0)은 건너뜀 — 겹치는 안을 골라 '적용 불가' 가 되지 않게
   const upTo = (n) => Math.ceil(n / ledRows) * ledRows, downTo = (n) => Math.floor(n / ledRows) * ledRows;
   const clashes = async (e) => { if (!io.clash) return false; try { return (await io.clash(e)) > 0; } catch { return false; } };
   if (ledAlts?.length || ledMore) {   // ② 재확인: 정밀 검증 미달이면 기저 순위의 다음 후보(같은 총수 → 다음 총수) 최대 2개 — 다른 필드(①③⑤④ 결과)는 그대로
     const tried = [{ design: d, verified }], scV = (v) => shapeScore({ ok: !v.stats.empty, stats: v.stats, eff: v.eff }, obs);
-    for (const [i, L] of (margin(verified.stats, obs) < 0 ? ledAlts ?? [] : []).slice(0, 2).entries()) {
+    for (const [i, L] of (quickMargin(verified.stats, obs) < 0 ? ledAlts ?? [] : []).slice(0, 2).entries()) {
       if (stop()) return halt();
       io.progress?.('verify', (i + 1) / 3, `② 후보 재확인 (${i + 2}/3)`);
-      const e = { ...d, ...L }, v = await io.verify(e);
+      const e = { ...d, ...L }, v = await qv(e);
       tried.push({ design: e, verified: v });
-      if (margin(v.stats, obs) >= 0) break;
+      if (quickMargin(v.stats, obs) >= 0) break;
     }
     // 그래도 미달 = 1열로 LED 를 하나씩 늘려(피치를 조금씩 줄여) 목표에 닿는 가장 적은 개수까지(2026-11-02). 지금 설계가 이미 통과면 지금보다 적은 개수까지만
     const mgOf = (t) => mgFix(t.verified.stats);
@@ -757,7 +766,7 @@ export async function runAutoDesign(cfg, io) {
         const L = ledMore(n);
         if (!L || await clashes({ ...d, ...L })) return null;
         io.progress?.('verify', Math.min(0.85, 0.3 + (0.55 * (clock() - t0)) / limitMs), `목표 미달 — LED ${n}개로 늘려 재확인`);
-        const e = { ...d, ...L }, v = await io.verify(e);
+        const e = { ...d, ...L }, v = await qv(e);
         tried.push({ design: e, verified: v }); more = true;
         return mgFix(v.stats);   // 폭이 어떤 개수로도 못 닿으면(ledLimit) 길이로 판정
       };
@@ -790,7 +799,7 @@ export async function runAutoDesign(cfg, io) {
         if (!L) break;
         if (await clashes({ ...d, ...L })) continue;
         io.progress?.('verify', 0.7, `LED ${n}개로 줄여 재확인`);
-        const e = { ...d, ...L }, v = await io.verify(e), mg = mgFix(v.stats);
+        const e = { ...d, ...L }, v = await qv(e), mg = mgFix(v.stats);
         tried.push({ design: e, verified: v }); more = true;
         if (passed ? mg < 0 : mg < best0 - SCORE_EPS) break;
       }
@@ -802,7 +811,7 @@ export async function runAutoDesign(cfg, io) {
       if (free.length && free.length < tried.length) tried.splice(0, tried.length, ...free);
     }
     steps.push({ stage: 'ledsVerify', tried });
-    const fewestPass = () => { const P = tried.filter((t) => margin(t.verified.stats, obs) >= 0); return P.length ? P.reduce((a, b) => (totalLeds(b.design) < totalLeds(a.design) ? b : a)) : null; };   // 통과안 선택은 ledLimit과 무관하게 길이·폭 목표를 모두 만족해야 함
+    const fewestPass = () => { const P = tried.filter((t) => quickMargin(t.verified.stats, obs) >= 0); return P.length ? P.reduce((a, b) => (totalLeds(b.design) < totalLeds(a.design) ? b : a)) : null; };   // 통과안 선택은 ledLimit과 무관하게 길이·폭 목표를 모두 만족해야 함
     const near = () => { const top = Math.max(...tried.map(mgOf)); return tried.filter((t) => mgOf(t) >= top - (top < -FAR_MARGIN ? 1e-9 : SCORE_EPS)).reduce((a, b) => (totalLeds(b.design) < totalLeds(a.design) ? b : a)); };   // 못 닿으면 가장 가까운 안 — 차이가 노이즈 수준이면 적은 개수
     // 1% 로는 미달이어도 근처 후보는 노이즈로 낮게 나온 것일 수 있음 — 적은 개수부터 최대 3개를 0.5% 로 재서 처음 통과한 안
     if (!fewestPass()) {
@@ -810,7 +819,7 @@ export async function runAutoDesign(cfg, io) {
       for (const t of pool) {
         t.verified = await judge(t.design, t.verified);
         if (stop()) return halt();
-        if (margin(t.verified.stats, obs) >= 0) break;
+        if (quickMargin(t.verified.stats, obs) >= 0) break;
       }
     }
     const sharp = tried.filter((t) => t.verified.sharp), fewestFix = () => { const P = ledLimit ? tried.filter((t) => mgOf(t) >= 0) : []; return P.length ? P.reduce((a, b) => (totalLeds(b.design) < totalLeds(a.design) ? b : a)) : null; };   // 폭이 개수로 안 오르면 길이를 통과하는 가장 적은 개수(2026-11-11)
@@ -819,16 +828,16 @@ export async function runAutoDesign(cfg, io) {
     if (cfg.screenGrid && ledMore) {   // 최적화 격자 통과안이 화면 격자에서 조금 미달이면 LED 를 늘려 화면 격자로 확인(최대 SHARPEN_MAX 개)
       pick.verified = await judge(pick.design, pick.verified);
       let left = SHARPEN_MAX - 1;
-      for (let n = upTo(totalLeds(pick.design) + 1); left > 0 && margin(pick.verified.stats, obs) < 0 && margin(pick.verified.stats, obs) >= -JUDGE_BAND && n <= cfg.nMax; n += ledRows) {
+      for (let n = upTo(totalLeds(pick.design) + 1); left > 0 && quickMargin(pick.verified.stats, obs) < 0 && quickMargin(pick.verified.stats, obs) >= -JUDGE_BAND && n <= cfg.nMax; n += ledRows) {
         if (stop()) return halt();
         const known = tried.find((t) => totalLeds(t.design) === n && (t.design.rows ?? 1) === ledRows), L = known ? null : ledMore(n);
         if (!known && (!L || await clashes({ ...d, ...L }))) continue;
         io.progress?.('verify', 0.5, `최종 화질 미달 — LED ${n}개로 늘려 재확인(몇 분 걸림)`);
-        const t = known ?? { design: { ...d, ...L }, verified: await io.verify({ ...d, ...L }) };
+        const t = known ?? { design: { ...d, ...L }, verified: await qv({ ...d, ...L }) };
         if (!known) { tried.push(t); more = true; }
         t.verified = await judge(t.design, t.verified);
         left--;
-        if (margin(t.verified.stats, obs) >= 0 || margin(t.verified.stats, obs) > margin(pick.verified.stats, obs) + SCORE_EPS) pick = t;
+        if (quickMargin(t.verified.stats, obs) >= 0 || quickMargin(t.verified.stats, obs) > quickMargin(pick.verified.stats, obs) + SCORE_EPS) pick = t;
       }
       if (stop()) return halt();
     }
@@ -838,14 +847,14 @@ export async function runAutoDesign(cfg, io) {
       reason = `LED ${ledRows === 2 ? '2열 총 ' : '1열 '}${Math.max(...tried.map((t) => totalLeds(t.design)))}개까지 늘려도 목표 미달 — ${uText(s)} · 한계: ${wid ? '폭 방향 확산 부족(LED 개수로는 안 오름) — Milky·형상으로 보완' : '길이 방향 끝 어두움 — Milky·LED 높이·형상으로 보완'}`;
     }
   }
-  if (ledLimit && margin(verified.stats, obs) < 0 && mgFix(verified.stats) >= 0) reason = `길이 목표는 LED ${totalLeds(d)}개로 통과, 폭은 미달 — ${uText(verified.stats)} · 한계: 폭 방향 확산 부족(LED 개수로는 안 오름) — Milky·형상으로 보완`;
+  if (ledLimit && quickMargin(verified.stats, obs) < 0 && mgFix(verified.stats) >= 0) reason = `길이 목표는 LED ${totalLeds(d)}개로 통과, 폭은 미달 — ${uText(verified.stats)} · 한계: 폭 방향 확산 부족(LED 개수로는 안 오름) — Milky·형상으로 보완`;
   verified = await judge(d, verified);
   if (stop()) return halt();
   currentVerified = await judgeCurrent(currentVerified);   // 같은 격자·노이즈로 비교
   if (stop()) return halt();
   // 노이즈 방어(①②③ 공통): 검증값이 현재안보다 SCORE_EPS 이상 낫지 않으면 현재안 유지. 둘 다 통과면 총 LED 수(rows·count) 감소도 이득
   const sc = (v) => shapeScore({ ok: !v.stats.empty, stats: v.stats, eff: v.eff }, obs);
-  const fewer = margin(verified.stats, obs) >= 0 && margin(currentVerified.stats, obs) >= 0 && totalLeds(d) < totalLeds(cfg.current);
+  const fewer = quickMargin(verified.stats, obs) >= 0 && quickMargin(currentVerified.stats, obs) >= 0 && totalLeds(d) < totalLeds(cfg.current);
   // 폭이 못 닿을 때: 길이가 새로 통과했거나 같은 통과에 개수가 줄면 이득(폭이 나빠지지 않을 때만) — 점수는 낮은 쪽(폭)에 묶여 안 변함
   const fixGain = !!ledLimit && mgFix(verified.stats) >= 0 && (mgFix(currentVerified.stats) < 0 || totalLeds(d) < totalLeds(cfg.current)) && verified.stats.Uwid >= currentVerified.stats.Uwid - SCORE_EPS;
   // 지금 배치가 불규칙이면 등간격 안을 '현재안 유지' 로 묻지 않음(균일한 피치 원칙) — 값 비교는 결과 표로
@@ -853,10 +862,10 @@ export async function runAutoDesign(cfg, io) {
   if (!cfg.fixedShape && !fewer && !fixGain && !regular && !(sc(verified) - sc(currentVerified) >= SCORE_EPS)) {
     steps.push({ stage: 'guard', tried: d, triedVerified: verified, triedReason: reason });
     if (stages.shape && d.shape && !shapeNote) shapeNote = '찾은 형상이 최종 판정에서 지금보다 낫지 않음 — 현재 형상 유지';
-    return { feasible: margin(currentVerified.stats, obs) >= 0, best: { ...cfg.current }, steps, reason: `현재안보다 나은 설계를 찾지 못함 — 현재안 유지${reason ? ` (${reason})` : ''}`, verified: currentVerified, current: currentVerified, unchanged: true, cancelled: false, hint, peek, milkyLowered: lowered, shapeNote };
+    return { feasible: quickMargin(currentVerified.stats, obs) >= 0, best: { ...cfg.current }, steps, reason: `현재안보다 나은 설계를 찾지 못함 — 현재안 유지${reason ? ` (${reason})` : ''}`, verified: currentVerified, current: currentVerified, unchanged: true, cancelled: false, hint, peek, milkyLowered: lowered, shapeNote };
   }
   // 판정·문구는 정밀 재계산 값 기준(후보 평가값은 광자가 적어 노이즈가 큼)
-  const vs = verified.stats, ok = margin(vs, obs) >= 0;
+  const vs = verified.stats, ok = quickMargin(vs, obs) >= 0;
   if (ok) { feasible = true; reason = ''; }
   else {   // 단계가 통과로 끝났어도 정밀 재계산 미달이면 불가
     feasible = false;

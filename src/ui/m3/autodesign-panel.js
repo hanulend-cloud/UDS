@@ -1,5 +1,5 @@
 // 기구 최적화 카드 — spec P4 §3. 체크 5개(①~⑤) · ③·④ 대상 부품 · [실행]/[중지] · 진행 · 현재|최적 비교 · [적용][취소][되돌리기][STEP]
-import { fmtJudge, fmtTg, fmtDp, flU } from '../../engine/mech3d/tally.js';
+import { fmtJudge, fmtTg, fmtDp, flU, passChance, CHANCE_MAYBE } from '../../engine/mech3d/tally.js';
 import { histTableHtml } from './opt-dash.js';
 import { shapeCasesHtml } from './shape-cases.js';
 import { stepRefEmitter } from '../../engine/mech3d/virtual-leds.js';   // 가상 배치 기준 LED(엔진과 같은 규칙)
@@ -341,7 +341,9 @@ export function histFromRun(res, r, at, labelOf) {
   const add = (design, v, kind) => {
     const s = v?.stats; if (!design || !s || s.empty || !Number.isFinite(s.Ulen)) return;
     const k = JSON.stringify(design); if (seen.has(k)) return; seen.add(k);
-    out.push({ key: `${at}|${k}`, label: labelOf(design), Ulen: s.Ulen, Uwid: s.Uwid ?? null, eff: v.eff ?? NaN, leds: design.count != null ? design.count * (design.rows === 2 ? 2 : 1) : null, design, r, at, kind });
+    const quick = !!s.quick, chance = quick ? v.chance ?? passChance(s, res.targets ?? r.targets ?? {}) : null;   // 빠른 검토 값(2026-11-15): 가능성 30% 미만은 추천에서 뺌 · 오차 = 길이·폭 중 큰 쪽
+    if (quick && chance < CHANCE_MAYBE) return;
+    out.push({ key: `${at}|${k}`, label: labelOf(design), Ulen: s.Ulen, Uwid: s.Uwid ?? null, eff: v.eff ?? NaN, leds: design.count != null ? design.count * (design.rows === 2 ? 2 : 1) : null, design, r, at, kind, ...(quick ? { quick, chance, se: Math.max(s.seLen ?? 0, s.seWid ?? 0) || null } : {}) });
   };
   if (!(r.clash > 0)) add(res.best, res.verified, 'final');
   for (const t of res.steps?.find((x) => x.stage === 'ledsVerify')?.tried ?? []) if (!t.clash) add(t.design, t.verified, 'alt');

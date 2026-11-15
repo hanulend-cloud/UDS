@@ -125,4 +125,16 @@ const fakePorts = (log, delay = 0) => Array.from({ length: 3 }, (_, w) => ({ sen
   await R.trace({ sceneKey: 'g', scene: { G: { ns: 2, nw: 2 } } }, { N: 60000, maxMs: 1e9, chunkN: 1e6, chunkMs: 500, batches: 2 });
   ok(Math.max(...sizes.cpu.slice(1)) === 1000 && Math.max(...sizes.gpu.slice(1)) === 4000, `같은 속도면 GPU 묶음이 4배 (CPU ${Math.max(...sizes.cpu.slice(1))} · GPU ${Math.max(...sizes.gpu.slice(1))})`);
 }
+{   // 빠른 검토(2026-11-15): 첫 묶음 크기를 정해 줌(firstN) — 느린 장면(Milky 높음)에서 첫 묶음이 시간 한도를 넘지 않게. 한도가 지나면 최소 광자 수 없이 멈춤
+  const sizes = [];
+  const port = () => ({ send: async (m) => {
+    if (m.type === 'scene') return { sceneKey: m.sceneKey, ready: true };
+    sizes.push(m.N); t += 6000;   // 묶음 하나가 6초
+    return { sceneKey: m.sceneKey, acc: new Float64Array(4), cnt: new Uint32Array(4), ledger: { emitted: m.N, escaped: 0, absSurf: 0, absVol: 0, lost: 0, rrLoss: 0, rrGain: 0 }, leak: {}, escObs: 0, ms: 6000 };
+  } });
+  let t = 0; const R = createAdRunner({ ports: [port(), port()], now: () => t });
+  const r = await R.trace({ sceneKey: 'q', scene: { G: { ns: 2, nw: 2 } } }, { N: 5e6, maxMs: 10000, minN: 0, firstN: 2000, batches: 2 });
+  ok(sizes[0] === 2000 && sizes[1] === 2000, `첫 묶음 = firstN (${sizes.slice(0, 2)})`);
+  ok(r.photons < 20000 && sizes.length <= 4, `시간 한도에서 멈춤 (광자 ${r.photons} · 묶음 ${sizes.length})`);
+}
 done();

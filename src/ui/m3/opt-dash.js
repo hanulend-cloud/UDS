@@ -1,4 +1,4 @@
-import { fmtJudge, fmtTg, fmtDp, flU } from '../../engine/mech3d/tally.js';
+import { fmtJudge, fmtTg, fmtDp, flU, fmtChance, chanceGrade } from '../../engine/mech3d/tally.js';
 import { fmtProg } from './progressive.js';
 import { judgeStats, uVerdict } from '../../engine/mech3d/tally.js';
 // 아래 칸 대시보드 — ① 기구 최적화 진행(6 항목 타일) ② 시뮬레이션 진행현황(수렴 그래프).
@@ -238,12 +238,14 @@ export function histTableHtml(list, tl, tw, busy, { pick = 'h', max = 0 } = {}) 
   // 순위 = 표시값(내림) 기준 — 노이즈 수준 차이(0.418 vs 0.412)로 화면상 같은 값의 순서가 뒤집히지 않게. 같으면 두 균일도 합 → 효율
   const fl = (v) => (Number.isFinite(v) ? Math.floor(v * 100 + 1e-9) / 100 : NaN);
   const mg = (e) => Math.min(Number.isFinite(tl) ? fl(e.Ulen) - tl : Infinity, Number.isFinite(tw) && e.Uwid != null ? fl(e.Uwid) - tw : Infinity), sum = (e) => (fl(e.Ulen) || 0) + (fl(e.Uwid) || 0);
-  const cell = (v, t) => (Number.isFinite(v) ? `<b class="${Number.isFinite(t) ? (v + 1e-9 >= t ? 'od-ok' : 'od-bad') : ''}">${fmtJudge(v)}</b>` : '–');
+  const cell = (v, t, q) => (Number.isFinite(v) ? q ? `<span class="mut" title="빠른 검토 값 — 정밀 재계산 전(실제보다 낮게 나오기 쉬움)">≈${fmtJudge(v)}</span>` : `<b class="${Number.isFinite(t) ? (v + 1e-9 >= t ? 'od-ok' : 'od-bad') : ''}">${fmtJudge(v)}</b>` : '–');
+  // 빠른 검토 후보(2026-11-15): 목표 달성 가능성(유력 75% 이상 · 가능성 있음 30% 이상) · 오차
+  const qTag = (e) => (e.quick ? ` <span class="om-q om-q-${chanceGrade(e.chance)}" title="빠른 검토 값${e.se > 0 ? ` · 오차 ±${(e.se * 100).toFixed(1)}%p` : ''} — 적용한 뒤 계산하면 정밀 값이 나옴">${chanceGrade(e.chance) === 'likely' ? '유력' : '가능성 있음'} ${fmtChance(e.chance)}${e.se > 0 ? ` · ±${(e.se * 100).toFixed(1)}%p` : ''}</span>` : '');
   const rows = list.map((e, i) => ({ e, i })).sort((a, b) => mg(b.e) - mg(a.e) || sum(b.e) - sum(a.e) || (b.e.eff || 0) - (a.e.eff || 0)).slice(0, max > 0 ? max : undefined).map(({ e, i }, n) =>
-    `<tr${e.applied ? ' class="om-h-on"' : ''}><td>${n + 1}</td><td class="om-mx-l" title="${esc(e.label)}">${esc(e.label)}${e.kind === 'final' ? '' : ' <span class="mut">(대안)</span>'}</td><td>${cell(e.Ulen, tl)}</td><td>${cell(e.Uwid, tw)}</td><td>${Number.isFinite(e.eff) ? `${(e.eff * 100).toFixed(1)}%` : '–'}</td><td class="mut">${esc(e.at ?? '')}</td>`
+    `<tr${e.applied ? ' class="om-h-on"' : ''}><td>${n + 1}</td><td class="om-mx-l" title="${esc(e.label)}">${esc(e.label)}${e.kind === 'final' ? '' : ' <span class="mut">(대안)</span>'}${qTag(e)}</td><td>${cell(e.Ulen, tl, e.quick)}</td><td>${cell(e.Uwid, tw, e.quick)}</td><td>${Number.isFinite(e.eff) ? `${(e.eff * 100).toFixed(1)}%` : '–'}</td><td class="mut">${esc(e.at ?? '')}</td>`
     + `<td><button type="button" ${pick === 'ad' ? `data-ad="hpick" data-v="${i}"` : `data-hpick="${i}"`}${busy ? ' disabled title="최적화가 끝난 뒤 고르세요"' : e.applied ? ' disabled title="지금 설계에 적용된 안"' : ''}>${e.applied ? '적용됨' : '적용'}</button></td></tr>`);
   if (pick === 'ad') return `<div class="om-hist-sc rs-histt"><table class="om-mx-t"><colgroup><col style="width:26px"><col><col style="width:58px"><col style="width:58px"><col style="width:52px"><col style="width:48px"><col style="width:58px"></colgroup><tr><th>#</th><th>사양</th><th>길이</th><th>폭</th><th>효율</th><th>시각</th><th></th></tr>${rows.join('')}</table></div>`;   // 결과 화면 안(머리는 결과 화면이 씀)
-  return `<div class="om-mx om-hist"><div class="om-lh" title="값 = 정밀 재계산 · 원하는 사양을 골라 [적용]"><b>지난 후보</b> <span class="mut">균일도 순 · ${list.length}개</span></div><div class="om-hist-sc"><table class="om-mx-t"><tr><th>#</th><th>사양</th><th>길이</th><th>폭</th><th>효율</th><th>시각</th><th></th></tr>${rows.join('')}</table></div></div>`;
+  return `<div class="om-mx om-hist"><div class="om-lh" title="값 = 정밀 재계산(≈ = 빠른 검토 값) · 원하는 사양을 골라 [적용]"><b>지난 후보</b> <span class="mut">균일도 순 · ${list.length}개</span></div><div class="om-hist-sc"><table class="om-mx-t"><tr><th>#</th><th>사양</th><th>길이</th><th>폭</th><th>효율</th><th>시각</th><th></th></tr>${rows.join('')}</table></div></div>`;
 }
 // 후보의 점수(목표 대비 여유 — 둘 다 있으면 작은 쪽)
 const scoreOf = (e, tl, tw) => (e.ok === false || !Number.isFinite(e.Ulen) ? -Infinity : Math.min(e.Ulen - tl, Number.isFinite(e.Uwid) && Number.isFinite(tw) ? e.Uwid - tw : Infinity));
