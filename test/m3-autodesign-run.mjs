@@ -137,4 +137,19 @@ const fakePorts = (log, delay = 0) => Array.from({ length: 3 }, (_, w) => ({ sen
   ok(sizes[0] === 2000 && sizes[1] === 2000, `첫 묶음 = firstN (${sizes.slice(0, 2)})`);
   ok(r.photons < 20000 && sizes.length <= 4, `시간 한도에서 멈춤 (광자 ${r.photons} · 묶음 ${sizes.length})`);
 }
+{   // 빠른 검토(2026-11-15 사용자): 오차가 충분히 작아지면(until) 시간 한도 전에 멈춤 — 배치마다 묶음이 하나씩 들어온 뒤, untilMs 간격으로만 물어봄
+  let t = 0, asked = 0, lens = [];
+  const port = () => ({ send: async (m) => {
+    if (m.type === 'scene') return { sceneKey: m.sceneKey, ready: true };
+    t += 1000;
+    return { sceneKey: m.sceneKey, acc: new Float64Array(4).fill(1), cnt: new Uint32Array(4), ledger: { emitted: m.N, escaped: 0, absSurf: 0, absVol: 0, lost: 0, rrLoss: 0, rrGain: 0 }, leak: {}, escObs: 0, ms: 1000 };
+  } });
+  const R = createAdRunner({ ports: [port()], now: () => t });
+  const r = await R.trace({ sceneKey: 'u', scene: { G: { ns: 2, nw: 2 } } }, { N: 5e6, maxMs: 60000, minN: 0, firstN: 1000, batches: 2, untilMs: 2000, until: (bs) => { asked++; lens.push(bs.length); return asked >= 3; } });
+  ok(r.ms < 60000 && r.ms >= 6000 && r.ms <= 8000, `오차 기준에 닿으면 한도 전에 멈춤 (${r.ms} ms)`);
+  ok(asked === 3 && lens.every((n) => n === 2), `2초 간격으로만 확인 · 배치가 다 찬 뒤 (${asked}회 · 배치 ${lens})`);
+  t = 0; asked = 0;
+  const r2 = await R.trace({ sceneKey: 'u', scene: { G: { ns: 2, nw: 2 } } }, { N: 5e6, maxMs: 10000, minN: 0, firstN: 1000, batches: 2, untilMs: 2000, until: () => { asked++; return false; } });
+  ok(r2.ms >= 10000 && r2.ms <= 12000 && asked >= 3, `기준에 못 닿으면 시간 한도까지 (${r2.ms} ms · 확인 ${asked}회)`);
+}
 done();

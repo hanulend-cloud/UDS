@@ -336,5 +336,12 @@ export function passChance(s, obs) {
   const one = (v, t, se) => (v == null || t == null ? 1 : se > 0 ? phi((v - t) / se) : v + 1e-9 >= t ? 1 : 0);
   return Math.min(one(s.Ulen, obs.targetLen, s.seLen), one(s.Uwid, obs.targetWid, s.seWid));
 }
-export const chanceGrade = (p) => (p >= CHANCE_LIKELY ? 'likely' : p >= CHANCE_MAYBE ? 'maybe' : 'out');
+// 오차 기준(2026-11-15 사용자): 빠른 검토 값이 정밀 값과 5%p 안에서 맞아야 의미가 있음 → 오차 ±2.5%p 에 닿을 때까지 계산(최대 60초). 한도에 걸려 오차가 더 큰 후보는 '참고용'(유력에 안 넣음)
+export const QUICK_SE = 0.025;
+export function quickErr(s, obs) {   // 판정하는 방향(목표·값이 있는 쪽)의 오차 중 큰 쪽. 못 잰 값은 Infinity
+  if (!s || s.empty || !Number.isFinite(s.Ulen)) return Infinity;
+  const one = (v, t, se) => (v == null || t == null ? 0 : se > 0 ? se : Infinity);
+  return Math.max(one(s.Ulen, obs.targetLen, s.seLen), one(s.Uwid, obs.targetWid, s.seWid));
+}
+export const chanceGrade = (p, se = 0) => (p < CHANCE_MAYBE ? 'out' : se > QUICK_SE + 1e-9 ? 'ref' : p >= CHANCE_LIKELY ? 'likely' : 'maybe');
 export const fmtChance = (p) => `${Math.floor(p * 100 + 1e-9)}%`;

@@ -1,5 +1,5 @@
 // 빠른 검토(2026-11-15): 후보는 시간 한도로 짧게 재고 오차로 '목표 달성 가능성' 을 냄 — 최종안만 정밀 재계산. node test/mech3d-quick-review.mjs
-import { debiasU, tallyStats, passChance, chanceGrade, CHANCE_LIKELY, CHANCE_MAYBE, fmtChance } from '../src/engine/mech3d/tally.js';
+import { debiasU, tallyStats, passChance, chanceGrade, quickErr, QUICK_SE, CHANCE_LIKELY, CHANCE_MAYBE, fmtChance } from '../src/engine/mech3d/tally.js';
 import { runAutoDesign, quickMargin } from '../src/engine/mech3d/autodesign.js';
 import { histFromRun } from '../src/ui/m3/autodesign-panel.js';
 import { histTableHtml } from '../src/ui/m3/opt-dash.js';
@@ -42,9 +42,9 @@ const near = (a, b, e = 0.005) => Math.abs(a - b) < e;
   ok(H[0].quick !== true && H[0].chance == null && H[1].quick === true && near(H[1].chance, 0.841) && H[1].se === 0.03 && H[2].quick === true, '빠른 검토 후보 = quick · chance · se');
 }
 { // 지난 후보 표: 빠른 검토 값 = ≈값 ±오차 · 가능성(유력/가능성 있음) · '빠른 검토 값' 표시. 정밀 값은 그대로
-  const h = histTableHtml([{ label: 'A', Ulen: 0.82, Uwid: 0.9, eff: 0.5, kind: 'final' }, { label: 'B', Ulen: 0.832, Uwid: 0.9, eff: 0.5, kind: 'alt', quick: true, chance: 0.841, se: 0.031 }, { label: 'C', Ulen: 0.79, Uwid: 0.9, eff: 0.5, kind: 'alt', quick: true, chance: 0.37, se: 0.03 }], 0.8, 0.6, false);
+  const h = histTableHtml([{ label: 'A', Ulen: 0.82, Uwid: 0.9, eff: 0.5, kind: 'final' }, { label: 'B', Ulen: 0.832, Uwid: 0.9, eff: 0.5, kind: 'alt', quick: true, chance: 0.841, se: 0.021 }, { label: 'C', Ulen: 0.79, Uwid: 0.9, eff: 0.5, kind: 'alt', quick: true, chance: 0.37, se: 0.02 }], 0.8, 0.6, false);
   ok(/유력 84%/.test(h) && /가능성 있음 37%/.test(h), '가능성 표시(유력 · 가능성 있음)');
-  ok(/≈83.2%/.test(h) && /±3.1%p/.test(h) && /빠른 검토 값/.test(h), '빠른 검토 값 = ≈ · ±오차');
+  ok(/≈83.2%/.test(h) && /±2.1%p/.test(h) && /빠른 검토 값/.test(h), '빠른 검토 값 = ≈ · ±오차');
   ok(!/≈82.0%/.test(h) && (h.match(/빠른 검토 값/g) ?? []).length >= 2, '정밀 값에는 표시 없음');
 }
 { // 노이즈 보정 추정(2026-11-15 실측: 같은 설계가 10초 값 33.7% · 정밀 62.3% — 최저÷최고는 노이즈만큼 낮게 나옴)
@@ -89,5 +89,14 @@ const near = (a, b, e = 0.005) => Math.abs(a - b) < e;
   const wprof = (j) => 1 - 0.85 * Math.abs(j - 9.5) / 9.5, truth = wprof(0) / wprof(9);   // 가장자리 15%
   const us = []; for (let t = 0; t < 5; t++) { const acc = Array.from({ length: 10 }, () => Float64Array.from({ length: ns * nw }, (_, k) => pois(0.15 * wprof(k % nw)))); us.push(tallyStats(G, acc, { targetLen: 0.8, targetWid: 0.8 })); }
   ok(us.every((x) => x.Uwid > 0.05 && Math.abs(x.Uwid - truth) < 0.1), `광자 적음: 폭 보정 ${us.map((x) => (x.Uwid * 100).toFixed(1)).join(' · ')}% (참값 ${(truth * 100).toFixed(1)}% · 그대로 ${(us[0].rawUwid * 100).toFixed(1)}%)`);
+}
+{ // 오차 기준(2026-11-15 사용자): 빠른 검토는 오차 ±2.5%p 에 닿을 때까지(최대 60초). 한도에 걸려 오차가 큰 후보는 '참고용' — '유력' 에 넣지 않음
+  ok(QUICK_SE === 0.025, '오차 기준 ±2.5%p');
+  ok(Math.abs(quickErr({ Ulen: 0.8, seLen: 0.02, Uwid: 0.7, seWid: 0.04 }, { targetLen: 0.8, targetWid: 0.6 }) - 0.04) < 1e-12, '오차 = 판정하는 방향 중 큰 쪽');
+  ok(Math.abs(quickErr({ Ulen: 0.8, seLen: 0.02, Uwid: 0.7, seWid: 0.04 }, { targetLen: 0.8, targetWid: null }) - 0.02) < 1e-12 && Math.abs(quickErr({ Ulen: 0.8, seLen: 0.02, Uwid: null, seWid: 0.04 }, { targetLen: 0.8, targetWid: 0.6 }) - 0.02) < 1e-12, '판정하지 않는 방향(목표 없음 · 좁은 라인)의 오차는 안 봄');
+  ok(quickErr({ empty: true }, { targetLen: 0.8 }) === Infinity && quickErr({ Ulen: 0.8, seLen: 0 }, { targetLen: 0.8 }) === Infinity, '빈 결과 · 오차를 못 잰 값은 기준 미달');
+  ok(chanceGrade(0.9, 0.025) === 'likely' && chanceGrade(0.9, 0.026) === 'ref' && chanceGrade(0.4, 0.05) === 'ref' && chanceGrade(0.4, 0.02) === 'maybe' && chanceGrade(0.2, 0.05) === 'out', '오차가 크면 참고용');
+  const h = histTableHtml([{ label: 'B', Ulen: 0.832, Uwid: 0.9, eff: 0.5, kind: 'alt', quick: true, chance: 0.95, se: 0.061 }, { label: 'C', Ulen: 0.85, Uwid: 0.9, eff: 0.5, kind: 'alt', quick: true, chance: 0.97, se: 0.021 }], 0.8, 0.6, false);
+  ok(/참고용 95%/.test(h) && /om-q-ref/.test(h) && /유력 97%/.test(h) && !/유력 95%/.test(h), '표: 오차가 큰 후보는 참고용');
 }
 done();
