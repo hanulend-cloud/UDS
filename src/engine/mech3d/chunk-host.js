@@ -6,6 +6,7 @@ import { milkyGridOptics, rwCoeffs } from './reweight.js';
 
 // getTable(): L2 산란 응답표, getDb(): 실측소재 DB(없으면 null)
 export function makeChunkHost({ getTable, getDb = () => null }) {
+  let mech = null;   // 든 기구 메쉬(부품 배열) — 장면 메시지의 빈 부품(null = 앞과 같음, pool.slimScene)을 채움
   let cache = null, gpu = null, gpuFail = () => {}, rec = null, recovered = 0;
   return {
     // GPU 추적기(gpu-trace.createGpuTracer) — 있으면 청크를 GPU 로(실패하면 끄고 CPU 로). onFail(메시지) 알림
@@ -20,18 +21,21 @@ export function makeChunkHost({ getTable, getDb = () => null }) {
       if (m.type === 'scene') {
         if (cache?.sceneKey === m.sceneKey) return { reply: { sceneKey: m.sceneKey, ready: true }, transfer: [] };   // 같은 장면 — 다시 만들지 않음
         try {
+          const mp = m.mechParts.map((p, i) => p ?? mech?.[i] ?? null);   // 받은 즉시 갱신(뒤에서 실패해도 pool 의 held 와 같게)
+          if (mp.some((p) => !p)) { mech = null; return { reply: { sceneKey: m.sceneKey, needMech: true }, transfer: [] }; }   // 든 것이 없음(새 Worker 등) — 전부 다시 받음
+          mech = mp;
           const table = getTable();
           if (!table) throw new Error('L2 산란 응답표가 없음');
           const prev = cache?.S ?? null;   // 앞 장면 — LED 만 움직였으면 BVH 를 고쳐 씀(다시 만들지 않음)
           cache = null;   // 실패하면 이전 장면도 쓰지 않음
-          const db = getDb(), rt = { name: 'mech', parts: m.mechParts }, line = lineFromData(m.lineData);   // 합친 메쉬·BVH 는 composeScene 이 한 번만
+          const db = getDb(), rt = { name: 'mech', parts: mp }, line = lineFromData(m.lineData);   // 합친 메쉬·BVH 는 composeScene 이 한 번만
           const S = composeScene({ rt, mspec: m.mspec, ledParts: m.ledParts, table, db, line, prev });
           cache = { sceneKey: m.sceneKey, db, S, line, G: m.G, obs: m.obs, emitters: m.emitters, ledSpec: m.mspec.light.spec, mspec: m.mspec };
           return { reply: { sceneKey: m.sceneKey, ready: true }, transfer: [] };
         } catch (e) { cache = null; return { reply: { sceneKey: m.sceneKey, error: String(e?.message ?? e) }, transfer: [] }; }
       }
       if (m.type === 'interactive') { gpu?.setInteractive?.(!!m.on); return { reply: null, transfer: [] }; }   // 3D 화면 조작 중 = GPU 를 작게 나눠 화면에 틈(2026-11-12) — 응답 없음
-      if (m.type === 'drop') { cache = null; return { reply: { dropped: true }, transfer: [] }; }   // 쉬는 Worker — 장면을 내려놓음(메모리)
+      if (m.type === 'drop') { cache = null; mech = null; return { reply: { dropped: true }, transfer: [] }; }   // 쉬는 Worker — 장면을 내려놓음(메모리)
       if (m.type === 'path') {   // 대표 광경로 — { emitter, want, nMech } → { path: { pts, dir } | null }
         if (!cache || cache.sceneKey !== m.sceneKey) return { reply: { sceneKey: m.sceneKey, stale: true }, transfer: [] };
         const { S, line, obs, G, ledSpec } = cache;

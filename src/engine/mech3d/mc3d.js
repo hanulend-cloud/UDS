@@ -26,18 +26,47 @@ function sampleHG(g, u) {
 
 // 다른 부품의 반대 법선 삼각형이 근처에 있을 수 있는 삼각형 표시(점 단위 판정의 사전 거름) — 장면별 캐시
 const coinCache = new WeakMap();
-export function coinFlags(S) {
-  if (coinCache.has(S)) return coinCache.get(S);
-  const { P, T, normals: NM, partOf, bvh } = S, nT = partOf.length, flag = new Uint8Array(nT), buf = [];
+// prev(선택, 2026-11-15) = 앞 장면(같은 삼각형 연결·같은 BVH 구조 = 점만 움직인 장면)과 그 표시가 있으면, 움직인 삼각형과 그 근처만 다시 계산.
+//   173만 삼각형을 처음부터 훑으면 Worker 마다 5~7초 — 기구 최적화 후보(장면)마다 반복돼 큰 도면이 몹시 느렸음. 표시는 사전 거름이라 넓게 잡혀도 결과는 같음(partnerAt 이 정확히 판정)
+const coinOne = (S, t, buf, lo, hi) => {
+  const { P, T, normals: NM, partOf, bvh } = S;
+  lo[0] = lo[1] = lo[2] = Infinity; hi[0] = hi[1] = hi[2] = -Infinity;
+  for (let k = 0; k < 3; k++) for (let c = 0; c < 3; c++) { const v = P[T[t * 3 + k] * 3 + c]; if (v - COIN_BOX < lo[c]) lo[c] = v - COIN_BOX; if (v + COIN_BOX > hi[c]) hi[c] = v + COIN_BOX; }
+  queryBox(bvh, lo, hi, buf);
+  for (const c of buf) {
+    if (partOf[c] === partOf[t]) continue;
+    if (NM[t * 3] * NM[c * 3] + NM[t * 3 + 1] * NM[c * 3 + 1] + NM[t * 3 + 2] * NM[c * 3 + 2] <= COIN_DOT) return 1;
+  }
+  return 0;
+};
+function coinDelta(S, prev, pf) {
+  const { P, T, partOf, bvh } = S, Q = prev.P, nT = partOf.length;
+  if (pf.length !== nT || Q.length !== P.length || prev.bvh?.meta !== bvh.meta) return null;
+  if (Q === P) return pf;
+  const dirty = new Uint8Array(nT), buf = [], lo = [0, 0, 0], hi = [0, 0, 0], list = [];
+  const mark = (t) => { if (!dirty[t]) { dirty[t] = 1; list.push(t); } };
+  let nC = 0;
   for (let t = 0; t < nT; t++) {
-    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
-    for (let k = 0; k < 3; k++) for (let c = 0; c < 3; c++) { const v = P[T[t * 3 + k] * 3 + c]; lo[c] = Math.min(lo[c], v - COIN_BOX); hi[c] = Math.max(hi[c], v + COIN_BOX); }
-    queryBox(bvh, lo, hi, buf);
-    for (const c of buf) {
-      if (partOf[c] === partOf[t]) continue;
-      if (NM[t * 3] * NM[c * 3] + NM[t * 3 + 1] * NM[c * 3 + 1] + NM[t * 3 + 2] * NM[c * 3 + 2] <= COIN_DOT) { flag[t] = 1; break; }
+    let ch = false;
+    for (let k = 0; k < 3 && !ch; k++) { const v = T[t * 3 + k] * 3; ch = P[v] !== Q[v] || P[v + 1] !== Q[v + 1] || P[v + 2] !== Q[v + 2]; }
+    if (!ch) continue;
+    if (++nC > nT * 0.2) return null;   // 많이 바뀌면 처음부터가 빠름
+    mark(t);
+    for (const A of [P, Q]) {   // 새 자리·옛 자리 근처 삼각형 — 짝이 새로 생기거나 없어질 수 있음
+      lo[0] = lo[1] = lo[2] = Infinity; hi[0] = hi[1] = hi[2] = -Infinity;
+      for (let k = 0; k < 3; k++) for (let c = 0; c < 3; c++) { const v = A[T[t * 3 + k] * 3 + c]; if (v - COIN_BOX < lo[c]) lo[c] = v - COIN_BOX; if (v + COIN_BOX > hi[c]) hi[c] = v + COIN_BOX; }
+      for (const c of queryBox(bvh, lo, hi, buf)) mark(c);
     }
   }
+  const flag = Uint8Array.from(pf);
+  for (const t of list) flag[t] = coinOne(S, t, buf, lo, hi);
+  return flag;
+}
+export function coinFlags(S, prev = null) {
+  if (coinCache.has(S)) return coinCache.get(S);
+  const pf = prev ? coinCache.get(prev) : null, nT = S.partOf.length;
+  let flag = pf ? coinDelta(S, prev, pf) : null;
+  if (!flag) { flag = new Uint8Array(nT); const buf = [], lo = [0, 0, 0], hi = [0, 0, 0]; for (let t = 0; t < nT; t++) flag[t] = coinOne(S, t, buf, lo, hi); }
   coinCache.set(S, flag);
   return flag;
 }

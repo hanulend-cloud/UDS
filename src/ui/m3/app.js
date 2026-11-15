@@ -852,15 +852,17 @@ async function lateralCandidates(M0, line, rt, ctx) {
   const al = Math.hypot(...ref.axis) || 1, n = ref.axis.map((v) => v / al);
   const half = ledHalfWidth(M0, line) * 0.9, down = (p) => { const h = intersectRay(rt.bvh, p[0], p[1], p[2], -n[0], -n[1], -n[2], 1e-6, Infinity, -1, -1, mask); return h ? h.t : Infinity; };
   const t0 = down(ref.pos), cs = [0];
-  const clashN = (c) => { const { M, parts } = designScene({ ...ctx.cur, positions: ss.map((s) => ({ s, w: c })), count: ss.length, rows: 1, rowGap: 0, stepVirt: true }, ctx); const lay = L.stepLayout(M, line);
-    return { lay, n: Math.max(boxClashN(M, line, rt), (lay?.leds ?? []).filter((k) => lay.parts[k] && C_interf(lay.parts[k], tracedParts(mech, M.parts))).length) }; };
-  let base = 0; try { base = clashN(0).n; } catch { return null; }
-  const tick = pacer();
+  const tick = pacer();   // LED 마다 화면에 양보 — 후보 하나(LED 72개 검사)가 0.9초씩 화면을 멈췄음(2026-11-15)
+  const clashN = async (c) => { const { M, parts } = designScene({ ...ctx.cur, positions: ss.map((s) => ({ s, w: c })), count: ss.length, rows: 1, rowGap: 0, stepVirt: true }, ctx); const lay = L.stepLayout(M, line);
+    const tp = tracedParts(mech, M.parts), bx = boxClashN(M, line, rt); let n = 0;
+    for (const k of lay?.leds ?? []) { await tick(); if (lay.parts[k] && C_interf(lay.parts[k], tp)) n++; }
+    return { lay, n: Math.max(bx, n) }; };
+  let base = 0; try { base = (await clashN(0)).n; } catch { return null; }
   for (let c = -16; c <= 16; c++) {   // 1 mm 간격(2026-11-03) — 비교는 엔진이 2 mm 로 훑고 ±1 mm
     if (!c) continue;
     await tick();
     try {
-      const { lay, n: nc } = clashN(c); if (nc > base) continue;
+      const { lay, n: nc } = await clashN(c); if (nc > base) continue;
       const es = lay.emitters ?? [], pick = [es[0], es[Math.floor(es.length / 2)], es.at(-1)].filter(Boolean);
       const okSup = pick.every((e) => { const lat = widthDirection(line, e.s, n); return [-1, 0, 1].every((sg) => Math.abs(down(e.pos.map((v, k) => v + sg * half * lat[k])) - t0) < 0.3); });
       if (okSup) cs.push(c);
@@ -868,7 +870,7 @@ async function lateralCandidates(M0, line, rt, ctx) {
   }
   return cs.length > 1 ? { cs, ss } : null;
 }
-const C_interf = (m, mech) => interferenceKeys(m, mech, [], []).size > 0;
+const C_interf = (m, mech) => newInterference(m, mech, [], new Map()) != null;   // 겹침이 있는가만 — 찾는 즉시 멈춤(깊이를 끝까지 재지 않음)
 // 결과 프로파일 아래에 찍을 LED 위치(라인 좌표 s, w) — 배치·라인이 같으면 캐시
 // 원설계 LED 위치 = LED STEP 그대로(편집·최적화·개별 조정·빛 끔 전) · 직접 배치 = 최적화를 처음 적용하기 전 값(light.originManual). 기준이 없으면 null
 let ledChgCache = null;

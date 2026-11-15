@@ -63,6 +63,36 @@ function insetSides(m) {
   SIDE.set(m.triangles, sd);
   return sd;
 }
+// 큰 부품(삼각형 LOCAL_MIN 개 이상)은 상대 부품 근처 삼각형만 봄(2026-11-15) — 100 MB 도면에서 LED 하나를 볼 때마다 큰 부품의 표본점 전체(수백만 개)를 훑어
+// 기구 최적화 준비에 화면이 53초 멈췄음(높이 범위 13초 + 폭 위치 후보 40초). 근처 삼각형은 부품 BVH 로 찾고, 안쪽 방향(insetSides)도 그 삼각형만 그때 계산. 결과는 전체를 훑을 때와 같음
+let LOCAL_MIN = 20000;
+export const setLocalMin = (n) => { LOCAL_MIN = n; };   // 시험용(Infinity = 항상 전체)
+const isBig = (m) => m.triangles.length / 3 >= LOCAL_MIN;
+const SIDE_LAZY = new WeakMap();
+function sideOf(m, t) {
+  const full = SIDE.get(m.triangles);
+  if (full) return full[t];
+  let sd = SIDE_LAZY.get(m.triangles);
+  if (!sd) { sd = new Int8Array(m.triangles.length / 3).fill(2); SIDE_LAZY.set(m.triangles, sd); }
+  if (sd[t] === 2) {
+    const { c, n } = triCN(m.positions, m.triangles, t), ms = solid(m);
+    sd[t] = !n ? 0 : insidePart(ms, c.map((v, k) => v - INSET * n[k])) ? 1 : insidePart(ms, c.map((v, k) => v + INSET * n[k])) ? -1 : 0;
+  }
+  return sd[t];
+}
+const trisNear = (m, b, pad) => queryBox(bvhOf(m), [b[0] - pad, b[1] - pad, b[2] - pad], [b[3] + pad, b[4] + pad, b[5] + pad], []);
+// 상자 b 근처 삼각형의 간섭용 표본점(innerSamplesOf 와 같은 점: 정점·중심·안쪽으로 들인 중심)마다 fn(x, y, z) — fn 이 true 면 멈추고 true
+function eachLocalInner(m, b, fn) {
+  const P = m.positions, T = m.triangles, seen = new Set();
+  for (const t of trisNear(m, b, INSET)) {
+    for (let j = 0; j < 3; j++) { const v = T[3 * t + j]; if (!seen.has(v)) { seen.add(v); if (fn(P[3 * v], P[3 * v + 1], P[3 * v + 2])) return true; } }
+    const { c, n } = triCN(P, T, t);
+    if (fn(c[0], c[1], c[2])) return true;
+    const sd = n ? sideOf(m, t) : 0;
+    if (sd && fn(c[0] - sd * INSET * n[0], c[1] - sd * INSET * n[1], c[2] - sd * INSET * n[2])) return true;
+  }
+  return false;
+}
 function triCN(P, T, t) {
   const a = vtx(P, T[3 * t]), b = vtx(P, T[3 * t + 1]), c = vtx(P, T[3 * t + 2]);
   const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
@@ -88,19 +118,29 @@ const boxBoxDist = (a, b) => Math.hypot(Math.max(a[0] - b[3], 0, b[0] - a[3]), M
 const vtx = (P, i) => [P[3 * i], P[3 * i + 1], P[3 * i + 2]];
 
 // 메쉬 m 표면에서 점 p 의 최근접점 — r 안에서만(없으면 null). 반환 { d, q }
-export function nearestOnMesh(m, p, r = Infinity, cand = []) {
-  const P = m.positions, T = m.triangles, bv = bvhOf(m);
-  let best = null, R = Number.isFinite(r) ? r : Math.max(1, boxDist(boxOf(m), p) * 2 + 1);
-  for (let pass = 0; pass < 40; pass++) {
-    queryBox(bv, [p[0] - R, p[1] - R, p[2] - R], [p[0] + R, p[1] + R, p[2] + R], cand);
-    for (const t of cand) {
-      const q = closestOnTri(p, vtx(P, T[3 * t]), vtx(P, T[3 * t + 1]), vtx(P, T[3 * t + 2])), d = Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]);
-      if (d <= R && (!best || d < best.d)) best = { d, q };
+export function nearestOnMesh(m, p, r = Infinity) {
+  // BVH 를 가까운 상자부터 내려가며 찾음(2026-11-15). 전에는 상자를 1 mm 에서 2배씩 키워 가며 그 안 삼각형을 전부 봤는데,
+  // 촘촘한 큰 부품(타공 그릴 20만 삼각형)의 표면에서 먼 점이면 마지막 상자에 삼각형이 수만 개 들어와 LED 하나 간섭 검사에 0.16초(72개 × 후보 수 = 화면 멈춤)
+  const P = m.positions, T = m.triangles, { box, meta, order } = bvhOf(m);
+  if (!order.length) return null;
+  const bd0 = (n) => { const b = n * 6; return Math.hypot(Math.max(box[b] - p[0], 0, p[0] - box[b + 3]), Math.max(box[b + 1] - p[1], 0, p[1] - box[b + 4]), Math.max(box[b + 2] - p[2], 0, p[2] - box[b + 5])); };
+  let R = r, q0 = null;
+  const stack = [0], dist = [bd0(0)];
+  while (stack.length) {
+    const n = stack.pop(), dn = dist.pop();
+    if (dn > R) continue;
+    const cnt = meta[n * 2 + 1];
+    if (cnt) {
+      for (let i = meta[n * 2], e = i + cnt; i < e; i++) {
+        const t = order[i], q = closestOnTri(p, vtx(P, T[3 * t]), vtx(P, T[3 * t + 1]), vtx(P, T[3 * t + 2])), d = Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]);
+        if (d <= R && (!q0 || d < R)) { R = d; q0 = q; }
+      }
+    } else {
+      const a = n + 1, b = meta[n * 2], da = bd0(a), db = bd0(b);
+      if (da < db) { stack.push(b, a); dist.push(db, da); } else { stack.push(a, b); dist.push(da, db); }   // 가까운 쪽을 먼저 꺼냄
     }
-    if (best || Number.isFinite(r)) return best;
-    R *= 2;
   }
-  return best;
+  return q0 ? { d: R, q: q0 } : null;
 }
 
 // 두 메쉬의 최소 간격(≤ maxDist 일 때만) — { gap, pa, pb } | null
@@ -125,17 +165,27 @@ export function meshGap(A, B, maxDist = 20) {
 export function meshPenetration(A, B, tol = TOL, stopAt = Infinity) {
   const ba = boxOf(A), bb = boxOf(B);
   if (boxBoxDist(ba, bb) > 0) return null;
+  // 지름길(2026-11-15): 한쪽 표면이 상대 상자 근처를 지나지 않으면 상대는 통째로 그 안이거나 밖 — 밖이면 겹침 없음(점 하나로 판정).
+  // 큰 케이스 상자 안에 든 LED 처럼 '상자는 겹치지만 표면은 먼' 쌍이 대부분이라, LED 표본 천여 개를 부품마다 하나씩 재던 시간(LED 하나 44 ms)을 없앰
+  for (const [X, Y, bx] of [[A, B, ba], [B, A, bb]]) {
+    if (!X.positions.length || trisNear(Y, bx, INSET * 2).length) continue;
+    if (!insidePart(solid(Y), [X.positions[0], X.positions[1], X.positions[2]])) return null;
+  }
   let out = null;
   const cand = [];
   for (const [X, Y] of [[A, B], [B, A]]) {
-    const s = innerSamplesOf(X), by = boxOf(Y), Ys = solid(Y);
-    for (let i = 0; i < s.length; i += 3) {
-      const p = [s[i], s[i + 1], s[i + 2]];
-      if (boxDist(by, p) > 0) continue;
+    const by = boxOf(Y), Ys = solid(Y);
+    const visit = (x, y, z) => {
+      const p = [x, y, z];
+      if (boxDist(by, p) > 0) return false;
       const h = nearestOnMesh(Y, p, Infinity, cand);
-      if (!h || h.d <= Math.max(tol, out?.depth ?? 0)) continue;   // 표면 근처(접촉면)·이미 더 깊은 것 있음
-      if (insidePart(Ys, p)) { out = { depth: h.d, pos: p }; if (h.d > stopAt) return out; }
-    }
+      if (!h || h.d <= Math.max(tol, out?.depth ?? 0)) return false;   // 표면 근처(접촉면)·이미 더 깊은 것 있음
+      if (insidePart(Ys, p)) { out = { depth: h.d, pos: p }; if (h.d > stopAt) return true; }
+      return false;
+    };
+    if (isBig(X)) { if (eachLocalInner(X, by, visit)) return out; continue; }
+    const s = innerSamplesOf(X);
+    for (let i = 0; i < s.length; i += 3) if (visit(s[i], s[i + 1], s[i + 2])) return out;
   }
   return out;
 }
@@ -259,18 +309,25 @@ function moveSamplesOf(m) {
   let s = MOVE.get(m);
   if (s) return s;
   const P = m.positions, T = m.triangles, sd = insetSides(m), pts = [];
-  for (let t = 0; t < sd.length; t++) {
-    if (!sd[t]) continue;
-    const { c, n } = triCN(P, T, t), q = c.map((v, k) => v - sd[t] * INSET * n[k]);
-    pts.push(...q);
-    for (let j = 0; j < 3; j++) {
-      const v = vtx(P, T[3 * t + j]), w = [c[0] - v[0], c[1] - v[1], c[2] - v[2]], l = Math.hypot(...w) || 1;
-      for (let k = 0; k < 3; k++) pts.push(v[k] - sd[t] * INSET * n[k] + (Math.min(INSET, l / 2) * w[k]) / l);
-    }
-  }
+  for (let t = 0; t < sd.length; t++) if (sd[t]) movePts(P, T, t, sd[t], pts);
   s = Float64Array.from(pts);
   MOVE.set(m, s);
   return s;
+}
+// 삼각형 t 의 이동 표본 4점(안쪽으로 들인 중심 + 들인 세 꼭짓점)을 pts 에 덧붙임
+function movePts(P, T, t, sd, pts) {
+  const { c, n } = triCN(P, T, t);
+  pts.push(c[0] - sd * INSET * n[0], c[1] - sd * INSET * n[1], c[2] - sd * INSET * n[2]);
+  for (let j = 0; j < 3; j++) {
+    const v = vtx(P, T[3 * t + j]), w = [c[0] - v[0], c[1] - v[1], c[2] - v[2]], l = Math.hypot(...w) || 1;
+    for (let k = 0; k < 3; k++) pts.push(v[k] - sd * INSET * n[k] + (Math.min(INSET, l / 2) * w[k]) / l);
+  }
+}
+// 큰 장애물: 움직이는 부품이 쓸고 가는 상자 근처 삼각형의 표본만(밖의 표본에서 쏜 광선은 maxD 안에 닿을 수 없음)
+function moveSamplesNear(m, sweep) {
+  const pts = [];
+  for (const t of trisNear(m, sweep, INSET * 2)) { const sd = sideOf(m, t); if (sd) movePts(m.positions, m.triangles, t, sd, pts); }
+  return pts;
 }
 // mov 를 방향 d(단위)로 옮길 때 처음 닿는 거리(≤ maxD) — 양방향 광선: mov 표본 → 장애물, 장애물 표본 → mov(−d), 발광점 → mov(−d)
 export function travelDistance(mov, obstacles, d, maxD, emitters = []) {
@@ -280,7 +337,7 @@ export function travelDistance(mov, obstacles, d, maxD, emitters = []) {
   const ms = moveSamplesOf(mov);
   for (const o of obstacles) {
     if (!o || boxBoxDist(sweep, boxOf(o)) > 0) continue;
-    const Os = solid(o), os = moveSamplesOf(o);
+    const Os = solid(o), os = isBig(o) ? moveSamplesNear(o, sweep) : moveSamplesOf(o);
     for (let i = 0; i < ms.length; i += 3) { const h = intersectRay(Os.bvh, ms[i], ms[i + 1], ms[i + 2], d[0], d[1], d[2], 1e-6, best); if (h && h.t < best) best = h.t; }
     for (let i = 0; i < os.length; i += 3) { const h = intersectRay(Ms.bvh, os[i], os[i + 1], os[i + 2], -d[0], -d[1], -d[2], 1e-6, best); if (h && h.t < best) best = h.t; }
   }

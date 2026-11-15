@@ -114,4 +114,15 @@ const fakePorts = (log, delay = 0) => Array.from({ length: 3 }, (_, w) => ({ sen
   const r = await pr; ok(r.photons === 20000 && log.filter((x) => x.endsWith('chunk')).length === 2, '풀면 이어서 끝남');
   const R2 = createAdRunner({ ports: fakePorts([]) }); R2.pause(); const p2 = R2.trace(job, { N: 20000, chunkN: 10000, batches: 2 }); await new Promise((r2) => setTimeout(r2, 10)); R2.cancel();
   let msg = ''; try { await p2; } catch (e) { msg = e.message; } ok(/중지/.test(msg), '멈춘 채 중지 가능'); }
+{   // GPU 포트는 한 묶음이 클수록 빠름(묶음마다 고정 비용 ~0.7초 실측, 2026-11-15) — 시간 제한 추적에서 GPU 묶음 목표 시간 = CPU 의 4배
+  const sizes = { cpu: [], gpu: [] };
+  const port = (gpu) => ({ gpu, send: async (m) => {
+    if (m.type === 'scene') return { sceneKey: m.sceneKey, ready: true };
+    sizes[gpu ? 'gpu' : 'cpu'].push(m.N);
+    return { sceneKey: m.sceneKey, acc: new Float64Array(nCell), cnt: new Uint32Array(nCell), ledger: { emitted: m.N, escaped: 0, absSurf: 0, absVol: 0, lost: 0, rrLoss: 0, rrGain: 0 }, leak: {}, escObs: 0, ms: m.N / 2, ...(gpu ? { gpu: true } : {}) };   // 둘 다 광자 2개/ms
+  } });
+  let t = 0; const R = createAdRunner({ ports: [port(false), port(true)], now: () => (t += 1) });
+  await R.trace({ sceneKey: 'g', scene: { G: { ns: 2, nw: 2 } } }, { N: 60000, maxMs: 1e9, chunkN: 1e6, chunkMs: 500, batches: 2 });
+  ok(Math.max(...sizes.cpu.slice(1)) === 1000 && Math.max(...sizes.gpu.slice(1)) === 4000, `같은 속도면 GPU 묶음이 4배 (CPU ${Math.max(...sizes.cpu.slice(1))} · GPU ${Math.max(...sizes.gpu.slice(1))})`);
+}
 done();

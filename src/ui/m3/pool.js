@@ -13,11 +13,17 @@ export const SCENE_BUDGET = 4e9, SCENE_BYTES_PER_TRI = 300;
 export const sceneWorkerLimit = (tris, size) => Math.max(1, Math.min(size, Math.floor(SCENE_BUDGET / (SCENE_BYTES_PER_TRI * Math.max(1, tris)))));
 const sceneTris = (m) => [...(m.mechParts ?? []), ...(m.ledParts ?? [])].reduce((n, p) => n + (p.triangles?.length ?? 0) / 3, 0);
 
+// 기구 메쉬는 Worker 에 한 번만 보냄(2026-11-15) — 최적화 후보마다 173만 삼각형(수십 MB)을 Worker 마다 복사해 화면이 멈추고 메모리가 치솟았음.
+// held = 그 Worker 가 든 부품 배열(마지막으로 보낸 mechParts). 같은 배열(positions·triangles·faceIds)인 부품은 null 로 보내고 Worker(chunk-host)가 든 것으로 채움
+export function slimScene(held, msg) {
+  if (!held || !msg.mechParts) return msg;
+  return { ...msg, mechParts: msg.mechParts.map((p, i) => { const h = held[i]; return h && h.positions === p.positions && h.triangles === p.triangles && h.faceIds === p.faceIds ? null : p; }) };
+}
 export function createPool({ dbLists, l2Raw = () => null, onStatus = () => {}, onGpu = () => {} }) {
   const pending = new Map(), pool = [];
   let gpu = null;
   let reqId = 0, loadFails = 0;   // 모듈 로드 실패로 다시 띄운 횟수(무한 반복 방지)
-  const lastScene = [], loaded = [];   // 포트별 마지막 장면 메시지(새로 띄운 Worker 에 다시 보냄) · Worker 에 실제로 올라간 장면 번호
+  const lastScene = [], loaded = [], held = [];   // held[k] = Worker k 가 든 기구 부품(slimScene)   // 포트별 마지막 장면 메시지(새로 띄운 Worker 에 다시 보냄) · Worker 에 실제로 올라간 장면 번호
   let limit = Infinity;   // 큰 도면이면 장면을 드는 Worker 수 제한(sceneWorkerLimit)
   function onMessage(e) {
     const d = e.data;
@@ -29,7 +35,7 @@ export function createPool({ dbLists, l2Raw = () => null, onStatus = () => {}, o
   function drop(w, msg) {
     w.terminate();
     const k = pool.indexOf(w); if (k >= 0) pool.splice(k, 1);
-    loaded.length = 0;   // 번호가 밀림 — 다음 청크 때 장면부터 다시
+    loaded.length = 0; held.length = 0;   // 번호가 밀림 — 다음 청크 때 장면부터 다시
     for (const [id, p] of pending) if (p.w === w) { pending.delete(id); clearTimeout(p.timer); p.rej(new Error(msg)); }
   }
   function killAll(msg) { for (const w of pool.slice()) drop(w, msg); }
@@ -40,7 +46,7 @@ export function createPool({ dbLists, l2Raw = () => null, onStatus = () => {}, o
     w.onerror = (e) => {
       const k2 = pool.indexOf(w);
       if (!e.message && k2 >= 0 && ++loadFails <= 6) {
-        w.terminate(); pool[k2] = spawn(k2); loaded[k2] = null;
+        w.terminate(); pool[k2] = spawn(k2); loaded[k2] = null; held[k2] = null;
         for (const [id, p] of pending) if (p.w === w) { pending.delete(id); clearTimeout(p.timer); p.rej(Object.assign(new Error('계산 Worker 다시 띄움(파일 받기 실패)'), { retry: true })); }
         return;
       }
@@ -56,6 +62,16 @@ export function createPool({ dbLists, l2Raw = () => null, onStatus = () => {}, o
     pending.set(id, { res, rej, w, timer });
     w.postMessage({ ...msg, id });
   });
+  // 장면 보내기 — 든 부품은 빼고 보냄. Worker 가 든 것이 없다고 하면(needMech, 그때 Worker 는 든 것을 비움) 전부 다시. 실패하면 든 것을 모르는 것으로
+  const sceneCall = async (k, msg) => {
+    try {
+      const slim = slimScene(held[k], msg);
+      held[k] = msg.mechParts ?? null;   // 보내는 순간 갱신 — 메시지는 순서대로 가므로 겹쳐 보낸 다음 장면도 이 기준으로 뺌
+      let r = await call(worker(k), slim);
+      if (r.needMech) { held[k] = msg.mechParts ?? null; r = await call(worker(k), msg); }
+      return r;
+    } catch (e) { held[k] = null; throw e; }
+  };
   const size = () => Math.max(1, Math.min(15, (navigator.hardwareConcurrency ?? 4) - 1));   // 메인 스레드(화면) 몫으로 코어 1개 남김 — 12개로 줄이면 ±5% 가 10초 목표를 넘음(실측 14.8초)
   // GPU 를 쓰면 CPU Worker 는 (논리 코어/2 − 2)개만 — 실측(16스레드·Intel Gen-9): CPU 14개 7.6만/s, GPU+CPU 6개 14만/s, GPU+CPU 14개 8.2만/s
   // (CPU 가 많으면 GPU 를 먹이는 Worker·전력 몫이 모자람). off() = 이 포트는 쉼(계산 루프가 다음 청크를 보내지 않음)
@@ -68,16 +84,16 @@ export function createPool({ dbLists, l2Raw = () => null, onStatus = () => {}, o
       lastScene[k] = msg;
       limit = sceneWorkerLimit(sceneTris(msg), size());
       if (isOff(k)) {
-        if (loaded[k]) { loaded[k] = null; call(worker(k), { type: 'drop' }).catch(() => {}); }   // 옛 장면도 내려놓음
+        if (loaded[k]) { loaded[k] = null; held[k] = null; call(worker(k), { type: 'drop' }).catch(() => {}); }   // 옛 장면도 내려놓음
         return { sceneKey: msg.sceneKey, ready: true, skipped: true };
       }
-    } else if (msg.type !== 'drop' && lastScene[k]?.sceneKey === msg.sceneKey && loaded[k] !== msg.sceneKey) await call(worker(k), lastScene[k]).then(() => { loaded[k] = msg.sceneKey; });
+    } else if (msg.type !== 'drop' && lastScene[k]?.sceneKey === msg.sceneKey && loaded[k] !== msg.sceneKey) await sceneCall(k, lastScene[k]).then(() => { loaded[k] = msg.sceneKey; });
     for (let n = 0; ; n++) {
-      try { const r = await call(worker(k), msg); if (msg.type === 'scene' && !r.error) loaded[k] = msg.sceneKey; return r; } catch (e) {
+      try { const r = await (msg.type === 'scene' ? sceneCall(k, msg) : call(worker(k), msg)); if (msg.type === 'scene' && !r.error) loaded[k] = msg.sceneKey; return r; } catch (e) {
         if (!e.retry || n >= 3) throw e;
         await new Promise((r) => setTimeout(r, 300 * (n + 1)));
         loaded[k] = null;
-        if (msg.type !== 'scene' && lastScene[k]) { await call(worker(k), lastScene[k]); loaded[k] = lastScene[k].sceneKey; }
+        if (msg.type !== 'scene' && lastScene[k]) { await sceneCall(k, lastScene[k]); loaded[k] = lastScene[k].sceneKey; }
       }
     }
   };

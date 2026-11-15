@@ -5,7 +5,7 @@ import { transformMesh } from './xform.js';
 import { pcbPlaneMesh } from './placement.js';
 import { defaultPart, setPartFinish } from './materials.js';
 import { LED_BODY_FINISH } from './defs.js';
-import { runMC3D } from './mc3d.js';
+import { runMC3D, coinFlags } from './mc3d.js';
 import { ledSource, combineSources } from './sources.js';
 import { makeAccumulator } from './tally.js';
 import { rng } from '../l2/mc-slab.js';
@@ -32,6 +32,7 @@ export function composeScene({ rt, mspec, ledParts, table, db, line, prev = null
   const rt2 = extraMeshes.length ? buildTraceMesh('job', [...rt.parts, ...extraMeshes], prev?.mesh) : rt.combined ? rt : buildTraceMesh('job', rt.parts, prev?.mesh);
   const S = buildTraceScene(rt2, { ...mspec, parts: [...mspec.parts, ...extraSpecs] }, { table, db });
   S.mesh = rt2;
+  if (prev) coinFlags(S, prev);   // 맞붙은 면 표시 — 앞 장면 것을 이어받아 바뀐 근처만 다시(첫 청크 때 처음부터 계산하지 않게)
   return S;
 }
 

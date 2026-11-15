@@ -112,4 +112,20 @@ const same = (a, b) => a.length === b.length && a.every((v, k) => v === b[k]);
   const h2 = makeChunkHost({ getTable: () => table, getDb: () => null });
   ok(h2.handle({ type: 'interactive', on: true })?.reply == null, 'GPU 없어도 interactive 무시(오류 없음)');
 }
+{   // 기구 메쉬는 한 번만 보냄(2026-11-15, 후보마다 173만 삼각형을 Worker 마다 복사 → 화면 멈춤): 같은 부품 = null, Worker 가 든 것으로 채움
+  const { slimScene } = await import('../src/ui/m3/pool.js');
+  const P = fx.plate, Q = { ...P, positions: Float32Array.from(P.positions) };
+  const m1 = { type: 'scene', sceneKey: 'a', mechParts: [P, Q] }, m2 = { type: 'scene', sceneKey: 'b', mechParts: [{ ...P }, { ...Q, positions: Float32Array.from(Q.positions) }] };
+  ok(slimScene(null, m1) === m1, '처음 = 전부 보냄');
+  const s2 = slimScene(m1.mechParts, m2);
+  ok(s2.mechParts[0] === null && s2.mechParts[1] === m2.mechParts[1] && m2.mechParts[0] !== null, '같은 배열의 부품만 뺌(원본 메시지는 그대로)');
+  const host = makeChunkHost({ getTable: () => table, getDb: () => null });
+  const sc = (k, mp) => host.handle({ type: 'scene', sceneKey: k, mechParts: mp, mspec: fx.mspec, ledParts: null, lineData: lightData(fx.line), G: fx.G, obs: fx.obs, emitters: fx.emitters }).reply;
+  ok(sc('n0', [null]).needMech === true, '든 것이 없는데 빈 부품 → needMech(전부 다시 보내라)');
+  ok(sc('n1', [fx.plate]).ready && sc('n2', [null]).ready, '보낸 뒤에는 빈 부품을 든 것으로 채움');
+  const a = host.handle({ type: 'chunk', sceneKey: 'n2', N: 2000, seed: 3 * 7919 }).reply;
+  ok(same(a.acc, J.accs[0]), '채운 장면의 결과 = 전부 보낸 장면과 같음');
+  host.handle({ type: 'drop' });
+  ok(sc('n3', [null]).needMech === true, 'drop 뒤에는 든 것이 없음');
+}
 done();
