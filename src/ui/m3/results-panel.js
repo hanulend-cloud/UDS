@@ -1,7 +1,7 @@
 import { shapeLayout } from './map-shape.js';
 import { requiredFlux, fmtProg, needText, needShort } from './progressive.js';
 import { mountSplit, mountHeightHandle } from './pane-split.js';
-import { clampRect, fitRect, winTop, dragBy, raiseWin, mountResizers, COLLAPSED_W, maxRect, DEF_RECT, flyWin } from './monitor.js';
+import { clampRect, fitRect, winTop, dragBy, raiseWin, mountResizers, COLLAPSED_W, maxRect, DEF_RECT, flyWin, collapsedRect } from './monitor.js';
 import { simPct } from './opt-dash.js';
 import { simCtl, setCtl, setStepMark, iconLabel } from './run-ctl.js';
 import { showCtxMenu } from './feature-tree.js';
@@ -742,11 +742,13 @@ export function createResultsPanel(el, { anchor = () => null, onOpt = null, onQu
     (el.closest('#mech3d-wrap') ?? document.body).appendChild(ov);   // 설계 화면에 붙임(화면을 바꾸면 함께 숨음)
     const cvs = Object.fromEntries(KINDS.map((k) => [k, ov.querySelector(`[data-big-cv="${k}"]`)]));
     const place = () => {
-      const m = big.min, X = big.max && !m, r = X ? maxRect(innerWidth, innerHeight, winTop()) : clampRect(m ? { ...rect, w: BIG_MIN_W } : rect, innerWidth, innerHeight, winTop());   // X = 크게(상단 바 아래 화면 전체) — 원래 크기(rect)는 그대로 둠
+      const m = big.min, X = big.max && !m; if (m) ov.style.width = 'max-content';
+      const r = X ? maxRect(innerWidth, innerHeight, winTop()) : m ? collapsedRect(rect, ov.offsetWidth, innerWidth, innerHeight, winTop()) : clampRect(rect, innerWidth, innerHeight, winTop());   // 접은 창 = 실제 폭으로 끝까지(2026-11-16)   // X = 크게(상단 바 아래 화면 전체) — 원래 크기(rect)는 그대로 둠
       if (!X) { rect.x = r.x; rect.y = r.y; if (!m) { rect.w = r.w; rect.h = r.h; } }
       Object.assign(ov.style, { left: `${r.x}px`, top: `${r.y}px`, width: m ? 'max-content' : `${r.w}px`, height: m ? 'auto' : `${r.h}px` });
     };
     const setMin = (v) => {
+      if (!v) Object.assign(rect, fitRect(rect, innerWidth, innerHeight, winTop()));   // 펼칠 때 창 전체가 보이게(2026-11-16)
       big.min = v; ov.classList.toggle('min', v); updMax();
       const b = ov.querySelector('[data-big-min]'); iconLabel(b, v ? '▾' : '▴', v ? '펼치기' : '접기', v ? '2D·1D 그림 보기' : '제목 줄만 남기기');
       place(); if (!v) paintBig();

@@ -1275,3 +1275,14 @@ done();
   say(g.length === 2 && g[0].transform === 'none' && g[1].transform === f[0]?.transform, '닫기 = 거꾸로(창 → 칩)');
   say(typeof flyFrames === 'function' && flyFrames(w, null, false) === null, '칩이 없으면 애니메이션 없음');
 }
+{ // 2026-11-16 사용자: 접은 창이 화면 끝까지 못 감 — 실제 폭(약 545px) 대신 720px 로 제한했음
+  const { clampRect, collapsedRect } = await import('../src/ui/m3/monitor.js');
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const r = collapsedRect?.({ x: 5000, y: 5000, w: 1040, h: 680 }, 545, 1024, 768, 126);
+  say(r?.x === 1024 - 545 - 8 && r?.y === 768 - 40, `접은 창 = 실제 폭으로 오른쪽·아래 끝까지 (${JSON.stringify(r)})`);
+  const s = collapsedRect?.({ x: 5000, y: 10, w: 1040, h: 680 }, 200, 1024, 768, 126);
+  say(s?.x === 1024 - 200 - 8 && s?.y === 126, '좁은 접은 창도(최소 폭 제한 없음) · 위는 상단 막대 아래');
+  const t = collapsedRect?.({ x: 5000, y: 300, w: 1040, h: 680 }, 0, 1024, 768, 126);
+  say(t?.x === 1024 - 720 - 8, '폭을 못 재면(0) 예전 폭 720 으로');
+  say(clampRect({ x: 5000, y: 300, w: 1040, h: 680 }, 1024, 768, 126).w === 1008, '펼친 창 제한은 그대로');
+}

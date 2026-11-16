@@ -33,6 +33,12 @@ export function clampRect(r, vw, vh, top = 8) {
   const x0 = r.x == null ? vw - w - 16 : r.x;
   return { x: Math.round(Math.max(8, Math.min(x0, vw - w - 8))), y: Math.round(Math.max(top, Math.min(r.y ?? DEF_RECT.y, vh - 40))), w, h };
 }
+// 접은 창 위치(순수) — w = 접은 창의 실제 폭(max-content, 화면에서 잼). 못 재면 COLLAPSED_W. 머리 줄만 보이므로 아래는 vh − 40 까지
+// (2026-11-16 사용자: 접은 창이 화면 끝까지 못 감 — 실제 폭 ~545px 대신 720px 로 제한했음)
+export function collapsedRect(r, w, vw, vh, top = 8) {
+  const W = w > 0 ? w : COLLAPSED_W, x0 = r.x == null ? vw - W - 16 : r.x;
+  return { x: Math.round(Math.max(8, Math.min(x0, vw - W - 8))), y: Math.round(Math.max(top, Math.min(r.y ?? DEF_RECT.y, vh - 40))) };
+}
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) ?? {}; } catch { return {}; } };
 const save = (s) => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch {} };
 
@@ -63,7 +69,7 @@ export function flyWin(el, anchor, closing, done = () => {}) {
   const a = el.animate(f, { duration: FLY_MS, easing: closing ? 'ease-in' : 'cubic-bezier(.2,.8,.2,1)' });
   el.style.transformOrigin = '0 0';
   let fin = false; const end = () => { if (fin) return; fin = true; el.style.transformOrigin = ''; done(); };
-  a.onfinish = a.oncancel = end; setTimeout(end, FLY_MS + 150);   // 화면이 숨겨져 애니메이션이 멈춰도 닫기는 끝냄
+  a.onfinish = a.oncancel = end; setTimeout(() => { try { a.cancel(); } catch {} end(); }, FLY_MS + 150);   // 화면이 숨겨져 애니메이션이 멈춰도 제자리에서 끝냄(창이 칩 쪽에 걸려 남지 않게)
 }
 // 떠 있는 창이 겹칠 때 — 누른 창을 앞으로(기구 최적화 창 ↔ 광량 분포 창)
 export function raiseWin(el) { document.querySelectorAll('.m3-mon, .m3-big-in').forEach((w) => { w.style.zIndex = w === el ? '61' : '60'; }); }
@@ -94,7 +100,8 @@ export function createMonitor({ host, items, onChange = () => {}, onTab = () => 
   st.max = !!sv.max && !old;
   const persist = () => save({ lay: LAY, open: st.open, min: st.min, max: st.max, x: st.x, y: st.y, w: st.w, h: st.h });
   const el = document.createElement('div');
-  const place = () => { const r = st.max && !st.min ? maxRect(innerWidth, innerHeight, winTop()) : clampRect(st.min ? { ...st, w: COLLAPSED_W } : st, innerWidth, innerHeight, winTop()); st.x = r.x; st.y = r.y; if (!st.min) { st.w = r.w; st.h = r.h; } el.style.left = `${r.x}px`; el.style.top = `${r.y}px`; el.style.width = st.min ? 'max-content' : `${r.w}px`; el.style.height = st.min ? 'auto' : `${r.h}px`; };
+  // 접은 창 = 실제 폭으로 끝까지(collapsedRect)
+  const place = () => { if (st.min) el.style.width = 'max-content'; const r = st.max && !st.min ? maxRect(innerWidth, innerHeight, winTop()) : st.min ? collapsedRect(st, el.offsetWidth, innerWidth, innerHeight, winTop()) : clampRect(st, innerWidth, innerHeight, winTop()); st.x = r.x; st.y = r.y; if (!st.min) { st.w = r.w; st.h = r.h; } el.style.left = `${r.x}px`; el.style.top = `${r.y}px`; el.style.width = st.min ? 'max-content' : `${r.w}px`; el.style.height = st.min ? 'auto' : `${r.h}px`; };
   const kick = () => window.dispatchEvent(new Event('resize'));   // 담은 칸의 그래프·캔버스 크기 다시
   el.className = 'm3-mon'; el.hidden = true; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', '기구 최적화');
   el.innerHTML = `<div class="m3-mon-hd" title="끌어서 옮기기 · ④ 광분포 결과가 목표 미달이면 여기서 후보를 찾아 최종 판정 → [적용]"><b><i class="m3-fl" data-mon-step>5</i><span class="m3-tx">기구 최적화</span><span class="m3-tx-s">최적화</span></b><span class="m3-mon-steps" data-mon-steps aria-live="polite"></span><span class="m3-mon-sum" data-mon-sum></span><span class="m3-mon-sp"></span><span class="m3-ctl" data-mon-ctl></span><button type="button" data-mon-max></button><button type="button" data-mon-min></button><button type="button" data-mon-close title="창 닫기(진행 중인 최적화는 계속)" aria-label="닫기">✕<span class="m3-tx"> 닫기</span></button></div><div class="m3-mon-body"></div>`;
@@ -128,6 +135,7 @@ export function createMonitor({ host, items, onChange = () => {}, onTab = () => 
   }
   function setMin(v) {
     v = !!v;   // 저장값에 min 이 없으면 undefined → classList.toggle 이 뒤집기로 동작해 몸통은 숨고 단추는 '접기'로 남았음(펼칠 방법 없음, 2026-11-08)
+    if (!v) Object.assign(st, fitRect(st, innerWidth, innerHeight, winTop()));   // 펼칠 때 창 전체가 보이게(아래 끝에 둔 접은 창, 2026-11-16)
     st.min = v; persist();
     el.classList.toggle('min', v);
     const b = el.querySelector('[data-mon-min]'); iconLabel(b, v ? '▾' : '▴', v ? '펼치기' : '접기', v ? '모든 칸 보기' : '제목과 현재 결과만 남기기');
