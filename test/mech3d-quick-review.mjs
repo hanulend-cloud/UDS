@@ -99,4 +99,12 @@ const near = (a, b, e = 0.005) => Math.abs(a - b) < e;
   const h = histTableHtml([{ label: 'B', Ulen: 0.832, Uwid: 0.9, eff: 0.5, kind: 'alt', quick: true, chance: 0.95, se: 0.061 }, { label: 'C', Ulen: 0.85, Uwid: 0.9, eff: 0.5, kind: 'alt', quick: true, chance: 0.97, se: 0.021 }], 0.8, 0.6, false);
   ok(/참고용 95%/.test(h) && /om-q-ref/.test(h) && /유력 97%/.test(h) && !/유력 95%/.test(h), '표: 오차가 큰 후보는 참고용');
 }
+{ // 2026-11-16 사용자: Milky 3 이상에서 후보 값 흔들림 줄이기 — 높은 Milky 창은 오차가 ±5%p 에 닿을 때까지(창당 30초 상한) 더 계산
+  const { milkyTraceOpts, MILKY_STEADY_FROM, MILKY_STEADY_SE, MILKY_STEADY_MS } = await import('../src/engine/mech3d/milky-search.js');
+  ok(MILKY_STEADY_FROM === 3 && MILKY_STEADY_SE === 0.05 && MILKY_STEADY_MS === 30000, 'Milky 3 이상 · ±5%p · 30초');
+  const lo = milkyTraceOpts(2.5), loP = milkyTraceOpts(2.5, { precise: true });
+  ok(lo.maxMs === 2000 && lo.N === 1.5e6 && lo.minN === 1e5 && !lo.steady && loP.maxMs === 6000 && loP.N === 3e6 && !loP.steady, 'Milky 3 미만 창은 그대로');
+  const hi = milkyTraceOpts(3), hiP = milkyTraceOpts(4.5, { precise: true }), h6 = milkyTraceOpts(6);
+  ok(hi.steady && hi.maxMs === 30000 && hi.minN === 1e5 && hiP.steady && hiP.maxMs === 30000 && hiP.N === 3e6 && h6.steady && h6.minN === 5e4, 'Milky 3 이상 창 = 오차 기준까지(30초 상한)');
+}
 done();

@@ -2,6 +2,14 @@
 import { tallyStats, windowProfile, fmtJudge, fmtTg } from './tally.js';
 import { ESS_MIN } from './reweight.js';
 
+// Milky 창 하나의 계산량. 기준(창 가운데)이 3 이상이면 광자당 계산이 느려 같은 시간에 광자가 적음 → 후보 값이 ±10%p 넘게 흔들림
+// (실측 모니터 링 Milky 3.5: 광자 10만 ±14%p · 87만 ±3%p). steady = 오차가 MILKY_STEADY_SE 에 닿을 때까지(창당 MILKY_STEADY_MS 상한) 더 계산(2026-11-16 사용자)
+export const MILKY_STEADY_FROM = 3, MILKY_STEADY_SE = 0.05, MILKY_STEADY_MS = 30000;
+export function milkyTraceOpts(centre, { precise = false } = {}) {
+  const o = precise ? { N: 3e6, maxMs: 6000 } : { N: 1.5e6, maxMs: 2000, minN: centre >= 6 ? 5e4 : 1e5 };   // 높은 Milky 는 광자당 매우 느림 — 탐색 창은 최소 광자를 낮춤
+  return centre >= MILKY_STEADY_FROM - 1e-9 ? { ...o, maxMs: MILKY_STEADY_MS, steady: true } : { ...o, steady: false };
+}
+
 // 목표 여유: min(U길이 − 목표, U폭 − 목표). 폭 판정이 없으면(좁은 라인) 길이만
 export const margin = (st, obs) => Math.min(st.Ulen - obs.targetLen, st.Uwid == null || obs.targetWid == null ? Infinity : st.Uwid - obs.targetWid);
 
