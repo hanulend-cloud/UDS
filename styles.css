@@ -489,7 +489,7 @@ canvas.m3-g { width: 100%; display: block; border-radius: 4px; background: #fafb
 #mech3d-wrap[data-theme="dark"] .m3-badge.k-milky { background: #2b3a4a; } #mech3d-wrap[data-theme="dark"] .m3-badge.k-clear { background: #183a5c; color: #a9d2ff; }
 #mech3d-wrap[data-theme="dark"] .m3-badge.k-led { background: #4a3c14; color: #f3d98a; }
 #mech3d-wrap[data-theme="dark"] .m3-m { background: #1f2736; }
-#mech3d-wrap[data-theme="dark"] canvas.m3-g { background: #1b2230; }
+#mech3d-wrap[data-theme="dark"] canvas.m3-g, #mech3d-wrap[data-theme="dark"] .m3-big-cv { background: #1b2230; }   /* 큰 창 그림도(2026-11-16 사용자: 다크에서 흰 배경) */
 #mech3d-wrap[data-theme="dark"] .m3-gauge, #mech3d-wrap[data-theme="dark"] .m3-barw, #mech3d-wrap[data-theme="dark"] .m3-ad-prog .bar { background: #2c3546; }
 #mech3d-wrap[data-theme="dark"] .m3-gauge .tg { background: #e6ebf2; }
 #mech3d-wrap[data-theme="dark"] .m3-msg, #mech3d-wrap[data-theme="dark"] .m3-warn { background: #3a2f14; border-color: #5c4a1c; color: #f0cf85; }

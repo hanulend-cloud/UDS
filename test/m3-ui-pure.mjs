@@ -1234,3 +1234,8 @@ done();
   say(S.stopped === true && S.tm?.milky === 30000 && a === b, '실패 = 멈춤 — 시간이 더 올라가지 않음');
   say(/끝나지 못했습니다/.test(vis(a)) && /Worker 응답 없음 \(chunk 90초\)/.test(vis(a)) && !/중지했습니다/.test(vis(a)) && /실패/.test(vis(a)) && !/진행 0/.test(vis(a)) && /data-adset/.test(a), `실패 문구와 이유를 진행 화면에 표시: ${vis(a).replace(/\s+/g, ' ').slice(0, 120)}`);
 }
+{ // 2026-11-16 사용자: 다크 모드에서 큰 창 2D 광량 분포 배경이 흰색 — 그림 칸도 작은 칸처럼 어두운 배경
+  const css = (await import('fs')).readFileSync('styles.css', 'utf8');
+  const ok = /#mech3d-wrap\[data-theme="dark"\][^{]*\.m3-big-cv[^{]*\{[^}]*background:\s*#1b2230/.test(css);
+  console.log(`${ok ? 'PASS' : 'FAIL'} 다크 모드 큰 창 그림 배경 = #1b2230(작은 칸과 같음)`); if (!ok) process.exitCode = 1;
+}
