@@ -62,6 +62,17 @@ export function stallWatch(t0 = 0, { limit = STALL_MS } = {}) {
     return !hidden && gap >= limit && gap < SLEEP_MS ? Math.round(gap / 1000) : 0;
   };
 }
+// 멈춤 원인(순수, 2026-11-16) — 브라우저의 긴 프레임 기록(long-animation-frame)에서 가장 긴 프레임과 그 안에서 오래 걸린 스크립트(함수 · 파일:위치 · 부른 쪽).
+// 스크립트 합이 프레임보다 훨씬 짧으면 스크립트 밖(그리기 · GPU 대기)에서 멈춘 것. 다른 PC 에서만 나는 멈춤을 기록만 보고 찾으려는 것
+export function stallCause(frames) {
+  const F = (frames ?? []).filter((f) => f?.duration >= 1000);
+  if (!F.length) return '';
+  const f = F.reduce((a, b) => (b.duration > a.duration ? b : a)), sec = (ms) => `${(ms / 1000).toFixed(1)}초`, file = (u) => String(u ?? '').split('?')[0].split('/').pop() || '?';
+  const sc = [...(f.scripts ?? [])].filter((x) => x.duration >= 100).sort((a, b) => b.duration - a.duration).slice(0, 3), sum = (f.scripts ?? []).reduce((a, x) => a + (x.duration ?? 0), 0);
+  const parts = sc.map((x) => `${sec(x.duration)} ${x.sourceFunctionName || '(이름 없음)'} (${file(x.sourceURL)}:${x.sourceCharPosition ?? '?'})${x.invoker ? ` ← ${String(x.invoker).slice(0, 80)}` : ''}${x.forcedStyleAndLayoutDuration >= 500 ? ` · 배치 계산 ${sec(x.forcedStyleAndLayoutDuration)}` : ''}`);
+  if (f.duration - sum >= 1000) parts.push(`스크립트 밖 ${sec(f.duration - sum)}(그리기 · GPU 대기)`);
+  return `긴 프레임 ${sec(f.duration)}: ${parts.join(' / ') || '원인 기록 없음'}`;
+}
 // 지난 실행이 비정상 종료인가(순수) — 박동 기록이 '보이는 채 사용 중'인데 끊겼으면. 닫기·새로고침·탭 숨김은 clean. 다른 탭이 살아 있으면 박동이 새로움
 export function lastRunCrashed(raw, t) {
   let a = null; try { a = JSON.parse(raw); } catch { return null; }
@@ -116,10 +127,13 @@ export function installErrorLog({ context = () => '' } = {}) {
   console.error = (...a) => { ce(...a); const err = a.find((x) => x instanceof Error); if (err || String(a[0]).startsWith('[m3')) reportError('프로그램', a.map((x) => x?.message ?? x).join(' '), err?.stack); };
   const beat = (clean = false) => { try { let ctx = ''; try { ctx = context(); } catch { ctx = ''; } S?.setItem(ALIVE, JSON.stringify({ t: Date.now(), clean, ctx })); } catch { /* 저장 공간 부족 */ } };
   const watch = stallWatch(Date.now());
+  // 긴 프레임 기록 보관(최근 20개) — 멈춤 알림에 원인(함수·파일)을 붙임. 지원하지 않는 브라우저는 원인 없이 알림
+  const frames = [], keepFrame = (e) => { if (e.duration < 1000) return; frames.push({ startTime: e.startTime, duration: e.duration, scripts: (e.scripts ?? []).map((x) => ({ duration: x.duration, invoker: x.invoker, sourceFunctionName: x.sourceFunctionName, sourceURL: x.sourceURL, sourceCharPosition: x.sourceCharPosition, forcedStyleAndLayoutDuration: x.forcedStyleAndLayoutDuration })) }); if (frames.length > 20) frames.shift(); };
+  let po = null; try { po = new PerformanceObserver((l) => { for (const e of l.getEntries()) keepFrame(e); }); po.observe({ type: 'long-animation-frame', buffered: true }); } catch { po = null; }
   let n = 0;
   setInterval(() => {
     const sec = watch(Date.now(), hid());
-    if (sec) reportError('화면', `화면이 ${sec}초 동안 멈춤`);
+    if (sec) setTimeout(() => { for (const e of po?.takeRecords?.() ?? []) keepFrame(e); const t = performance.now(); reportError('화면', `화면이 ${sec}초 동안 멈춤`, stallCause(frames.filter((f) => f.startTime + f.duration >= t - sec * 1000 - 5000))); }, 600);   // 긴 프레임 기록은 조금 늦게 도착
     if (!hid() && (++n * 1000) % BEAT_MS === 0) beat();
   }, 1000);
   beat();

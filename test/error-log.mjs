@@ -1,5 +1,5 @@
 // 오류 기록: 설명 · 반복 묶기 · 남은 기록 · 화면 멈춤 · 비정상 종료: node test/error-log.mjs
-import { explainError, isNoise, createErrorLog, entryText, stallWatch, lastRunCrashed, STALL_MS } from '../src/ui/error-log.js';
+import { explainError, isNoise, createErrorLog, entryText, stallWatch, lastRunCrashed, STALL_MS, stallCause } from '../src/ui/error-log.js';
 let fail = 0;
 const ok = (c, m) => { console.log(`${c ? 'PASS' : 'FAIL'} ${m}`); if (!c) fail++; };
 const mem = (init = {}) => { const d = { ...init }; return { getItem: (k) => d[k] ?? null, setItem: (k, v) => { d[k] = v; } }; };
@@ -43,5 +43,15 @@ const mem = (init = {}) => { const d = { ...init }; return { getItem: (k) => d[k
   ok(lastRunCrashed(J({ t: 1000, clean: true }), 60000) === null, '정상 종료 아님 없음');
   ok(lastRunCrashed(J({ t: 59000, clean: false }), 60000) === null, '다른 탭이 살아 있음(박동 새로움) = 종료 아님');
   ok(lastRunCrashed(null, 60000) === null && lastRunCrashed('{깨짐', 60000) === null, '기록 없음·깨짐 = 없음');
+}
+{ // 멈춤 원인(2026-11-16) — 브라우저의 긴 프레임 기록에서 가장 오래 걸린 스크립트를 '위치' 로 남김
+  const fr = [{ startTime: 1000, duration: 900, scripts: [] }, { startTime: 5000, duration: 8200, renderStart: 13100, scripts: [
+    { duration: 7600, invoker: 'TimerHandler:setTimeout', sourceFunctionName: 'packProject', sourceURL: 'http://127.0.0.1:5180/src/main.js?v=3', sourceCharPosition: 4321, forcedStyleAndLayoutDuration: 0 },
+    { duration: 300, invoker: 'FrameRequestCallback', sourceFunctionName: 'draw', sourceURL: 'http://127.0.0.1:5180/src/ui/m3/viewer.js', sourceCharPosition: 77 }, { duration: 20, invoker: 'x', sourceFunctionName: 'tiny', sourceURL: 'a.js', sourceCharPosition: 1 }] }];
+  const c = stallCause(fr);
+  ok(/^긴 프레임 8\.2초/.test(c) && c.includes('7.6초 packProject (main.js:4321) ← TimerHandler:setTimeout') && c.includes('0.3초 draw (viewer.js:77)') && !c.includes('tiny') && !c.includes('127.0.0.1'), `멈춤 원인: ${c}`);
+  const g = stallCause([{ startTime: 0, duration: 9000, scripts: [{ duration: 400, invoker: 'FrameRequestCallback', sourceFunctionName: '', sourceURL: 'http://x/src/ui/m3/viewer.js', sourceCharPosition: 5 }] }]);
+  ok(g.includes('스크립트 밖 8.6초') && g.includes('(이름 없음) (viewer.js:5)'), `스크립트가 아니면 그리기·GPU 대기로 표시: ${g}`);
+  ok(stallCause([]) === '' && stallCause(null) === '' && stallCause([{ startTime: 0, duration: 300, scripts: [] }]) === '', '기록이 없거나 짧은 프레임뿐이면 빈 문구');
 }
 console.log(fail ? `${fail} FAIL` : 'all PASS'); if (fail) process.exit(1);
