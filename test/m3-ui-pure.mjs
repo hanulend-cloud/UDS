@@ -1286,3 +1286,16 @@ done();
   say(t?.x === 1024 - 720 - 8, '폭을 못 재면(0) 예전 폭 720 으로');
   say(clampRect({ x: 5000, y: 300, w: 1040, h: 680 }, 1024, 768, 126).w === 1008, '펼친 창 제한은 그대로');
 }
+{ // 2026-11-16 사용자: 광분포 시뮬레이션 창 상단 진행 현황 그래프는 빼고 2D 분포를 넓게 — 진행률 막대·광선 수 줄은 남김
+  const { simMiniHtml } = await import('../src/ui/m3/opt-dash.js');
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const h = simMiniHtml?.('42.3', '광선 189만') ?? '';
+  say(/42\.3%/.test(h) && /od-bar/.test(h) && /광선 189만/.test(h) && !/od-simplot|<svg/.test(h), `큰 창 진행 줄 = 막대·광선 수만, 그래프 없음 (${h.slice(0, 60)})`);
+  const src = (await import('fs')).readFileSync('src/ui/m3/opt-dash.js', 'utf8');
+  say(!/mini\.innerHTML = `[^`]*simPlotSvg/.test(src), '큰 창에 추이 그래프를 그리지 않음');
+}
+{ // 2026-11-16 사용자: 큰 창에서 2D 분포를 넓게 — 2D : 1D 줄 = 2 : 1 로 시작
+  const src = (await import('fs')).readFileSync('src/ui/m3/results-panel.js', 'utf8');
+  const ok = /mountSplit\(\[C\('map'\), ov\.querySelector\('\.m3-big-row'\)\], \{ key: 'uds\.m3\.bigV2', dir: 'col', min: 120, init: \[2, 1\]/.test(src);
+  console.log(`${ok ? 'PASS' : 'FAIL'} 큰 창 2D : 1D = 2 : 1 로 시작`); if (!ok) process.exitCode = 1;
+}

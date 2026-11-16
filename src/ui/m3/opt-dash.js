@@ -382,6 +382,8 @@ export const simTotal = (last, tgt) => (last ? Math.max(last.ph, Number.isFinite
 // 진행 그래프 2개(2026-11-04): ① 계산 오차가 목표까지 내려가는 모습(남은 양 = 점선 예상) ② 길이·폭 균일도와 목표선(세로 막대 = 값의 불확실 범위 ±2 표준오차)
 const niceStep = (span, want) => { const raw = span / want, p = 10 ** Math.floor(Math.log10(raw)); for (const m of [1, 2, 5, 10]) if (m * p >= raw) return m * p; return 10 * p; };   // results-panel 1D 와 같은 눈금 간격
 const lineOf = (pts) => pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+// 광분포 시뮬레이션 창 상단 진행 줄(순수) — 진행률 막대 + 광선 수. 추이 그래프는 넣지 않음(2026-11-16 사용자: 2D 를 넓게)
+export const simMiniHtml = (pct, row) => `<div class="od-pct"><b>${pct}%</b><div class="od-bar od-bar-big"><i style="width:${pct}%"></i></div><span class="od-simcap od-capr">${row}</span></div>`;
 export function simPlotSvg(H, tgt, obs, w, h) {
   if (!(H?.length > 1)) return '';
   const last = H[H.length - 1], total = Math.max(simTotal(last, tgt), last.ph), one = w < 280, cw = one ? w : Math.floor((w - 8) / 2), ch = Math.max(44, (one ? Math.floor(h / 2) : h) - 17);
@@ -481,9 +483,8 @@ export function createSimDash(el, { onCtl = null, bar = null } = {}) {
     const dg = el.querySelector('[data-s="diag"]'); if (dg) { dg.hidden = !diag; set('diag', diag?.html ?? ''); }
     set('svg', svg);
     if (mini) {
-      mini.classList.toggle('od-noplot', !(H.length > 1));   // 추이 기록이 없으면(지난 결과를 그대로 씀 등) 그래프 자리 없이 진행 줄만(2026-11-13: 빈 공간이 큼)
-      const pl = mini.querySelector('.od-simplot'), w = Math.max(240, pl?.clientWidth || mini.clientWidth), ph = pl?.clientHeight || 130;   // 칸 크기로 그림 — 그림은 칸을 밀지 않음(.od-sim2 절대 위치)
-      mini.innerHTML = `<div class="od-pct"><b>${pctT}%</b><div class="od-bar od-bar-big"><i style="width:${pctT}%"></i></div><span class="od-simcap od-capr">${row}</span></div><div class="od-simplot">${simPlotSvg(H, tgt, obs, w, ph)}</div>`;   // 광선 수 = 진행 막대 오른쪽(그래프 위 줄을 비워 그래프를 크게, 2026-11-08)
+      mini.classList.add('od-noplot');   // 진행 현황 그래프는 빼고 2D 분포를 넓게(2026-11-16 사용자) — 진행률 막대·광선 수만
+      { const html = simMiniHtml(pctT, row); if (mini._html !== html) { mini.innerHTML = html; mini._html = html; } }
     }
     // 접힌 줄에는 주 광경로 한 줄 요약, 펼치면 광경로 목록
     set('sum', P.length ? `광경로 <span class="mut">${(P[0].share * 100).toFixed(0)}% ${esc(pathText(P[0], names))}</span>` : '광경로');

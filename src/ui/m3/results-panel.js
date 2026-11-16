@@ -781,7 +781,7 @@ export function createResultsPanel(el, { anchor = () => null, onOpt = null, onQu
     // 창 안 크기 조절: 2D ↕ 1D(높이) · 길이 1D ↔ 폭 1D(폭) — 끌기 막대(비율 기억). 창 자체 = 오른쪽 아래 모서리(CSS resize)
     const C = (k) => ov.querySelector(`.m3-big-c[data-k="${k}"]`);
     // 진행 현황(그래프) ↕ 2D ↕ 1D — 경계선을 끌어 높이 조절(2026-11-08: 진행 그래프도 크기 조절)
-    mountSplit([C('map'), ov.querySelector('.m3-big-row')], { key: 'uds.m3.bigV', dir: 'col', min: 120, onChange: () => paintBig() });
+    mountSplit([C('map'), ov.querySelector('.m3-big-row')], { key: 'uds.m3.bigV2', dir: 'col', min: 120, init: [2, 1], onChange: () => paintBig() });   // 2D 를 넓게(2:1, 2026-11-16 사용자) — 두 번 클릭 = 이 비율로
     // 진행 그래프 칸 높이 = 따로 손잡이(2026-11-08) — 2D·1D 를 '이 그림만'으로 볼 때도 조절. 아래 그림이 최소 120px 은 남게
     { const pg = ov.querySelector('[data-big-prog]'); mountHeightHandle(pg, { key: 'uds.m3.bigProgH', min: 120, max: () => Math.max(120, big.grid.clientHeight - 140), onChange: () => paintBig() }); }
     mountSplit([C('prof'), C('wprof')], { key: 'uds.m3.bigH', dir: 'row', min: 160, onChange: () => paintBig() });

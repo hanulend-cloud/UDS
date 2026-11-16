@@ -14,7 +14,7 @@ export function mountSplit(items, { key, dir = 'col', min = 60, init = null, onC
   els.slice(0, -1).forEach((e, i) => {
     const h = document.createElement('div');
     h.className = `m3-psplit ${dir}`; h.setAttribute('role', 'separator'); h.setAttribute('aria-orientation', dir === 'col' ? 'horizontal' : 'vertical');
-    h.title = `${dir === 'col' ? '위아래' : '좌우'}로 끌어 크기 조절 · 두 번 클릭 = 같은 크기`;
+    h.title = `${dir === 'col' ? '위아래' : '좌우'}로 끌어 크기 조절 · 두 번 클릭 = ${Array.isArray(init) ? '처음 비율' : '같은 크기'}`;
     h.addEventListener('pointerdown', (ev) => {
       const a0 = size(els[i]), b0 = size(els[i + 1]), s = w[i] + w[i + 1], p0 = dir === 'col' ? ev.clientY : ev.clientX;
       if (a0 + b0 < 2 * min) return;   // 칸이 숨었거나(접힘) 너무 작으면 끌지 않음 — 비율이 망가진 채 저장되던 것 방지
