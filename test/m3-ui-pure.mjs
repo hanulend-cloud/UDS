@@ -1251,3 +1251,11 @@ done();
   const x = { cur: { milky: 2 }, best: { milky: 3.45 }, stages: { milky: true }, stepLeds: 72 };
   say(factorResult(x, {}, {}, 'shape')?.off === true && factorResult(x, {}, {}, 'milky')?.off === false, 'factorResult: 안 돌림 = off');
 }
+{ // 2026-11-16 점검: Ctrl+Z 로 적용을 되돌려도 지난 후보 표가 '적용됨'(누를 수 없음)으로 남음 — 설계가 바뀌면 표시를 풂
+  const { histAfterRestore } = await import('../src/ui/m3/opt-dash.js');
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const H = [{ applied: true }, { applied: false }];
+  histAfterRestore?.(H, false); const keep = H[0].applied === true;
+  histAfterRestore?.(H, true);
+  say(typeof histAfterRestore === 'function' && keep && H.every((x) => x.applied === false), '되돌리기로 설계가 바뀌면 지난 후보 표의 적용됨 해제(보기만 바뀌면 그대로)');
+}

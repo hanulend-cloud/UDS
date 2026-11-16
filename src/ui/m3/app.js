@@ -26,7 +26,7 @@ import { buildObsOverlay, cellColors, extractFaces } from './colormap.js';
 import { mountCommandBar, obsCmd } from './command-bar.js';
 import { renderFeatureTree, toggleVisibility, viewKeep, togglePcb, makeGroup, ungroup, groupMembers, rangeSelect, obsFacesAfterClick, removeFromGroups, viewCtxItems, showCtxMenu, toggleLed, ledFoldDefault, untraceItem } from './feature-tree.js';
 import { mountSplitter, mountDockSplitter, mountFacSplitter } from './splitter.js';
-import { createOptDash, createSimDash, simPct, traceFrac } from './opt-dash.js';
+import { createOptDash, createSimDash, simPct, traceFrac, histAfterRestore } from './opt-dash.js';
 import { geomQuery, geomLimit, geomClash } from './geom-client.js';
 import { renderPropertyPanel } from './property-panel.js';
 import { optCtl, rerunAsk } from './run-ctl.js';
@@ -304,7 +304,9 @@ function histRestore(next, was) {
     for (const k of n.locked) if (!w.locked.includes(k)) { ad.locked[k] = { at: Date.now() }; adSel(k, false); }
     ad.undo = null; ad.applied = null; ad.lastLock = null;
   }
-  if (JSON.stringify(n.m) === JSON.stringify(w.m)) { st.update('view'); return; }   // 보기만 바뀜 = 계산 그대로
+  const mChanged = JSON.stringify(n.m) !== JSON.stringify(w.m);
+  if (ad) histAfterRestore(ad.hist, mChanged);   // 설계가 바뀜 = 지난 후보 표 '적용됨' 해제
+  if (!mChanged) { st.update('view'); return; }   // 보기만 바뀜 = 계산 그대로
   // spec.mech3d 객체는 main.js 와 공유 — 같은 객체 안을 바꿔 넣음(불러오기와 같은 경로로 메쉬·광원 다시 맞춤)
   const cases0 = M.shapeCases;   // 형상 후보 표는 되돌리기 대상이 아님
   for (const k of Object.keys(M)) delete M[k];

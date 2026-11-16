@@ -58,6 +58,8 @@ const FB_COL = { milky: '#3b82f6', position: '#f59e0b', shape: '#a855f7', housin
 // 중지 — 돌던 항목은 '중지됨'(진행 % 가 남아 아직 도는 것처럼 보이지 않게, 2026-11-12)
 // 계산 실패(예외) — 멈춤으로 두고 이유를 남김(전에는 '진행 중' 으로 남아 시간이 계속 올라갔음, 2026-11-16)
 export function failRun(S, text, now) { closePhase(S, now); S.stopped = true; S.failed = text || '알 수 없는 오류'; S.pauseAt = null; stopTiles(S); }
+// 되돌리기·다시 실행으로 설계가 바뀌면 지난 후보 표의 '적용됨' 을 풂 — 그대로면 다시 적용할 수 없었음(2026-11-16 점검)
+export function histAfterRestore(hist, designChanged) { if (designChanged) for (const x of hist ?? []) x.applied = false; }
 export function stopTiles(S) { for (const t of Object.values(S?.tiles ?? {})) if (t.status === 'run' || t.status === 'wait') t.status = 'stop'; }
 // 항목 카드 한 줄 설명 — 무엇을 어디까지 바꾸는지(2026-11-12 평가)
 const FB_DESC = { position: 'LED 개수·간격·폭 위치·높이를 바꿈 — 부품과 겹치는 안은 뺌', shape: '광경로 위 부품의 입광면 모양을 바꿈 — 최소 살두께는 지킴', milky: '확산도(Milky)를 0~5 안에서 찾음 — 5 초과는 투과율이 크게 떨어져 적용 안 함' };
