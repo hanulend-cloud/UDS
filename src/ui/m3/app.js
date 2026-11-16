@@ -729,7 +729,7 @@ function renderAuto() {
   const effects = (st.result ?? (st.undo ? st.applied : null))?.effects ?? null;   // 항목별 효과 — 실행이 끝날 때 결과에 붙임(적용 뒤에도 남음)
   renderAutoPanel(el, { mode, hasResult: hasRes && mode === 'set' && !st.running, now: factorNow(), effects, hist: st.hist, locked: st.locked, flash: st.flash, caseView: adCaseView(), avail, sel, running: st.running && { ...st.running, paused: !!st.paused }, result: st.result, resultOpen: !!st.resultOpen, names: M.parts.map((p) => p.name), canRevert: !!st.undo, applied: st.undo ? st.applied ?? null : null, noLine: !A.store.session.line, noLed: A.store.session.line ? adBlock() : '', milkyPart: mp, housingMat: hm ? { name: hm.name, max: hm.max } : null, catalog: reflCat() }, {
     onSel: (k, v) => adSel(k, v),
-    onAction: (k, v) => ({ caseSort: () => adCaseSort(v), casePick: () => adCasePick(v), caseRun: adCaseRun, applyBlocked: () => { st.flash = `LED 몸체가 부품과 ${st.result?.clash ?? ''}개 겹쳐 적용할 수 없음 — 다른 후보(오른쪽 '지난 최적화 후보' 표)를 고르거나 [취소] 후 LED 배치·개수를 바꿔 다시 실행하세요`; renderAuto(); }, casePart: () => { const i = +v; if (!Number.isInteger(i)) return; A.store.update('session', (_, x) => { x.multi = []; x.node = `part:${i}`; x.sel = { part: i, face: null }; x.ledSel = null; x.status = `케이스 부품 ${i + 1} — 속성에서 면 처리를 바꾸세요(추천 값은 결과 카드)`; }); monitor?.collapse?.(); }, shapeDeep: adShapeDeep, continue: adContinue, applyMilky: () => adApplyMilky(+v), hpick: () => adPickHist(+v), chart: () => { st.showChart = !st.showChart; renderAuto(); }, toSet: () => { st.view = 'set'; renderAuto(); }, toResult: () => { st.view = 'result'; renderAuto(); }, close: () => monitor?.close(), apply: adApply, applyAlt: adApplyAlt, cancel: adCancel, revert: adRevert, step: adStep, view: () => { st.resultOpen = true; renderAuto(); }, hide: () => { st.resultOpen = false; renderAuto(); } })[k]?.(),
+    onAction: (k, v) => ({ caseSort: () => adCaseSort(v), casePick: () => adCasePick(v), caseRun: adCaseRun, applyBlocked: () => { st.flash = `LED 몸체가 부품과 ${st.result?.clash ?? ''}개 겹쳐 적용할 수 없음 — 다른 후보(오른쪽 '지난 최적화 후보' 표)를 고르거나 [취소] 후 LED 배치·개수를 바꿔 다시 실행하세요`; renderAuto(); }, casePart: () => { const i = +v; if (!Number.isInteger(i)) return; A.store.update('session', (_, x) => { x.multi = []; x.node = `part:${i}`; x.sel = { part: i, face: null }; x.ledSel = null; x.status = `케이스 부품 ${i + 1} — 속성에서 면 처리를 바꾸세요(추천 값은 결과 카드)`; }); monitor?.collapse?.(); }, shapeDeep: adShapeDeep, continue: adContinue, applyMilky: () => adApplyMilky(+v), hpick: () => adPickHist(+v), chart: () => { st.showChart = !st.showChart; renderAuto(); }, toSet: () => { st.view = 'set'; renderAuto(); }, toResult: () => { st.view = 'result'; renderAuto(); }, close: () => monitor?.close(), apply: adApply, applyAlt: adApplyAlt, twoRow: adTwoRow, cancel: adCancel, revert: adRevert, step: adStep, view: () => { st.resultOpen = true; renderAuto(); }, hide: () => { st.resultOpen = false; renderAuto(); } })[k]?.(),
   });
 }
 // 접은 창에 보일 현재 결과 — 실행 중 = 진행률, 결과 있음 = 후보 값, 그 밖 = 지금 값(길이·폭 균일도)
@@ -1199,7 +1199,8 @@ async function adRun(opt = {}) {
       // 시간 예산 60 s(spec §2.2c): 후보당 1.2만 광자, 넘치면 줄임(≥ 3000) — 지도는 후보마다 방출 1 기준(emitted = 1)
       const r = await R.traceEach(adJob(Md, parts, ctx, { emitters: sets[0] }), sets, { N: 30000, maxMs: 60000, minN: 3000, onProgress: (i, n) => progress('leds', i / n, `LED 위치 후보 시험 ${i}/${n}`) });
       // 간섭 방지: LED 몸체 반폭 + 0.3 mm 만큼 라인 끝에서 떨어지게(끝벽), 2열 간격도 반폭만큼 안쪽(측벽)
-      const m = ledHalf + 0.3, gapsOk = gaps.filter((g) => !(line.width > 0) || g + m <= line.width / 2 + 1e-9);
+      // 폭 위치를 옮긴 배치(wc ≠ 0)는 그만큼 한쪽 벽에 가까움 — 열 간격 한계에 |wc| 를 더함(2026-11-16: 빼먹어 벽에 겹치는 2열 간격이 후보에 들었음)
+      const m = ledHalf + 0.3, gapsOk = gaps.filter((g) => !(line.width > 0) || Math.abs(wc) + g + m <= line.width / 2 + 1e-9);
       return { cand, maps: r.maps, emitted: r.emitted, gaps: gapsOk, sMargin: m, minGap: Math.max(2, 2 * ledHalf + 0.2) };
     },
     async evalShapes(d, cands, N, maxMs = 2500) {   // 단계별 광자·시간 제한은 halving 일정(6만/20만/60만 · 2.5/4/6초)
@@ -1286,6 +1287,12 @@ async function adRun(opt = {}) {
   } catch (e) { if (A === a && !R.stopped) { setStatus(`기구 최적화 실패: ${e.message}`); A.optDash?.fail(e.message); } }
   if (A !== a) return;   // 그사이 이탈
   const clashN = res && !res.cancelled && !R.stopped ? await designClash(res.best, ctx, M0, rt, line) : 0;   // running 을 끄기 전에 — 양보하는 동안 다시 실행되지 않게
+  // 2열 대안(2026-11-16) — 최종안에 2열 배치만 얹어 간섭·PCB 폭을 미리 확인(LED STEP: 폭 이동 후보 cs = PCB 위·간섭 없는 폭 위치)
+  let twoRow = null;
+  if (res?.twoRow && !res.cancelled && !R.stopped) {
+    const t = res.twoRow, ws = [...new Set(t.layout.positions.map((q) => q.w))], cs = lateral ?? [0];
+    twoRow = { ...t, clash: await designClash({ ...res.best, ...t.layout }, ctx, M0, rt, line), offPcb: !!stp && ws.some((w) => !(cs.includes(Math.floor(w + 1e-9)) && cs.includes(Math.ceil(w - 1e-9)))) };
+  }
   if (A !== a) return;
   globalThis.__adLast = res;   // 진단용(콘솔에서 단계별 결과 확인)
   st.running = null; st.runner = null; st.paused = false;
@@ -1297,7 +1304,7 @@ async function adRun(opt = {}) {
     const smI = sp >= 0 && M0.parts[sp]?.shapeMod ? sp : M0.parts.findIndex((p) => p.shapeMod), sm = smI >= 0 ? M0.parts[smI].shapeMod : null;   // 비교표 '현재' 열 — 이미 적용된 형상(표시만)
     st.resultOpen = false;   // 끝나면 결과 카드(요약)만 — 자세한 결과 창은 [자세히]
     st.result = { seed: res.verified?.raw ?? null, shapeLimited: !!res.steps?.find((x) => x.stage === 'shapeField')?.limited, milkyRows: stages.milky ? milkyTable(res.steps ?? []) : null, targets: { len: obs.targetLen, wid: obs.targetWid, judge: judgeStats(res.verified?.stats, A.store.mspec.observe) }, design: res.best, feasible: res.feasible, reason: res.reason, shapeSwing: quickShape && !opt.shapeDeep && !opt.caseCheck, caseCheck: !!opt.caseCheck, shapeNote: res.shapeNote ?? null, hint: res.hint ?? null, peek: res.peek ?? null, lowered: res.milkyLowered ?? null, shape: res.best.shape ?? null, screen: res.steps?.find((x) => x.stage === 'shapeScreen')?.gains ?? null, stepLeds: nStep, unchanged: !!res.unchanged, ctx, stages: resultStageFlags(stages),
-      added: opt.added ?? [], base: opt.base ?? null, clash: clashN, oneRow: !!st.sel.oneRow,
+      added: opt.added ?? [], base: opt.base ?? null, clash: clashN, oneRow: !!st.sel.oneRow, twoRow,
       finish: stages.housing ? (() => { const c = { ...M0.parts[hp].finish, ...(M0.parts[hp].coating ? { coating: M0.parts[hp].coating } : {}) }; return { cur: c, best: res.best.finish ?? c }; })() : null, height: stages.height && hInfo ? { dz: res.best.dz ?? 0, gap: hInfo.gap } : null,
       cur: { ...cur, shape: sm ? { dt: sm.dt, h: sm.h, R: sm.R, e: sm.e ?? 0, c: sm.c ?? 0, kF: sm.kF ?? null } : null, Ulen: C?.stats?.Ulen, Uwid: C?.stats?.Uwid, eff: C?.eff ?? NaN, profile: C?.stats?.profile ?? null },
       best: { ...res.best, ...(stp ? { stepOrig: !res.best.stepVirt } : {}), Ulen: res.verified.stats.Ulen, Uwid: res.verified.stats.Uwid, eff: res.verified.eff, profile: res.verified.stats.profile ?? null } };
@@ -1439,6 +1446,21 @@ async function adContinue() {
   if (!r.unchanged) adApply();   // 현재안 유지면 적용할 것 없이 그대로 이어서
   dashReset(next);
   // 적용(형상·크기 변경)이면 관측 라인을 다시 인식함 — 그동안 S.line 이 비어 실행이 바로 빠져나가던 것(2026-10-30). 라인이 생길 때까지 기다림(최대 30초)
+  const a = A;
+  for (let k = 0; k < 150 && A === a && !A.store.session.line; k++) await new Promise((res) => setTimeout(res, 200));
+  if (A !== a) return;
+  if (!A.store.session.line) { setStatus('관측 라인을 다시 인식하지 못해 이어서 최적화를 시작하지 못함'); return; }
+  adRun({ stages: next });
+}
+// [2열로 이어서](2026-11-16) — 폭 미달 결과의 2열 대안을 적용한 뒤, 체크한 형상·Milky 만 그 위에서 다시 최적화(위치는 다시 안 돌림 — 2열 배치 유지)
+async function adTwoRow() {
+  const st = adState(), r = st.result, t = r?.twoRow; if (!t?.layout || t.clash > 0 || st.running) return;
+  const s = st.sel, av = adAvail(A.store.mspec);
+  const next = { milky: !!(s.milky && av.milky.ok), leds: false, height: false, housing: false, shape: !!(s.shape && av.shape.ok && av.shape.parts.includes(s.shapePart)) };
+  Object.assign(r, { seed: null, design: { ...r.design, ...t.layout }, unchanged: false, clash: 0, twoRow: null, best: { ...r.best, ...t.layout, Ulen: t.est.Ulen, Uwid: t.est.Uwid } });
+  adApply();
+  if (!next.milky && !next.shape) { st.flash = '2열 배치를 적용함 — 형상·Milky 를 체크하고 다시 실행하면 그 위에서 최적화합니다'; setStatus(st.flash); renderAuto(); return; }
+  dashReset(next);
   const a = A;
   for (let k = 0; k < 150 && A === a && !A.store.session.line; k++) await new Promise((res) => setTimeout(res, 200));
   if (A !== a) return;

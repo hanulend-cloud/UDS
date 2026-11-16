@@ -624,4 +624,15 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   ok(LADDER_MS >= 600000, '늘리기 시간 한도 10분 이상');
 }
 
+{ // 2열 대안(2026-11-16): 폭이 끝까지 미달이고 최종안이 1열이면 결과에 twoRow(배치 + 예상 균일도) — 폭이 통과하거나 1열만이면 없음
+  const nw = 4, G = { ns: 100, nw, ds: 1, cell: 2, w0: -4, L: 100, closed: false, winS: 10, area: new Float64Array(100 * nw).fill(1), valid: new Uint8Array(100 * nw).fill(1) }, line = { length: 100, closed: false };
+  const wc = [-3, -1, 1, 3], gs = [1, 2, 3], cand = candidateGrid(line, { sStep: 2, wOffsets: [0, ...gs.flatMap((d) => [-d, d])] });
+  const maps = cand.map(({ s, w }) => Float32Array.from({ length: 100 * nw }, (_, k) => Math.exp(-(((k / nw | 0) + 0.5 - s) ** 2) / 72) * Math.exp(-((wc[k % nw] - w) ** 2) / 4.5)));
+  const run = (rowsOptions, wid) => runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.5, targetWid: 0.99 }, current: { milky: 1, count: 5, pitch: 0, rows: 1 }, G, line, nMax: 40, rowsOptions },
+    { basis: async () => ({ cand, maps: maps.map((m) => m.slice()), emitted: 1, gaps: rowsOptions.includes(2) ? gs : [], sMargin: 0 }), progress() {}, cancelled: () => false, verify: async () => ({ stats: st(0.8, wid), eff: 0.5 }) });
+  const r = await run([1, 2], 0.2), t = r.twoRow;
+  ok(t && t.layout.rows === 2 && t.layout.positions.length === 2 * t.layout.count && t.layout.rowGap > 0 && t.est.Uwid > t.base.Uwid + 0.05 && t.est.Ulen >= 0.5, `폭 미달 → 2열 대안: ${t ? `${t.layout.layoutText} 예상 폭 ${t.est.Uwid.toFixed(2)} (1열 ${t.base.Uwid.toFixed(2)})` : '없음'}`);
+  ok((await run([1], 0.2)).twoRow == null, '1열만 = 2열 대안 없음');
+  ok((await run([1, 2], 0.995)).twoRow == null, '최종 판정에서 폭이 통과하면 2열 대안 없음');
+}
 done();

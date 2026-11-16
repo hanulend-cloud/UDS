@@ -1299,3 +1299,12 @@ done();
   const ok = /mountSplit\(\[C\('map'\), ov\.querySelector\('\.m3-big-row'\)\], \{ key: 'uds\.m3\.bigV2', dir: 'col', min: 120, init: \[2, 1\]/.test(src);
   console.log(`${ok ? 'PASS' : 'FAIL'} 큰 창 2D : 1D = 2 : 1 로 시작`); if (!ok) process.exitCode = 1;
 }
+{ // 2열 대안 안내·단추(2026-11-16) — 폭 미달로 끝난 결과에 계산해 둔 2열 안을 제안
+  const { twoRowAltText, twoRowBtn, resultViewHtml } = await import('../src/ui/m3/autodesign-panel.js');
+  const t = { layout: { rows: 2, count: 6, rowGap: 2, positions: Array(12).fill({ s: 1, w: 0 }), layoutText: '2열 × 6개 같은 피치 17.7 mm (열 간격 ±2.0 mm)' }, est: { Ulen: 0.801, Uwid: 0.86 }, base: { Ulen: 0.8, Uwid: 0.17 }, clash: 0, offPcb: false };
+  const tx = twoRowAltText({ twoRow: t }), c = (k, v) => { console.log(`${k ? 'PASS' : 'FAIL'} ${v}`); if (!k) process.exitCode = 1; };
+  c(/2열 대안/.test(tx) && tx.includes('LED 총 12개') && tx.includes('86.0%') && tx.includes('17.0%') && /PCB/.test(tx) && !/0\.86/.test(tx), `2열 대안 문구: ${tx}`);
+  c(twoRowAltText({}) === '' && twoRowBtn({}) === '', '대안 없으면 문구·단추 없음');
+  c(/data-ad="twoRow"/.test(twoRowBtn({ twoRow: t })) && twoRowBtn({ twoRow: { ...t, clash: 2 } }) === '' && /겹/.test(twoRowAltText({ twoRow: { ...t, clash: 2 } })), '단추 data-ad=twoRow · LED 몸체가 겹치면 단추 없이 이유만');
+  c(/PCB 폭 밖/.test(twoRowAltText({ twoRow: { ...t, offPcb: true } })), '지금 PCB 폭 밖이면 알림');
+}

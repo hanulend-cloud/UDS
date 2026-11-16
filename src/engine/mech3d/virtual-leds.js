@@ -59,8 +59,9 @@ export function virtualLayout({ parts, step, line, count, pitch = 0, positions =
   return out;
 }
 
-// 기준 LED 발광점을 라인 위치 s 들로 옮긴 것(몸체 없음) — 자동설계 ② 후보마다 광원 하나
-export const virtualEmittersAt = ({ parts, step, line, positions }) => virtualLayout({ parts, step, line, positions, bodies: false }).emitters;
+// 기준 LED 발광점을 라인 위치 s 들로 옮긴 것(몸체 없음) — 자동설계 ② 후보마다 광원 하나. 넘긴 순서 그대로 · 위치마다 하나(2026-11-16):
+// 한꺼번에 넘기면 배치 정리(normalizeLedPositions)가 s 순으로 정렬·닫힌 라인은 겹침을 합쳐, 후보 격자(w 줄마다 s 순)와 순서가 어긋났음 — 후보 지도가 뒤섞여 위치 예상값이 모두 0 근처
+export const virtualEmittersAt = ({ parts, step, line, positions }) => positions.map((q) => virtualLayout({ parts, step, line, positions: [q], bodies: false }).emitters[0]);
 
 // 원래/가상 배치를 하나로(순수) — step.virtual = { count, pitch, rows?, rowGap? } | null. line 이 없으면 원래 배치로 대신.
 // 가상인데 기준 LED 가 없으면 원래 배치 + err. adjust = ledAdjust.items(validAdjust) | null — 원래 배치는 line 이 있어야 적용.

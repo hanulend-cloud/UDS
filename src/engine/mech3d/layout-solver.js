@@ -131,7 +131,7 @@ function* solveLayoutSteps(args) {
   }
   const rank = (a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || b.margin - a.margin || b.eff - a.eff;
   let found = null, foundT = 0, timedOut = false;
-  const pass = [], miss = [], spare = [];
+  const pass = [], miss = [], spare = [], twos = [];
   for (let T = 1; T <= nMax; T++) {
     if (found && T > foundT + 1) break;
     if (now() - t0 > timeBudget) { timedOut = true; break; }
@@ -139,13 +139,23 @@ function* solveLayoutSteps(args) {
     for (const rows of RO) {
       if (T % rows) continue;
       if (!found && atT.some((r) => r.rows < rows)) break;   // 같은 총수: 1열 통과면 2열은 안 봄
-      for (const g of rows === 1 ? [0] : gaps) { const r = yield* solveN(T / rows, rows, g); if (r) (r.margin >= safety ? atT : miss).push(r); }
+      for (const g of rows === 1 ? [0] : gaps) { const r = yield* solveN(T / rows, rows, g); if (r) { (r.margin >= safety ? atT : miss).push(r); if (rows === 2) twos.push(r); } }
     }
     atT.sort(rank);
     if (!found && atT.length) { found = atT[0]; foundT = T; pass.push(...atT.slice(1)); }
     else if (found) spare.push(...atT);
   }
   const strip = ({ ss, ...r }) => r;
+  // 2열 대안(2026-11-16): 고른 안이 1열이고 폭이 목표 미달일 때 — 계산해 둔 2열 중 폭이 가장 높은 열 간격으로, 폭을 빼고(1열 안을 고를 때와 같게) 길이가 통과하는 가장 적은 개수를 다시 풂
+  function* twoRowOf(b) {
+    const tw = obs.targetWid, bs = b?.stats, pool = twos.filter((r) => r.stats?.Uwid != null);
+    if (inner || !pool.length || !bs || b.rows === 2 || !(tw > 0) || !(bs.Uwid < tw)) return null;
+    const g = pool.reduce((x, r) => (r.stats.Uwid > x.stats.Uwid ? r : x)).rowGap;
+    const q = yield* solveLayoutSteps({ ...args, inner: true, rowsOptions: [2], gaps: [g], obs: { ...obs, targetWid: null } });
+    if (!q.positions?.length || !(q.stats?.Uwid >= bs.Uwid + 0.01)) return null;
+    const { feasible, reason: _r, alts, evals: _e, atCount: _a, limit: _l, twoRow: _t, ...t } = q;
+    return { ...t, lenOk: !!feasible };
+  }
   // 정한 개수(열당 n)의 최선 배치 — 최종 판정에서 개수를 늘리거나 줄일 때. 고른 안과 같은 열 수·열 간격으로(2026-11-07: 전에는 1열만 — 2열 안을 버리고 1열로 바뀜)
   const atCount = (n, rows = 1, g = 0) => { const r = RO.includes(rows) ? drain(solveN(n, rows, rows === 1 ? 0 : g)) : null; return r ? strip(r) : null; };
   if (found) return { feasible: true, ...strip(found), reason: '', alts: [...pass, ...spare].slice(0, 2).map(strip), evals, atCount };
@@ -155,7 +165,7 @@ function* solveLayoutSteps(args) {
     const q = yield* solveLayoutSteps({ ...args, inner: true, obs: { ...obs, targetWid: null } });
     if (q.positions?.length) {
       const { feasible, reason: _r, alts, evals: e2, atCount: at2, limit: _l, ...b } = q, s = b.stats;
-      return { feasible: false, ...b, margin: margin(s, obs), reason: `LED 개수를 늘려도 폭 목표에 못 닿음 — 길이가 가장 적게 통과하는 ${layoutText(b)}: 길이 균일도 ${fmtJudge(s.Ulen)}${s.Uwid == null ? '' : ` · 폭 균일도 ${fmtJudge(s.Uwid)}`} — 폭 방향 확산 부족: ③ 형상 또는 Milky 상향 권장`, alts: [], evals: evals + e2, atCount: at2, limit };
+      return { feasible: false, ...b, twoRow: yield* twoRowOf(b), margin: margin(s, obs), reason: `LED 개수를 늘려도 폭 목표에 못 닿음 — 길이가 가장 적게 통과하는 ${layoutText(b)}: 길이 균일도 ${fmtJudge(s.Ulen)}${s.Uwid == null ? '' : ` · 폭 균일도 ${fmtJudge(s.Uwid)}`} — 폭 방향 확산 부족: ③ 형상 또는 Milky 상향 권장`, alts: [], evals: evals + e2, atCount: at2, limit };
     }
   }
   // 안쪽 풀이가 못 닿으면 가장 가까운 안(차이가 작으면 적은 개수)
@@ -166,5 +176,5 @@ function* solveLayoutSteps(args) {
   const b = strip({ ...b0, n: b0.nRow }); delete b.nRow; delete b.j;
   const st = b.stats, wid = st?.Uwid != null && st.Uwid - obs.targetWid < st.Ulen - obs.targetLen;
   const reason = `${timedOut ? '시간 제한 안에서' : `LED 총 ${nMax}개까지`} 배치를 바꿔도 목표 미달 — 가장 가까운 ${layoutText(b)}: 길이 균일도 ${fmtJudge(st.Ulen)}${st.Uwid == null ? '' : ` · 폭 균일도 ${fmtJudge(st.Uwid)}`} — ${wid ? '폭 방향 확산 부족: ③ 형상 또는 Milky 상향 권장' : '길이 방향 리플·끝 어두움: Milky 상향 또는 LED–커버 거리 확대 권장'}`;
-  return { feasible: false, ...b, reason, alts: [], evals, atCount, limit: null };
+  return { feasible: false, ...b, twoRow: yield* twoRowOf(b), reason, alts: [], evals, atCount, limit: null };
 }

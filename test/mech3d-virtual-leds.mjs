@@ -71,6 +71,10 @@ ok(stepRefEmitter({ excluded: [1], emitters: [{ part: 0, needsCheck: true }, { p
   ok(ok2 && new Set(ys).size === 2 && ys.includes('3.50') && ys.includes('5.50'), `2열 발광점: y ${ys.join()}`);
   ok(v.leds.every((k, i) => { const b = bounds(v.parts[k].positions), e = v.emitters[i]; return Math.abs(b[1] - (e.pos[1] - 1)) < 1e-5 && Math.abs(b[4] - (e.pos[1] + 1)) < 1e-5 && Math.abs((b[0] + b[3]) / 2 - e.pos[0]) < 1e-5; }), '2열 몸체 = 발광점 따라 이동');
   const at = virtualEmittersAt({ parts: P, step: stp, line: strip, positions: [{ s: s[1], w: 1 }] });
+  { // 후보 순서 그대로(2026-11-16): 위치 후보 격자는 w 줄마다 s 순서 — 정렬해서 돌려주면 후보와 지도가 어긋나 ① 위치/개수 예상값이 모두 0 근처가 됐음(11-09 부터, LED STEP)
+    const grid = [1, -1].flatMap((w) => [s[2], s[0], s[1]].map((sv) => ({ s: sv, w }))), eg = virtualEmittersAt({ parts: P, step: stp, line: strip, positions: grid });
+    const one = (q) => virtualEmittersAt({ parts: P, step: stp, line: strip, positions: [q] })[0];
+    ok(eg.length === grid.length && eg.every((e, k) => e.pos.every((c, a) => Math.abs(c - one(grid[k]).pos[a]) < 1e-9)), '후보 발광점: 넘긴 순서 그대로, 후보마다 하나'); }
   ok(at.length === 1 && at[0].pos.every((c, j) => Math.abs(c - v.emitters[3].pos[j]) < 1e-9), 'positions {s, w}: w = 기준 w0 에서의 오프셋');
   const big = virtualLayout({ parts: P, step: stp, line: strip, count: 1, rows: 2, rowGap: 9 }), hw = strip.width / 2 - 0.5;
   ok(Math.abs(Math.abs(big.emitters[1].pos[1] - big.emitters[0].pos[1]) - 2 * hw) < 1e-6, `열 간격 제한 ±${hw.toFixed(2)}`);

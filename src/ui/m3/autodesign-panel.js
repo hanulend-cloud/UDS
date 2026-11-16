@@ -322,6 +322,13 @@ export const limitText = (reason) => {
 // 어느 한쪽만 실행돼도 결과 카드에서 '안 돌림'으로 보이지 않게 한다. 복사본을 만들어 실행 중 객체 변경의 영향도 막는다.
 export function resultStageFlags(stages = {}) { const out = { ...stages }; out.position = !!(out.position || out.leds || out.height); return out; }
 // 폭 미달 + '1열만' = 2열 배치를 시도하라는 안내(2026-11-07) — 위치를 돌렸을 때만
+// 2열 대안(2026-11-16) — 위치·형상·Milky 를 다 돌려도 폭이 미달이고 최종안이 1열일 때, 위치 단계에서 계산해 둔 2열 최선안을 제안(자동으로 바꾸지 않음 — LED 수·PCB 가 바뀜)
+export function twoRowAltText(r) {
+  const t = r?.twoRow, y = t?.layout; if (!y) return '';
+  const n = y.positions?.length ?? 2 * (y.count ?? 0), warn = t.clash > 0 ? ` · ⚠ LED 몸체가 부품과 겹쳐(${t.clash}개) 쓸 수 없음` : t.offPcb ? ' · ⚠ 지금 PCB 폭 밖 — PCB 를 넓혀야 함' : '';
+  return `💡 2열 대안 — ${y.layoutText ?? `2열 × ${y.count}개`} (LED 총 ${n}개): 위치 단계 예상 폭 균일도 ${fmtJudge(t.est?.Uwid)} (1열 ${fmtJudge(t.base?.Uwid)}) · 길이 ${fmtJudge(t.est?.Ulen)} — LED PCB 새 설계 필요${warn}`;
+}
+export const twoRowBtn = (r) => (r?.twoRow?.layout && !(r.twoRow.clash > 0) ? '<button type="button" data-ad="twoRow" title="2열 배치를 적용한 뒤, 체크한 형상·Milky 를 그 위에서 다시 최적화(예상값은 빠른 계산 — 끝난 뒤 최종 판정으로 확인). [되돌리기] 로 취소 가능">2열로 이어서 ▸</button>' : '');
 export function oneRowHint(r) { const w = r.best?.Uwid, t = r.targets?.wid; return r.oneRow && r.stages?.leds && Number.isFinite(w) && t != null && w < t ? `💡 폭 균일도 미달 — 설계 인자에서 '1열만(재료비↓)'을 끄면 2열 배치도 찾아 봅니다(LED 개수·재료비 늘 수 있음)` : ''; }
 // 케이스 면 추천(2026-11-07) — ④ 최적화는 없앴지만 하우징 면 처리를 한 단계 올리면 나아지는지는 알려 줌(설계 값은 안 바꿈, 바꾸는 건 사용자가 부품 속성에서).
 // 뚜렷이 나아질 때만(길이·폭 중 하나 +0.02 이상, 어느 쪽도 0.01 넘게 나빠지지 않음). 표시값은 내림
@@ -475,8 +482,8 @@ export function resultViewHtml(r, { applied = null, effects = null, hist = null,
     effDropHtml(r.cur, r.best)].join('');
   const alt = r.unchanged && r.alt ? `<div class="rs-note">찾은 후보 ${fmtJudge(r.alt.Ulen)}/${fmtJudge(r.alt.Uwid)} — 지금보다 뚜렷이 낫지 않음</div>` : '';
   return `<div class="rs">${cards}<div class="rs-vd ${v[0]}"><b>${v[1]}</b> <span class="mut">${v[2]}</span>${lim ? ` <span class="rs-lim" title="한계: ${esc(lim)}">· 한계: ${esc(lim.split(' — ')[0])}</span>` : ''}</div>
-    ${warn}${alt}${notesLines(r)}
-    <div class="rs-btn">${applyBtn(r, 'LED 몸체가 부품과 겹침')}${altBtn(r)}${shapeDeepBtn(r)}${r.clash > 0 ? '' : `<button type="button" data-ad="continue" title="${r.unchanged ? '지금 설계 그대로' : '이 안을 적용한 뒤'}, 체크했지만 이번에 돌리지 않은 항목을 이어서 최적화">이 안에서 이어서 ▸</button>`}${toSetBtn}<span class="m3-ad-sp"></span>${r.shape ? '<button type="button" data-ad="step">STEP 내보내기</button>' : ''}<button type="button" data-ad="view" title="프로파일 비교 · Milky 표 · 전체 비교표">프로파일·표</button><button type="button" data-ad="cancel" title="이 결과를 설계에 적용하지 않고 닫기 — 지난 후보 표에는 남음">적용 안 함</button></div>
+    ${warn}${alt}${twoRowAltText(r) ? `<div class="rs-note">${esc(twoRowAltText(r))}</div>` : ''}${notesLines(r)}
+    <div class="rs-btn">${applyBtn(r, 'LED 몸체가 부품과 겹침')}${altBtn(r)}${shapeDeepBtn(r)}${twoRowBtn(r)}${r.clash > 0 ? '' : `<button type="button" data-ad="continue" title="${r.unchanged ? '지금 설계 그대로' : '이 안을 적용한 뒤'}, 체크했지만 이번에 돌리지 않은 항목을 이어서 최적화">이 안에서 이어서 ▸</button>`}${toSetBtn}<span class="m3-ad-sp"></span>${r.shape ? '<button type="button" data-ad="step">STEP 내보내기</button>' : ''}<button type="button" data-ad="view" title="프로파일 비교 · Milky 표 · 전체 비교표">프로파일·표</button><button type="button" data-ad="cancel" title="이 결과를 설계에 적용하지 않고 닫기 — 지난 후보 표에는 남음">적용 안 함</button></div>
     ${histBox}</div>`;
 }
 // 참고 문구·Milky 표는 접어 둠(2026-11-08) — 메인 카드는 판정·값·단추만
@@ -484,6 +491,7 @@ function notesHtml(r) {
   const n = [
     caseHintText(r) ? `<button type="button" class="m3-rlim m3-rhint" data-ad="casePart" data-v="${r.hint.finish.part}" title="케이스 부품 속성 열기 — 면 처리는 직접 바꿈">${esc(caseHintText(r))} ▸</button>` : '',
     oneRowHint(r) ? `<div class="m3-rlim">${esc(oneRowHint(r))}</div>` : '',
+    twoRowAltText(r) ? `<div class="m3-rlim">${esc(twoRowAltText(r))}</div>` : '',
     r.shapeNote ? `<div class="m3-rlim">💡 형상 그대로: ${esc(r.shapeNote)}</div>` : '',
     shapeMissText(r) ? `<div class="m3-rlim">${esc(shapeMissText(r))}</div>` : '',
     r.lowered ? `<div class="m3-rlim">${esc(loweredText(r.lowered, r.unchanged))}</div>` : '',
@@ -501,7 +509,7 @@ export function resultLineHtml(r) {
     ${rows ? `<table class="m3-cmp m3-cmp-s"><tr><th></th><th>현재</th><th>최적화 후</th></tr>${rows}</table>` : ''}${clash}
     ${lim ? `<div class="m3-rlim">💡 한계: ${esc(lim)}</div>` : ''}
     ${notesHtml(r)}
-    ${altNote(r)}<div class="m3-rbtn">${applyBtn(r, 'LED 몸체가 부품과 겹침')}${altBtn(r)}${shapeDeepBtn(r)}<button type="button" data-ad="cancel">취소</button>${r.clash > 0 ? '' : `<button type="button" data-ad="continue" title="${r.unchanged ? '지금 설계 그대로' : '이 안을 적용한 뒤'}, 체크했지만 이번에 돌리지 않은 항목(예: 위치·Milky)을 그 위에서 이어서 최적화">이 안에서 이어서 ▸</button>`}<span class="m3-ad-sp"></span><button type="button" data-ad="view" title="프로파일 비교·사유 전문">자세히 ▸</button></div></div>`;
+    ${altNote(r)}<div class="m3-rbtn">${applyBtn(r, 'LED 몸체가 부품과 겹침')}${altBtn(r)}${shapeDeepBtn(r)}${twoRowBtn(r)}<button type="button" data-ad="cancel">취소</button>${r.clash > 0 ? '' : `<button type="button" data-ad="continue" title="${r.unchanged ? '지금 설계 그대로' : '이 안을 적용한 뒤'}, 체크했지만 이번에 돌리지 않은 항목(예: 위치·Milky)을 그 위에서 이어서 최적화">이 안에서 이어서 ▸</button>`}<span class="m3-ad-sp"></span><button type="button" data-ad="view" title="프로파일 비교·사유 전문">자세히 ▸</button></div></div>`;
 }
 // el 에 그리고 이벤트를 h 로 넘김. state = { avail, sel, running, result, resultOpen, … } — 결과가 있으면 한 줄 + (열림) 결과 창
 export function renderAutoPanel(el, state, h) {

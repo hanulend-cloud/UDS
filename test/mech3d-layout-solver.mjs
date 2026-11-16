@@ -93,4 +93,19 @@ const gapsOk = (r, g) => ss(r).every((x, i, a) => i === 0 || x - a[i - 1] >= g -
   ok(y0 === 0 && yields === 1, '30 ms 가 지났을 때만 차례를 넘김');
   await yieldNow(); ok(true, 'yieldNow 끝남');
 }
+{ // 폭이 어떤 배치로도 목표 미달: 고른 안은 1열(길이만 통과) — 계산해 둔 2열 중 폭이 가장 높은 안을 twoRow 로 함께 돌려줌(2026-11-16)
+  const nw = 4, G4 = { ns: 100, nw, ds: 1, cell: 2, w0: -4, L: 100, closed: false, winS: 10, area: new Float64Array(100 * nw).fill(1), valid: new Uint8Array(100 * nw).fill(1) };
+  const wc = [-3, -1, 1, 3], gs = [1, 2, 3], sw = 1.5, c4 = candidateGrid(line, { sStep: 2, wOffsets: [0, ...gs.flatMap((d) => [-d, d])] });
+  const m4 = c4.map(({ s, w }) => Float32Array.from({ length: 100 * nw }, (_, k) => Math.exp(-(((k / nw | 0) + 0.5 - s) ** 2) / 72) * Math.exp(-((wc[k % nw] - w) ** 2) / (2 * sw * sw))));
+  const Uw = (ws) => { const f = wc.map((x) => ws.reduce((a, w) => a + Math.exp(-((x - w) ** 2) / (2 * sw * sw)), 0)); return Math.min(...f) / Math.max(...f); };
+  const bg = gs.reduce((a, d) => (Uw([-d, d]) > Uw([-a, a]) ? d : a)), o4 = { targetLen: 0.5, targetWid: 0.99 };
+  const r = solveLayout({ G: G4, obs: o4, line, cand: c4, maps: m4, rowsOptions: [1, 2], gaps: gs, nMax: 40, uniformOnly: true });
+  ok(!r.feasible && r.rows === 1 && r.limit === 'wid', `폭 미달: 고른 안은 1열 (${layoutText(r)})`);
+  ok(r.twoRow && r.twoRow.rows === 2 && r.twoRow.rowGap === bg && Math.abs(r.twoRow.stats.Uwid - Uw([-bg, bg])) < 1e-3 && r.twoRow.stats.Uwid > r.stats.Uwid + 0.05 && r.twoRow.stats.Ulen >= o4.targetLen && r.twoRow.positions.length === r.twoRow.total,
+    `2열 대안: ${r.twoRow ? `${layoutText(r.twoRow)} 폭 ${r.twoRow.stats.Uwid.toFixed(3)} (1열 ${r.stats.Uwid.toFixed(3)})` : '없음'}`);
+  const r1 = solveLayout({ G: G4, obs: o4, line, cand: c4, maps: m4, rowsOptions: [1], gaps: [], nMax: 40, uniformOnly: true });
+  ok(r1.twoRow == null, '1열만이면 2열 대안 없음');
+  const r2 = solveLayout({ G: G4, obs: { targetLen: 0.5, targetWid: 0.8 }, line, cand: c4, maps: m4, rowsOptions: [1, 2], gaps: gs, nMax: 40, uniformOnly: true });
+  ok(r2.feasible && r2.rows === 2 && r2.twoRow == null, '2열로 통과하면 대안 따로 없음');
+}
 done();

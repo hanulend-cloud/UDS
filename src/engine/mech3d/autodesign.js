@@ -490,7 +490,7 @@ export function quickMargin(s, obs) {
 }
 export async function runAutoDesign(cfg, io) {
   const { obs } = cfg, stages = cfg.partial ? {} : cfg.stages, steps = [], sCap = Math.min(cfg.milkyMax ?? MILKY_OPT_MAX, MILKY_OPT_MAX), mCap = sCap;   // partial = 중지 때 받은 안 — 항목은 다시 안 돌리고 최종 판정만(2026-11-12)
-  let d = { ...cfg.current }, feasible = true, reason = '', hint = null, peek = null, shapeNote = null, ledAlts = null, ledMore = null, ledLimit = null, ledRows = 1, lateralLayout = null;
+  let d = { ...cfg.current }, feasible = true, reason = '', hint = null, peek = null, shapeNote = null, ledAlts = null, ledMore = null, ledLimit = null, ledRows = 1, lateralLayout = null, ledTwoRow = null;
   const stop = () => io.cancelled?.();
   const withChance = (v) => (v?.stats?.quick ? { ...v, chance: passChance(v.stats, obs) } : v), qv = async (e) => withChance(await io.verify(e, { quick: true }));
   if (stop()) return { cancelled: true };
@@ -544,7 +544,7 @@ export async function runAutoDesign(cfg, io) {
     const solved = two ? await solveLayoutAsync({ ...a, uniformOnly: cfg.uniformPitch !== false, wCenter: d.wCenter ?? 0, rowsOptions: cfg.rowsOptions ?? [1, 2], gaps: cfg.rowsOptions && !cfg.rowsOptions.includes(2) ? [] : B.gaps ?? [],   // rowsOptions [1] = 1열만(재료비)
        sMargin: B.sMargin ?? 0, timeBudget: cfg.layoutBudget ?? 20000, safety: cfg.layoutSafety ?? 0.02 }, { tick: pacer(), cancelled: stop }) : searchLeds({ ...a, spare: 1 });
     if (!solved) return halt();
-    const { atCount, limit, ...r } = solved;
+    const { atCount, limit, twoRow: tw2 = null, ...r } = solved;
     steps.push({ stage: 'leds', ...r });
     if (two) io.trace?.('leds', [r, ...(r.alts ?? [])].filter((e) => e.positions?.length).map((e, i) => ({ label: `${i ? '대안 ' : ''}${layoutText(e)}`, Ulen: e.stats?.Ulen, Uwid: e.stats?.Uwid, ok: true, est: true })));   // est = 배치 추정(실제 계산 아님)   // 대시보드: 배치 Solver 최선안·대안(기저 추정)
     const lay = (e) => two
@@ -556,6 +556,8 @@ export async function runAutoDesign(cfg, io) {
     ledAlts = keepCount ? [] : (two ? r.alts ?? [] : ledAlternatives(r, false)).map(lay);   // cfg.stepMode = LED STEP(② 는 기준 LED 복사 배치를 점수 매김)
     if (lateralLayout && !keepCount) ledAlts = [lateralLayout, ...ledAlts.filter((x) => JSON.stringify(x.positions) !== JSON.stringify(lateralLayout.positions))];   // 폭 이동만으로 통과한 현재 배치를 후속 Solver가 덮지 않게 정밀 재확인 후보로 보존
     ledLimit = limit ?? null;
+    // 2열 대안(2026-11-16) — 폭이 어떤 배치로도 미달일 때 계산해 둔 2열 최선안. 최종 판정에서도 폭이 미달이고 최종안이 1열이면 결과에 실어 제안(자동으로 바꾸지 않음)
+    if (two && tw2?.positions?.length) ledTwoRow = { layout: { ...lay(tw2), stepVirt: !!cfg.stepMode }, est: { Ulen: tw2.stats.Ulen, Uwid: tw2.stats.Uwid }, base: { Ulen: r.stats?.Ulen ?? null, Uwid: r.stats?.Uwid ?? null }, lenOk: !!tw2.lenOk };
     // 개수 늘리기·줄이기 = 고른 안과 같은 열 수·열 간격(n = 총수, 열 수의 배수만)
     ledRows = two ? r.rows ?? 1 : 1;
     if (atCount) { const g0 = r.rowGap ?? 0; ledMore = (n) => { if (n % ledRows) return null; const e = atCount(n / ledRows, ledRows, g0); return e?.positions?.length ? lay(e) : null; }; }
@@ -744,6 +746,7 @@ export async function runAutoDesign(cfg, io) {
   // 개수로 고칠 수 있는 방향만 본 여유 — 폭이 어떤 개수로도 못 닿으면(ledLimit) 길이로 판정
   const mgFix = (s) => (ledLimit ? quickMargin({ ...s, Uwid: null }, obs) : quickMargin(s, obs));
   // 늘리기·줄이기 보조(2026-11-07): 열 수의 배수로 맞춤 · 부품과 겹치는 안(io.clash > 0)은 건너뜀 — 겹치는 안을 골라 '적용 불가' 가 되지 않게
+  const twoRowFor = (dd, v) => (ledTwoRow && (dd.rows ?? 1) !== 2 && obs.targetWid > 0 && v?.stats?.Uwid != null && v.stats.Uwid < obs.targetWid ? ledTwoRow : null);
   const upTo = (n) => Math.ceil(n / ledRows) * ledRows, downTo = (n) => Math.floor(n / ledRows) * ledRows;
   const clashes = async (e) => { if (!io.clash) return false; try { return (await io.clash(e)) > 0; } catch { return false; } };
   if (ledAlts?.length || ledMore) {   // ② 재확인: 정밀 검증 미달이면 기저 순위의 다음 후보(같은 총수 → 다음 총수) 최대 2개 — 다른 필드(①③⑤④ 결과)는 그대로
@@ -862,7 +865,7 @@ export async function runAutoDesign(cfg, io) {
   if (!cfg.fixedShape && !fewer && !fixGain && !regular && !(sc(verified) - sc(currentVerified) >= SCORE_EPS)) {
     steps.push({ stage: 'guard', tried: d, triedVerified: verified, triedReason: reason });
     if (stages.shape && d.shape && !shapeNote) shapeNote = '찾은 형상이 최종 판정에서 지금보다 낫지 않음 — 현재 형상 유지';
-    return { feasible: quickMargin(currentVerified.stats, obs) >= 0, best: { ...cfg.current }, steps, reason: `현재안보다 나은 설계를 찾지 못함 — 현재안 유지${reason ? ` (${reason})` : ''}`, verified: currentVerified, current: currentVerified, unchanged: true, cancelled: false, hint, peek, milkyLowered: lowered, shapeNote };
+    return { feasible: quickMargin(currentVerified.stats, obs) >= 0, best: { ...cfg.current }, steps, reason: `현재안보다 나은 설계를 찾지 못함 — 현재안 유지${reason ? ` (${reason})` : ''}`, verified: currentVerified, current: currentVerified, unchanged: true, cancelled: false, hint, peek, milkyLowered: lowered, shapeNote, twoRow: twoRowFor(cfg.current, currentVerified) };
   }
   // 판정·문구는 정밀 재계산 값 기준(후보 평가값은 광자가 적어 노이즈가 큼)
   const vs = verified.stats, ok = quickMargin(vs, obs) >= 0;
@@ -879,5 +882,5 @@ export async function runAutoDesign(cfg, io) {
       reason = uRe.test(reason) ? reason.replace(uRe, vt) : `${reason} — ${vt}`;
     }
   }
-  return { feasible, best: d, steps, reason, verified, current: currentVerified, cancelled: false, hint, peek, milkyLowered: lowered, shapeNote };
+  return { feasible, best: d, steps, reason, verified, current: currentVerified, cancelled: false, hint, peek, milkyLowered: lowered, shapeNote, twoRow: twoRowFor(d, verified) };
 }
