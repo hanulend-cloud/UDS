@@ -67,7 +67,8 @@ export function factorBoardHtml(S, nw = {}, cfg = null, res = null) {
     // 고정 = 적용까지 마친 항목 — 다음 실행에서 건드리지 않음. [다시 최적화] = 고정 풀고 다시 체크
     const dot = `<i class="fb-dot" style="background:${FB_COL[k]}"></i>`, head = (lead, chipC, chipT) => `<div class="fb-head">${lead}${dot}<b class="fb-name">${name}</b>${FB_DESC[k] ? `<span class="fb-i" title="${FB_DESC[k]}">ⓘ</span>` : ''}<span class="od-chip ${chipC}">${chipT}</span></div>`;   // 한 줄 설명 = ⓘ 에 마우스(2026-11-12 사용자: 회색 글이 많아 정신없음)
     const R = res?.(k);   // 결과 화면(2026-11-08) — 같은 자리 상자에 이전 → 이후 · 효과(설정·진행·결과에서 인자 위치가 그대로)
-    if (R) return `<div class="fb-card ${R.chg ? 'fb-on' : 'fb-off'}" style="--fb:${FB_COL[k]}">${head('<span class="fb-sw"></span>', R.chg ? 'st-run' : 'st-off', R.chip)}<div class="fb-in"><div class="fb-val">${R.body}</div>${R.eff ? `<div class="fb-eff">${R.eff}</div>` : ''}</div></div>`;
+    const c0 = R?.off ? cfg?.(k) : null, sw = c0?.box ? `<label class="fb-sw" title="${esc(c0.why || '체크하고 [이 안에서 이어서] — 이 항목을 이어서 최적화')}">${c0.box}</label>` : '<span class="fb-sw"></span>';   // 안 돌린 항목 = 체크 상자(이어서 할 항목 고르기, 2026-11-16 사용자)
+    if (R) return `<div class="fb-card ${R.chg ? 'fb-on' : 'fb-off'}" style="--fb:${FB_COL[k]}">${head(sw, R.chg ? 'st-run' : 'st-off', R.chip)}<div class="fb-in"><div class="fb-val">${R.body}</div>${R.eff ? `<div class="fb-eff">${R.eff}</div>` : ''}</div></div>`;
     if (nw.locked?.[k]) return `<div class="fb-card fb-lock" style="--fb:${FB_COL[k]}" title="최적화 결과를 적용함 — 다음 실행에서 이 값 그대로 씀">${head('<span class="fb-lk">🔒</span>', 'st-lock', '✓ 고정')}<div class="fb-in"><div class="fb-val">${esc(nowTxt)} <button type="button" class="fb-redo" data-adunlock="${k}">다시 최적화</button></div></div></div>`;
     const c = cfg?.(k), t = S?.tiles?.[k], on = c ? !!c.on : t ? t.status !== 'off' : !!nw.on?.[k];
     const ev = (t?.evals ?? []).filter((e) => e.ok !== false && Number.isFinite(e.Ulen)); let b = null;

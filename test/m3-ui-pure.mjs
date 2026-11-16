@@ -1239,3 +1239,15 @@ done();
   const ok = /#mech3d-wrap\[data-theme="dark"\][^{]*\.m3-big-cv[^{]*\{[^}]*background:\s*#1b2230/.test(css);
   console.log(`${ok ? 'PASS' : 'FAIL'} 다크 모드 큰 창 그림 배경 = #1b2230(작은 칸과 같음)`); if (!ok) process.exitCode = 1;
 }
+{ // 2026-11-16 사용자: 최적화 끝난 뒤 [이 안에서 이어서] 가 안 됨 — 결과 화면 카드에 체크 상자가 없어 '안 돌린 항목을 체크' 할 수 없었음
+  const { factorBoardHtml } = await import('../src/ui/m3/opt-dash.js');
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const cfg = (k) => ({ on: k === 'milky', box: `<input type="checkbox" data-ad="${k === 'position' ? 'leds' : k}" aria-label="${k} 사용">`, opt: '', why: '' });
+  const res = (k) => (k === 'milky' ? { chg: true, chip: '바뀜', off: false, body: '2.00 → 3.45', eff: '' } : { chg: false, chip: '안 돌림', off: true, body: k === 'position' ? 'LED 72개' : '원본', eff: '' });
+  const h = factorBoardHtml(null, {}, cfg, res);
+  say(/data-ad="leds"/.test(h) && /data-ad="shape"/.test(h) && !/data-ad="milky"/.test(h), '결과 화면: 안 돌린 항목만 체크 상자(이어서 할 항목 고르기)');
+  say(/LED 72개/.test(h) && /2\.00 → 3\.45/.test(h), '결과 값은 그대로 보임');
+  const { factorResult } = await import('../src/ui/m3/autodesign-panel.js');
+  const x = { cur: { milky: 2 }, best: { milky: 3.45 }, stages: { milky: true }, stepLeds: 72 };
+  say(factorResult(x, {}, {}, 'shape')?.off === true && factorResult(x, {}, {}, 'milky')?.off === false, 'factorResult: 안 돌림 = off');
+}

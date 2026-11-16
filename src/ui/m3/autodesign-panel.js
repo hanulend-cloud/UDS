@@ -420,7 +420,7 @@ function factorBoxesHtml(x, effects, locked = {}, only = null) {
     const sgn = fmtDp;
     const ef = e && (Number.isFinite(e.dl) || Number.isFinite(e.dw)) ? `<div class="rs-fef" title="단계별 빠른 계산값을 전체 변화에 맞춰 나눈 대략값">효과 ≈ 길이 ${sgn(e.dl ?? 0)} · 폭 ${sgn(e.dw ?? 0)}</div>` : '';
     const body = chg ? `<div class="rs-fv"><span class="mut">${clip(a0, 14)}</span> → <b>${clip(b0, 20)}</b>${extra ? ` <b>${esc(extra)}</b>` : ''}</div>` : `<div class="rs-fv mut">${clip(a0, 26)}</div>`;
-    if (only) return { chg, chip: st[1], body: body.replace(/^<div class="rs-fv( mut)?">|<\/div>$/g, ''), eff: ef.replace(/^<div class="rs-fef"[^>]*>|<\/div>$/g, '') };
+    if (only) return { chg, off: st[0] === 'off', chip: st[1], body: body.replace(/^<div class="rs-fv( mut)?">|<\/div>$/g, ''), eff: ef.replace(/^<div class="rs-fef"[^>]*>|<\/div>$/g, '') };
     return `<div class="rs-fb rs-${st[0]}" style="--fb:${col}"><div class="rs-fh"><b>${name}</b><span class="rs-fs">${st[1]}</span></div>${body}${ef}</div>`;
   };
   if (only) return box(only);
