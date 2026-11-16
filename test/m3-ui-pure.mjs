@@ -1259,3 +1259,19 @@ done();
   histAfterRestore?.(H, true);
   say(typeof histAfterRestore === 'function' && keep && H.every((x) => x.applied === false), '되돌리기로 설계가 바뀌면 지난 후보 표의 적용됨 해제(보기만 바뀌면 그대로)');
 }
+{ // 2026-11-16 사용자: 상단 ④·⑤ 단계 칩과 떠 있는 창이 이어져 보이게 — 같은 색·번호 · 열림 밑줄 · 칩에서 펼쳐지는 애니메이션
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const css = (await import('fs')).readFileSync('styles.css', 'utf8');
+  say(/--step-sim:/.test(css) && /--step-opt:/.test(css) && /\.m3-big-in\s*\{\s*--win-tint:\s*var\(--step-sim\)/.test(css) && /\.m3-mon\s*\{\s*--win-tint:\s*var\(--step-opt\)/.test(css), '창 색 = 단계 색 변수(④ sim · ⑤ opt)');
+  say(/\[data-c="sim"\][^{]*\{[^}]*--step:\s*var\(--step-sim\)/.test(css) && /\[data-c="opt"\][^{]*\{[^}]*--step:\s*var\(--step-opt\)/.test(css) && /\.m3-flow i\s*\{[^}]*background:\s*var\(--step\)/.test(css), '칩 번호 원 = 같은 단계 색');
+  say(/\.m3-flow\.win-open[^{]*\{[^}]*var\(--step\)/.test(css) && /\.m3-flow\.win-open::after/.test(css), '창이 열리면 칩에 같은 색 밑줄 + ▾');
+  const { flyFrames } = await import('../src/ui/m3/monitor.js');
+  const w = { left: 400, top: 200, width: 800, height: 600 }, c = { left: 600, top: 20, width: 160, height: 40 };
+  const f = flyFrames?.(w, c, false) ?? [];
+  const m = (s) => s.match(/translate\(([-\d.]+)px, ([-\d.]+)px\) scale\(([-\d.]+), ([-\d.]+)\)/).slice(1).map(Number);
+  const [x, y, sx, sy] = f.length ? m(f[0].transform) : [];
+  say(f.length === 2 && x === 200 && y === -180 && sx === 0.2 && Math.abs(sy - 40 / 600) < 1e-9 && f[0].opacity === 0.3 && f[1].transform === 'none' && f[1].opacity === 1, `열기 = 칩 자리에서 창 크기로 (${f[0]?.transform})`);
+  const g = flyFrames?.(w, c, true) ?? [];
+  say(g.length === 2 && g[0].transform === 'none' && g[1].transform === f[0]?.transform, '닫기 = 거꾸로(창 → 칩)');
+  say(typeof flyFrames === 'function' && flyFrames(w, null, false) === null, '칩이 없으면 애니메이션 없음');
+}

@@ -1,7 +1,7 @@
 import { shapeLayout } from './map-shape.js';
 import { requiredFlux, fmtProg, needText, needShort } from './progressive.js';
 import { mountSplit, mountHeightHandle } from './pane-split.js';
-import { clampRect, fitRect, winTop, dragBy, raiseWin, mountResizers, COLLAPSED_W, maxRect, DEF_RECT } from './monitor.js';
+import { clampRect, fitRect, winTop, dragBy, raiseWin, mountResizers, COLLAPSED_W, maxRect, DEF_RECT, flyWin } from './monitor.js';
 import { simPct } from './opt-dash.js';
 import { simCtl, setCtl, setStepMark, iconLabel } from './run-ctl.js';
 import { showCtxMenu } from './feature-tree.js';
@@ -547,7 +547,7 @@ export const mapMenuItems = (hasPin, onCell) => [
 ];
 // 1D 우클릭 메뉴 항목(순수)
 export const plotMenuItems = (title) => [{ k: 'csv', label: `${title} 데이터 CSV 저장` }, { k: 'png', label: '그래프 이미지 저장 (PNG)' }, { k: 'copy', label: '그래프 이미지 복사' }];
-export function createResultsPanel(el, { onOpt = null, onQuality = null, fileName = () => 'uds', onLeak = null, onBig = null, onCalc = null, calcBusy = () => false, onNote = null } = {}) {
+export function createResultsPanel(el, { anchor = () => null, onOpt = null, onQuality = null, fileName = () => 'uds', onLeak = null, onBig = null, onCalc = null, calcBusy = () => false, onNote = null } = {}) {
   let effT = { key: null, t0: null };
   let optFrac = null, vCls = '';   // 기구 최적화 진행률(null = 안 돎) · 지금 종합 판정
   function syncNext() {   // 판정 옆 '다음 할 일' 단추
@@ -656,7 +656,8 @@ export function createResultsPanel(el, { onOpt = null, onQuality = null, fileNam
       paint(k, cv);
     }
   };
-  const closeBig = () => { if (!big) return; onBig?.(null); big.ro?.disconnect(); big.el.remove(); document.removeEventListener('keydown', big.key); document.removeEventListener('pointerdown', big.down, true); window.removeEventListener('resize', big.rs); big = null; };
+  // anim = 단추로 닫음 → ④ 칩으로 접혀 들어감(2026-11-16)
+  const closeBig = (anim = false) => { if (!big) return; onBig?.(null); big.ro?.disconnect(); { const w = big.el; if (anim === true) flyWin(w, anchor(), true, () => w.remove()); else w.remove(); } document.removeEventListener('keydown', big.key); document.removeEventListener('pointerdown', big.down, true); window.removeEventListener('resize', big.rs); big = null; };
   const setFocus = (k) => {
     big.focus = k; if (k) big.grid.dataset.focus = k; else delete big.grid.dataset.focus;   // 속성이 있으면(빈 값도) 한 그림 배치
     big.grid.querySelectorAll('[data-big-one]').forEach((b) => { const on = b.dataset.bigOne === k; b.textContent = on ? '↙ 모두 보기' : '⤢ 이 그림만'; b.title = on ? '2D·1D 를 한 화면에' : '이 그림만 화면 가득'; });
@@ -752,7 +753,7 @@ export function createResultsPanel(el, { onOpt = null, onQuality = null, fileNam
     };
     // Esc = 이 창을 마지막으로 눌렀을 때만(뒤 화면에서 작업 중인 Esc 를 가로채지 않게)
     big = { el: ov, cvs, grid: ov.querySelector('.m3-big-grid'), focus: null, equal: eq0, min: false, active: true,
-      key: (e) => { if (e.key !== 'Escape' || !big.active) return; if (big.regMode) regOff(); else if (big.focus) setFocus(null); else closeBig(); },
+      key: (e) => { if (e.key !== 'Escape' || !big.active) return; if (big.regMode) regOff(); else if (big.focus) setFocus(null); else closeBig(true); },
       down: (e) => { big.active = ov.contains(e.target); },
       rs: () => { place(); paintBig(); } };
     document.addEventListener('keydown', big.key); document.addEventListener('pointerdown', big.down, true); window.addEventListener('resize', big.rs);
@@ -771,7 +772,7 @@ export function createResultsPanel(el, { onOpt = null, onQuality = null, fileNam
       if (e.target.closest('[data-big-reg-on]')) { if (big.regMode) regOff(); else { big.regMode = true; unroll(); showRegion(); paint('map', big.cvs.map); paint('map', q('map')); } return; }
       if (e.target.closest('[data-big-fit]')) { cvs.map._view = null; if (!big.regMode) cvs.map._flat = false; paint('map', cvs.map); return; }
     });
-    ov.querySelector('[data-big-close]').onclick = closeBig;
+    ov.querySelector('[data-big-close]').onclick = () => closeBig(true);
     ov.querySelector('[data-big-q]').onchange = (e) => onQuality?.(e.target.value);
     const eq = ov.querySelector('[data-big-eq]'); eq.onchange = () => { big.equal = eq.checked; cvs.map._flat = false; paint('map', cvs.map); };
     wireMapHover(cvs.map); wireBigZoom(cvs.map); cvs.map._region = region; cvs.map._onPin = onPin; cvs.map._onPinOff = pinOff; cvs.map._onMenu = (e, c, cv) => mapMenu(e, c, cv); wireHover(cvs.prof); wireHover(cvs.wprof); cvs.prof._onMenu = plotMenu('prof'); cvs.wprof._onMenu = plotMenu('wprof');
@@ -784,6 +785,7 @@ export function createResultsPanel(el, { onOpt = null, onQuality = null, fileNam
     mountSplit([C('prof'), C('wprof')], { key: 'uds.m3.bigH', dir: 'row', min: 160, onChange: () => paintBig() });
     if (typeof ResizeObserver !== 'undefined') { big.ro = new ResizeObserver(() => paintBig()); big.ro.observe(ov); }
     setMin(false); raiseWin(ov); setFocus(null); syncBig(); showRegion(); onBig?.(ov.querySelector('[data-big-prog]'));
+    flyWin(ov, anchor(), false);   // ④ 칩에서 펼쳐짐
   }
   // 큰 창 머리: 화질 = 지금 값
   const syncBig = () => {
@@ -887,5 +889,5 @@ export function createResultsPanel(el, { onOpt = null, onQuality = null, fileNam
   clear();
   // 기구 최적화 진행률(null = 안 돎) — 판정 옆 단추 글만 고침(그래프는 다시 안 그림)
   const setOptRun = (f) => { const v = Number.isFinite(f) ? Math.round(f * 1000) / 1000 : null; if (v === optFrac) return; optFrac = v; syncNext(); };
-  return { update, closeBig, setOptRun, toggleBig: () => (big ? closeBig() : openBig()) };
+  return { update, closeBig, setOptRun, toggleBig: () => (big ? closeBig(true) : openBig()) };
 }

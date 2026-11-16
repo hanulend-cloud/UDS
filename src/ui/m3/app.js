@@ -209,7 +209,7 @@ export async function mount(ctx) {
   mountSplitter(document.querySelector('.m3-main'));   // 좌·우 창 폭 끌어서 조절(한 번만 붙음)
   mountDockSplitter(document.querySelector('#m3-dock'), document.querySelector('#mech3d-wrap'));   // 아래 칸 높이 조절
   // ⑤ 기구 최적화 창(떠 있는 창) — 설계 인자 현황·기구 최적화 칸을 기본 화면에서 빼서 담음. 여닫기 = 명령줄 [5 기구 최적화]
-  monitor ??= createMonitor({ host: $('#mech3d-wrap'), items: [$('#m3-factor'), $('#m3-dock')], onTab: (m) => { if (!A) return; adState().view = m; renderAuto(); }, onChange: (on) => { const b = document.querySelector('#m3-cmd [data-c="opt"]'); if (b) { b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); } if (on && A && !adState().open) adSetOpen(true); if (A) { renderMarkers(); adDetectPath(); } } });
+  monitor ??= createMonitor({ anchor: () => document.querySelector('#m3-cmd [data-c="opt"]'), host: $('#mech3d-wrap'), items: [$('#m3-factor'), $('#m3-dock')], onTab: (m) => { if (!A) return; adState().view = m; renderAuto(); }, onChange: (on) => { const b = document.querySelector('#m3-cmd [data-c="opt"]'); if (b) { b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); } winOpenChip('opt', on); if (on && A && !adState().open) adSetOpen(true); if (A) { renderMarkers(); adDetectPath(); } } });
   // 기구 최적화 창 안: 왼쪽 설계 인자 ↔ 오른쪽 실행·진행 폭 조절(가운데 세로 경계선 끌기, 보는 사람별)
   // 실행 줄·결과 카드(#m3-auto) = 왼쪽 설계 인자 바로 아래(2026-10-30) — 고르고 → 실행 → 결과를 한 칸에서, 오른쪽은 진행 모니터만
   if ($('#m3-auto') && $('#m3-auto').parentElement !== $('#m3-factor')) $('#m3-factor')?.appendChild($('#m3-auto'));
@@ -234,7 +234,7 @@ export async function mount(ctx) {
   }
   const a = A = { ctx, store, pool, view: null, meshShown: null, lineKey: '', Gc: null, obsShown: null, checks: {}, markKey: '', timing: { start: 0, first: null, noise5: null } };
   a.prog = createProgressive({ ports: pool.ports(), onUpdate: onCalc, opts: { targetNoise: ctx.mspec.observe.targetNoise ?? 0.01 } });
-  a.results = createResultsPanel($('#m3-res'), { onOpt: () => { if (monitor) { monitor.open(); monitor.expand(); } }, onNote: (t) => setStatus(t), onCalc: (k) => calcCtl(k), calcBusy: () => !!A?.ad?.running, onLeak: () => A.store.update('session', (_, s) => { s.focusCheck = s.focusCheck === 'leak' ? null : 'leak'; }), onBig: (node) => A?.simDash?.attach(node), fileName: () => String(A?.store?.mspec?.name ?? 'uds').replace(/\.(stp|step)$/i, ''), onQuality: (v) => A.store.update('observe', (m) => { m.observe.quality = v; }) });
+  a.results = createResultsPanel($('#m3-res'), { onOpt: () => { if (monitor) { monitor.open(); monitor.expand(); } }, onNote: (t) => setStatus(t), onCalc: (k) => calcCtl(k), calcBusy: () => !!A?.ad?.running, onLeak: () => A.store.update('session', (_, s) => { s.focusCheck = s.focusCheck === 'leak' ? null : 'leak'; }), onBig: (node) => { A?.simDash?.attach(node); winOpenChip('sim', !!node); }, anchor: () => document.querySelector('#m3-cmd [data-c="sim"]'), fileName: () => String(A?.store?.mspec?.name ?? 'uds').replace(/\.(stp|step)$/i, ''), onQuality: (v) => A.store.update('observe', (m) => { m.observe.quality = v; }) });
   // 균일도 그래프 칸 = 창 왼쪽 아래(실행·결과 밑, 2026-11-05)
   let chartEl = $('#m3-odchart'); if (!chartEl) { chartEl = document.createElement('div'); chartEl.id = 'm3-odchart'; $('#m3-factor')?.appendChild(chartEl); }
   a.optDash = createOptDash($('#m3-optdash'), { history: () => { const st = A?.ad; return st ? { list: st.hist ?? [], tgLen: A.store.mspec.observe.targetLen, tgWid: A.store.mspec.observe.targetWid, busy: !!st.running } : null; }, onPick: (i) => adPickHist(i), onPartial: () => adRunPartial(), onSet: () => { if (A) { adState().view = 'set'; renderAuto(); } }, chart: chartEl, result: (k) => adFactorResult(k), config: (k) => (A?.tileState ? tileConfigHtml(k, A.tileState) : { on: false, html: '' }), onSel: (k, v) => adSel(k, v), onUnlock: (k) => adUnlock(k), board: $('#m3-factor'), now: () => (A ? factorNow() : {}) }); a.simDash = createSimDash($('#m3-simdash'), { onCtl: (k) => calcCtl(k), bar: $('#m3-run') });
@@ -242,6 +242,7 @@ export async function mount(ctx) {
   mountSplit([$('#m3-simdash'), $('#m3-res')], { key: 'uds.m3.simSplit', dir: 'col', min: 80, init: [1, 3], onChange: () => window.dispatchEvent(new Event('resize')) });   // 아래 칸 = 기구 최적화 · 오른쪽 맨 위 = 광분포 시뮬레이션(항상 보임, 계산 제어 단추)
   a.cmd = mountCommandBar($('#m3-cmd'), cmdHandlers());
   if (monitor?.isOpen()) $('#m3-cmd [data-c="opt"]')?.classList.add('on');
+  winOpenChip('opt', !!monitor?.isOpen());   // 지난번 열어 둔 창은 칩 막대보다 먼저 열림 — 열림 표시를 여기서 맞춤
   a.unsub = store.subscribe(onChange);
   // 되돌리기(Ctrl+Z): 저장 상태 + 보기 켜기/끄기 + 고정 항목 — 바뀐 때만 한 칸
   rememberLedMesh();
@@ -1100,6 +1101,8 @@ async function adRunBoost() {
     if (r.feasible) return;
   }
 }
+// 상단 ④·⑤ 칩 = 떠 있는 창이 열려 있음(같은 색 밑줄 + ▾, 2026-11-16 사용자)
+function winOpenChip(k, on) { const b = document.querySelector(`#m3-cmd [data-c="${k}"]`); if (!b) return; b.classList.toggle('win-open', !!on); b.setAttribute('aria-pressed', String(!!on)); }
 const progress0 = (t) => { const st = A?.ad; if (st?.running) { st.running = { ...st.running, text: t }; renderAuto(); } };
 async function adRun(opt = {}) {
   const a = A, st = adState(), S = A.store.session;

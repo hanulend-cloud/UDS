@@ -47,6 +47,24 @@ export function dragBy(handle, snap, onMove, ok, onEnd = () => {}) {
     handle.addEventListener('pointermove', mv); handle.addEventListener('pointerup', up); handle.addEventListener('pointercancel', up);
   });
 }
+// 창 ↔ 상단 단계 칩 애니메이션(2026-11-16 사용자: ④·⑤ 칩과 창이 이어져 보이게) — 열 때 칩 자리에서 창 크기로, 닫을 때 거꾸로
+// 순수: w·c = getBoundingClientRect(창·칩). 칩이 없으면 null(애니메이션 없음)
+export function flyFrames(w, c, closing) {
+  if (!w || !c || !(w.width > 0) || !(w.height > 0)) return null;
+  const at = { transform: `translate(${c.left - w.left}px, ${c.top - w.top}px) scale(${c.width / w.width}, ${c.height / w.height})`, opacity: 0.3 }, full = { transform: 'none', opacity: 1 };
+  return closing ? [full, at] : [at, full];
+}
+export const FLY_MS = 200;
+// el 을 칩(anchor)에서 펼치거나 칩으로 접음. 애니메이션을 못 하면(움직임 줄이기 · 칩 없음 · 지원 안 함) done 을 바로
+export function flyWin(el, anchor, closing, done = () => {}) {
+  const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const f = !reduce && el?.animate && anchor?.isConnected ? flyFrames(el.getBoundingClientRect(), anchor.getBoundingClientRect(), closing) : null;
+  if (!f) { done(); return; }
+  const a = el.animate(f, { duration: FLY_MS, easing: closing ? 'ease-in' : 'cubic-bezier(.2,.8,.2,1)' });
+  el.style.transformOrigin = '0 0';
+  let fin = false; const end = () => { if (fin) return; fin = true; el.style.transformOrigin = ''; done(); };
+  a.onfinish = a.oncancel = end; setTimeout(end, FLY_MS + 150);   // 화면이 숨겨져 애니메이션이 멈춰도 닫기는 끝냄
+}
 // 떠 있는 창이 겹칠 때 — 누른 창을 앞으로(기구 최적화 창 ↔ 광량 분포 창)
 export function raiseWin(el) { document.querySelectorAll('.m3-mon, .m3-big-in').forEach((w) => { w.style.zIndex = w === el ? '61' : '60'; }); }
 
@@ -69,7 +87,7 @@ export function mountResizers(el, { rect, apply, ok = () => true, end = () => {}
   }
 }
 // host = 창을 붙일 곳(#mech3d-wrap — CSS 변수 상속), items = 창에 담을 칸들(차례대로), onChange(open) = 단추 표시 갱신
-export function createMonitor({ host, items, onChange = () => {}, onTab = () => {} }) {
+export function createMonitor({ host, items, onChange = () => {}, onTab = () => {}, anchor = () => null }) {   // anchor = 상단 ⑤ 칩(펼침·접힘 애니메이션)
   const sv = load(), old = sv.lay !== LAY;
   let st = { open: false, min: false, ...DEF_RECT, ...(old ? { open: sv.open, min: sv.min } : sv) };
   st.min = !!st.min; st.open = !!st.open;
@@ -121,10 +139,12 @@ export function createMonitor({ host, items, onChange = () => {}, onTab = () => 
     Object.assign(st, fitRect(st, innerWidth, innerHeight, winTop()));
     st.open = true; persist(); el.hidden = false; setMin(st.min); onChange(true);
     addEventListener('resize', place);
+    flyWin(el, anchor(), false);
   }
   function close() {
     if (!st.open) return;
-    st.open = false; persist(); el.hidden = true; onChange(false);
+    st.open = false; persist(); onChange(false);
+    flyWin(el, anchor(), true, () => { if (!st.open) el.hidden = true; });   // 접혀 들어간 뒤 숨김(그사이 다시 열면 그대로)
     removeEventListener('resize', place);
   }
   if (st.open) { st.open = false; queueMicrotask(open); }   // 지난번에 열어 둔 채였으면 다시 엶
