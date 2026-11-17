@@ -1360,3 +1360,11 @@ done();
   const { simCardText } = await import('../src/ui/m3/opt-dash.js');
   okS(simCardText('running', 29.74) === '계산 중 29.7%' && simCardText('done', 100, 'converged') === '계산 완료 — 노이즈 충분히 작음' && simCardText('running', 50, '', false, true) === '기구 최적화 중 — 일시정지(끝나면 이어서)' && simCardText('paused', 40) === '일시정지 40.0%', `④ 상태 글에 진행 %: ${simCardText('running', 29.74)}`);
 }
+// 설계 인자 = 가로 3칸(2026-11-18 사용자) — 상세 검토 표는 칸 안에서 결과 줄 → 후보 줄로
+{
+  const { readFileSync } = await import('node:fs'), css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const okS = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
+  const last = (sel) => { let r = ''; for (const blk of css.split('}')) { const i = blk.indexOf('{'); if (i > 0 && blk.slice(0, i).split(',').some((s) => s.trim().replace(/\s+/g, ' ') === sel)) r = blk.slice(i + 1); } return r; };
+  okS(/repeat\(3,/.test(last('.m3-mon .fb-cards')), `기구 최적화 창 설계 인자 = 가로 3칸: ${last('.m3-mon .fb-cards')}`);
+  okS(/grid/.test(last('.m3-mon .fb-tbl tr')) && /grid-row:\s*1/.test(last('.m3-mon .fb-tbl .fb-res')) && /grid-row:\s*2/.test(last('.m3-mon .fb-tbl .fb-cs')), '좁은 칸: 결과 줄 위, 후보 줄 아래');
+}
