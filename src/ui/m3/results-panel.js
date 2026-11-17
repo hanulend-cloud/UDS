@@ -264,7 +264,7 @@ export function uniTagHtml(kind, st, tg) {
   return `<span class="m3-uni ${c}" title="${kind} 균일도 · 목표 ${fmtTg(tg)}">${kind} 균일도 <b>${fmtJudge(v)}</b> <small>목표 ${fmtTg(tg)}</small></span>`;
 }
 export const MIN_COLOR = '#e5484d';
-// 최고점 = 빨간 고리(속 빔, 최저점과 같은 색·크기 — 2026-11-17 사용자: 흰색은 링 시작점과 헷갈림) · 계산 초반(노이즈 5% 넘음)은 여기저기 옮겨 다녀서 숨김
+// 최고점 = 빨간 고리(속 빔, 최저점과 같은 색·크기 — 2026-11-17 사용자) · 계산 초반(노이즈 5% 넘음)은 여기저기 옮겨 다녀서 숨김
 export const MAX_COLOR = MIN_COLOR;
 export const showMax = (st) => !!st && !st.empty && st.relNoise <= 0.05;
 const mapMaxIdx = (G, map, mx) => { for (let k = 0; k < map.length; k++) if (G.valid[k] && map[k] === mx) return k; return -1; };
@@ -414,8 +414,8 @@ function drawShapeMap(cv, v, dpr, hover, mode) {
   }
   colorBar(x, W, H, dpr);
   x.font = `${10.5 * dpr}px sans-serif`; x.fillStyle = '#8a93a6'; x.textAlign = 'right'; x.textBaseline = 'bottom';
-  x.fillText(mode === 'ring' ? '링 · 두께 확대(시작점·방향은 실제와 같음) — [실제 비율] = 실제 모양' : `실제 모양 · 가로 ${Ly.info.mm[0].toFixed(1)} × 세로 ${Ly.info.mm[1].toFixed(1)} mm`, box.x + box.w, H - 3 * dpr);
-  if (mode === 'ring') { const [i0x, i0y] = Ly.toPx(0, G.w0 + (rows[0] + rows[1] + 1) / 2 * G.cell); x.beginPath(); x.arc(i0x, i0y, 3 * dpr, 0, 2 * Math.PI); x.fillStyle = '#ffffff'; x.fill(); x.textAlign = 'left'; x.textBaseline = 'middle'; x.fillStyle = '#8a93a6'; x.fillText('s 0', i0x + 6 * dpr, i0y); }
+  x.fillText(mode === 'ring' ? '링 · 두께 확대(방향은 실제와 같음) — [실제 비율] = 실제 모양' : `실제 모양 · 가로 ${Ly.info.mm[0].toFixed(1)} × 세로 ${Ly.info.mm[1].toFixed(1)} mm`, box.x + box.w, H - 3 * dpr);
+  // 링 시작점(흰 점 · s 0) 표시 뺌(2026-11-17 사용자) — 최저·최고점이 2D·3D 에 같이 찍혀 위치를 맞출 수 있음
   if (v.showMax && mx > 0) { const kM = mapMaxIdx(G, map, mx); if (kM >= 0) { const [cs, cw] = mapCellSW(G, Math.floor(kM / G.nw), kM % G.nw), [px, py] = Ly.toPx(cs, cw); maxRing(x, px, py, minDotR(box.w, box.h, dpr), dpr); } }   // 최고점 = 빨간 고리(2026-11-17)
   if (kMin >= 0) { const i = Math.floor(kMin / G.nw), j = kMin % G.nw, [cs, cw] = mapCellSW(G, i, j), [px, py] = Ly.toPx(cs, cw); x.beginPath(); x.arc(px, py, minDotR(box.w, box.h, dpr), 0, 2 * Math.PI); x.fillStyle = MIN_COLOR; x.fill(); x.strokeStyle = '#ffffff'; x.lineWidth = 0.8 * dpr; x.stroke(); }
   if (v.pin) { const [px, py] = Ly.toPx(v.pin.s, v.pin.w); x.beginPath(); x.arc(px, py, 4 * dpr, 0, 2 * Math.PI); x.fillStyle = PIN_COLOR; x.fill(); x.strokeStyle = 'rgba(10,14,22,.9)'; x.lineWidth = 1.5 * dpr; x.stroke(); }
