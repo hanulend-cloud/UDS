@@ -293,7 +293,7 @@ const perPhoton = (s) => Array.from(s.sum, (v) => v / (s.photons / 25000));   //
   const T = fakeTimers(), P = createProgressive({ ports: [port(T)], timers: T, opts: { ...OPT, targetNoise: 0.02 } });
   P.restart(job(1)); await T.advance(30000);
   const s0 = P.snapshot(), tg = s0.stats.Ulen + 0.01;
-  ok(s0.state === 'done' && s0.stats.relNoise <= 0.011 && s0.stats.relNoise > 0.005 && s0.stats.relNoise <= 0.02, `겨우 통과(${(s0.stats.Ulen * 100).toFixed(1)}% ± ${(s0.stats.seLen * 100).toFixed(1)}%p): 1% 까지 보고 멈춤, 0.5% 는 안 감 (2026-11-17, ${(s0.stats.relNoise * 100).toFixed(2)}%)`);
+  ok(s0.state === 'done' && s0.stats.relNoise < 0.02 && s0.stats.relNoise >= 0.005, `겨우 통과(${(s0.stats.Ulen * 100).toFixed(1)}% ± ${(s0.stats.seLen * 100).toFixed(1)}%p): 2% 에서 멈추지 않고 오차 ±1.0%p 쪽으로 더 계산, 0.5% 아래로는 안 감 (2026-11-17, ${(s0.stats.relNoise * 100).toFixed(2)}%)`);
   P.setJudge({ obs: { ...obs, targetLen: tg } });
   ok(P.snapshot().state === 'running' && P.snapshot().targetNoise === 0.005, '목표를 바로 위로 올리면 0.5% 까지 계산 재개');
   P.cancel();

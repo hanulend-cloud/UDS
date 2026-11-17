@@ -1,5 +1,5 @@
 // 관측 집계: node test/mech3d-tally.mjs
-import { LUM_CONE, fmtJudge, nearTarget, judgeNoise, JUDGE_NOISE, sharpNoise, PASS_NOISE, tallyGeometry, makeAccumulator, tallyStats, windowProfile, autoCells } from '../src/engine/mech3d/tally.js';
+import { LUM_CONE, fmtJudge, nearTarget, judgeNoise, JUDGE_NOISE, sharpNoise, PASS_SE, tallyGeometry, makeAccumulator, tallyStats, windowProfile, autoCells } from '../src/engine/mech3d/tally.js';
 import { recognizeLine, lightData, lineFromData } from '../src/engine/mech3d/line.js';
 import { rng } from '../src/engine/l2/mc-slab.js';
 import { runMC3D } from '../src/engine/mech3d/mc3d.js';
@@ -186,10 +186,15 @@ ok(S.counted === nV && S.noiseWarn === false, `집계 셀 ${S.counted}, 노이�
   ok(!nearTarget({ Ulen: 0.81, Uwid: 0.85 }, O) && !nearTarget({ Ulen: 0.6, Uwid: 0.85 }, O) && !nearTarget({ Ulen: 0.78, Uwid: 0.5 }, O) && !nearTarget({ empty: true, Ulen: 0.78 }, O), '통과·먼 미달·빈 결과 = 근처 아님');
   ok(judgeNoise({ Ulen: 0.78, Uwid: 0.85 }, O, 0.01) === JUDGE_NOISE && judgeNoise({ Ulen: 0.81, Uwid: 0.85 }, O, 0.01) === 0.01 && judgeNoise({ Ulen: 0.78, Uwid: 0.85 }, O, 0.002) === 0.002, '근처만 0.5% 로 · 사용자가 더 낮게 정했으면 그 값');
   // 겨우 통과(목표 + 표준오차 2배 안)도 판정이 흔들림(2026-11-17 사용자: 링 같은 설계 78.6% / 80.3% — 표준오차 1.7%p) → 1% 까지
-  ok(PASS_NOISE === 0.01 && sharpNoise({ Ulen: 0.8028, seLen: 0.017, Uwid: 0.9, seWid: 0.01 }, O) === PASS_NOISE, '겨우 통과(차이 < 표준오차 2배) → 1% 까지');
+  // 2026-11-17 사용자: 노이즈 1% 대신 판정 오차(표준오차) ±1.0%p 까지 — 1%p 낮은 안이 통과로 나올 확률 약 16%. 오차는 노이즈에 비례 → 필요한 노이즈 = 지금 노이즈 × 1.0%p ÷ 지금 오차
+  { const t = sharpNoise({ Ulen: 0.8028, seLen: 0.017, relNoise: 0.02, Uwid: 0.9, seWid: 0.01 }, O);
+    ok(PASS_SE === 0.01 && Math.abs(t - 0.02 * 0.01 / 0.017) < 1e-9, `겨우 통과(±1.7%p, 노이즈 2%) → 노이즈 ${(t * 100).toFixed(2)}% 까지(오차 ±1.0%p)`); }
+  ok(sharpNoise({ Ulen: 0.805, seLen: 0.0095, relNoise: 0.011, Uwid: 0.9, seWid: 0.005 }, O) === null, '이미 오차 ±1.0%p 안이면 더 안 잼(근처로 표시)');
+  ok(sharpNoise({ Ulen: 0.81, seLen: 0.1, relNoise: 0.02, Uwid: 0.9, seWid: 0.005 }, O) === JUDGE_NOISE, '계산된 노이즈가 0.5% 보다 낮으면 0.5%');
+  ok(sharpNoise({ Ulen: 0.8028, seLen: 0.017, Uwid: 0.9, seWid: 0.01 }, O) === null, '노이즈 모르면 더 안 잼');
   ok(sharpNoise({ Ulen: 0.85, seLen: 0.005, Uwid: 0.9, seWid: 0.005 }, O) === null && sharpNoise({ Ulen: 0.6, seLen: 0.01, Uwid: 0.9 }, O) === null, '확실한 통과·먼 미달 = 더 안 잼');
   ok(sharpNoise({ Ulen: 0.79, seLen: 0.01, Uwid: 0.9 }, O) === JUDGE_NOISE, '목표 바로 아래는 지금처럼 0.5%');
-  ok(judgeNoise({ Ulen: 0.8028, seLen: 0.017, Uwid: 0.9, seWid: 0.01 }, O, 0.02) === PASS_NOISE && judgeNoise({ Ulen: 0.8028, seLen: 0.017, Uwid: 0.9, seWid: 0.01 }, O, 0.005) === 0.005, '④ 도 같은 규칙 · 더 낮게 정했으면 그 값');
+  { const S = { Ulen: 0.8028, seLen: 0.017, relNoise: 0.02, Uwid: 0.9, seWid: 0.01 }; ok(Math.abs(judgeNoise(S, O, 0.02) - 0.02 * 0.01 / 0.017) < 1e-9 && judgeNoise(S, O, 0.005) === 0.005, '④ 도 같은 규칙 · 더 낮게 정했으면 그 값'); }
 }
 { // 목표 바로 아래 값이 반올림으로 목표처럼 보이지 않게
   ok(fmtJudge(0.7952, 0.8) === '79.5%' && fmtJudge(0.7886, 0.8) === '78.8%' && fmtJudge(0.7999, 0.8) === '79.9%' && fmtJudge(0.81, 0.8) === '81.0%' && fmtJudge(0.72, 0.8) === '72.0%' && fmtJudge(0.8, 0.8) === '80.0%' && fmtJudge(NaN, 0.8) === '–' && fmtJudge(0.7952) === '79.5%', '균일도 표시 = 내림 — 미달이 0.80 으로 보이지 않고, 화면과 같은 값');

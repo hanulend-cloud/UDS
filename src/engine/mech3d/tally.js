@@ -14,13 +14,17 @@ export function nearTarget(s, obs) {
   const m = Math.min(s.Ulen - obs.targetLen, s.Uwid == null ? Infinity : s.Uwid - obs.targetWid);
   return m < 0 && m >= -JUDGE_BAND;
 }
-// 겨우 통과(목표와의 차이 < 표준오차 2배)도 1% 까지(2026-11-17 사용자 승인) — 노이즈 2% 판정이 같은 설계에서 78.6% / 80.3% 로 갈림
-export const PASS_NOISE = 0.01;
+// 겨우 통과(목표와의 차이 < 표준오차 2배)는 판정 오차(표준오차) ±1.0%p 까지(2026-11-17 사용자 — 노이즈 2% 판정이 같은 설계에서 78.6% / 80.3% 로 갈림, 1%p 낮은 안이 통과로 나올 확률 약 16%)
+// 오차는 노이즈에 비례 → 필요한 노이즈 = 지금 노이즈 × PASS_SE ÷ 지금 오차(근처인 방향 중 큰 쪽) · 0.5% 아래로는 안 감 · 최적화에서는 PASS_MS(3분) 한도
+export const PASS_SE = 0.01, PASS_MS = 180000;
 export function sharpNoise(s, obs) {
   if (nearTarget(s, obs)) return JUDGE_NOISE;
-  if (!s || s.empty || !Number.isFinite(s.Ulen)) return null;
+  if (!s || s.empty || !Number.isFinite(s.Ulen) || !(s.relNoise > 0)) return null;
   const j = judgeStats(s, obs);
-  return j.all === 'near' && j.len !== 'bad' && j.wid !== 'bad' ? PASS_NOISE : null;
+  if (j.all !== 'near') return null;
+  const seOf = (v, se) => (Number.isFinite(se) && se > 0 ? se : s.relNoise * v);
+  const se = Math.max(j.len === 'near' ? seOf(s.Ulen, s.seLen) : 0, j.wid === 'near' ? seOf(s.Uwid, s.seWid) : 0);
+  return se > PASS_SE ? Math.max(JUDGE_NOISE, (s.relNoise * PASS_SE) / se) : null;
 }
 export const judgeNoise = (s, obs, noise) => { const t = sharpNoise(s, obs); return t == null ? noise : Math.min(noise, t); };
 // 화면 판정(2026-11-04) — 목표와의 차이가 노이즈보다 작으면 통과·미달을 가를 수 없어 '근처'. 같은 설계 고화질 3회 실측 0.7925 · 0.802 · 0.8027(표준오차 ≈ 0.004) → 표준오차의 2배.

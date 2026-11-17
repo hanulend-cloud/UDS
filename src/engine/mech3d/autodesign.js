@@ -1,7 +1,7 @@
 // P4 자동설계 단계 실행기 — spec §1·§2. 순서 ② → ⑤ LED 높이 → ④ 케이스 면 → ① → ③(§2.3c), 체크 안 한 항목은 현재 값 고정. 계산은 io 가 맡는다(Worker / 시험 가짜).
 // ① 재가중 창은 기준 ±0.25(ESS 한계, spec §2.1). U(Milky) 는 단봉형(§2.1a) — 거친 탐색으로 최고점을 지나면 멈추고, 오르는 구간에서만 할선/이분으로 최소 통과 Milky. ② 는 기준(①·④ 함께면 거친 최고점 Milky ≤ 5·케이스 최고 등급, §2.2c)에서 최소 개수를 구한 뒤 ④·① 이 고른다.
 // io.milkyRows(d, ms, { precise }) — precise = 경계가 든 창의 재추적(광자 많이). 결과 { feasible, best(design), steps:[{stage, …}], reason, verified, current(현재안 io.verify), cancelled }
-import { nearTarget, sharpNoise, fmtJudge, JUDGE_NOISE, JUDGE_BAND, fmtTg, passChance } from './tally.js';
+import { nearTarget, sharpNoise, PASS_MS, PASS_SE, fmtJudge, JUDGE_NOISE, JUDGE_BAND, fmtTg, passChance } from './tally.js';
 import { hasCurve, hasField } from './shape-opt.js';
 import { milkyAxis } from './reweight.js';
 import { pickMilky, margin } from './milky-search.js';
@@ -715,15 +715,21 @@ export async function runAutoDesign(cfg, io) {
     const r = await sharpTo(v, (o) => io.verify(e, o), {});
     return r === v ? v : { ...r, sharp: true };   // 더 잴 것 없으면 받은 값 그대로
   };
-  // 판정 노이즈까지 이어서 계산(sharpNoise: 목표 바로 아래 0.5% · 겨우 통과 1%, 2026-11-17) — 1% 에서 목표 바로 아래로 내려오면 0.5% 까지 한 번 더
-  const fmtNoise = (x) => `${(x * 100).toFixed(1)}%`;
+  // 판정 노이즈까지 이어서 계산(sharpNoise: 목표 바로 아래 0.5% · 겨우 통과 = 판정 오차 ±1.0%p 까지 3분 한도, 2026-11-17) — 그 뒤 목표 바로 아래로 내려오면 0.5% 까지 한 번 더
+  const fmtNoise = (x) => `${(x * 100).toFixed(1)}%`, fmtSe = (x) => `±${(x * 100).toFixed(1)}%p`;
+  const seNow = (s) => Math.max(s.seLen ?? 0, s.seWid ?? 0);
   const sharpTo = async (r, run, extra) => {
+    let passDone = false;
     for (let k = 0; k < 2 && !stop(); k++) {
-      const t = sharpNoise(r.stats, obs);
-      if (t == null || !(r.stats.relNoise > t * 1.1)) break;
-      io.progress?.('verify', 0.5, `목표 근처 — 노이즈 ${t * 100}% 까지 다시 계산(몇 분 걸림)`);
-      // 더 정밀하게 재다 실패하면(Worker 응답 없음 등) 최적화 전체를 버리지 않고 앞 값으로 판정 + 이유(2026-11-17 — 30분 결과가 사라졌음). 중지는 그대로 멈춤
-      try { r = await run({ noise: t, from: r, ...extra }); } catch (e) { if (stop() || /중지/.test(e?.message ?? '')) throw e; return { ...r, sharpErr: `노이즈 ${t * 100}% 재계산 실패(${e?.message ?? e}) — 노이즈 ${fmtNoise(r.stats.relNoise)} 값으로 판정` }; }
+      const pass = !nearTarget(r.stats, obs), t = sharpNoise(r.stats, obs);
+      if (t == null || !(r.stats.relNoise > t * 1.1) || (pass && passDone)) break;
+      io.progress?.('verify', 0.5, pass ? `겨우 통과 — 판정 오차 ${fmtSe(PASS_SE)} 까지 다시 계산(최대 3분)` : `목표 근처 — 노이즈 ${fmtNoise(t)} 까지 다시 계산(몇 분 걸림)`);
+      // 더 정밀하게 다시 재다 실패하면(Worker 응답 없음 등) 최적화 전체를 버리지 않고 앞 값으로 판정 + 이유(2026-11-17 — 30분 결과가 사라졌음). 중지는 그대로 멈춤
+      try { r = await run({ noise: t, from: r, ...extra, ...(pass ? { maxMs: PASS_MS } : {}) }); } catch (e) { if (stop() || /중지/.test(e?.message ?? '')) throw e; return { ...r, sharpErr: `노이즈 ${fmtNoise(t)} 재계산 실패(${e?.message ?? e}) — 노이즈 ${fmtNoise(r.stats.relNoise)} 값으로 판정` }; }
+      if (pass) {
+        passDone = true;
+        if (r.stats.relNoise > t * 1.1 && sharpNoise(r.stats, obs) != null && !nearTarget(r.stats, obs)) return { ...r, sharpErr: `3분 안에 판정 오차 ${fmtSe(PASS_SE)} 에 못 닿음 — 오차 ${fmtSe(seNow(r.stats))} 값으로 판정(목표 근처)` };
+      }
     }
     return r;
   };
