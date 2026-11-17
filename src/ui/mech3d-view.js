@@ -606,11 +606,11 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   }
   // 2D 광량 분포 최저점(빨간 점)을 3D 관측면에도(2026-11-17 사용자) — pos = 관측면 덧그림 위 점 | null. 화면 지름 OBS_MIN_PX, 가려도 보임, 단면에선 잘림
   const OBS_MIN_PX = 8;
-  // 최고점 = 흰 고리(속 빔, 어두운 테두리) — 최저점과 같은 화면 크기(2026-11-17 사용자)
+  // 최고점 = 빨간 고리(속 빔, 어두운 테두리) — 최저점과 같은 화면 크기(2026-11-17 사용자)
   function obsDot(fill) {
     const cv = document.createElement('canvas'); cv.width = cv.height = 64;
     const x = cv.getContext('2d'); x.beginPath(); x.arc(32, 32, 26, 0, 2 * Math.PI);
-    if (fill) { x.fillStyle = '#e5484d'; x.fill(); x.lineWidth = 6; x.strokeStyle = '#ffffff'; x.stroke(); } else { x.lineWidth = 14; x.strokeStyle = 'rgba(10,14,22,.85)'; x.stroke(); x.lineWidth = 7; x.strokeStyle = '#ffffff'; x.stroke(); }
+    if (fill) { x.fillStyle = '#e5484d'; x.fill(); x.lineWidth = 6; x.strokeStyle = '#ffffff'; x.stroke(); } else { x.lineWidth = 14; x.strokeStyle = 'rgba(10,14,22,.85)'; x.stroke(); x.lineWidth = 7; x.strokeStyle = '#e5484d'; x.stroke(); }
     const d = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false, depthWrite: false, transparent: true, clippingPlanes: clip }));
     d.renderOrder = fill ? 4 : 3.9; scene.add(d); return d;
   }

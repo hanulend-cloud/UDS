@@ -561,7 +561,7 @@ ok(judgeText(0.3, 0.8, null, 0.2).cls === 'busy' && /판정 보류/.test(judgeTe
 }
 { // 2D 최저 위치 점: 그림 크기에 맞춤, 2~5 px
   const { minDotR, MIN_COLOR, MAX_COLOR, showMax } = await import('../src/ui/m3/results-panel.js');
-  ok(MAX_COLOR === '#ffffff' && showMax({ relNoise: 0.02 }) && !showMax({ relNoise: 0.08 }) && !showMax(null) && !showMax({ empty: true, relNoise: 0.01 }), '최고점 = 흰 고리 · 노이즈 5% 넘으면 숨김');
+  ok(MAX_COLOR === MIN_COLOR && showMax({ relNoise: 0.02 }) && !showMax({ relNoise: 0.08 }) && !showMax(null) && !showMax({ empty: true, relNoise: 0.01 }), '최고점 = 빨간 고리(최저점과 같은 색, 2026-11-17) · 노이즈 5% 넘으면 숨김');
   ok(minDotR(40, 30) === 1.5 && minDotR(100, 100) === 2 && minDotR(800, 400) === 3.5 && minDotR(800, 400, 2) === 7 && MIN_COLOR === '#e5484d', `최저 점 = 더 작은 빨간 점(2026-11-17 사용자): ${minDotR(40, 30)} ${minDotR(100, 100)} ${minDotR(800, 400)} ${MIN_COLOR}`);
 }
 { // 광원·LED 우클릭 메뉴

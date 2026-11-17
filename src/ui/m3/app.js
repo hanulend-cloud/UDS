@@ -489,7 +489,7 @@ function paintObs(snap) {
   const FG = Gc.G.validAll ? { ...Gc.G, valid: Gc.G.validAll } : Gc.G, kMin = mapMinCell(FG, st.mapAll ?? st.map);
   const at = (k) => (k >= 0 ? obsPoint(Gc.overlay, Gc.G, (Math.floor(k / Gc.G.nw) + 0.5) * Gc.G.ds, Gc.G.w0 + ((k % Gc.G.nw) + 0.5) * Gc.G.cell) : null);
   v.setObsMin?.(at(kMin));
-  v.setObsMax?.(st.relNoise <= 0.05 ? at(mapMaxCell(FG, st.mapAll ?? st.map)) : null);   // 최고점 = 흰 고리 · 계산 초반(노이즈 5% 넘음)은 숨김(2026-11-17)
+  v.setObsMax?.(st.relNoise <= 0.05 ? at(mapMaxCell(FG, st.mapAll ?? st.map)) : null);   // 최고점 = 빨간 고리 · 계산 초반(노이즈 5% 넘음)은 숨김(2026-11-17)
 }
 
 // ---- 설계 점검 ----
