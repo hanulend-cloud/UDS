@@ -610,7 +610,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   function obsDot(fill) {
     const cv = document.createElement('canvas'); cv.width = cv.height = 64;
     const x = cv.getContext('2d'); x.beginPath(); x.arc(32, 32, 26, 0, 2 * Math.PI);
-    if (fill) { x.fillStyle = '#e5484d'; x.fill(); x.lineWidth = 6; x.strokeStyle = '#ffffff'; x.stroke(); } else { x.lineWidth = 8; x.strokeStyle = '#e5484d'; x.stroke(); }   // 최고점 = 빨간 선만, 안은 비움
+    if (fill) { x.fillStyle = '#e5484d'; x.fill(); x.lineWidth = 6; x.strokeStyle = '#ffffff'; x.stroke(); } else { x.lineWidth = 13; x.strokeStyle = '#e5484d'; x.stroke(); }   // 최고점 = 빨간 선만, 안은 비움
     const d = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false, depthWrite: false, transparent: true, clippingPlanes: clip }));
     d.renderOrder = fill ? 4 : 3.9; scene.add(d); return d;
   }
