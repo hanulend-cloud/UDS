@@ -256,6 +256,13 @@ function wireHover(cv) {
 // v = { G, map, leds:[{s,w}] } · cv._mapv 에 저장 → 마우스 읽기·확대 창이 다시 그림
 const MAP_PAD = { l: 40, r: 64, t: 8, b: 30 }, EXAG_MAX = 8, PIN_COLOR = '#ff8a1f';
 // 최저 위치 점(순수) — 빨간 작은 점(2026-11-17 사용자: 회색 → 더 작은 빨강), 반지름 = 그림의 짧은 변에 비례 1.5~3.5 px. 3D 관측면 표시도 같은 색
+// 1D 프로파일 제목 옆 균일도(순수, 2026-11-17 사용자) — kind '길이'|'폭', 색 = 판정(통과 ok · 근처 near · 미달 bad). 계산 초반(노이즈 5% 넘음)·값 없음 = 빈 글
+export function uniTagHtml(kind, st, tg) {
+  const L = kind === '길이', v = L ? st?.Ulen : st?.Uwid, se = L ? st?.seLen : st?.seWid;
+  if (!st || st.empty || !Number.isFinite(v) || !(st.relNoise <= 0.05)) return '';
+  const c = uVerdict(v, tg, se, st.relNoise);
+  return `<span class="m3-uni ${c}" title="${kind} 균일도 · 목표 ${fmtTg(tg)}">${kind} 균일도 <b>${fmtJudge(v)}</b> <small>목표 ${fmtTg(tg)}</small></span>`;
+}
 export const MIN_COLOR = '#e5484d';
 export const minDotR = (w, h, dpr = 1) => Math.max(1.5 * dpr, Math.min(3.5 * dpr, Math.min(w, h) * 0.02));
 // 지도 배치(순수) — 한 줄(가로 = 길이 s, 1D 프로파일과 같은 가로축). 길고 좁은 관측면(예: 440 × 5.5 mm)은 상자 높이를 다 쓰면
@@ -570,9 +577,9 @@ export function createResultsPanel(el, { anchor = () => null, onOpt = null, onQu
     </div>
     <div class="m3-blk"><div class="m3-t"><b class="m3-tt">2D 광량 분포 <i class="m3-info" data-r="mapsub" tabindex="0">ⓘ</i></b><span><label class="m3-map-eq" title="가로세로를 같은 축척으로 — 끄면 좁은 폭을 늘려 보여 줌"><input type="checkbox" data-r="mapEq"> 실제 비율</label> <select data-r="quality" title="2D 분포·1D 프로파일 칸 크기(정사각) — 저 1.5 mm(빠름) · 중 1.0 mm(광선 ≈2배) · 고 0.5 mm(광선 ≈4배) · 짧거나 좁은 면은 그 방향만 더 잘게" aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>  <button type="button" class="m3-zoom" data-zoom="map" title="큰 창으로 보기" aria-label="2D 광량 분포 확대">⤢</button></span></div>
       <div class="m3-gw"><canvas class="m3-g" data-r="map" width="600" height="200"></canvas></div></div>
-    <div class="m3-blk"><div class="m3-t"><b class="m3-tt">길이 방향 1D 프로파일 <i class="m3-info" data-r="psub" tabindex="0">ⓘ</i></b><span><button type="button" class="m3-zoom" data-zoom="prof" title="큰 창으로 보기" aria-label="길이 프로파일 확대">⤢</button></span></div>
+    <div class="m3-blk"><div class="m3-t"><b class="m3-tt">길이 방향 1D 프로파일 <i class="m3-info" data-r="psub" tabindex="0">ⓘ</i> <span data-r="uprof"></span></b><span><button type="button" class="m3-zoom" data-zoom="prof" title="큰 창으로 보기" aria-label="길이 프로파일 확대">⤢</button></span></div>
       <div class="m3-gw"><canvas class="m3-g" data-r="prof" width="600" height="150"></canvas></div></div>
-    <div class="m3-blk"><div class="m3-t"><b class="m3-tt">폭 방향 1D 프로파일 <i class="m3-info" data-r="wsub" tabindex="0">ⓘ</i></b><span><button type="button" class="m3-zoom" data-zoom="wprof" title="큰 창으로 보기" aria-label="폭 프로파일 확대">⤢</button></span></div>
+    <div class="m3-blk"><div class="m3-t"><b class="m3-tt">폭 방향 1D 프로파일 <i class="m3-info" data-r="wsub" tabindex="0">ⓘ</i> <span data-r="uwprof"></span></b><span><button type="button" class="m3-zoom" data-zoom="wprof" title="큰 창으로 보기" aria-label="폭 프로파일 확대">⤢</button></span></div>
       <div class="m3-gw"><canvas class="m3-g" data-r="wprof" width="600" height="120"></canvas></div></div>`;
   const q = (k) => el.querySelector(`[data-r="${k}"]`);
   let mapEq = false; try { mapEq = localStorage.getItem('uds.m3.mapEq') === '1'; } catch {}   // 메인 2D 실제 비율 — 이 브라우저에 기억
@@ -737,7 +744,7 @@ export function createResultsPanel(el, { anchor = () => null, onOpt = null, onQu
     // 떠 있는 창(2026-11-02) — 기구 최적화 창처럼 머리 끌어 옮기기 · 모서리로 크기 · 접기. 뒤 화면을 막지 않음(열어 둔 채 설계·최적화). 위치·크기 = 보는 사람별, 접힘은 열 때마다 펼침
     const rect = fitRect(bigRectLoad(), innerWidth, innerHeight, winTop());
     ov.className = 'm3-big-in'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', '광분포 시뮬레이션');
-    const cell = (k) => `<div class="m3-big-c" data-k="${k}"><div class="m3-big-ct"><b>${TITLE[k]}</b><span class="m3-big-sp"></span>${k === 'map' ? `<label class="m3-big-eq"><input type="checkbox" data-big-eq${eq0 ? ' checked' : ''}> 실제 비율</label><button type="button" data-big-reg-on aria-pressed="false" title="켜 둔 동안 끌 때마다 새 영역 · 그 영역의 균일도를 아래 표로 비교 · 켠 채 클릭 = 영역 지움 · 끄면 영역 결과를 숨김(다시 켜면 보임) · 휠 = 확대 · 오른쪽 끌기 = 이동 · 더블클릭 = 전체 보기">▭ 영역 선택</button><button type="button" data-big-fit disabled title="확대하면 켜짐 — 휠 = 확대 · 오른쪽 끌기 = 이동">전체 보기</button>` : ''}<button type="button" data-big-one="${k}">⤢ 이 그림만</button></div><canvas class="m3-big-cv" data-big-cv="${k}"></canvas>${k === 'map' ? '<div class="m3-big-reg" data-big-reg hidden></div>' : ''}</div>`;
+    const cell = (k) => `<div class="m3-big-c" data-k="${k}"><div class="m3-big-ct"><b>${TITLE[k]}</b>${k === 'map' ? '' : `<span data-big-uni="${k}"></span>`}<span class="m3-big-sp"></span>${k === 'map' ? `<label class="m3-big-eq"><input type="checkbox" data-big-eq${eq0 ? ' checked' : ''}> 실제 비율</label><button type="button" data-big-reg-on aria-pressed="false" title="켜 둔 동안 끌 때마다 새 영역 · 그 영역의 균일도를 아래 표로 비교 · 켠 채 클릭 = 영역 지움 · 끄면 영역 결과를 숨김(다시 켜면 보임) · 휠 = 확대 · 오른쪽 끌기 = 이동 · 더블클릭 = 전체 보기">▭ 영역 선택</button><button type="button" data-big-fit disabled title="확대하면 켜짐 — 휠 = 확대 · 오른쪽 끌기 = 이동">전체 보기</button>` : ''}<button type="button" data-big-one="${k}">⤢ 이 그림만</button></div><canvas class="m3-big-cv" data-big-cv="${k}"></canvas>${k === 'map' ? '<div class="m3-big-reg" data-big-reg hidden></div>' : ''}</div>`;
     ov.innerHTML = `<div class="m3-big-hd" title="끌어서 옮기기"><b title="진행 현황 · 2D · 1D — 2D 클릭 = 그 점 기준 1D 곡선(주황) · 그림 우클릭 = 데이터·이미지 저장"><i class="m3-fl" data-big-step>4</i><span class="m3-tx">광분포 시뮬레이션</span><span class="m3-tx-s">광분포</span></b><span class="m3-mon-sum" data-big-sum></span><span class="m3-big-sp"></span><span class="m3-ctl" data-big-ctl></span><label class="m3-big-q">화질 <select data-big-q aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label><button type="button" data-big-max></button><button type="button" data-big-min></button><button type="button" data-big-close title="Esc" aria-label="닫기">✕<span class="m3-tx"> 닫기</span></button></div>
       <div class="m3-big-grid"><div class="m3-big-prog" data-big-prog></div>${cell('map')}<div class="m3-big-row">${cell('prof')}${cell('wprof')}</div></div>`;
     (el.closest('#mech3d-wrap') ?? document.body).appendChild(ov);   // 설계 화면에 붙임(화면을 바꾸면 함께 숨음)
@@ -799,6 +806,7 @@ export function createResultsPanel(el, { anchor = () => null, onOpt = null, onQu
     const pr = last?.snap?.state === 'done' ? 100 : last?.snap?.progress ?? simPct(st0?.relNoise, last?.snap?.targetNoise ?? 0.01);
     setStepMark(big.el.querySelector('[data-big-step]'), 4, last?.snap?.state === 'done');
     setCtl(big.el.querySelector('[data-big-ctl]'), simCtl(last?.snap, calcBusy()), (k) => onCalc?.(k));
+    for (const [k, kind, tg] of [['prof', '길이', O?.targetLen], ['wprof', '폭', O?.targetWid]]) { const n = big.el.querySelector(`[data-big-uni="${k}"]`), h = uniTagHtml(kind, st0, tg); if (n && n.innerHTML !== h) n.innerHTML = h; }   // 큰 창 1D 제목 옆 균일도
     if (su) su.innerHTML = `<b>진행 ${fmtProg(pr)}%</b> ${!st0 || st0.empty || st0.relNoise > 0.05 ? '' : `${u('길이', st0.Ulen, O?.targetLen)} ${u('폭', st0.Uwid, O?.targetWid)}`}`;   // 접었을 때 보이는 현재 결과(계산 초반 값은 노이즈가라 숨김)
   };
   // onclick 대입(addEventListener 아님) — 패널을 다시 만들면(새 도면·프로젝트) 앞 패널의 처리를 대체. 쌓이면 큰 창이 2개 열리고 아래 창은 이전 계산 데이터였음
@@ -837,6 +845,8 @@ export function createResultsPanel(el, { anchor = () => null, onOpt = null, onQu
     const { snap, observe, message } = args, st = snap?.stats, G = snap?.G;
     if (observe && document.activeElement !== q('quality')) q('quality').value = observe.quality ?? 'low';
     el.querySelectorAll('.m3-blk').forEach((b) => b.classList.toggle('dim', !st || !!st.empty));
+    { const ul = uniTagHtml('길이', st, observe?.targetLen), uw = uniTagHtml('폭', st, observe?.targetWid);   // 1D 제목 옆 균일도(2026-11-17)
+      if (q('uprof').innerHTML !== ul) q('uprof').innerHTML = ul; if (q('uwprof').innerHTML !== uw) q('uwprof').innerHTML = uw; }
     if (!st || st.empty || !G) { clear(message); syncBig(); return; }
     q('msg').hidden = !message; q('msg').textContent = message || '';
     for (const k of Object.keys(RATIO)) sizeCanvas(q(k), RATIO[k]);

@@ -1350,3 +1350,12 @@ done();
   const { readFileSync } = await import('node:fs'), m = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
   c(/id: 'sym', label: '대칭 영역 검토/.test(m) && /m3app\.setSymOn\(!m3app\.symOn\(\)\)/.test(m), '설정 메뉴: 대칭 영역 검토 켜기/끄기');
 }
+{ // 2026-11-17 사용자: 1D 프로파일 제목 옆 균일도 · 메인 화면 ④ 상태 글에 진행 %
+  const okS = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
+  const { uniTagHtml } = await import('../src/ui/m3/results-panel.js');
+  const a = uniTagHtml('길이', { Ulen: 0.7416, seLen: 0.004, relNoise: 0.01 }, 0.8), b = uniTagHtml('폭', { Uwid: 0.853, seWid: 0.004, relNoise: 0.01 }, 0.8);
+  okS(/길이 균일도/.test(a) && /74\.1%/.test(a) && /class="m3-uni bad"/.test(a) && /85\.3%/.test(b) && /m3-uni ok/.test(b) && /목표 80%/.test(a), `제목 옆 균일도: ${a} | ${b}`);
+  okS(/m3-uni near/.test(uniTagHtml('길이', { Ulen: 0.803, seLen: 0.01, relNoise: 0.01 }, 0.8)) && uniTagHtml('길이', { Ulen: 0.7, seLen: 0.05, relNoise: 0.08 }, 0.8) === '' && uniTagHtml('폭', { Uwid: null }, 0.8) === '' && uniTagHtml('길이', null, 0.8) === '', '근처 = near · 계산 초반(노이즈 5% 넘음)·값 없음 = 표시 안 함');
+  const { simCardText } = await import('../src/ui/m3/opt-dash.js');
+  okS(simCardText('running', 29.74) === '계산 중 29.7%' && simCardText('done', 100, 'converged') === '계산 완료 — 노이즈 충분히 작음' && simCardText('running', 50, '', false, true) === '기구 최적화 중 — 일시정지(끝나면 이어서)' && simCardText('paused', 40) === '일시정지 40.0%', `④ 상태 글에 진행 %: ${simCardText('running', 29.74)}`);
+}

@@ -1557,3 +1557,9 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .fb-tr-best .fb-res { font-weight: 600; }
 .fb-more { white-space: nowrap; align-self: center; }
 .om-say:empty { display: none; }   /* 끝난 뒤 빈 '지금' 줄(흰 띠) 숨김 */
+.od-cardbar { height: 4px; margin: 2px 0 4px; }
+/* 1D 프로파일 제목 옆 균일도(2026-11-17) — 색 = 판정 */
+.m3-uni { margin-left: 8px; font-weight: 400; font-size: 12px; white-space: nowrap; }
+.m3-uni b { font-size: 14px; font-variant-numeric: tabular-nums; }
+.m3-uni small { opacity: .7; font-size: 11px; }
+.m3-uni.ok b { color: var(--m3-ok, #3fae7a); } .m3-uni.near b { color: var(--m3-warn, #e0a030); } .m3-uni.bad b { color: var(--m3-bad, #e5484d); }

@@ -448,6 +448,11 @@ export function simStateText(state, reason = '', stopped = false, busy = false, 
   if (state === 'error') return `계산 실패 — ${error ? `${error} · ` : ''}▶ 로 다시 계산`;   // 전에는 'error' 영어 그대로(2026-11-17)
   return { running: '계산 중', paused: stopped ? '중지됨' : '일시정지', done: reason === 'adopted' ? '계산 완료 — 기구 최적화 최종 판정 값' : reason === 'converged' ? '계산 완료 — 노이즈 충분히 작음' : '계산 한도 도달 — 노이즈가 아직 큼', pending: '대기', starting: '장면 준비', idle: '계산 전' }[state] ?? state ?? '';
 }
+// 메인 화면 ④ 카드 상태 글(순수, 2026-11-17 사용자: 진행 % 가 안 보임 — 아래 진행 줄은 2026-11-13 숨김) — 계산 중·일시정지면 진행 % 를 붙임
+export function simCardText(state, pct, reason = '', stopped = false, busy = false, error = '') {
+  const t = simStateText(state, reason, stopped, busy, error);
+  return !busy && (state === 'running' || state === 'paused') && Number.isFinite(pct) ? `${t} ${fmtProg(pct)}%` : t;
+}
 // 오른쪽 맨 위 카드(항상 보임) — onCtl(k) = 실행·일시정지·중지. 광경로 목록은 접는 칸
 // bar = 아래 상태줄 칸(2026-11-12 화면 다시 그리기 6단계): 있으면 실행·일시정지·중지 · 진행률 · 광선 수 · 상태 글을 그 줄에 그리고,
 //       카드에는 제목과 접는 칸(계산 오차·균일도 추이 / 광경로)만 남김. 접는 칸 열림은 보는 사람별로 기억(uds.m3.simPlots)
@@ -474,11 +479,12 @@ export function createSimDash(el, { onCtl = null, bar = null } = {}) {
     const last = H[H.length - 1], pct = state === 'done' ? 100 : Number.isFinite(prog) ? prog : last ? simPct(last.noise, tgt) : 0, pctT = fmtProg(pct);
     const plot = el.querySelector('.od-simplot'), svg = simPlotSvg(H, tgt, obs, plot?.clientWidth || 300, plot?.clientHeight || 70);
     const row = simCaption(H, tgt, obs, state);
-    const sTxt = [simStateText(state, reason, stopped, busy, err), symNote(sym)].filter(Boolean).join(' · ');
+    const sTxt = [simStateText(state, reason, stopped, busy, err), symNote(sym)].filter(Boolean).join(' · '), cTxt = [simCardText(state, pct, reason, stopped, busy, err), symNote(sym)].filter(Boolean).join(' · ');
     // 틀은 한 번만 만들고 칸마다 바뀐 것만 고침 — 계산 중 갱신이 잦아도 단추 클릭·접는 칸이 끊기지 않게
     if (bar && !el.querySelector('.od-simh')) {   // 상태줄 모드: 카드 = 제목 + 접는 칸
       let open = false; try { open = localStorage.getItem('uds.m3.simPlots') === '1'; } catch {}
       el.innerHTML = `<div class="od-h od-simh"><i class="m3-fl" data-s="step">4</i>광분포 시뮬레이션<span class="m3-ad-sp"></span><span class="mut od-simst" data-s="st"></span></div>
+        <div class="od-bar od-cardbar" data-s="cbar" hidden title="계산 오차가 목표에 닿으면 100%"><i></i></div>
         <details class="od-more od-plots"${open ? ' open' : ''}><summary title="계산 오차(목표 점선까지 내려가면 계산 끝) · 길이·폭 균일도가 광선 수에 따라 어떻게 변했는지">계산 오차 · 균일도 추이</summary><div class="od-simbox"><div class="od-simplot" data-s="svg"></div></div></details>
         <div class="od-diag" data-s="diag" hidden></div>
         <details class="od-more"><summary><span data-s="sum">광경로</span></summary><div data-s="paths"></div></details>`;
@@ -494,8 +500,9 @@ export function createSimDash(el, { onCtl = null, bar = null } = {}) {
         <details class="od-more"><summary><span data-s="sum">광경로</span></summary><div data-s="paths"></div></details>`;
     }
     const set = (k, html) => { const n = el.querySelector(`[data-s="${k}"]`); if (n && n.innerHTML !== html) n.innerHTML = html; };
-    set('st', esc(sTxt));
-    { const n = el.querySelector('[data-s="st"]'); if (n) n.title = n.textContent; }   // 좁은 칸에서 … 로 잘려도 전체 문구를 볼 수 있게
+    set('st', esc(bar ? cTxt : sTxt));   // 메인 화면 카드 = 진행 % 포함(아래 진행 줄은 숨김, 2026-11-17)
+    { const n = el.querySelector('[data-s="st"]'); if (n) n.title = n.textContent; }
+    { const cb = el.querySelector('[data-s="cbar"]'); if (cb) { cb.hidden = !(state === 'running' || state === 'paused') || busy; cb.firstElementChild.style.width = `${pctT}%`; } }   // 좁은 칸에서 … 로 잘려도 전체 문구를 볼 수 있게
     setStepMark(el.querySelector('[data-s="step"]'), 4, state === 'done');
     setCtl((bar ?? el).querySelector('[data-sim-ctl]'), simCtl({ state, stopped }, busy), (k) => onCtl?.(k));
     if (bar) {
