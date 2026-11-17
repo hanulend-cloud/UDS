@@ -14,10 +14,9 @@ export function fitRect(r, vw, vh, top = 8) {
   const w = Math.min(r.w, vw - 16), h = Math.min(r.h, vh - top - 8);
   return { x: Math.max(8, Math.min(r.x ?? vw - w - 8, vw - w - 8)), y: Math.max(top, Math.min(r.y ?? top, vh - h - 8)), w, h };
 }
-// 창 머리 단계 표시(순수) — 설정 › 진행 › 결과. 상태에 따라 저절로 바뀜(누르는 탭 아님, 2026-11-12 사용자: 한 화면으로)
-export function monStepsHtml(mode) {
-  const ks = [['set', '설정'], ['run', '진행'], ['result', '결과']], at = Math.max(0, ks.findIndex(([k]) => k === mode));
-  return ks.map(([, n], i) => (i < at ? `<i class="ok">${n} ✓</i>` : i === at ? `<i class="now">${n}</i>` : `<i>${n}</i>`)).join('<span class="sep"> › </span>');
+// 창 머리 탭(순수) — 설정 · 진행 · 결과. 실행하면 진행, 끝나면 결과로 저절로 넘어가고 눌러서 오갈 수 있음(2026-11-17 사용자: 탭 다시). ok[k] === false = 못 누름
+export function monTabsHtml(mode, ok = {}) {
+  return [['set', '설정'], ['run', '진행'], ['result', '결과']].map(([k, n]) => `<button type="button" role="tab" data-mon-tab="${k}"${k === mode ? ' class="on"' : ''} aria-selected="${k === mode}"${k !== mode && ok[k] === false ? ' disabled' : ''}>${n}</button>`).join('');
 }
 // [⤢ 크게] — 상단 바·단계 막대 아래 화면 전체(순수, 2026-11-12 평가 5: 창이 작아 안에서 계속 스크롤)
 export const maxRect = (vw, vh, top = 8) => ({ x: 8, y: top, w: Math.max(MIN_W, vw - 16), h: Math.max(MIN_H, vh - top - 8) });
@@ -104,7 +103,7 @@ export function createMonitor({ host, items, onChange = () => {}, onTab = () => 
   const place = () => { if (st.min) el.style.width = 'max-content'; const r = st.max && !st.min ? maxRect(innerWidth, innerHeight, winTop()) : st.min ? collapsedRect(st, el.offsetWidth, innerWidth, innerHeight, winTop()) : clampRect(st, innerWidth, innerHeight, winTop()); st.x = r.x; st.y = r.y; if (!st.min) { st.w = r.w; st.h = r.h; } el.style.left = `${r.x}px`; el.style.top = `${r.y}px`; el.style.width = st.min ? 'max-content' : `${r.w}px`; el.style.height = st.min ? 'auto' : `${r.h}px`; };
   const kick = () => window.dispatchEvent(new Event('resize'));   // 담은 칸의 그래프·캔버스 크기 다시
   el.className = 'm3-mon'; el.hidden = true; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', '기구 최적화');
-  el.innerHTML = `<div class="m3-mon-hd" title="끌어서 옮기기 · ④ 광분포 결과가 목표 미달이면 여기서 후보를 찾아 최종 판정 → [적용]"><b><i class="m3-fl" data-mon-step>5</i><span class="m3-tx">기구 최적화</span><span class="m3-tx-s">최적화</span></b><span class="m3-mon-steps" data-mon-steps aria-live="polite"></span><span class="m3-mon-sum" data-mon-sum></span><span class="m3-mon-sp"></span><span class="m3-ctl" data-mon-ctl></span><button type="button" data-mon-max></button><button type="button" data-mon-min></button><button type="button" data-mon-close title="창 닫기(진행 중인 최적화는 계속)" aria-label="닫기">✕<span class="m3-tx"> 닫기</span></button></div><div class="m3-mon-body"></div>`;
+  el.innerHTML = `<div class="m3-mon-hd" title="끌어서 옮기기 · ④ 광분포 결과가 목표 미달이면 여기서 후보를 찾아 최종 판정 → [적용]"><b><i class="m3-fl" data-mon-step>5</i><span class="m3-tx">기구 최적화</span><span class="m3-tx-s">최적화</span></b><span class="m3-mon-tabs" role="tablist" data-mon-tabs></span><span class="m3-mon-sum" data-mon-sum></span><span class="m3-mon-sp"></span><span class="m3-ctl" data-mon-ctl></span><button type="button" data-mon-max></button><button type="button" data-mon-min></button><button type="button" data-mon-close title="창 닫기(진행 중인 최적화는 계속)" aria-label="닫기">✕<span class="m3-tx"> 닫기</span></button></div><div class="m3-mon-body"></div>`;
   const body = el.querySelector('.m3-mon-body');
   for (const it of items.filter(Boolean)) body.appendChild(it);   // 기본 화면에서 빼서 창 안으로(닫아도 여기 그대로)
   host.appendChild(el);
@@ -122,16 +121,11 @@ export function createMonitor({ host, items, onChange = () => {}, onTab = () => 
     st.max = !!v; if (v && st.min) { setMin(false); } updMax(); place(); persist(); kick(); raiseWin(el);
   }
   el.querySelector('[data-mon-close]').onclick = () => close();
-  // 끝난 뒤 진행 기록(그래프·후보 표) — 결과 아래 접는 칸(2026-11-12 사용자: 탭 대신 한 화면)
-  const logBtn = document.createElement('button');
-  logBtn.type = 'button'; logBtn.className = 'm3-mon-log'; logBtn.setAttribute('aria-expanded', 'false');
-  logBtn.onclick = () => { const on = !el.classList.contains('show-log'); el.classList.toggle('show-log', on); logBtn.setAttribute('aria-expanded', String(on)); logBtn.textContent = on ? '▾ 진행 기록 접기' : '▸ 진행 기록 — 그래프·후보 표'; kick(); };
-  logBtn.textContent = '▸ 진행 기록 — 그래프·후보 표';
-  body.appendChild(logBtn);
+  el.querySelector('[data-mon-tabs]').addEventListener('click', (e) => { const b = e.target.closest('[data-mon-tab]'); if (b && !b.disabled) onTab(b.dataset.monTab); });
   // 화면 = 설정(설계 인자 고르기) · 진행(진행률·그래프) · 결과(판정·변화·적용). ok = 고를 수 있는 탭
   function setMode(mode, ok = {}) {
     if (el.dataset.mode !== mode) { el.dataset.mode = mode; kick(); }
-    const q = el.querySelector('[data-mon-steps]'), h = monStepsHtml(mode); if (q._h !== h) { q._h = h; q.innerHTML = h; }
+    const q = el.querySelector('[data-mon-tabs]'), h = monTabsHtml(mode, ok); if (q._h !== h) { q._h = h; q.innerHTML = h; }
   }
   function setMin(v) {
     v = !!v;   // 저장값에 min 이 없으면 undefined → classList.toggle 이 뒤집기로 동작해 몸통은 숨고 단추는 '접기'로 남았음(펼칠 방법 없음, 2026-11-08)

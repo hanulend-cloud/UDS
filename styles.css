@@ -1213,24 +1213,20 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 .m3-asum b.ok { color: var(--m3-ok); } .m3-asum b.bad { color: var(--m3-bad); }
 
 /* 기구 최적화 창 화면: 설정 · 진행 · 결과(2026-11-08) — 한 번에 한 화면만, 한 열 */
-.m3-mon-steps { display: inline-flex; align-items: center; gap: 2px; margin-left: 10px; font-size: 12px; white-space: nowrap; }   /* 탭 대신 단계 표시(누르지 않음, 2026-11-12) */
-.m3-mon-steps i { font-style: normal; padding: 2px 9px; border-radius: 6px; color: var(--m3-mut); }
-.m3-mon-steps i.now { background: var(--m3-acc); color: #fff; font-weight: 600; }
-.m3-mon-steps i.ok { color: var(--m3-ok); }
-.m3-mon-steps .sep { color: var(--m3-mut); }
-.m3-mon-log { display: none; justify-self: start; border: 1px solid var(--m3-line); background: transparent; color: var(--m3-text, inherit); border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
-.m3-mon[data-mode="result"] .m3-mon-log { display: block; order: 2; }
+.m3-mon-tabs { display: inline-flex; gap: 2px; margin-left: 10px; padding: 2px; border-radius: 7px; background: rgba(127,127,160,.14); }   /* 설정·진행·결과 탭(2026-11-17 사용자: 탭 다시) */
+.m3-mon-tabs button { border: 0; background: transparent; color: inherit; font-size: 12px; padding: 2px 12px; border-radius: 5px; cursor: pointer; opacity: .85; }
+.m3-mon-tabs button.on { background: var(--m3-acc); color: #fff; opacity: 1; font-weight: 600; }
+.m3-mon-tabs button:disabled { opacity: .35; cursor: default; }
 .m3-mon[data-mode] .m3-mon-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-auto-rows: max-content; align-content: start; }
 .m3-mon[data-mode] .m3-mon-colsplit { display: none; }
 .m3-mon[data-mode] .m3-mon-body #m3-auto, .m3-mon[data-mode] .m3-mon-body #m3-odchart, .m3-mon[data-mode] .m3-mon-body > #m3-dock, .m3-mon[data-mode] .m3-mon-body .fb-body { grid-column: 1; grid-row: auto; border-right: 0; }
 .m3-mon[data-mode="set"] #m3-odchart, .m3-mon[data-mode="set"] .m3-mon-body > #m3-dock { display: none !important; }
 .m3-mon[data-mode="run"] #m3-auto:empty, .m3-mon[data-mode="run"] .om-hist { display: none !important; }
-.m3-mon[data-mode="run"] .m3-mon-body > #m3-dock { order: 1; }
-.m3-mon[data-mode="run"] #m3-odchart { order: 2; }
-.m3-mon[data-mode="result"]:not(.show-log) .m3-mon-body > #m3-dock, .m3-mon[data-mode="result"]:not(.show-log) #m3-odchart { display: none !important; }   /* 끝난 뒤 진행 기록 = 결과 아래 접는 칸 */
-.m3-mon[data-mode="result"] .m3-mon-body > #m3-dock { order: 3; }
-.m3-mon[data-mode="result"] #m3-odchart { order: 4; }
-.m3-mon[data-mode="result"] #m3-auto { order: 1; }
+/* 진행·결과 화면 순서(2026-11-17 사용자): 진행 현황 → 진행 그래프(제목 옆 균일도) → 항목(펼치면 상세 표) → 결과·단추 */
+.m3-mon[data-mode]:not([data-mode="set"]) .m3-mon-body > #m3-dock { order: 1; }
+.m3-mon[data-mode]:not([data-mode="set"]) #m3-odchart { order: 2; }
+.m3-mon[data-mode]:not([data-mode="set"]) .fb-body { order: 3; }
+.m3-mon[data-mode]:not([data-mode="set"]) #m3-auto { order: 4; }
 .rs-vd { font-size: 14px; margin: 2px 0 10px; }
 .rs-vd b { font-size: 15px; margin-right: 4px; }
 .rs-vd.ok b { color: var(--m3-ok); } .rs-vd.bad b { color: var(--m3-bad); } .rs-vd.near b { color: var(--m3-warn); }
@@ -1259,7 +1255,7 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 .rs-link::before { content: '▸ '; } .m3-mon.show-chart .rs-link::before { content: '▾ '; }
 @media (max-width: 860px) { .rs-cards { grid-template-columns: minmax(0, 1fr); } }
 /* 결과 화면 2(2026-11-08): 접은 창엔 탭 없음 · 최적화 인자 상자 · 참고 한 줄 · 지난 후보 바로 */
-.m3-mon.min .m3-mon-steps, .m3-mon.min .m3-mon-log { display: none !important; }
+.m3-mon.min .m3-mon-tabs { display: none !important; }
 .rs-fbs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
 .rs-fb { border: 1px solid var(--m3-line); border-left: 4px solid var(--fb); border-radius: 0; padding: 7px 10px; font-size: 12px; min-width: 0; background: #fff; }
 .rs-fb.rs-chg { background: color-mix(in srgb, var(--fb) 7%, #fff); border-color: color-mix(in srgb, var(--fb) 45%, #fff); border-left-color: var(--fb); }
@@ -1300,12 +1296,12 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .fb-card.fb-run { box-shadow: 0 0 0 2px var(--fb), 0 2px 8px color-mix(in srgb, var(--fb) 35%, transparent); }
 
 /* 설정·진행·결과 같은 배치(2026-11-08): 맨 위 = 설계 인자 상자, 그 아래 = 길이·폭·효율 카드 */
-.m3-mon[data-mode] .fb-body { order: -1; }
+.m3-mon[data-mode="set"] .fb-body { order: -1; }
 .fb-eff { margin-top: 3px; font-size: 11.5px; color: var(--m3-ok); }
 .m3-mon[data-mode="run"] .om-kpi { margin: 2px 0 8px; }
 /* 인자 강조 차이 크게 · 상자 크기 고정(2026-11-08) */
 .m3-mon .fb-cards { align-items: stretch; }
-.m3-mon .fb-cards .fb-card { min-height: 108px; box-sizing: border-box; display: flex; flex-direction: column; }
+.m3-mon .fb-cards .fb-card { min-height: 0; box-sizing: border-box; display: flex; flex-direction: column; }
 .m3-mon .fb-cards .fb-card .fb-in { flex: 1; }
 .fb-card.fb-off { border: 1px dashed #c3c9d4 !important; border-left: 4px solid #c3c9d4 !important; background: #f6f7f9 !important; box-shadow: none !important; }
 .fb-card.fb-off .fb-head { background: transparent !important; color: #8a93a6; }
@@ -1535,3 +1531,29 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .m3-mon.min .m3-tx-s, .m3-big-in.min .m3-tx-s { display: inline; }
 .fb-head .od-chip { grid-column: 5; }   /* ⓘ 가 없어도 칩은 같은 줄 오른쪽 끝(2026-11-13: 칩이 다음 줄로 밀려 배경 밖으로 넘침) */
 .om-kpi-host .om-kpi { margin: 8px 0 4px; }
+
+/* 기구 최적화 창 정리(2026-11-17 사용자) — 항목 = 한 줄에 하나(아래 상세 표가 넓게) · 균일도 = 그래프 제목 오른쪽 */
+.m3-mon .fb-cards { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.om-ct { display: flex; align-items: baseline; gap: 10px; margin: 4px 0 6px; font-size: 13px; }
+.om-ct > b { font-size: 13px; }
+.om-uh { margin-left: auto; display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; font-size: 13px; }
+.om-uh[title], .om-uv[title], .om-ue[title] { cursor: help; }
+.om-uh .om-uv b { display: inline; font-size: 18px; font-weight: 700; }
+.om-uh .om-u1 { color: var(--od-s1); } .om-uh .om-u2 { color: var(--od-s2); }
+.om-uh .om-u1.bad, .om-uh .om-u2.bad { text-decoration: underline 2px var(--m3-bad); text-underline-offset: 3px; }
+.om-uh .om-tg, .om-uh .om-sl { font-style: normal; color: var(--m3-mut); font-size: 11.5px; }
+.om-uh .om-ue { color: var(--m3-mut); font-size: 12px; margin-left: 4px; }
+.fb-det { border-top: 1px dashed var(--m3-line); margin-top: 2px; font-size: 12px; }
+.fb-det > summary { cursor: pointer; padding: 4px 10px; color: var(--m3-acc); }
+.fb-tbl { width: 100%; border-collapse: collapse; margin: 0 0 6px; }
+.fb-tbl th, .fb-tbl td { border-bottom: 1px solid var(--m3-line); padding: 3px 8px; text-align: left; vertical-align: top; }
+.fb-tbl th { font-weight: 600; font-size: 11.5px; color: var(--m3-mut); }
+.fb-tbl .fb-n { width: 22px; color: var(--m3-mut); }
+.fb-tbl .fb-cs { display: flex; flex-wrap: wrap; gap: 4px; }
+.fb-c { padding: 1px 6px; border-radius: 4px; background: rgba(127,127,160,.1); white-space: nowrap; }
+.fb-c i { font-style: normal; color: var(--m3-mut); }
+.fb-c.fb-c-top { background: color-mix(in srgb, var(--fb, var(--m3-acc)) 18%, transparent); font-weight: 600; }
+.fb-tbl .fb-res { width: 1%; white-space: nowrap; }
+.fb-tr-best .fb-res { font-weight: 600; }
+.fb-more { white-space: nowrap; align-self: center; }
+.om-say:empty { display: none; }   /* 끝난 뒤 빈 '지금' 줄(흰 띠) 숨김 */

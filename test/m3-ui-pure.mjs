@@ -517,8 +517,8 @@ ok(judgeText(0.3, 0.8, null, 0.2).cls === 'busy' && /판정 보류/.test(judgeTe
   applyProgress(S, 'leds', 0, 'LED 후보 위치 추적');
   ok(chip(monitorHtml(S, 5)) === '✓' && !chip(monitorHtml(mk(), 5)), '위치 계산이 시작되면 기준 Milky = 완료 · 그 단계가 없으면 칸 없음');
   const E = mk(); E.seq = [{ k: 'milky', label: 'Milky 2', Ulen: 0.85, Uwid: 0.84, eff: 0.6 }];
-  const eh = monitorHtml(E, 5), effTxt = eh.match(/광 효율<\/div><b class="om-v">([^<]*)<\/b><div class="mut">([^<]*)/);
-  ok(effTxt?.[1] === '≈60.0%' && /시작 66\.0%/.test(effTxt[2]) && /▼6\.0%p/.test(effTxt[2]), `진행 중 광 효율 = 지금까지 최고안의 대략값: ${effTxt?.[1]} ${effTxt?.[2]}`);
+  const eh = monitorHtml(E, 5), effTxt = eh.match(/<span class="om-ue" title="([^"]*)">효율 ([^<]*)</)?.slice(1).reverse();   // 2026-11-17: 그래프 제목 줄 · 시작→변화 = 마우스
+  ok(effTxt?.[0] === '≈60.0%' && /시작 66\.0%/.test(effTxt[1]) && /▼6\.0%p/.test(effTxt[1]), `진행 중 광 효율 = 지금까지 최고안의 대략값: ${effTxt?.[0]} ${effTxt?.[1]}`);
   const P = { ...mk(), stopped: true, partial: { done: ['leds'] } }, ph = monitorHtml(P, 5);
   ok(/data-adpartial/.test(ph) && /끝난 항목\(LED 배치\)/.test(ph) && /정밀 판정/.test(ph) && !/data-adpartial/.test(monitorHtml({ ...mk(), stopped: true }, 5)), '중지 후 = 끝난 항목까지 반영한 안 정밀 판정 단추(끝난 항목이 있을 때만)'); }
 { // 전체 판정이 근처면 설명 문장도 근처로(엔진 사유의 '미달'이 남지 않게) · 하나라도 미달이면 그대로
@@ -719,7 +719,7 @@ done();
   ok(/적은 광선/.test(h) && /최종 판정/.test(h) && !/서로 다른 후보/.test(h) && !/길이 최고/.test(h), '현황 표: 한 후보의 값 · 후보 값 설명');
   const { monitorHtml } = await import('../src/ui/m3/opt-dash.js');
   const tl = Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', evals: [] }])), SS = { tgLen: 0.8, tgWid: 0.8, seq: [], before: {}, tiles: tl };
-  ok(monitorHtml(SS, 1).includes('od-plot') && !monitorHtml(SS, 1, { chart: false }).includes('od-plot') && monitorHtml(SS, 1, { chart: false }).includes('om-mx'), '그래프를 따로 그리면 오른쪽 칸에서 빠짐');
+  ok(monitorHtml(SS, 1).includes('od-plot') && !monitorHtml(SS, 1, { chart: false }).includes('od-plot') && !monitorHtml(SS, 1, { chart: false }).includes('om-mx'), '그래프를 따로 그리면 오른쪽 칸에서 빠짐 · 항목 현황 표는 항목 아래로(2026-11-17)');
   const SF = { ...SS, final: { Ulen: 0.7886, Uwid: 0.7052, label: 'x' } }, mh = monitorHtml(SF, 1);
   ok(mh.includes('78.8%') && !mh.includes('78.9%') && mh.includes('70.5%') && !mh.includes('70.6%'), '최종 값 = 결과 카드와 같은 내림 표시(표·문장·지표)');
   const { chartHtml } = await import('../src/ui/m3/opt-dash.js');
@@ -811,7 +811,7 @@ done();
   const S = { tgLen: 0.8, tgWid: 0.8, t0: 0, tiles: { position: { status: 'done', frac: 1, evals: [{ label: '1열 17개', Ulen: 0.84, Uwid: 0.81 }] }, housing: { status: 'off', evals: [] }, shape: { status: 'run', frac: 0.46, evals: [] }, milky: { status: 'off', evals: [] } },
     seq: [{ k: 'position', label: '1열 17개', Ulen: 0.84, Uwid: 0.81 }], before: { Ulen: 0.55, Uwid: 0.62 }, log: [{ sec: 92, k: 'position', label: '1열 17개', Ulen: 0.84, Uwid: 0.81 }], locked: { milky: true } };
   const m = monitorHtml(S, 130);
-  const okMon = m.indexOf('① 위치') < m.indexOf('② 형상') && m.includes('46.0%') && /고정/.test(m) && m.includes('84.0%') && m.includes('▲29.0%p') && m.includes('1열 17개') && m.includes('od-plot');
+  const okMon = m.indexOf('① 위치') < m.indexOf('② 형상') && m.includes('46.0%') && /고정/.test(m) && m.includes('84.0%') && m.includes('▲29.0%p') && factorBoardHtml(S, { on: {} }).includes('1열 17개') && m.includes('od-plot');   // 후보 이름 = 항목 아래 상세 표(2026-11-17)
   console.log(order === 'position,shape,milky' && okLock && okMon ? 'PASS 기구 최적화 창: 계산 순서 · 고정 항목 · 모니터(진행 줄·지표·기록)' : (process.exitCode = 1, `FAIL 최적화 창: ${order} lock ${okLock} mon ${okMon}`)); }
 { // 트리 우클릭 메뉴(2026-10-30): 고른 부품 수에 맞는 항목 · 그룹에서 빼기 · Shift 범위 선택
   const { treeCtxItems, removeFromGroups, rangeSelect } = await import('../src/ui/m3/feature-tree.js');
@@ -919,7 +919,7 @@ done();
   const eff = stageEffects({ shape: { Ulen: 0.7, Uwid: 0.74 }, milky: { Ulen: 0.72, Uwid: 0.75 } }, r.cur, r.best);
   ok(Math.abs(eff.shape.dl + eff.milky.dl - 0.1) < 1e-9 && Math.abs(eff.shape.dw + eff.milky.dw - 0.15) < 1e-9 && eff.shape.dl > eff.milky.dl, `항목 효과 합 = 전체 변화(배분): ${JSON.stringify(eff)}`);
   const h = resultViewHtml(r, { effects: eff, hist: [{ label: 'Milky 3.6', Ulen: 0.75, Uwid: 0.77, eff: 0.5 }] });
-  ok(h.includes('목표 미달') && (h.match(/rs-card/g) ?? []).length >= 3 && h.includes('65.0%') && h.includes('75.0%') && h.includes('▲10.0%p'), '판정 · 카드(이전 → 이후 ▲)');
+  ok(h.includes('목표 미달') && !/rs-card/.test(h), '판정 · 카드 없음(값은 진행 그래프 제목 줄, 2026-11-17 사용자)');
   { const { factorResult } = await import('../src/ui/m3/autodesign-panel.js'), F = (k) => factorResult(r, eff, {}, k);
     ok(!h.includes('class="rs-fb ') && F('shape').chg && F('milky').chg && F('milky').body.includes('3.60') && /길이 \+\d+\.\d%p/.test(F('milky').eff) && !F('position').chg && F('position').chip === '안 돌림', '결과 = 설계 인자 상자 자리에(이전 → 이후 · 효과 · 상태)'); }
   ok(h.includes('data-ad="apply"') && h.includes('data-ad="hpick" data-v="0"') && h.includes('지난 후보') && !h.includes('<details'), '적용 · 지난 후보(접지 않음)');
@@ -1025,11 +1025,10 @@ done();
   okW(clampRect({ x: 100, y: 0, w: 400, h: 300 }, 1600, 900).y === 8, '위 경계를 안 주면 예전처럼 8');
   okW(fitRect({ x: 0, y: 0, w: 400, h: 2000 }, 1600, 900, 56).h <= 900 - 56 - 8, '높이도 상단 바 아래 공간에 맞춤');
   const { maxRect } = await import('../src/ui/m3/monitor.js'), m = maxRect?.(1600, 900, 96);   // 최적화 창 [⤢ 크게](2026-11-12 평가 5: 창이 작아 안에서 스크롤)
-  { const { monStepsHtml } = await import('../src/ui/m3/monitor.js'), tx = (h) => (h ?? '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim(), cur = (h) => h?.match(/class="now">([^<]*)</)?.[1];
-    okW(typeof monStepsHtml === 'function' && tx(monStepsHtml('set')) === '설정 › 진행 › 결과' && cur(monStepsHtml('set')) === '설정'
-      && tx(monStepsHtml('run')) === '설정 ✓ › 진행 › 결과' && cur(monStepsHtml('run')) === '진행'
-      && tx(monStepsHtml('result')) === '설정 ✓ › 진행 ✓ › 결과' && cur(monStepsHtml('result')) === '결과' && !/<button/.test(monStepsHtml('run')),
-      `최적화 창 = 탭 대신 단계 표시(누르는 단추 아님): ${tx(monStepsHtml?.('result'))}`); }
+  { const { monTabsHtml } = await import('../src/ui/m3/monitor.js'), h = monTabsHtml?.('run', { set: true, run: true, result: false }) ?? '';   // 2026-11-17 사용자: 설정/진행/결과 탭 다시
+    const bt = [...h.matchAll(/<button[^>]*data-mon-tab="(\w+)"[^>]*>([^<]*)</g)].map((m) => [m[1], m[2], m[0]]);
+    okW(bt.map((x) => x[1]).join(' ') === '설정 진행 결과' && /class="on"/.test(bt[1]?.[2] ?? '') && /aria-selected="true"/.test(bt[1]?.[2] ?? '') && /disabled/.test(bt[2]?.[2] ?? '') && !/disabled/.test(bt[0]?.[2] ?? ''),
+      `최적화 창 = 누르는 탭 3개(지금 화면 표시 · 결과 없으면 결과 탭 못 누름): ${h}`); }
   okW(m && m.x === 8 && m.y === 96 && m.w === 1584 && m.h === 900 - 96 - 8, `크게 = 상단 바·단계 막대 아래 화면 전체: ${JSON.stringify(m)}`);
 }
 { // 최종 판정(몇 분)에도 남은 시간 — 90초 넘으면 분 단위(2026-11-12 평가: 검증 2~3분 동안 남은 시간 없음)
@@ -1043,7 +1042,7 @@ done();
   const tiles = Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', evals: [] }])); tiles.milky = { status: 'run', frac: 0.4, evals: [] };
   const base = { tgLen: 0.8, tgWid: 0.8, before: { Ulen: 0.2, Uwid: 0.2 }, tiles, seq: [{ k: 'milky', Ulen: 0.5, Uwid: 0.4 }] };
   const run = monitorHtml(base, 5), end = monitorHtml({ ...base, ended: true, endSec: 9, final: { Ulen: 0.53, Uwid: 0.46 } }, 9);
-  console.log(/om-kpi" title="[^"]*대략값[^"]*정밀 재계산/.test(run) && /목표에 더 모자란/.test(run) && !/om-kpi" title=/.test(end) ? 'PASS 실행 중 큰 숫자 = 대략값 · 최고 기준 안내' : (process.exitCode = 1, 'FAIL 대략값 안내'));
+  console.log(/om-uh" title="[^"]*대략값[^"]*정밀 재계산/.test(run) && /목표에 더 모자란/.test(run) && !/om-uh" title=/.test(end) ? 'PASS 실행 중 큰 숫자 = 대략값 · 최고 기준 안내' : (process.exitCode = 1, 'FAIL 대략값 안내'));
 }
 { // 항목 카드 한 줄 설명(2026-11-12 평가: 무엇을 얼마나 바꾸는지 없음)
   const { factorBoardHtml, STAGES } = await import('../src/ui/m3/opt-dash.js');
@@ -1161,18 +1160,18 @@ done();
   const css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
   const S = { tgLen: 0.8, tgWid: 0.8, before: { Ulen: 0.3, Uwid: 0.3 }, tiles: Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', evals: [] }])), seq: [{ k: 'milky', Ulen: 0.5, Uwid: 0.4 }] };
   let f = 0; const okU = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) { f++; process.exitCode = 1; } };
-  { // 2026-11-13 사용자: 균일도는 그래프 아래(그래프를 읽기 쉽게)
+  { // 2026-11-17 사용자: 균일도 = 그래프 제목 오른쪽에 약간 크게 · 따로 있던 카드 3개는 없앰
     const { monitorParts } = await import('../src/ui/m3/opt-dash.js');
-    const m = monitorHtml(S, 5), k = m.indexOf('om-kpi'), sy = m.indexOf('om-say'), lg = m.indexOf('od-legend');
-    okU(k > sy && k > lg, '균일도 = 그래프(범례 포함) 아래');
-    const P = monitorParts(S, 5, { chart: false });
-    okU(!P.main.includes('om-kpi') && P.kpi.includes('om-kpi') && P.kpi.includes('길이 균일도'), '그래프를 따로 그리면 균일도도 그래프 칸으로(본문에는 없음)');
+    const m = monitorHtml(S, 5), t = m.indexOf('om-ct'), pl = m.indexOf('od-plot');
+    okU(t >= 0 && t < pl && !/class="om-k\b/.test(m) && !/om-kpi"/.test(m), '균일도 = 그래프 제목 줄(그래프 위) · 카드 없음');
+    const P = monitorParts(S, 5, { chart: false }), vis = P.kpi.replace(/\s(title)="[^"]*"/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    okU(!P.main.includes('om-ct') && /진행 그래프/.test(vis) && /길이 ≈50\.0%/.test(vis) && /폭 ≈40\.0%/.test(vis), `그래프를 따로 그리면 제목 줄도 그래프 칸으로: ${vis}`);
+    okU(!/om-more/.test(P.main), '진행 칸의 \'상세 — 항목별 현황\' 표는 없앰(항목 아래 표로 옮김)');
     const src = (await import('node:fs')).readFileSync(new URL('../src/ui/m3/opt-dash.js', import.meta.url), 'utf8');
-    okU(/om-kpi-host/.test(src) && /put\(h\.chart\.querySelector\('\.om-kpi-host'\), P\.kpi\)/.test(src), '그래프 칸 = 그래프 + 그 아래 균일도');
+    okU(/put\(h\.chart, '<div class="om-kpi-host"><\/div>' \+ chartHtml\(\)\)/.test(src), '그래프 칸 = 제목 줄(균일도) 먼저, 그 아래 그래프');
+    okU(/class="om-v om-u1[^"]*"[^>]*>[^<]*≈50\.0%/.test(P.kpi) && /class="om-v om-u2[^"]*"[^>]*>[^<]*≈40\.0%/.test(P.kpi), '길이·폭 값에 그래프 색 구분');
+    okU(/\.om-uh \.om-u1 \{[^}]*var\(--od-s1\)/.test(css) && /\.om-uh \.om-u2 \{[^}]*var\(--od-s2\)/.test(css), '길이 = 그래프 파랑 · 폭 = 그래프 주황');
   }
-  const m = monitorHtml(S, 5);
-  okU(/class="om-k om-u1"[^>]*>[\s\S]*?길이 균일도/.test(m) && /class="om-k om-u2"[^>]*>[\s\S]*?폭 균일도/.test(m), '길이·폭 카드에 그래프 색 구분 표시');
-  okU(/\.om-k\.om-u1 \{[^}]*var\(--od-s1\)/.test(css) && /\.om-k\.om-u2 \{[^}]*var\(--od-s2\)/.test(css), '길이 = 그래프 파랑 · 폭 = 그래프 주황');
 }
 { // 접은 창(기구 최적화·광분포 시뮬레이션) = 진행 상태 + 아이콘만(글씨 빼고), 폭 = 내용만큼(2026-11-13 사용자)
   const { iconLabel, setCtl } = await import('../src/ui/m3/run-ctl.js'), { readFileSync } = await import('node:fs');
@@ -1314,4 +1313,29 @@ done();
   const c = (k, v) => { console.log(`${k ? 'PASS' : 'FAIL'} ${v}`); if (!k) process.exitCode = 1; };
   c(simStateText('idle') === '계산 전' && ['idle', 'error', 'running', 'paused', 'done', 'pending', 'starting'].every((k) => !/^[a-z]+$/.test(simStateText(k))), `상태 글에 영어 상태 이름 없음 (idle → ${simStateText('idle')})`);
   c(a === '계산 실패 — Worker 응답 없음 (scene 30초) · ▶ 로 다시 계산' && b === '계산 실패 — ▶ 로 다시 계산' && !/error/.test(a + b), `계산 실패 글: ${a} | ${b}`);
+}
+
+{ // 2026-11-17 사용자: 항목별 상세 검토 = 항목 바로 아래 표 · 같이 시험한 후보는 한 줄 · 오른쪽에 그 줄 결과 · 창 = 진행·그래프 → 항목 → 결과
+  const c = (k, v) => { console.log(`${k ? 'PASS' : 'FAIL'} ${v}`); if (!k) process.exitCode = 1; };
+  const { pushEvals, itemTableHtml, factorBoardHtml, STAGES } = await import('../src/ui/m3/opt-dash.js');
+  const tiles = Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', frac: 0, evals: [] }]));
+  const S = { tgLen: 0.8, tgWid: 0.8, tiles, seq: [], log: [] };
+  pushEvals(S, 'milky', [{ label: 'Milky 1.00', Ulen: 0.5, Uwid: 0.3 }, { label: 'Milky 2.00', Ulen: 0.6, Uwid: 0.35 }]);
+  pushEvals(S, 'milky', [{ label: 'Milky 2.50', Ulen: 0.65, Uwid: 0.4 }]);
+  c(tiles.milky.evals.map((e) => e.bi).join() === '1,1,2', `같이 받은 후보 = 같은 묶음 번호: ${tiles.milky.evals.map((e) => e.bi)}`);
+  const h = itemTableHtml(tiles.milky, 0.8, 0.8), rows = [...h.matchAll(/<tr class="fb-tr[^"]*">([\s\S]*?)<\/tr>/g)].map((m) => m[1]);
+  c(rows.length === 2 && /Milky 1\.00/.test(rows[0]) && /Milky 2\.00/.test(rows[0]) && !/Milky 2\.50/.test(rows[0]), `한 줄 = 같이 시험한 후보: ${rows.length}줄`);
+  c(/<td class="fb-res">[\s\S]*Milky 2\.00[\s\S]*60\.0%/.test(rows[0]) && /<td class="fb-res">[\s\S]*Milky 2\.50/.test(rows[1]), '줄 오른쪽 = 그 줄의 결과(최고 후보 값)');
+  const many = { evals: Array.from({ length: 40 }, (_, i) => ({ label: `후보 ${i}`, Ulen: i / 100, Uwid: i / 100, bi: 1 })) }, hm = itemTableHtml(many, 0.8, 0.8);
+  c((hm.match(/class="fb-c[ "]/g) ?? []).length <= 6 && /외 \d+개/.test(hm) && /후보 39/.test(hm), '후보가 많은 줄 = 좋은 순 몇 개 + 외 N개');
+  const fb = factorBoardHtml(S, { on: {} }, (k) => ({ on: k === 'milky', box: '', opt: '' }));
+  c(/<details class="fb-det" data-keep="det-milky"[\s\S]*fb-tr/.test(fb) && !/data-keep="det-shape"/.test(fb), '시험한 항목 상자 아래 = 펼치는 상세 표(시험 안 한 항목은 없음)');
+  const { renderAutoPanel, resultViewHtml } = await import('../src/ui/m3/autodesign-panel.js');
+  const r = { feasible: false, targets: { len: 0.8, wid: 0.8 }, stages: { milky: true }, cur: { milky: 2, Ulen: 0.25, Uwid: 0.19, eff: 0.19 }, best: { milky: 3, Ulen: 0.55, Uwid: 0.13, eff: 0.15 } };
+  c(!/rs-cards/.test(resultViewHtml(r)), '결과 화면 길이·폭·효율 카드 없음(그래프 제목 줄로)');
+  const { readFileSync } = await import('node:fs'), css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8'), mon = readFileSync(new URL('../src/ui/m3/monitor.js', import.meta.url), 'utf8');
+  const ord = (sel) => +(css.match(new RegExp(String.raw`\.m3-mon\[data-mode\]:not\(\[data-mode="set"\]\) ${sel} \{ order: (-?\d+)`))?.[1] ?? NaN);
+  const o = [ord('\.m3-mon-body > #m3-dock'), ord('#m3-odchart'), ord('\.fb-body'), ord('#m3-auto')];
+  c(o.every(Number.isFinite) && o[0] < o[1] && o[1] < o[2] && o[2] < o[3], `진행·결과 화면 순서 = 진행 현황 → 그래프 → 항목 → 결과: ${o}`);
+  c(!/m3-mon-log/.test(mon) && /data-mon-tab/.test(mon), "'진행 기록' 접는 단추 대신 탭");
 }

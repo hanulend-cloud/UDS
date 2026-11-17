@@ -156,8 +156,9 @@ export function tileConfigHtml(k, { avail, sel, running, names = [], milkyPart =
 // noLine = 관측 라인 없음 · noLed = 실행할 수 없는 이유(LED 없음·읽는 중) — 실행 불가
 export function nowCardsHtml(nw) {   // 설정 화면 = 지금 값(결과·진행 화면과 같은 자리)
   if (!nw || !Number.isFinite(nw.Ulen)) return '';
-  const c = (label, v, t, pct = false) => `<div class="rs-card"><div class="mut">${label}${!pct && Number.isFinite(t) ? ` · 목표 ${fmtTg(t)}` : ''}</div><div class="rs-v"><b class="${!pct && Number.isFinite(t) ? (v + 1e-9 >= t ? 'ok' : 'bad') : ''}">${pct ? (Number.isFinite(v) ? `${(v * 100).toFixed(1)}%` : '–') : fmtJudge(v)}</b><span class="rs-side">지금</span></div></div>`;
-  return `<div class="rs-cards">${c('길이 균일도', nw.Ulen, nw.tgLen)}${c('폭 균일도', nw.Uwid, nw.tgWid)}${c('광 효율', nw.eff, NaN, true)}</div>`;
+  // 카드 3개 대신 한 줄(2026-11-17 사용자: 균일도는 제목 옆에 약간 크게) — 진행·결과 화면의 그래프 제목 줄과 같은 모양
+  const u = (label, v, t, cls) => `<span class="om-uv">${label} <b class="${cls} ${Number.isFinite(t) ? (v + 1e-9 >= t ? 'ok' : 'bad') : ''}">${fmtJudge(v)}</b>${Number.isFinite(t) ? `<i class="om-tg">/${fmtTg(t)}</i>` : ''}</span>`;
+  return `<div class="om-ct"><b>지금 균일도</b><span class="om-uh">${u('길이', nw.Ulen, nw.tgLen, 'om-u1')}<i class="om-sl">/</i>${u('폭', nw.Uwid, nw.tgWid, 'om-u2')}<span class="om-ue">효율 ${Number.isFinite(nw.eff) ? `${(nw.eff * 100).toFixed(1)}%` : '–'}</span></span></div>`;
 }
 export function autoCardHtml({ avail, sel, running, canRevert = false, noLine = false, noLed = '', applied = null }) {
   const on = AD_ITEMS.filter(([, , ks]) => ks.some((k) => sel[k] && avail[k]?.ok)).map(([, l]) => l);
@@ -379,16 +380,6 @@ export function stageEffects(bests, cur, best, order = ['position', 'shape', 'mi
   return out;
 }
 const verdictOf = (r) => (r.unchanged ? ['keep', '현재안 유지', r.caseCheck ? '고른 후보를 쓸 수 없음' : '더 나은 안 없음'] : r.targets?.judge?.all === 'near' ? ['near', '≈ 목표 근처', '통과·미달을 가를 수 없는 차이'] : r.feasible ? ['ok', '✓ 목표 통과', r.caseCheck ? '고른 후보' : '최적안을 찾음'] : ['bad', '✕ 목표 미달', r.caseCheck ? '고른 후보' : '가장 가까운 안']);
-// 변화 카드 — 이전 → 이후 ▲증가 · 막대(회색 = 이전, 파랑 = 오른 만큼, 빨강 선 = 목표)
-function changeCard(label, a, b, t, pct = false) {
-  const fa = pct ? (v) => (Number.isFinite(v) ? `${(v * 100).toFixed(1)}%` : '–') : (v) => fmtJudge(v);
-  const d = Number.isFinite(a) && Number.isFinite(b) ? (pct ? (b - a) * 100 : (flU(b) - flU(a)) * 100) : NaN;
-  const dTxt = Number.isFinite(d) && Math.abs(d) >= 0.05 ? `<span class="rs-d ${d > 0 ? 'up' : 'dn'}">${d > 0 ? '▲' : '▼'}${Math.abs(d).toFixed(1)}%p</span>` : '';
-  const cls = !pct && Number.isFinite(t) && Number.isFinite(b) ? (b + 1e-9 >= t ? 'ok' : 'bad') : '';
-  const W = (v) => `${Math.round(Math.max(0, Math.min(1, v)) * 1000) / 10}%`;
-  const bar = !pct && Number.isFinite(a) && Number.isFinite(b) ? `<div class="rs-bar"><i class="rs-b0" style="width:${W(Math.min(a, b))}"></i><i class="rs-b1 ${b < a ? 'dn' : ''}" style="left:${W(Math.min(a, b))};width:${W(Math.abs(b - a))}"></i>${Number.isFinite(t) ? `<i class="rs-tg" style="left:${W(t)}" title="목표 ${fmtTg(t)}"></i>` : ''}</div>` : '';
-  return `<div class="rs-card"><div class="mut">${label}${!pct && Number.isFinite(t) ? ` · 목표 ${fmtTg(t)}` : ''}</div><div class="rs-v"><b class="${cls}">${fa(b)}</b><span class="rs-side">시작 ${fa(a)} ${dTxt}</span></div>${bar}</div>`;   // 바뀐 값 = 왼쪽 크게, 시작·변화 = 오른쪽(카드 높이 고정에서 안 잘리게, 2026-11-08)
-}
 const ITEM_NAME = { LED: '① LED 배치', 'LED 높이': '① LED 높이', 형상: '② 형상', Milky: '③ Milky', '케이스 면': '케이스 면' };
 const STAGE_KEY = { position: ['leds', 'height', 'position'], shape: ['shape'], milky: ['milky'], housing: ['housing'] };
 // 무엇을 바꿔서 얼마나 좋아졌나 — 바뀐 항목 + 이번에 돌렸지만 그대로인 항목(그대로). 효과 = 그 단계 몫(≈)
@@ -470,10 +461,9 @@ export function resultViewHtml(r, { applied = null, effects = null, hist = null,
   const x = r ?? applied, tg = x?.targets ?? {};
   const histBox = hist?.length ? `<div class="rs-hist"><div class="rs-h" title="균일도 순 · 골라서 [적용]">지난 후보 <span class="rs-hn mut">${hist.length}개</span></div>${histTableHtml(hist, tg.len, tg.wid, busy, { pick: 'ad' })}</div>` : '';
   if (!x) return `<div class="rs"><div class="rs-h mut">이번 결과 없음</div>${histBox}</div>`;
-  const cards = `<div class="rs-cards">${changeCard('길이 균일도', x.cur?.Ulen, x.best?.Ulen, tg.len)}${changeCard('폭 균일도', x.cur?.Uwid, x.best?.Uwid, tg.wid)}${changeCard('광 효율', x.cur?.eff, x.best?.eff, NaN, true)}</div>`;
   if (!r) {   // 적용 뒤에도 판정·경고·다음 할 일 메모는 남김(2026-11-12 평가: 적용하면 메모가 사라짐)
     const va = verdictOf(applied), effDrop = effDropHtml(applied.cur, applied.best);
-    return `<div class="rs">${cards}<div class="rs-vd ok"><b>✓ 적용됨</b> <span class="mut">${esc(applied.at ?? '')} · 되돌리기 전까지 유지</span>${va?.[0] && va[0] !== 'ok' ? ` <span class="rs-lim">· ${esc(va[1])}</span>` : ''}</div>${effDrop}${notesLines(applied)}
+    return `<div class="rs"><div class="rs-vd ok"><b>✓ 적용됨</b> <span class="mut">${esc(applied.at ?? '')} · 되돌리기 전까지 유지</span>${va?.[0] && va[0] !== 'ok' ? ` <span class="rs-lim">· ${esc(va[1])}</span>` : ''}</div>${effDrop}${notesLines(applied)}
     <div class="rs-btn"><button type="button" data-ad="revert" title="적용 전 값으로">↶ 되돌리기</button>${toSetBtn}</div>${histBox}</div>`;
   }
   const v = verdictOf(r), lim = limitText(r.reason);
@@ -481,7 +471,7 @@ export function resultViewHtml(r, { applied = null, effects = null, hist = null,
     r.best?.rows === 2 && r.cur?.rows !== 2 ? '<div class="rs-note warn">⚠ 2열 배치 = LED PCB 새로 설계</div>' : '',
     effDropHtml(r.cur, r.best)].join('');
   const alt = r.unchanged && r.alt ? `<div class="rs-note">찾은 후보 ${fmtJudge(r.alt.Ulen)}/${fmtJudge(r.alt.Uwid)} — 지금보다 뚜렷이 낫지 않음</div>` : '';
-  return `<div class="rs">${cards}<div class="rs-vd ${v[0]}"><b>${v[1]}</b> <span class="mut">${v[2]}</span>${lim ? ` <span class="rs-lim" title="한계: ${esc(lim)}">· 한계: ${esc(lim.split(' — ')[0])}</span>` : ''}</div>
+  return `<div class="rs"><div class="rs-vd ${v[0]}"><b>${v[1]}</b> <span class="mut">${v[2]}</span>${lim ? ` <span class="rs-lim" title="한계: ${esc(lim)}">· 한계: ${esc(lim.split(' — ')[0])}</span>` : ''}</div>
     ${warn}${alt}${twoRowAltText(r) ? `<div class="rs-note">${esc(twoRowAltText(r))}</div>` : ''}${notesLines(r)}
     <div class="rs-btn">${applyBtn(r, 'LED 몸체가 부품과 겹침')}${altBtn(r)}${shapeDeepBtn(r)}${twoRowBtn(r)}${r.clash > 0 ? '' : `<button type="button" data-ad="continue" title="${r.unchanged ? '지금 설계 그대로' : '이 안을 적용한 뒤'}, 체크했지만 이번에 돌리지 않은 항목을 이어서 최적화">이 안에서 이어서 ▸</button>`}${toSetBtn}<span class="m3-ad-sp"></span>${r.shape ? '<button type="button" data-ad="step">STEP 내보내기</button>' : ''}<button type="button" data-ad="view" title="프로파일 비교 · Milky 표 · 전체 비교표">프로파일·표</button><button type="button" data-ad="cancel" title="이 결과를 설계에 적용하지 않고 닫기 — 지난 후보 표에는 남음">적용 안 함</button></div>
     ${histBox}</div>`;
