@@ -120,3 +120,14 @@ process.exitCode = fail ? 1 : 0;
   const U = await unpackBundle(await packBundle('{}', [S]));
   ok(U.files[0].file.lastModified === 0, '.uds 안 STEP 수정 시각 0 = 그대로 0(열 때마다 같은 키)'); }
 process.exitCode = fail ? 1 : 0;
+// .uds 다시 열 때(2026-11-17 사용자: 창 위에 'STEP 못 찾음' 띠가 떴다가 기다리면 열림) — 설정을 넣기 전에 '읽는 중' 으로 켜 둠
+{ const { bundleReading } = await import('../src/ui/pending-banner.js');
+  ok(JSON.stringify(bundleReading([{ role: 'led', file: { name: 'l.stp', size: 1 } }, { role: 'mech', file: { name: 'a.stp', size: 6e6 } }])) === '{"name":"a.stp","size":6000000}' && bundleReading([{ role: 'led', file: { name: 'l.stp', size: 1 } }]) === null && bundleReading([]) === null, '.uds 안 첫 기구 STEP = 읽는 중 표시 대상 · 없으면 null');
+  const { readFileSync } = await import('node:fs'), m = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  const fn = m.slice(m.indexOf('async function openProjectFile'), m.indexOf('async function openProject()'));
+  ok(fn.indexOf('stepReading = bundleReading(') >= 0 && fn.indexOf('stepReading = bundleReading(') < fn.indexOf('applyProjectText(U.text)'), '설정(보관 띠)을 넣기 전에 읽는 중으로 — 저장소에 STEP 넣는 동안 찾을 수 없음 띠가 안 뜸'); }
+{ // STEP 변환이 끝나도 설정 복원(LED STEP 읽기 등 기다림)이 끝날 때까지 '읽는 중' — 그 사이 '찾을 수 없음' 띠가 뜨던 문제(2026-11-17)
+  const { readFileSync } = await import('node:fs'), m = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  const a = m.indexOf('w.onmessage = async'), h = m.slice(a, m.indexOf('w.onerror', a)), cut = h.slice(h.indexOf('w.terminate();'), h.indexOf('if (m.data.error)'));
+  ok(!/if \(stepReading\) \{ stepReading = null/.test(cut) && (h.match(/doneReading\(\)/g) ?? []).length >= 5 && h.indexOf('doneReading()', h.indexOf('spec.mech3d = ms;')) > 0, '변환 끝 ≠ 복원 끝: 실패·취소·다음 파일·추가·복원 끝에서만 읽는 중을 풂'); }
+process.exitCode = fail ? 1 : 0;

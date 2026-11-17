@@ -34,7 +34,7 @@ import { mountMenubar } from './ui/menubar.js';
 import { APP_VERSION, APP_DATE } from './version.js';
 import { createProjectFile, projectFileLabel } from './ui/project-file.js';
 import { isBundle, unpackBundle } from './ui/project-bundle.js';
-import { pendingBanner } from './ui/pending-banner.js';
+import { pendingBanner, bundleReading } from './ui/pending-banner.js';
 import { NO_SERVER, fetchFailText } from './ui/fetch-fail.js';
 import { pickSources, sourcesKey, keepStepSource, loadStepSources, onStepSourcesChange, bundleProject, setStepSourcePins } from './ui/step-sources.js';
 import { createTabLock, openChannel } from './ui/tab-lock.js';
@@ -491,8 +491,9 @@ function importMech3d(file, onDone = null, { noSplit = false, onMore = null } = 
         ov?.stage(m.data.key, m.data.frac ?? 0, m.data.text ?? ''); if (!ov) say(`${LOAD_LABEL[m.data.key] ?? ''}${m.data.text ? ` — ${m.data.text}` : ''}`); return;
       }
       w.terminate();
-      if (stepReading) { stepReading = null; renderPendingBanner(); }   // 읽기 끝(다음 파일이 있으면 next 가 다시 켬)
-      if (m.data.error) { ov?.close(); if (opened) m3app.setRefining(false); say(`불러오기 실패: ${m.data.error}${opened ? ' — 지금 화면은 거친 메시라 계산하지 않음. 다시 불러오세요' : ''}`); return; }
+      // '읽는 중' 띠는 변환 끝이 아니라 설정 복원이 끝날 때 풂(2026-11-17 — 그 사이 LED STEP 읽기 등을 기다리는 동안 '찾을 수 없음' 띠가 떴음). 다음 파일이 있으면 next 가 새로 켬
+      const mine = stepReading, doneReading = () => { if (mine && stepReading === mine) { stepReading = null; renderPendingBanner(); } };
+      if (m.data.error) { doneReading(); ov?.close(); if (opened) m3app.setRefining(false); say(`불러오기 실패: ${m.data.error}${opened ? ' — 지금 화면은 거친 메시라 계산하지 않음. 다시 불러오세요' : ''}`); return; }
       const info = m.data.info ?? {};
       const after = () => `${m.data.relaxed ? ` · 큰 파일이라 메시 간격을 ${m.data.relaxed.linDefl} mm 로 넓힘(곡면 값이 조금 달라질 수 있음)` : ''}${info.cached ? ` · 저장해 둔 변환 결과로 엶${m.data.timing ? `(처음 불러올 때 ${stepTimingText(m.data.timing)})` : ''}` : `${ov ? ` · 걸린 시간: ${stepTimingText(m.data.timing)}` : ''}${info.fast ? ' · 대용량 고속 엔진으로 읽음' : info.cut ? ` · 부품 단위 ${info.workers}조각으로 나눠 읽음(모양이 이상하면 관리자 모드의 파일 › 3D 기구 STEP Import, 나누지 않고 읽기)` : info.noSplit ? ' · 나누지 않고 읽음' : ''}${info.roots && cacheWorthy(file) ? ` · STEP 부품(루트) ${info.roots}개` : ''}${info.slow?.ms > 5000 ? ` · 가장 오래 걸린 부품 변환 ${stepTimingText({ transfer: info.slow.ms }).replace('형상 변환 ', '')}` : ''}${slowTip(m.data.timing, info)}`}`;
       // 다음에 같은 파일을 바로 열 수 있게 저장(큰 파일만) — 화면 준비와 따로
@@ -526,7 +527,7 @@ function importMech3d(file, onDone = null, { noSplit = false, onMore = null } = 
           m3app.setStatus(`추가함: ${file.name} · 부품 ${m.data.parts.length}개(부품 ${base + 1}번부터) · 전체 ${M.parts.length}개 · 접촉면 ${M.contacts.length}개 — 새 부품의 소재를 정하세요. LED 면 광원에서 직접 지정${after()}`);
           ov?.close();
         } catch (e) { ov?.close(); say(`추가 실패: ${e.message ?? e}`); }
-        return;
+        doneReading(); return;
       }
       try {
         // 저장된 3D 설정(메쉬 없음 — 보관분, 또는 평판 모드로 나간 뒤 새로고침해 메쉬 미적재)이 있으면: 같은 기구 = 복원, 다르면 물어봄(취소 = 보관 유지·불러오기 중단)
@@ -540,7 +541,7 @@ function importMech3d(file, onDone = null, { noSplit = false, onMore = null } = 
           if (st.status === 'more') {
             restoring.parts.push(...parts); ov?.close();
             const t = `${file.name} 읽음 (${st.k}/${st.n}) — 다음 파일을 Import 하세요: ${st.next}`; say(t); $('#m3-start-msg').textContent = t;
-            onMore?.();   // 통합 파일에서 여는 중이면 다음 파일을 바로
+            doneReading(); onMore?.();   // 통합 파일에서 여는 중이면 다음 파일을 바로
             return;
           }
           if (st.status === 'done') { parts = [...restoring.parts, ...parts]; prep = null; sceneName = srcs[0].name; }
@@ -549,7 +550,7 @@ function importMech3d(file, onDone = null, { noSplit = false, onMore = null } = 
         const same = !!pend && matchesPending(pend, partInfo(parts));
         if (pend && !same && !confirm(`${file.name}: 저장된 3D 설정${pend.name ? `(${pend.name})` : ''}과 부품 구성이 다릅니다. 새 기구로 시작할까요?
 (취소 = 저장된 설정을 그대로 두고 불러오기 중단)`)) {
-          ov?.close(); say('불러오기 취소 — 저장된 3D 설정은 그대로 보관됨'); return;
+          ov?.close(); doneReading(); say('불러오기 취소 — 저장된 3D 설정은 그대로 보관됨'); return;
         }
         m3app.unmount();
         setMech3dMesh(sceneName, parts, prep);   // BVH·합친 메쉬·접촉면은 Worker 가 만들어 옴
@@ -569,8 +570,9 @@ function importMech3d(file, onDone = null, { noSplit = false, onMore = null } = 
           : `불러옴: ${file.name} · 부품 ${m.data.parts.length}개 · 삼각형 ${tris()} 개 · 접촉면 ${ms.contacts.length}개${nLed ? ` · LED ${nLed}개 자동 인식(틀리면 광원에서 다시 지정)${m3app.pcbNote()}` : ''} — 다음: 왼쪽 부품 리스트에서 확산판·도광판의 소재(Milky·투명)를 정하고 ① LED 지정${after()}`);
         ov?.close();
       } catch (e) { ov?.close(); say(`불러오기 실패: ${e.message ?? e}`); }
+      doneReading();   // 복원 끝(성공이면 보관 설정이 없어 띠가 숨음)
     };
-    w.onerror = (e) => { w.terminate(); ov?.close(); say(`불러오기 실패: ${e.message ?? e}`); };
+    w.onerror = (e) => { w.terminate(); ov?.close(); if (stepReading) { stepReading = null; renderPendingBanner(); } say(`불러오기 실패: ${e.message ?? e}`); };   // 실패하면 '읽는 중' 띠를 풂
     if (hit?.prep) w.onmessage({ data: { parts: hit.prep.parts, prep: hit.prep, relaxed: hit.relaxed, timing: hit.timing, info: { ...(hit.info ?? {}), cached: true } } });   // 작업자 없이
     else w.postMessage({ text, bytes: file.size, early, noSplit });
   })().catch((e) => { ov?.close(); say(`불러오기 실패: ${e.message ?? e}`); });
@@ -994,6 +996,7 @@ function pickMissingStep() {
 async function openProjectFile(f) {
   if (!(await isBundle(f))) { applyProjectText(await f.text()); return; }
   const U = await unpackBundle(f);
+  stepReading = bundleReading(U.files);   // 설정(보관 띠)을 넣기 전에 '읽는 중' — 아래 STEP 저장(수 초)동안 '찾을 수 없음' 띠가 뜨던 문제(2026-11-17)
   applyProjectText(U.text);
   for (const s of U.files) await keepStepSource(s.role, s.file, s.gz);
   const mech = U.files.filter((s) => s.role === 'mech').map((s) => s.file), led = U.files.find((s) => s.role === 'led')?.file ?? null;
@@ -1001,7 +1004,7 @@ async function openProjectFile(f) {
     for (let i = 0; i < 200 && !m3app.isMounted(); i++) await new Promise((r) => setTimeout(r, 100));
     if (led && getLedMesh()?.name !== led.name) m3app.importLed(led);
   };
-  if ((!spec.mech3dPending && spec.mech3d) || !mech.length) { ledNow(); return; }   // 지금 메쉬가 같은 기구면 다시 읽지 않음(설정 없는 파일 = 새 기구로 읽음)
+  if ((!spec.mech3dPending && spec.mech3d) || !mech.length) { if (stepReading) { stepReading = null; renderPendingBanner(); } ledNow(); return; }   // 지금 메쉬가 같은 기구면 다시 읽지 않음(설정 없는 파일 = 새 기구로 읽음)
   const next = (k) => { stepReading = { name: mech[k].name, size: mech[k].size }; renderPendingBanner(); importMech3d(mech[k], ledNow, { onMore: () => next(k + 1) }); };   // 여러 파일 = 저장 순서대로
   next(0);
 }
