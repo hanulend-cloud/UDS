@@ -1190,8 +1190,8 @@ async function adRun(opt = {}) {
     async milkyRows(d, ms, { precise = false, peek = false, ref = false } = {}) {   // ref = 위치 계산용 기준 Milky 찾기 — Milky 후보 칸에 넣지 않음(진행 줄 '기준 Milky' 칸, 2026-11-12)   // 재가중 기준 = 창 가운데. 시간 제한(Milky 4~5 는 광자당 ~10배) — 경계가 든 창은 정밀 재추적
       const { M: Md, parts } = designScene({ ...d, milky: ms[Math.floor(ms.length / 2)] }, ctx);
       const { steady, ...to } = milkyTraceOpts(ms[Math.floor(ms.length / 2)], { precise });   // Milky 3 이상 창 = 오차 ±5%p 까지(30초 상한) — 후보 값 흔들림 줄이기
-      const r = await R.trace(adJob(Md, parts, ctx), { ...to, ...(steady ? { until: (bs) => quickErr(tallyStats(G, bs, obs), obs) <= MILKY_STEADY_SE } : {}), rw: { part: ctx.mp, milkies: ms } });
-      const rows = milkyRows(G, obs, { milkies: ms, batches: r.rwBatches, ess: r.ess, emitted: r.ledger.emitted, sym: symFor(d, Md) });
+      const sy = symFor(d, Md), r = await R.trace(adJob(Md, parts, ctx), { ...to, ...(steady ? { until: (bs) => quickErr(symStats(G, bs, obs, null, sy), obs) <= MILKY_STEADY_SE } : {}), rw: { part: ctx.mp, milkies: ms } });
+      const rows = milkyRows(G, obs, { milkies: ms, batches: r.rwBatches, ess: r.ess, emitted: r.ledger.emitted, sym: sy });
       if (!peek && !ref) A.optDash?.evals('milky', rows.filter((q) => q.trusted).map((q) => ({ label: `Milky ${(+q.milky).toFixed(2)}`, v: +q.milky, Ulen: q.Ulen, Uwid: q.Uwid, eff: q.eff })));   // 믿을 수 있는(ESS 충분) 격자점만
       return rows;
     },

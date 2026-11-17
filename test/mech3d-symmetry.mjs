@@ -1,5 +1,5 @@
 // 대칭 영역 검토(2026-11-17): node test/mech3d-symmetry.mjs
-import { detectSym, foldPlan, foldArr, symStats, asymCheck } from '../src/engine/mech3d/symmetry.js';
+import { detectSym, foldPlan, foldArr, symStats, asymCheck, rotCount } from '../src/engine/mech3d/symmetry.js';
 import { tallyStats } from '../src/engine/mech3d/tally.js';
 
 let fail = 0;
@@ -29,7 +29,7 @@ const field = (G, f, B, noise) => Array.from({ length: B }, () => { const a = ne
   const R = grid(48, 6, { closed: true }), ring = Array.from({ length: 12 }, (_, k) => led(2 + 4 * k));
   const rs = detectSym(R, ring);
   ok(rs.rot === 12 && !rs.len, `링 LED 12개 같은 간격, 칸 48 → 회전 12: ${JSON.stringify(rs)}`);
-  ok(detectSym(grid(50, 6, { closed: true }), ring.map((l, k) => ({ ...l, s: (50 / 12) * k }))).rot === 2, '칸 수가 12로 안 나뉘면 나뉘는 가장 큰 약수(2)');
+  ok(detectSym(grid(50, 6, { closed: true }), ring.map((l, k) => ({ ...l, s: (50 / 12) * k }))).rot === 12, '칸 수가 12로 안 나뉘어도 회전 12(칸을 간격 안 위치별로 묶음, 2026-11-17)');
 }
 { // 접기 — 칸 짝 합치기
   const G = grid(9, 4), P = foldPlan(G, { len: true, wid: true, rot: 0 });
@@ -37,7 +37,9 @@ const field = (G, f, B, noise) => Array.from({ length: B }, () => { const a = ne
   const one = new Float64Array(36).fill(1), f = foldArr(P, one);
   ok(f[0] === 4 && f[4 * 2] === 2 && P.G.area[0] === 4 && P.G.area[4 * 2] === 2, '짝 칸 합 · 가운데 줄(홀수)은 짝 없음 — 면적도 같이 합침');
   const Rp = foldPlan(grid(48, 6, { closed: true }), { len: false, wid: false, rot: 12 });
-  ok(Rp.G.ns === 4 && Rp.G.closed && Rp.factor === 12 && Rp.speed === 12, '회전 12 → 한 주기(4칸), 닫힌 격자');
+  ok(Rp.G.ns === 4 && Rp.G.closed && Rp.factor === 12 && Rp.speed === 12, '회전 12, 칸 48(나뉨) → 한 주기 4칸 그대로');
+  const Rq = foldPlan(grid(151, 6, { closed: true }), { len: false, wid: false, rot: 39 });
+  ok(Rq.G.ns === 24 && Rq.speed === 6 && Math.abs(Rq.G.ds * Rq.G.ns - 151 / 39) < 1e-9, `칸 151 · 회전 39 → 간격 안 위치 묶음 ${Rq.G.ns}칸(간격 1/24), 약 ×${Rq.speed}`);
 }
 { // 대칭 도면: 접은 값 = 전체 값(노이즈 안) · 노이즈는 줄어듦
   const G = grid(60, 10), f = (i, j) => (1 - 0.4 * Math.exp(-i / 4) - 0.4 * Math.exp(-(59 - i) / 4)) * (1 - 0.3 * ((j - 4.5) / 5) ** 2);
@@ -60,4 +62,18 @@ const field = (G, f, B, noise) => Array.from({ length: B }, () => { const a = ne
   const G = grid(20, 4), accs = field(G, () => 1, 4, 0.05);
   ok(symStats(G, accs, obs, null, null).Ulen === tallyStats(G, accs, obs).Ulen && !symStats(G, accs, obs, null, null).sym, '대칭 정보 없으면 지금과 똑같이');
 }
+{ // 링 회전 = LED 간격이 정확히 같을 때만(0.05 mm, 2026-11-17 사용자: ring-12led.uds 5.75/6.00 mm 섞임 → 합치면 길이 +9%p)
+  const led = (s) => ({ s, w: 0, h: 2.8, as: 0, aw: 0 }), L = 226.17;
+  const gaps = [5.75, 5.75, 6, 5.75, 5.75, 5.75, 5.75, 6, 5.75, 5.75, 5.75, 5.75, 6, 5.75, 5.75, 5.75, 5.75, 6, 5.75, 5.75, 5.75, 5.75, 6, 5.75, 5.75, 5.75, 5.75, 6, 5.75, 5.75, 5.75, 5.75, 6, 5.75, 5.75, 5.75, 5.75, 6];
+  const ss = [1]; for (const g of gaps) ss.push(ss[ss.length - 1] + g);
+  ok(rotCount(ss.map(led), L) === 0, `간격 5.75/6.00 섞임 → 회전 아님: ${rotCount(ss.map(led), L)}`);
+  ok(rotCount(Array.from({ length: 39 }, (_, k) => led(1 + (L / 39) * k)), L) === 39, '정확히 같은 간격 → 회전 39');
+  // 간격 안 위치 묶음 = 전체 계산과 같은 값(칸 151, 주기 L/39 — 칸이 주기와 안 맞아도 골을 놓치지 않음)
+  const G = grid(151, 6, { closed: true }); G.ds = L / 151; G.L = L; for (let k = 0; k < G.area.length; k++) G.area[k] = G.ds;
+  const P = L / 39, box = (i) => { let v = 0; for (let q = 0; q < 50; q++) { const s0 = (i + (q + 0.5) / 50) * G.ds; v += 1 - 0.25 * (0.5 + 0.5 * Math.cos((2 * Math.PI * s0) / P)) ** 4; } return v / 50; };
+  const f = (i) => box(i) * G.ds, exact = tallyStats(G, field(G, f, 8, 0), obs), st = symStats(G, field(G, f, 8, 0), obs, null, { len: false, wid: false, rot: 39 });
+  ok(st.Ulen - exact.Ulen > -0.001 && st.Ulen - exact.Ulen < 0.004, `주기와 안 맞는 칸에서도 묶은 값 ≈ 전체 값(+0.4%p 이내): ${st.Ulen.toFixed(3)} / ${exact.Ulen.toFixed(3)}`);
+}
+{ const G = grid(20, 4), accs = field(G, () => 1, 4, 0.05), st = symStats(G, accs, obs, null, { len: false, wid: false, rot: 0, why: ['회전: LED 간격이 정확히 같지 않음'] });
+  ok(st.Ulen === tallyStats(G, accs, obs).Ulen && /LED 간격/.test(st.sym?.off ?? ''), `대칭을 찾지 못하면 값은 그대로 + 이유 표시: ${st.sym?.off}`); }
 console.log(fail ? `${fail} FAIL` : 'ALL PASS');
