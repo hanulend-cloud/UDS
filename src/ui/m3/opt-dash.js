@@ -422,22 +422,23 @@ export function simCaption(H, tgt, obs, state) {
   return `광선 ${human(last.ph)} / 총 ${human(state === 'done' ? last.ph : simTotal(last, tgt))}${state === 'running' ? etaText(H, tgt).replace(/ · 필요 광선 ≈ [^·]*/, '') : ''}`;
 }
 // 시뮬레이션 상태 글(순수) — 카드·아래 상태줄 공용
-export function simStateText(state, reason = '', stopped = false, busy = false) {
+export function simStateText(state, reason = '', stopped = false, busy = false, error = '') {
   if (busy) return '기구 최적화 중 — 일시정지(끝나면 이어서)';
-  return { running: '계산 중', paused: stopped ? '중지됨' : '일시정지', done: reason === 'adopted' ? '계산 완료 — 기구 최적화 최종 판정 값' : reason === 'converged' ? '계산 완료 — 노이즈 충분히 작음' : '계산 한도 도달 — 노이즈가 아직 큼', pending: '대기', starting: '장면 준비' }[state] ?? state ?? '';
+  if (state === 'error') return `계산 실패 — ${error ? `${error} · ` : ''}▶ 로 다시 계산`;   // 전에는 'error' 영어 그대로(2026-11-17)
+  return { running: '계산 중', paused: stopped ? '중지됨' : '일시정지', done: reason === 'adopted' ? '계산 완료 — 기구 최적화 최종 판정 값' : reason === 'converged' ? '계산 완료 — 노이즈 충분히 작음' : '계산 한도 도달 — 노이즈가 아직 큼', pending: '대기', starting: '장면 준비', idle: '계산 전' }[state] ?? state ?? '';
 }
 // 오른쪽 맨 위 카드(항상 보임) — onCtl(k) = 실행·일시정지·중지. 광경로 목록은 접는 칸
 // bar = 아래 상태줄 칸(2026-11-12 화면 다시 그리기 6단계): 있으면 실행·일시정지·중지 · 진행률 · 광선 수 · 상태 글을 그 줄에 그리고,
 //       카드에는 제목과 접는 칸(계산 오차·균일도 추이 / 광경로)만 남김. 접는 칸 열림은 보는 사람별로 기억(uds.m3.simPlots)
 export function createSimDash(el, { onCtl = null, bar = null } = {}) {
-  let H = [], tgt = 0.02, raf = 0, state = '', obs = null, P = [], names = [], reason = '', stopped = false;
+  let H = [], tgt = 0.02, raf = 0, state = '', obs = null, P = [], names = [], reason = '', stopped = false, err = '';
   // names = 부품 이름, nMech = 기구 부품 수(LED STEP 부품 번호는 그 뒤 — 경로에서 뺌)
   let busy = false;   // 기구 최적화 중(점진 계산 일시정지)
   let diag = null;   // 빛 도달 진단(관측면 도달 < 1%)
   let mini = null;   // 광분포 시뮬레이션 창 안의 진행 현황 칸
   let prog;   // 점진 계산의 표시 진행률(되돌아가지 않음)
   function sample(snap, targetNoise, observe, nm = names, nMech = nm.length, adBusy = false, skip = []) {
-    prog = snap?.progress; busy = adBusy; tgt = targetNoise ?? tgt; obs = observe ?? obs; state = snap?.state ?? ''; reason = snap?.reason ?? ''; stopped = !!snap?.stopped; names = nm; P = topPaths(snap?.paths, nMech, 3, skip);
+    prog = snap?.progress; busy = adBusy; tgt = targetNoise ?? tgt; obs = observe ?? obs; state = snap?.state ?? ''; reason = snap?.reason ?? ''; err = snap?.error ?? ''; stopped = !!snap?.stopped; names = nm; P = topPaths(snap?.paths, nMech, 3, skip);
     const ph = snap?.photons ?? 0, st = snap?.stats;
     diag = ph >= 50000 ? reachDiag(snap?.ledger, snap?.leak, nm) : null;
     if (!st || st.empty || !ph) { if (!ph) H = []; draw(); return; }
@@ -451,7 +452,7 @@ export function createSimDash(el, { onCtl = null, bar = null } = {}) {
     const last = H[H.length - 1], pct = state === 'done' ? 100 : Number.isFinite(prog) ? prog : last ? simPct(last.noise, tgt) : 0, pctT = fmtProg(pct);
     const plot = el.querySelector('.od-simplot'), svg = simPlotSvg(H, tgt, obs, plot?.clientWidth || 300, plot?.clientHeight || 70);
     const row = simCaption(H, tgt, obs, state);
-    const sTxt = simStateText(state, reason, stopped, busy);
+    const sTxt = simStateText(state, reason, stopped, busy, err);
     // 틀은 한 번만 만들고 칸마다 바뀐 것만 고침 — 계산 중 갱신이 잦아도 단추 클릭·접는 칸이 끊기지 않게
     if (bar && !el.querySelector('.od-simh')) {   // 상태줄 모드: 카드 = 제목 + 접는 칸
       let open = false; try { open = localStorage.getItem('uds.m3.simPlots') === '1'; } catch {}
@@ -478,7 +479,7 @@ export function createSimDash(el, { onCtl = null, bar = null } = {}) {
     if (bar) {
       const B = (k) => bar.querySelector(`[data-b="${k}"]`), bt = (k, t) => { const n = B(k); if (n && n.textContent !== t) n.textContent = t; };
       bt('pct', `${pctT}%`); B('bar').style.width = `${pctT}%`; bt('row', row); bt('st', sTxt);
-      const sn = B('st'); sn.title = sTxt; sn.className = `m3-run-st ${state === 'done' ? (reason === 'converged' || reason === 'adopted' ? 'ok' : 'warn') : ''}`;
+      const sn = B('st'); sn.title = sTxt; sn.className = `m3-run-st ${state === 'done' ? (reason === 'converged' || reason === 'adopted' ? 'ok' : 'warn') : state === 'error' ? 'bad' : ''}`;
     } else { set('pct', `${pctT}%`); el.querySelector('[data-s="bar"]').style.width = `${pctT}%`; set('row', row); }
     const dg = el.querySelector('[data-s="diag"]'); if (dg) { dg.hidden = !diag; set('diag', diag?.html ?? ''); }
     set('svg', svg);

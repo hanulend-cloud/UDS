@@ -1308,3 +1308,10 @@ done();
   c(/data-ad="twoRow"/.test(twoRowBtn({ twoRow: t })) && twoRowBtn({ twoRow: { ...t, clash: 2 } }) === '' && /겹/.test(twoRowAltText({ twoRow: { ...t, clash: 2 } })), '단추 data-ad=twoRow · LED 몸체가 겹치면 단추 없이 이유만');
   c(/PCB 폭 밖/.test(twoRowAltText({ twoRow: { ...t, offPcb: true } })), '지금 PCB 폭 밖이면 알림');
 }
+{ // 계산 실패 상태 글(2026-11-17) — 'error' 영어 그대로 나오던 것 → 한국어 + 원인
+  const { simStateText } = await import('../src/ui/m3/opt-dash.js');
+  const a = simStateText('error', '', false, false, 'Worker 응답 없음 (scene 30초)'), b = simStateText('error');
+  const c = (k, v) => { console.log(`${k ? 'PASS' : 'FAIL'} ${v}`); if (!k) process.exitCode = 1; };
+  c(simStateText('idle') === '계산 전' && ['idle', 'error', 'running', 'paused', 'done', 'pending', 'starting'].every((k) => !/^[a-z]+$/.test(simStateText(k))), `상태 글에 영어 상태 이름 없음 (idle → ${simStateText('idle')})`);
+  c(a === '계산 실패 — Worker 응답 없음 (scene 30초) · ▶ 로 다시 계산' && b === '계산 실패 — ▶ 로 다시 계산' && !/error/.test(a + b), `계산 실패 글: ${a} | ${b}`);
+}

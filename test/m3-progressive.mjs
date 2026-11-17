@@ -144,6 +144,14 @@ const OPT = { chunkN: 1000, fixedChunk: true, bins: 10, debounceMs: 500, tickMs:
   ok(Object.keys(J.ledger).every((k) => Math.abs(s.ledger[k] - J.ledger[k]) <= 1e-12 * Math.max(1, J.ledger[k])), '원장 합 일치(도착 순서 차이만)');
   ok(s.ledger.lumEsc > 0 && s.ledger.lumEsc <= s.ledger.escaped, `실제 추적 청크가 ±10° 휘도 광량을 돌려줌 (${s.ledger.lumEsc})`);
 }
+{   // 큰 도면 = 장면 준비 제한 시간도 늘림(2026-11-17) — 청크처럼 삼각형 20만 개마다 기본 시간만큼(상한 5분). 전에는 장면만 30초 고정이라 느린 PC 에서 큰 도면이 'error'
+  const T = fakeTimers(), hung = { send() { return new Promise(() => {}); } }, j0 = job(1), big = { ...j0, scene: { ...j0.scene, mechParts: [{ triangles: { length: 3 * 400000 } }] } };
+  const P = createProgressive({ ports: [hung], timers: T, opts: { ...OPT, sceneTimeoutMs: 5000, chunkTimeoutMs: 3000 } });
+  P.restart(big); await T.advance(500 + 9999);
+  ok(P.snapshot().state === 'starting', `삼각형 40만 개 = 장면 제한 10초 (9.999초에 아직 대기: ${P.snapshot().state})`);
+  await T.advance(1);
+  ok(P.snapshot().state === 'error' && /scene 10초/.test(P.snapshot().error), `10초 뒤 error (${P.snapshot().error})`);
+}
 {   // 응답 없는 포트 → 제한 시간 뒤 error (장면 · 청크)
   const T = fakeTimers(), hung = { log: [], send(m) { this.log.push(m); return new Promise(() => {}); } };
   const P = createProgressive({ ports: [hung], timers: T, opts: { ...OPT, sceneTimeoutMs: 5000, chunkTimeoutMs: 3000 } });

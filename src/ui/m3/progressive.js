@@ -102,11 +102,14 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
     job = j; state = 'starting'; emit();
     // 청크 제한 시간은 도면 크기에 맞춘다(2026-11-11) — 삼각형 20만 개마다 기본 시간만큼 더 줌(상한 5분). 큰 도면은 한 청크가 정상적으로도 30초를 넘김
     const tris = (a) => (a ?? []).reduce((s, p) => s + (p.triangles?.length ?? 0) / 3, 0);
-    chunkLimit = Math.min(300000, o.chunkTimeoutMs * Math.max(1, (tris(j.scene?.mechParts) + tris(j.scene?.ledParts)) / 200000));
+    const scale = Math.max(1, (tris(j.scene?.mechParts) + tris(j.scene?.ledParts)) / 200000);
+    chunkLimit = Math.min(300000, o.chunkTimeoutMs * scale);
+    // 장면 준비(BVH 만들기)도 도면 크기에 맞춤(2026-11-17) — 30초 고정이라 느린 PC 에서 큰 도면(삼각형 170만 개)이 'Worker 응답 없음 (scene 30초)' 로 계산 실패
+    const sceneLimit = Math.min(300000, o.sceneTimeoutMs * scale);
     size.fill(o.minChunk);
     // 포트마다 따로: 장면이 준비되는 대로 그 포트의 청크를 시작(느린 Worker 가 다른 Worker 를 붙잡지 않음)
     await Promise.all(ports.map(async (p, k) => {
-      try { await send(p, { type: 'scene', sceneKey: j.sceneKey, ...j.scene }, o.sceneTimeoutMs); } catch (e) { fail(g, e); return; }
+      try { await send(p, { type: 'scene', sceneKey: j.sceneKey, ...j.scene }, sceneLimit); } catch (e) { fail(g, e); return; }
       if (g !== gen || state === 'error') return;
       ready[k] = g;
       if (state === 'starting') {

@@ -1420,7 +1420,7 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .m3-run-bar > i { display: block; height: 100%; background: var(--m3-acc); }
 .m3-run-row { color: var(--m3-mut); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .m3-run-st { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.m3-run-st.ok { color: var(--m3-ok); } .m3-run-st.warn { color: var(--m3-warn); }
+.m3-run-st.ok { color: var(--m3-ok); } .m3-run-st.warn { color: var(--m3-warn); } .m3-run-st.bad { color: var(--m3-bad); font-weight: 600; }
 /* 시뮬레이션 카드: 접는 칸이 닫혀 있으면 내용 높이만(아래 결과 칸이 자리를 가짐) */
 .m3-right > .m3-simcard:not(:has(details.od-plots[open])) { flex: none !important; height: auto !important; }
 .m3-simcard details.od-plots[open] > .od-simbox { min-height: 96px; height: 120px; display: flex; flex-direction: column; border: 1px solid var(--m3-line); border-radius: 6px; padding: 2px; }
