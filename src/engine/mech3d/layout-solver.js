@@ -73,10 +73,11 @@ function* solveLayoutSteps(args) {
     return { n: ss.length, rows, rowGap: rows === 2 ? g : 0, wCenter: rw4(wCenter), total: pos.length, positions: pos, ss: ss2, kind, stats: st, eff: tot / (emitted * pos.length), margin: margin(st, obs), pitch: 0, endMargin: null, ratio: null, ...extra };
   };
   // 단계 1: 같은 피치(끝 여백 격자 1 mm → 최고점 ±1 mm 를 0.25 mm) · 닫힌 라인 = L/n 균등(시작 위치 4개)
+  //   링은 시작 위치만 격자에 맞추고 나머지는 정확히 L/n 씩(2026-11-17 — LED 마다 격자에 맞추면 간격이 5.75/6.00 처럼 섞임)
   function* stage1(n, rows, g) {
     let best = null;
     if (closed) {
-      for (let k = 0; k < 4; k++) { const s0 = (k * L) / (4 * n), r = ev(Array.from({ length: n }, (_, i) => snapS(s0 + (i * L) / n, L) % L).sort((a, b) => a - b), rows, g, 'uniform', { pitch: 0 }); if (r && better(r, best)) best = r; yield; }
+      for (let k = 0; k < 4; k++) { const s0 = ((snapS((k * L) / (4 * n), L) % L) + L) % L, r = ev(Array.from({ length: n }, (_, i) => (s0 + (i * L) / n) % L).sort((a, b) => a - b), rows, g, 'uniform', { pitch: 0 }); if (r && better(r, best)) best = r; yield; }
       return best;
     }
     if (n === 1) return ev([snapS(L / 2, L)], rows, g, 'uniform', { pitch: 0, endMargin: L / 2 });

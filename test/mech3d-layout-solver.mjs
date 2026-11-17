@@ -41,7 +41,11 @@ const gapsOk = (r, g) => ss(r).every((x, i, a) => i === 0 || x - a[i - 1] >= g -
   const ring = { length: 100, closed: true }, Gc = { ...G, closed: true }, cc = candidateGrid(ring, { sStep: 2 });
   const maps = cc.map(({ s }) => Float32Array.from({ length: 100 }, (_, i) => { const d = Math.min(Math.abs(i + 0.5 - s), 100 - Math.abs(i + 0.5 - s)); return Math.exp(-(d * d) / 72); }));
   const r = solveLayout({ G: Gc, obs: { targetLen: 0.8, targetWid: 0 }, line: ring, cand: cc, maps, rowsOptions: [1], nMax: 30 }), s = ss(r);
-  ok(r.feasible && r.kind === 'uniform' && s.every((x, i) => i === 0 || Math.abs(x - s[i - 1] - 100 / s.length) < 0.3), `닫힌 라인 균등: ${s.length}개`); }
+  ok(r.feasible && r.kind === 'uniform' && s.every((x, i) => i === 0 || Math.abs(x - s[i - 1] - 100 / s.length) < 0.3), `닫힌 라인 균등: ${s.length}개`);
+  // 링은 간격이 정확히 같아야 함(2026-11-17 사용자: 0.25 mm 격자 맞춤으로 5.75/6.00 섞임 → 이음매 포함 모든 간격 = L/n)
+  const r7 = r.atCount?.(7), s7 = r7 ? [...new Set(r7.positions.map((q) => q.s))].sort((a, b) => a - b) : [];
+  const g7 = s7.map((x, i) => (i ? x - s7[i - 1] : x + 100 - s7.at(-1)));
+  ok(s7.length === 7 && g7.every((g) => Math.abs(g - 100 / 7) < 1e-6), `링 7개(100/7 mm): 간격 모두 같음 ${g7.map((g) => g.toFixed(3)).join('/')}`); }
 { // 끝 여유(sMargin): LED 몸체가 끝벽에 닿지 않게 첫·끝 LED 중심 ≥ 여유
   const r = solveLayout({ G, obs: { targetLen: 0.7, targetWid: 0 }, line, cand, maps: mk(0.4), rowsOptions: [1], nMax: 30, sMargin: 4 }), s = r.positions.map((q) => q.s);
   ok(r.positions.length > 0 && Math.min(...s) >= 4 - 1e-9 && Math.max(...s) <= 96 + 1e-9, `끝 여유 4 mm: ${Math.min(...s)}~${Math.max(...s)} (${r.feasible ? '통과' : '미달'})`); }
