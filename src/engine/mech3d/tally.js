@@ -8,7 +8,7 @@
 // 2D 분포·1D 프로파일 화질 = 정사각 칸 크기(2026-10-30): 저 1.5 · 중 1.0 · 고 0.5 mm — 칸이 작을수록 칸당 광자가 줄어 같은 정확도까지 광자가 더 필요.
 // 짧은 면은 길이 10칸 이상, 좁은 면은 폭 4칸 이상이 되게 그 방향만 더 잘게(판정에 칸 수가 모자라지 않게)
 // 판정 노이즈(2026-11-03) — 균일도(칸 최저÷최고)는 노이즈만큼 낮게 나옴(실측 같은 설계: 노이즈 1% 0.78~0.79, 0.5% 0.81). 그래서 목표 바로 아래(JUDGE_BAND 안) 미달은 0.5% 까지 계산해 판정. 통과는 더 계산해도 오르기만 하고, 먼 미달은 안 바뀌니 그대로
-export const JUDGE_NOISE = 0.005, JUDGE_BAND = 0.03;
+export const JUDGE_NOISE = 0.005, JUDGE_BAND = 0.03, JUDGE_MS = 300000;   // JUDGE_MS = 최적화에서 0.5% 재계산 한도 5분(2026-11-17 사용자)
 export function nearTarget(s, obs) {
   if (!s || s.empty || !Number.isFinite(s.Ulen)) return false;
   const m = Math.min(s.Ulen - obs.targetLen, s.Uwid == null ? Infinity : s.Uwid - obs.targetWid);
