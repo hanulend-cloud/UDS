@@ -560,8 +560,8 @@ ok(judgeText(0.3, 0.8, null, 0.2).cls === 'busy' && /판정 보류/.test(judgeTe
   ok(!go.includes('읽는 중') && wait.includes('LED 도면을 읽는 중'), '준비 전에는 이유 표시');
 }
 { // 2D 최저 위치 점: 그림 크기에 맞춤, 2~5 px
-  const { minDotR } = await import('../src/ui/m3/results-panel.js');
-  ok(minDotR(40, 30) === 2 && minDotR(100, 100) === 3 && minDotR(800, 400) === 5 && minDotR(800, 400, 2) === 10, `점 크기: ${minDotR(40, 30)} ${minDotR(100, 100)} ${minDotR(800, 400)}`);
+  const { minDotR, MIN_COLOR } = await import('../src/ui/m3/results-panel.js');
+  ok(minDotR(40, 30) === 1.5 && minDotR(100, 100) === 2 && minDotR(800, 400) === 3.5 && minDotR(800, 400, 2) === 7 && MIN_COLOR === '#e5484d', `최저 점 = 더 작은 빨간 점(2026-11-17 사용자): ${minDotR(40, 30)} ${minDotR(100, 100)} ${minDotR(800, 400)} ${MIN_COLOR}`);
 }
 { // 광원·LED 우클릭 메뉴
   const { treeCtxItems } = await import('../src/ui/m3/feature-tree.js');

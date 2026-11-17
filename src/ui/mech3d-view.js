@@ -157,6 +157,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   const render = () => {
     if (pathItems.length) pathLayout();   // 광경로 화살표·글씨 = 화면 px 크기
     if (obsUi) obsLayout();
+    if (obsMinDot?.visible) obsMinDot.scale.setScalar(OBS_MIN_PX * worldPerPx(obsMinDot.position));   // 화면 크기 고정
     renderer.render(scene, camera);
     if (gz) { gz.c.position.copy(camera.position).sub(controls.target).normalize().multiplyScalar(5.6); gz.c.up.copy(camera.up); gz.c.lookAt(0, 0, 0); gz.r.render(gz.s, gz.c); }
   };
@@ -186,7 +187,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
     return e;
   }
   const fatMats = new Set();   // 굵은 선 재질 — 창 크기가 바뀌면 resolution 갱신
-  let pathGroup = null, pathItems = [], obsUi = null, obsFillMesh = null;   // 광경로 그룹 · 화면 크기 맞춤 항목 · 관측면 표시(render 가 쓰므로 위에 선언)
+  let pathGroup = null, pathItems = [], obsUi = null, obsFillMesh = null, obsMinDot = null;   // obsMinDot = 2D 최저점과 같은 위치의 빨간 점(2026-11-17)   // 광경로 그룹 · 화면 크기 맞춤 항목 · 관측면 표시(render 가 쓰므로 위에 선언)
   let looks = [];   // 부품별 색·투명도(없으면 종류 기본값)
   let meshes = [], partsRef = [], kinds = [], sel = null, obsSet = new Set(), overlay = null, obsMesh = null, markers = null, coneMeshes = [];
 
@@ -413,7 +414,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   }
   function setDim(fn) { dim = fn; meshes.forEach((_, i) => colorize(i)); render(); }
   function setLines(on) { lines = !!on; meshes.forEach((_, i) => colorize(i)); render(); }
-  function setObsShow(on) { obsShow = !!on; if (obsMesh) obsMesh.visible = obsShow; if (lastOver) setOverlay(lastOver); else render(); }
+  function setObsShow(on) { obsShow = !!on; if (obsMesh) obsMesh.visible = obsShow; if (obsMinDot) obsMinDot.visible = obsShow && obsMinDot.userData.on; if (lastOver) setOverlay(lastOver); else render(); }
   function setXray(on) { xray = !!on; meshes.forEach((_, i) => colorize(i)); if (lastOver) setOverlay(lastOver); else render(); }
   // 화면 1 px 이 pos 에서 몇 mm 인지 — 광경로 화살표·글씨를 확대·축소와 상관없이 같은 화면 크기로(render 마다)
   function worldPerPx(pos) {
@@ -599,7 +600,20 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
       obsDir = geom.dir ?? null; liftObs(); obsMesh.visible = obsShow;
       scene.add(obsMesh);
     }
+    if (!obsMesh && obsMinDot) { obsMinDot.userData.on = false; obsMinDot.visible = false; }   // 색지도가 없어지면 최저점도
     if (had !== !!obsMesh && lastOver) { setOverlay(lastOver); return; }   // 색지도가 생기거나 없어지면 관측면 채움 진하기를 바꿈
+    render();
+  }
+  // 2D 광량 분포 최저점(빨간 점)을 3D 관측면에도(2026-11-17 사용자) — pos = 관측면 덧그림 위 점 | null. 화면 지름 OBS_MIN_PX, 가려도 보임, 단면에선 잘림
+  const OBS_MIN_PX = 8;
+  function setObsMin(pos) {
+    if (!obsMinDot && pos) {
+      const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+      const x = cv.getContext('2d'); x.beginPath(); x.arc(32, 32, 27, 0, 2 * Math.PI); x.fillStyle = '#e5484d'; x.fill(); x.lineWidth = 6; x.strokeStyle = '#ffffff'; x.stroke();
+      obsMinDot = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false, depthWrite: false, transparent: true, clippingPlanes: clip }));
+      obsMinDot.renderOrder = 4; scene.add(obsMinDot);
+    }
+    if (obsMinDot) { obsMinDot.userData.on = !!pos; if (pos) obsMinDot.position.set(...pos); obsMinDot.visible = !!pos && obsShow; }
     render();
   }
   function setObsColors(colors) {
@@ -759,5 +773,5 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
 
   // 다 쓴 보기(불러오기 미리보기)의 그래픽 메모리를 돌려줌 — 큰 도면에서 3D 문맥 두 개가 메모리를 나눠 쓰지 않게
   function dispose() { dropProxies(); for (const m of meshes) { scene.remove(m); m.geometry.dispose(); } meshes = []; for (const m of partMats.values()) m.dispose(); partMats.clear(); renderer.dispose(); renderer.forceContextLoss(); }
-  return { dispose, setTheme, theme: () => theme, setLightPaths, setXray, xray: () => xray, setLines, lines: () => lines, setObsShow, obsShow: () => obsShow, setDim, setParts, setKinds, setHidden, setSelection, setOverlay, setPickMode, render, setView, fit, fitAll, viewName: () => viewName, setSection, setObsSurface, setObsColors, setCheckMarkers };
+  return { dispose, setTheme, theme: () => theme, setLightPaths, setXray, xray: () => xray, setLines, lines: () => lines, setObsShow, obsShow: () => obsShow, setDim, setParts, setKinds, setHidden, setSelection, setOverlay, setPickMode, render, setView, fit, fitAll, viewName: () => viewName, setSection, setObsSurface, setObsColors, setObsMin, setCheckMarkers };
 }

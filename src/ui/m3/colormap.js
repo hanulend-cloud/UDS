@@ -82,14 +82,35 @@ function nearestValid(G, s, w) {
   }
   return -1;
 }
-// 정점 → 집계 칸 번호(격자마다 한 번만 구한다)
-export function vertexCells(positions, line, G) {
-  const n = positions.length / 3, out = new Int32Array(n);
-  for (let v = 0; v < n; v++) {
-    const [x, y] = line.to2D([positions[3 * v], positions[3 * v + 1], positions[3 * v + 2]]), [s, w] = line.toSW(x, y);
-    out[v] = nearestValid(G, s, w);
-  }
+// 정점 → (s, w) 펼친 좌표
+export function vertexSW(positions, line) {
+  const n = positions.length / 3, out = new Float32Array(2 * n);
+  for (let v = 0; v < n; v++) { const [x, y] = line.to2D([positions[3 * v], positions[3 * v + 1], positions[3 * v + 2]]), [s, w] = line.toSW(x, y); out[2 * v] = s; out[2 * v + 1] = w; }
   return out;
+}
+// 정점 → 집계 칸 번호(격자마다 한 번만 구한다)
+export function vertexCells(positions, line, G, sw = vertexSW(positions, line)) {
+  const n = positions.length / 3, out = new Int32Array(n);
+  for (let v = 0; v < n; v++) out[v] = nearestValid(G, sw[2 * v], sw[2 * v + 1]);
+  return out;
+}
+// 최저 칸(2D 광량 분포의 빨간 점과 같은 규칙) — 유효 칸 중 가장 낮은 값, 같으면 앞 칸. 빛이 없으면 −1
+export function mapMinCell(G, map) {
+  let mx = 0, k0 = -1;
+  for (let k = 0; k < map.length; k++) if (G.valid[k] && map[k] > mx) mx = map[k];
+  if (!(mx > 0)) return -1;
+  for (let k = 0; k < map.length; k++) if (G.valid[k] && (k0 < 0 || map[k] < map[k0])) k0 = k;
+  return k0;
+}
+// (s, w) → 관측면 덧그림 위 가장 가까운 정점의 3D 위치(2026-11-17 사용자: 2D 최저점을 3D 관측면에도) · 링은 이음매 너머도. 정점 없으면 null
+export function obsPoint(ov, G, s, w) {
+  let best = -1, bd = Infinity;
+  for (let v = 0; v < ov.sw.length / 2; v++) {
+    let ds = Math.abs(ov.sw[2 * v] - s); if (G.closed) ds = Math.min(ds, G.L - ds);
+    const d = ds * ds + (ov.sw[2 * v + 1] - w) ** 2;
+    if (d < bd) { bd = d; best = v; }
+  }
+  return best < 0 ? null : [ov.positions[3 * best], ov.positions[3 * best + 1], ov.positions[3 * best + 2]];
 }
 // 칸 값(map) → 정점 색(유효 칸 최대 대비, 같은 색 막대). 칸 없음(−1) = 회색
 export function cellColors(cells, map, valid, out = null) {
@@ -113,6 +134,6 @@ export function buildObsOverlay(parts, faces, line, G, { maxTris = 200000, lift 
     for (let k = 0; k < s.positions.length; k += 3) { const p = [s.positions[k], s.positions[k + 1], s.positions[k + 2]], n = line.normalAt?.(p) ?? d; pos.push(p[0] + lift * n[0], p[1] + lift * n[1], p[2] + lift * n[2]); }
     for (const t of s.triangles) tri.push(t + base);
   }
-  const positions = Float32Array.from(pos);
-  return { positions, triangles: Uint32Array.from(tri), cells: vertexCells(positions, line, G) };
+  const positions = Float32Array.from(pos), sw = vertexSW(positions, line);
+  return { positions, triangles: Uint32Array.from(tri), cells: vertexCells(positions, line, G, sw), sw };
 }

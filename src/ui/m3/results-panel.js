@@ -255,8 +255,9 @@ function wireHover(cv) {
 // 최저점 표시(값·위치), 마우스 위치 읽기. equal = 가로세로 같은 축척(실제 비율, 확대 창에서 선택). 모든 치수는 dpr 배
 // v = { G, map, leds:[{s,w}] } · cv._mapv 에 저장 → 마우스 읽기·확대 창이 다시 그림
 const MAP_PAD = { l: 40, r: 64, t: 8, b: 30 }, EXAG_MAX = 8, PIN_COLOR = '#ff8a1f';
-// 최저 위치 점 반지름(순수) — 그림의 짧은 변에 비례, 2~5 px
-export const minDotR = (w, h, dpr = 1) => Math.max(2 * dpr, Math.min(5 * dpr, Math.min(w, h) * 0.03));
+// 최저 위치 점(순수) — 빨간 작은 점(2026-11-17 사용자: 회색 → 더 작은 빨강), 반지름 = 그림의 짧은 변에 비례 1.5~3.5 px. 3D 관측면 표시도 같은 색
+export const MIN_COLOR = '#e5484d';
+export const minDotR = (w, h, dpr = 1) => Math.max(1.5 * dpr, Math.min(3.5 * dpr, Math.min(w, h) * 0.02));
 // 지도 배치(순수) — 한 줄(가로 = 길이 s, 1D 프로파일과 같은 가로축). 길고 좁은 관측면(예: 440 × 5.5 mm)은 상자 높이를 다 쓰면
 // 폭이 수십 배 과장되므로 폭 확대를 EXAG_MAX 배까지만(띠 높이 최소 28 px) — 띠는 상자 가운데. (예전엔 여러 줄로 접었지만 1D 프로파일과 맞춰 보기 어려움)
 // equal = 가로세로 같은 축척(확대 창에서 선택) — 줄 안에서 정확히 1:1.
@@ -403,7 +404,7 @@ function drawShapeMap(cv, v, dpr, hover, mode) {
   x.font = `${10.5 * dpr}px sans-serif`; x.fillStyle = '#8a93a6'; x.textAlign = 'right'; x.textBaseline = 'bottom';
   x.fillText(mode === 'ring' ? '링 · 두께 확대(시작점·방향은 실제와 같음) — [실제 비율] = 실제 모양' : `실제 모양 · 가로 ${Ly.info.mm[0].toFixed(1)} × 세로 ${Ly.info.mm[1].toFixed(1)} mm`, box.x + box.w, H - 3 * dpr);
   if (mode === 'ring') { const [i0x, i0y] = Ly.toPx(0, G.w0 + (rows[0] + rows[1] + 1) / 2 * G.cell); x.beginPath(); x.arc(i0x, i0y, 3 * dpr, 0, 2 * Math.PI); x.fillStyle = '#ffffff'; x.fill(); x.textAlign = 'left'; x.textBaseline = 'middle'; x.fillStyle = '#8a93a6'; x.fillText('s 0', i0x + 6 * dpr, i0y); }
-  if (kMin >= 0) { const i = Math.floor(kMin / G.nw), j = kMin % G.nw, [cs, cw] = mapCellSW(G, i, j), [px, py] = Ly.toPx(cs, cw); x.beginPath(); x.arc(px, py, minDotR(box.w, box.h, dpr), 0, 2 * Math.PI); x.fillStyle = '#8a8f98'; x.fill(); x.strokeStyle = '#ffffff'; x.lineWidth = dpr; x.stroke(); }
+  if (kMin >= 0) { const i = Math.floor(kMin / G.nw), j = kMin % G.nw, [cs, cw] = mapCellSW(G, i, j), [px, py] = Ly.toPx(cs, cw); x.beginPath(); x.arc(px, py, minDotR(box.w, box.h, dpr), 0, 2 * Math.PI); x.fillStyle = MIN_COLOR; x.fill(); x.strokeStyle = '#ffffff'; x.lineWidth = 0.8 * dpr; x.stroke(); }
   if (v.pin) { const [px, py] = Ly.toPx(v.pin.s, v.pin.w); x.beginPath(); x.arc(px, py, 4 * dpr, 0, 2 * Math.PI); x.fillStyle = PIN_COLOR; x.fill(); x.strokeStyle = 'rgba(10,14,22,.9)'; x.lineWidth = 1.5 * dpr; x.stroke(); }
   for (const R of [cv._region, cv._drag]) {   // 선택 영역 — 펼친 그림과 같은 주황 테두리(2026-11-13 사용자: 실제 비율·링으로 돌아가면 어딜 골랐는지 안 보임)
     if (!R) continue;
@@ -466,9 +467,9 @@ export function drawMap(cv, v, dpr = 1, hover = null, equal = false) {
   // 색 막대(0~100%) + 최저 위치
   colorBar(x, W, H, dpr);
   x.save(); x.beginPath(); x.rect(ox, oy, PW, rowH); x.clip();   // 확대 때 상자 밖으로 나간 표시는 자름
-  if (kMin >= 0) {   // 최저 위치 = 회색 점만(글씨는 작은 그림을 가림, 2026-11-04) · 크기는 그림에 맞춤
+  if (kMin >= 0) {   // 최저 위치 = 빨간 점만(글씨는 작은 그림을 가림, 2026-11-04) · 크기는 그림에 맞춤
     const i = Math.floor(kMin / G.nw), j = kMin % G.nw, [cs, cw] = mapCellSW(G, i, j), [px, py] = xy(cs, cw);
-    x.beginPath(); x.arc(px, py, minDotR(PW, rowH, dpr), 0, 2 * Math.PI); x.fillStyle = '#8a8f98'; x.fill(); x.strokeStyle = '#ffffff'; x.lineWidth = dpr; x.stroke();
+    x.beginPath(); x.arc(px, py, minDotR(PW, rowH, dpr), 0, 2 * Math.PI); x.fillStyle = MIN_COLOR; x.fill(); x.strokeStyle = '#ffffff'; x.lineWidth = 0.8 * dpr; x.stroke();
   }
   // 지정 점(클릭) — 주황 십자선 + 점: 이 점을 지나는 길이·폭 1D 프로파일이 아래에 함께 나옴
   if (v.pin) {
