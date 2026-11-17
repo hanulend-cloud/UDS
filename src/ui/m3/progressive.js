@@ -60,7 +60,7 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
   const o = { ...PROG_DEFAULTS, ...opts };
   const cap = () => job?.maxPhotons ?? o.maxPhotons;   // 계산 한도 — 작업(화질)별, 없으면 기본
   let gen = 0, state = 'idle', reason = null, error = null, job = null, pendingJob = null, debounce = null, ticker = null;
-  let paths = {}, bins, binIssued, ledger, leak, nextChunk, issued, retry, doneChunks, photons, ignored, snap, early, nMin, nMax;
+  let paths = {}, bins, binIssued, ledger, leak, nextChunk, issued, retry, doneChunks, photons, ignored, snap, early, nMin, nMax, seeded = false;   // seeded = 최종 판정 값을 넘겨받음 → 대칭 합치기 안 함(판정은 전체 영역)
   let pendingSeed = null, wantPaused = false, disposed = false;   // wantPaused: 대기·시작 중 일시정지 요청 → 시작될 때 적용
   const busy = ports.map(() => 0);   // 포트별로 돌고 있는 펌프의 세대(0 = 쉼)
   const ready = ports.map(() => 0);  // 포트별로 장면이 준비된 세대 — 준비된 포트부터 바로 청크를 보낸다
@@ -68,7 +68,7 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
   const now = () => (typeof timers.now === 'function' ? timers.now() : globalThis.performance?.now?.() ?? Date.now());
   resetAcc();
 
-  function resetAcc() { prog = null; bins = Array.from({ length: o.bins }, () => null); binIssued = new Float64Array(o.bins); ledger = ledger0(); leak = {}; paths = {}; nextChunk = 0; issued = 0; retry = []; nMin = Infinity; nMax = 0; doneChunks = 0; photons = 0; ignored = 0; snap = null; early = false; }
+  function resetAcc() { prog = null; bins = Array.from({ length: o.bins }, () => null); binIssued = new Float64Array(o.bins); ledger = ledger0(); leak = {}; paths = {}; nextChunk = 0; issued = 0; retry = []; nMin = Infinity; nMax = 0; doneChunks = 0; photons = 0; ignored = 0; snap = null; early = false; seeded = false; }
   function stopTick() { if (ticker != null) { timers.clearInterval(ticker); ticker = null; } }
   function startTick() { stopTick(); ticker = timers.setInterval(onTick, o.tickMs); }
   const emit = () => { if (!disposed) onUpdate(snapshot()); };
@@ -194,7 +194,7 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
     for (const key in ledger) ledger[key] = (seed.ledger[key] ?? 0) / c0;
     for (const key in seed.leak ?? {}) leak[key] = seed.leak[key] / c0;
     for (const key in seed.paths ?? {}) paths[key] = seed.paths[key] / c0;
-    photons = issued = seed.photons; nMin = 1; nMax = 2;
+    photons = issued = seed.photons; nMin = 1; nMax = 2; seeded = true;
   }
   function compute() {
     const filled = bins.filter(Boolean);
@@ -204,7 +204,7 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
     const same = nMin === nMax && nMin === o.chunkN, ref = o.chunkN;
     const norm = (B, a) => (same ? (B.n === 1 ? a : a.map((v) => v / B.n)) : a.map((v) => v * (ref / B.photons)));
     const accs = filled.map((B) => norm(B, B.acc)), cnts = filled.map((B) => norm(B, B.cnt));
-    const stats = symStats(job.G, accs, job.obs, cnts, job.sym);   // 대칭 칸 합치기(job.sym, 2026-11-17) — 없으면 tallyStats 그대로
+    const stats = symStats(job.G, accs, job.obs, cnts, seeded ? null : job.sym);   // 대칭 칸 합치기(job.sym, 2026-11-17) — 없으면 tallyStats 그대로. 넘겨받은 최종 판정 값은 합치지 않음(전체 영역)
     // 2D 표시·TXT 용 면 전체 지도 — stats.map 과 같은 정규화(제외 구역이 없는 칸은 값이 같음)
     if (job.G.validAll) { const all = filled.map((B) => norm(B, B.accAll)), m = new Float64Array(job.G.ns * job.G.nw); for (let k = 0; k < m.length; k++) if (job.G.validAll[k]) { let v = 0; for (const a of all) v += a[k]; m[k] = v / all.length / job.G.areaAll[k]; } stats.mapAll = m; if (stats.sym?.factor > 1) { const sm = new Float64Array(m.length); for (const x of all) for (let k = 0; k < m.length; k++) sm[k] += x[k]; stats.mapAll = symMapAll(job.G, sm, all.length, job.sym); } }   // 대칭 합치기 중이면 화면 지도도 짝 칸 평균
     const sum = new Float64Array(job.G.ns * job.G.nw);

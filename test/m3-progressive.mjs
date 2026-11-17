@@ -313,6 +313,12 @@ const perPhoton = (s) => Array.from(s.sum, (v) => v / (s.photons / 25000));   //
   ok(sn.state === 'done' && sn.reason === 'adopted' && chunks(a).length === 0 && Math.abs(sn.stats.Ulen - want.Ulen) < 1e-9 && Math.abs(sn.stats.Uwid - want.Uwid) < 1e-9 && sn.photons === 5e6 && scenes(a).length === 1, `인계 값 = 판정 값 ${sn.stats?.Ulen?.toFixed(4)}`);
   P.restart(job(10), () => ({ ...seed, nCell: 99 })); await T.advance(500); await settle();
   ok(P.snapshot().state === 'running' && chunks(a).length > 0, '격자가 다른 값은 무시 — 새로 계산');
+  // 대칭 도면이어도 인계 값은 합치지 않음(2026-11-17 사용자: 링 적용 뒤 ④ 80.1% ≠ 판정 78.6% — 최종 판정은 전체 영역)
+  const sb = Array.from({ length: 10 }, (_, b) => ({ acc: Float64Array.from({ length: 8 }, (_, k) => (k < 2 || k >= 6 ? 0.8 : 1) * (1 + 0.02 * Math.sin(b * 3 + k * 1.7)) * 5e5), accAll: new Float64Array(8), cnt: new Float64Array(8).fill(50), n: 5, photons: 5e5 }));
+  const sWant = tallyStats(G, sb.map((b) => b.acc), obs);
+  P.restart({ ...job(11), sym: { len: true, wid: true, rot: 0, why: [] } }, () => ({ ...seed, batches: sb })); await T.advance(500); await settle();
+  const ss = P.snapshot();
+  ok(ss.reason === 'adopted' && Math.abs(ss.stats.Ulen - sWant.Ulen) < 1e-9 && Math.abs(ss.stats.Uwid - sWant.Uwid) < 1e-9 && !ss.stats.sym, `대칭 도면 인계 값 = 판정 값(합치지 않음): ${ss.stats?.Ulen?.toFixed(4)} / ${sWant.Ulen.toFixed(4)}`);
   P.dispose(); }
 { // 중지 = 결과는 남고 이어서 못 함 · 다음 실행은 처음부터 계산(일시정지처럼 멈춰 있지 않음)
   const T = fakeTimers(), a = delayedPort(T), P = createProgressive({ ports: [a], timers: T, opts: OPT });
