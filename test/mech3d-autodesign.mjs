@@ -547,6 +547,13 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
     ok(r.feasible && r.verified.stats.relNoise === 0.01 && calls.some((o) => o.noise === 0.01) && !calls.some((o) => o.noise === 0.005), `${screenGrid ? '화면 격자' : '최적화 격자'}: 80.3%(노이즈 2%) → 1% 까지 다시 잼 · 0.5% 는 안 감 (${calls.map((o) => o.noise ?? '-').join(',')})`);
   }
 }
+{ // 더 정밀하게 다시 재다 실패(Worker 응답 없음)해도 최적화 전체를 버리지 않음 — 앞 단계 값으로 판정하고 이유를 남김(2026-11-17 링: 0.5% 재계산 중 청크 90초 → 30분 결과가 사라짐)
+  for (const screenGrid of [true, false]) {
+    const io = { milkyRows: async (d, ms) => rowsOf(ms), verify: async (d, o = {}) => { if (o.noise === 0.005) throw new Error('Worker 응답 없음 (chunk 90초)'); const n = o.noise ?? 0.02; return { stats: { ...st(n === 0.01 ? 0.79 : 0.803, 0.9), seLen: n * 0.85, seWid: n * 0.5, relNoise: n }, eff: 0.5, photons: 1e7 }; }, progress() {}, cancelled: () => false };
+    const r = await runAutoDesign({ stages: { milky: true }, obs: { ...obs, targetNoise: 0.02 }, current: { milky: 3, count: 5, pitch: 0, shape: null }, milkyMax: 5, screenGrid }, io);
+    ok(!r.feasible && r.verified.stats.Ulen === 0.79 && r.verified.stats.relNoise === 0.01 && /응답 없음/.test(r.verified.sharpErr ?? ''), `${screenGrid ? '화면 격자' : '최적화 격자'}: 0.5% 실패 → 1% 값(79.0%)으로 판정 + 이유 (${r.verified?.sharpErr})`);
+  }
+}
 { // 화면 격자 통과 = 통과, 먼 값은 목표 노이즈(1%)까지만 · 점진 결과가 있으면 현재안은 다시 재지 않음
   const calls = [], cs = { stats: { ...st(0.7, 0.9), relNoise: 0.01 }, eff: 0.5, sharp: true }, io = { milkyRows: async (d, ms) => rowsOf(ms), verify: async (d, o = {}) => { calls.push(o); return { stats: { ...st(o.screen ? 0.85 : 0.82, 0.9), relNoise: o.noise ?? 0.01 }, eff: 0.5, photons: 1e7 }; }, progress() {}, cancelled: () => false };
   const r = await runAutoDesign({ stages: { milky: true }, obs: { ...obs, targetNoise: 0.01 }, current: { milky: 3, count: 5, pitch: 0, shape: null }, milkyMax: 5, screenGrid: true, currentScreen: cs }, io);

@@ -716,12 +716,14 @@ export async function runAutoDesign(cfg, io) {
     return r === v ? v : { ...r, sharp: true };   // 더 잴 것 없으면 받은 값 그대로
   };
   // 판정 노이즈까지 이어서 계산(sharpNoise: 목표 바로 아래 0.5% · 겨우 통과 1%, 2026-11-17) — 1% 에서 목표 바로 아래로 내려오면 0.5% 까지 한 번 더
+  const fmtNoise = (x) => `${(x * 100).toFixed(1)}%`;
   const sharpTo = async (r, run, extra) => {
     for (let k = 0; k < 2 && !stop(); k++) {
       const t = sharpNoise(r.stats, obs);
       if (t == null || !(r.stats.relNoise > t * 1.1)) break;
       io.progress?.('verify', 0.5, `목표 근처 — 노이즈 ${t * 100}% 까지 다시 계산(몇 분 걸림)`);
-      r = await run({ noise: t, from: r, ...extra });
+      // 더 정밀하게 재다 실패하면(Worker 응답 없음 등) 최적화 전체를 버리지 않고 앞 값으로 판정 + 이유(2026-11-17 — 30분 결과가 사라졌음). 중지는 그대로 멈춤
+      try { r = await run({ noise: t, from: r, ...extra }); } catch (e) { if (stop() || /중지/.test(e?.message ?? '')) throw e; return { ...r, sharpErr: `노이즈 ${t * 100}% 재계산 실패(${e?.message ?? e}) — 노이즈 ${fmtNoise(r.stats.relNoise)} 값으로 판정` }; }
     }
     return r;
   };

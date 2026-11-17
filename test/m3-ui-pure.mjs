@@ -919,6 +919,8 @@ done();
   const eff = stageEffects({ shape: { Ulen: 0.7, Uwid: 0.74 }, milky: { Ulen: 0.72, Uwid: 0.75 } }, r.cur, r.best);
   ok(Math.abs(eff.shape.dl + eff.milky.dl - 0.1) < 1e-9 && Math.abs(eff.shape.dw + eff.milky.dw - 0.15) < 1e-9 && eff.shape.dl > eff.milky.dl, `항목 효과 합 = 전체 변화(배분): ${JSON.stringify(eff)}`);
   const h = resultViewHtml(r, { effects: eff, hist: [{ label: 'Milky 3.6', Ulen: 0.75, Uwid: 0.77, eff: 0.5 }] });
+  { const hs = resultViewHtml({ ...r, sharpErr: '노이즈 0.5% 재계산 실패(Worker 응답 없음 (chunk 90초)) — 노이즈 1.0% 값으로 판정' });
+    ok(/rs-note warn[^>]*>⚠ [^<]*재계산 실패/.test(hs) && !/💡 노이즈 0\.5%/.test(hs), '정밀 재계산 실패 = 결과 화면에 경고 한 줄(2026-11-17)'); }
   ok(h.includes('목표 미달') && !/rs-card/.test(h), '판정 · 카드 없음(값은 진행 그래프 제목 줄, 2026-11-17 사용자)');
   { const { factorResult } = await import('../src/ui/m3/autodesign-panel.js'), F = (k) => factorResult(r, eff, {}, k);
     ok(!h.includes('class="rs-fb ') && F('shape').chg && F('milky').chg && F('milky').body.includes('3.60') && /길이 \+\d+\.\d%p/.test(F('milky').eff) && !F('position').chg && F('position').chip === '안 돌림', '결과 = 설계 인자 상자 자리에(이전 → 이후 · 효과 · 상태)'); }

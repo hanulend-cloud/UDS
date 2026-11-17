@@ -450,9 +450,9 @@ const toSetBtn = '<button type="button" data-ad="toSet" title="항목을 다시 
 // 참고 한 줄씩(최대 3) — 화면엔 짧게, 전체는 마우스. 다음 할 일(nextTryText)이 맨 앞
 function notesLines(r) {
   const n = [
-    nextTryText(r), oneRowHint(r), r.shapeNote ? `형상 그대로: ${r.shapeNote}` : '', shapeMissText(r),
+    nextTryText(r), oneRowHint(r), r.sharpErr ?? '', r.shapeNote ? `형상 그대로: ${r.shapeNote}` : '', shapeMissText(r),
     r.lowered ? loweredText(r.lowered, r.unchanged) : '', !r.feasible && r.peek ? peekText(r.peek) : '',
-  ].filter(Boolean).slice(0, 3).map((t) => tipNote(t));
+  ].filter(Boolean).slice(0, 3).map((t) => tipNote(t, t === r.sharpErr ? 'warn' : ''));   // 정밀 재계산 실패 = 경고(2026-11-17)
   const ch = caseHintText(r) ? `<button type="button" class="rs-note m3-rhint" data-ad="casePart" data-v="${r.hint.finish.part}" title="${esc(caseHintText(r))}">💡 ${esc(shortNote(caseHintText(r)))} ▸</button>` : '';
   return n.join('') + ch;
 }
@@ -482,6 +482,7 @@ function notesHtml(r) {
     caseHintText(r) ? `<button type="button" class="m3-rlim m3-rhint" data-ad="casePart" data-v="${r.hint.finish.part}" title="케이스 부품 속성 열기 — 면 처리는 직접 바꿈">${esc(caseHintText(r))} ▸</button>` : '',
     oneRowHint(r) ? `<div class="m3-rlim">${esc(oneRowHint(r))}</div>` : '',
     twoRowAltText(r) ? `<div class="m3-rlim">${esc(twoRowAltText(r))}</div>` : '',
+    r.sharpErr ? `<div class="m3-rlim">⚠ ${esc(r.sharpErr)}</div>` : '',
     r.shapeNote ? `<div class="m3-rlim">💡 형상 그대로: ${esc(r.shapeNote)}</div>` : '',
     shapeMissText(r) ? `<div class="m3-rlim">${esc(shapeMissText(r))}</div>` : '',
     r.lowered ? `<div class="m3-rlim">${esc(loweredText(r.lowered, r.unchanged))}</div>` : '',
