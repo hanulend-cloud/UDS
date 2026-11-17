@@ -268,7 +268,7 @@ export const MIN_COLOR = '#e5484d';
 export const MAX_COLOR = MIN_COLOR;
 export const showMax = (st) => !!st && !st.empty && st.relNoise <= 0.05;
 const mapMaxIdx = (G, map, mx) => { for (let k = 0; k < map.length; k++) if (G.valid[k] && map[k] === mx) return k; return -1; };
-function maxRing(x, px, py, r, dpr) { x.beginPath(); x.arc(px, py, r, 0, 2 * Math.PI); x.strokeStyle = 'rgba(10,14,22,.85)'; x.lineWidth = 2.6 * dpr; x.stroke(); x.strokeStyle = MAX_COLOR; x.lineWidth = 1.3 * dpr; x.stroke(); }
+function maxRing(x, px, py, r, dpr) { x.beginPath(); x.arc(px, py, r, 0, 2 * Math.PI); x.strokeStyle = MAX_COLOR; x.lineWidth = 1.2 * dpr; x.stroke(); }   // 빨간 선만, 안은 비움(2026-11-17 사용자 — 어두운 테두리가 채운 점처럼 보임)
 export const minDotR = (w, h, dpr = 1) => Math.max(1.5 * dpr, Math.min(3.5 * dpr, Math.min(w, h) * 0.02));
 // 지도 배치(순수) — 한 줄(가로 = 길이 s, 1D 프로파일과 같은 가로축). 길고 좁은 관측면(예: 440 × 5.5 mm)은 상자 높이를 다 쓰면
 // 폭이 수십 배 과장되므로 폭 확대를 EXAG_MAX 배까지만(띠 높이 최소 28 px) — 띠는 상자 가운데. (예전엔 여러 줄로 접었지만 1D 프로파일과 맞춰 보기 어려움)
