@@ -1339,3 +1339,12 @@ done();
   c(o.every(Number.isFinite) && o[0] < o[1] && o[1] < o[2] && o[2] < o[3], `진행·결과 화면 순서 = 진행 현황 → 그래프 → 항목 → 결과: ${o}`);
   c(!/m3-mon-log/.test(mon) && /data-mon-tab/.test(mon), "'진행 기록' 접는 단추 대신 탭");
 }
+{ // 대칭 영역 검토 표시(2026-11-17) — 시뮬레이션 상태 줄 · 최적화 진행 줄
+  const c = (k, v) => { console.log(`${k ? 'PASS' : 'FAIL'} ${v}`); if (!k) process.exitCode = 1; };
+  const { symNote, monitorHtml, STAGES } = await import('../src/ui/m3/opt-dash.js');
+  c(symNote?.({ label: '길이 ½ · 폭 ½', factor: 4, speed: 2, off: '' }) === '대칭 길이 ½ · 폭 ½ 합침 · 약 ×2 빠름' && symNote({ label: '폭 ½', factor: 2, speed: 1, off: '' }) === '대칭 폭 ½ 합침 · 폭 노이즈만 줄어듦' && symNote({ label: '길이 ½', factor: 1, off: '대칭 아님(결과 검사) — 전체 계산' }) === '대칭 아님 — 전체 계산' && symNote(null) === '', `대칭 문구: ${symNote?.({ label: '길이 ½ · 폭 ½', factor: 4 })}`);
+  const S = { tgLen: 0.8, tgWid: 0.8, before: {}, tiles: Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', evals: [] }])), seq: [], symNote: '대칭 길이 ½ 합침 · 약 ×2 빠름(빠른 검토)' };
+  c(/대칭 길이 ½ 합침/.test(monitorHtml(S, 3)), '최적화 진행 줄에 대칭 사용 표시');
+  const { readFileSync } = await import('node:fs'), m = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  c(/id: 'sym', label: '대칭 영역 검토/.test(m) && /m3app\.setSymOn\(!m3app\.symOn\(\)\)/.test(m), '설정 메뉴: 대칭 영역 검토 켜기/끄기');
+}

@@ -353,6 +353,7 @@ function setupMenubar() {
     { label: '설정', items: [
       { id: 'target', label: '목표 균일도 · 계산 정밀도 · 설계 점검 기준…', enabled: m3 },
       { id: 'auto', label: '기구 최적화 기본값 (Milky 상한 · 보완 자동 추가)…', enabled: m3 },
+      { id: 'sym', label: '대칭 영역 검토 — 대칭인 칸을 합쳐 빠르게 (최종 판정은 전체 영역)', checked: () => m3app.symOn(), enabled: m3 },
       '-',
       { id: 'admin', label: '관리자 모드 (소재 DB 관리)', checked: isAdmin },
       { id: 'mat-db', label: '소재 DB 관리…', enabled: () => m3() && isAdmin() },
@@ -372,6 +373,7 @@ function setupMenubar() {
     if (id === 'import-led') return $('#file-led').click();
     if (id === 'reset') { if (confirm('모든 설정을 기본값으로 되돌릴까요? (불러온 기구·LED 설정도 지워짐)')) resetAll(); return; }
     if (id === 'mat-db') return m3app.openMaterialDb();
+    if (id === 'sym') return m3app.setSymOn(!m3app.symOn());
     if (id === 'admin') { setAdmin(!isAdmin()); return m3app.adminChanged(); }
     if (id === 'paths') return m3app.setPathsOn(!m3app.pathsOn());
     if (id === 'xray') return m3app.setXrayOn(!m3app.xrayOn());

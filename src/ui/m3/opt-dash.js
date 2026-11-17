@@ -235,7 +235,7 @@ export function monitorParts(S, sec = 0, { chart = true } = {}) {
   const est = busy && !fin0 && !!cur, kt = busy && !fin0 ? ' title="큰 숫자 = 지금까지 최고(빠른 계산 대략값 · 길이·폭 중 목표에 더 모자란 쪽 기준) — 끝나면 정밀 재계산 값으로 조금 바뀔 수 있음"' : '';
   // 균일도 = 그래프 아래(그래프를 읽고 바로 값 확인, 2026-11-13 사용자)
   const kpiH = `<div class="om-ct"><b>진행 그래프</b><span class="om-uh"${kt}>${kpi('길이 균일도', tl, cur?.Ulen ?? b0.Ulen, b0.Ulen, lastE?.Ulen, est, 'om-u1')}<i class="om-sl">/</i>${kpi('폭 균일도', tw, cur?.Uwid ?? b0.Uwid, b0.Uwid, lastE?.Uwid, est, 'om-u2')}${effK}</span></div>`;
-  return { main: `<div class="od-pct om-pct"><b>${pct}%</b><div class="od-bar od-bar-big" role="progressbar" aria-label="기구 최적화 진행" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div><span class="mut od-simst">${busy ? `${S.pauseAt ? '일시정지' : '진행'} ${mmss(sec)}` : S.failed ? '실패' : S.stopped ? '중지됨' : `끝남 ${mmss((S.endSec ?? sec))}`} · 후보 ${nEval}개</span></div>
+  return { main: `<div class="od-pct om-pct"><b>${pct}%</b><div class="od-bar od-bar-big" role="progressbar" aria-label="기구 최적화 진행" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div><span class="mut od-simst">${busy ? `${S.pauseAt ? '일시정지' : '진행'} ${mmss(sec)}` : S.failed ? '실패' : S.stopped ? '중지됨' : `끝남 ${mmss((S.endSec ?? sec))}`} · 후보 ${nEval}개${S.symNote ? ` · ${esc(S.symNote)}` : ''}</span></div>
     <div class="om-steps">${steps.join('<i class="om-ar">→</i>')}</div>
     <div class="om-say">${say}</div>
     ${chart ? kpiH + chartHtml() : ''}`, kpi: chart ? '' : kpiH };
@@ -346,6 +346,7 @@ export function createOptDash(el, h = {}) {
   render(); renderBoard();
   function stop() { if (S) { closePhase(S, S.pauseAt ?? performance.now()); S.stopped = true; S.pauseAt = null; stopTiles(S); draw(); } }
   function fail(text) { if (S && S.ended == null && !S.stopped) { failRun(S, text, S.pauseAt ?? performance.now()); draw(); } }
+  function setSym(t) { if (S) { S.symNote = t; draw(); } }   // 대칭 합치기 안내(빠른 검토)
   function setPartial(P) { if (S) { S.partial = P; draw(); } }   // 중지 뒤 끝난 항목까지 반영한 안(정밀 판정 단추)
   // 일시정지한 시간은 걸린 시간에서 뺌
   function setPaused(on) { if (!S) return; if (on) S.pauseAt ??= performance.now(); else if (S.pauseAt) { if (S.phT != null) S.phT += performance.now() - S.pauseAt; S.t0 += performance.now() - S.pauseAt; S.pauseAt = null; } draw(); }
@@ -355,7 +356,7 @@ export function createOptDash(el, h = {}) {
   // 단계별 최고(실제 계산값) — 결과 화면의 항목별 효과
   function stageBests() { if (!S) return null; const o = {}; for (const [k] of STAGES) { const t = S.tiles[k]; if (t.status !== 'off') { const e = stageBest(t, S.tgLen, S.tgWid); if (e && !e.est) o[k] = { Ulen: e.Ulen, Uwid: e.Uwid }; } } return o; }
   const hasRun = () => !!S;
-  return { stageBests, hasRun, reset, addStages, progress, evals, finish, stop, fail, setPartial, setPaused, refresh, clear };
+  return { setSym, stageBests, hasRun, reset, addStages, progress, evals, finish, stop, fail, setPartial, setPaused, refresh, clear };
 }
 
 // 광경로 순위(순수) — paths = { 'R:2>1': 가중 합 } → [{ parts:[번호], refl, share }] 비중 큰 순(기구 부품만, 같은 경로 합침)
@@ -440,6 +441,8 @@ export function simCaption(H, tgt, obs, state) {
   return `광선 ${human(last.ph)} / 총 ${human(state === 'done' ? last.ph : simTotal(last, tgt))}${state === 'running' ? etaText(H, tgt).replace(/ · 필요 광선 ≈ [^·]*/, '') : ''}`;
 }
 // 시뮬레이션 상태 글(순수) — 카드·아래 상태줄 공용
+// 대칭 영역 검토 문구(2026-11-17) — sym = symStats 결과의 sym
+export const symNote = (sym) => (!sym ? '' : sym.off ? '대칭 아님 — 전체 계산' : sym.factor > 1 ? `대칭 ${sym.label} 합침${(sym.speed ?? sym.factor) > 1 ? ` · 약 ×${sym.speed ?? sym.factor} 빠름` : ' · 폭 노이즈만 줄어듦'}` : '');
 export function simStateText(state, reason = '', stopped = false, busy = false, error = '') {
   if (busy) return '기구 최적화 중 — 일시정지(끝나면 이어서)';
   if (state === 'error') return `계산 실패 — ${error ? `${error} · ` : ''}▶ 로 다시 계산`;   // 전에는 'error' 영어 그대로(2026-11-17)
@@ -454,10 +457,11 @@ export function createSimDash(el, { onCtl = null, bar = null } = {}) {
   let busy = false;   // 기구 최적화 중(점진 계산 일시정지)
   let diag = null;   // 빛 도달 진단(관측면 도달 < 1%)
   let mini = null;   // 광분포 시뮬레이션 창 안의 진행 현황 칸
+  let sym = null;   // 대칭 합치기 상태(symStats)
   let prog;   // 점진 계산의 표시 진행률(되돌아가지 않음)
   function sample(snap, targetNoise, observe, nm = names, nMech = nm.length, adBusy = false, skip = []) {
     prog = snap?.progress; busy = adBusy; tgt = targetNoise ?? tgt; obs = observe ?? obs; state = snap?.state ?? ''; reason = snap?.reason ?? ''; err = snap?.error ?? ''; stopped = !!snap?.stopped; names = nm; P = topPaths(snap?.paths, nMech, 3, skip);
-    const ph = snap?.photons ?? 0, st = snap?.stats;
+    const ph = snap?.photons ?? 0, st = snap?.stats; sym = st?.sym ?? null;
     diag = ph >= 50000 ? reachDiag(snap?.ledger, snap?.leak, nm) : null;
     if (!st || st.empty || !ph) { if (!ph) H = []; draw(); return; }
     if (H.length && ph < H[H.length - 1].ph) H = [];   // 장면이 바뀌어 다시 시작
@@ -470,7 +474,7 @@ export function createSimDash(el, { onCtl = null, bar = null } = {}) {
     const last = H[H.length - 1], pct = state === 'done' ? 100 : Number.isFinite(prog) ? prog : last ? simPct(last.noise, tgt) : 0, pctT = fmtProg(pct);
     const plot = el.querySelector('.od-simplot'), svg = simPlotSvg(H, tgt, obs, plot?.clientWidth || 300, plot?.clientHeight || 70);
     const row = simCaption(H, tgt, obs, state);
-    const sTxt = simStateText(state, reason, stopped, busy, err);
+    const sTxt = [simStateText(state, reason, stopped, busy, err), symNote(sym)].filter(Boolean).join(' · ');
     // 틀은 한 번만 만들고 칸마다 바뀐 것만 고침 — 계산 중 갱신이 잦아도 단추 클릭·접는 칸이 끊기지 않게
     if (bar && !el.querySelector('.od-simh')) {   // 상태줄 모드: 카드 = 제목 + 접는 칸
       let open = false; try { open = localStorage.getItem('uds.m3.simPlots') === '1'; } catch {}

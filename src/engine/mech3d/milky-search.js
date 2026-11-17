@@ -1,6 +1,7 @@
 // ① Milky 탐색 — spec P4 §2.1. 재가중 격자 지도(배치별) → 행 → 목표를 만족하는 최소 Milky(선형 보간).
-import { tallyStats, windowProfile, fmtJudge, fmtTg } from './tally.js';
+import { windowProfile, fmtJudge, fmtTg } from './tally.js';
 import { ESS_MIN } from './reweight.js';
+import { symStats } from './symmetry.js';
 
 // Milky 창 하나의 계산량. 기준(창 가운데)이 3 이상이면 광자당 계산이 느려 같은 시간에 광자가 적음 → 후보 값이 ±10%p 넘게 흔들림
 // (실측 모니터 링 Milky 3.5: 광자 10만 ±14%p · 87만 ±3%p). steady = 오차가 MILKY_STEADY_SE 에 닿을 때까지(창당 MILKY_STEADY_MS 상한) 더 계산(2026-11-16 사용자)
@@ -21,11 +22,11 @@ export function darkFrac(p) {
 }
 // batches: 배치별 Float64Array(격자 수 × 셀), ess: 격자별 유효 표본 비율, emitted: 방출 총량(효율 분모)
 // 반환 [{ milky, Ulen, Uwid, eff, ess, trusted, margin, map, profile, dark }] — dark = 가장 어두운 위치 { len(닫힌 경로 null), wid(최악 창, 좁은 라인 null) } 0~1
-export function milkyRows(G, obs, { milkies, batches, ess, emitted }) {
+export function milkyRows(G, obs, { milkies, batches, ess, emitted, sym = null }) {   // sym = 대칭 합치기(빠른 검토, 2026-11-17)
   const nCell = G.ns * G.nw;
   return milkies.map((m, j) => {
     const accs = batches.map((a) => a.subarray(j * nCell, (j + 1) * nCell));
-    const st = tallyStats(G, accs, obs);
+    const st = symStats(G, accs, obs, null, sym);
     const sum = new Float64Array(nCell);
     let tot = 0; for (const a of accs) for (let k = 0; k < nCell; k++) { tot += a[k]; sum[k] += a[k]; }
     const dark = st.empty ? null : { len: G.closed ? null : darkFrac(st.profile), wid: st.win ? darkFrac(windowProfile(G, sum, st.win[0], st.win[1])) : null };

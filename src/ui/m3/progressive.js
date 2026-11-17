@@ -4,7 +4,8 @@
 // 적응형에서는 청크 c ≥ bins 를 보낸 광자가 가장 적은 배치에 넣는다(크기가 제각각이어도 배치 무게가 고르게).
 // 청크 크기: 기본은 적응형 — 포트마다 minChunk 로 시작해 잰 속도로 다음 청크를 ≈chunkMs 분량으로(minChunk~maxChunk).
 //   fixedChunk: true 면 chunkN 고정(runJob 과 비트 일치 시험용).
-import { tallyStats, judgeNoise, LUM_CONE } from '../../engine/mech3d/tally.js';
+import { judgeNoise, LUM_CONE } from '../../engine/mech3d/tally.js';
+import { symStats, symMapAll } from '../../engine/mech3d/symmetry.js';
 
 export const PROG_DEFAULTS = { chunkN: 25000, fixedChunk: false, minChunk: 1000, maxChunk: 50000, chunkMs: 500, bins: 10, targetNoise: 0.02, maxPhotons: 1e8, debounceMs: 500, tickMs: 1000, seedBase: 1, maxIgnored: 16, sceneTimeoutMs: 60000, chunkTimeoutMs: 30000 };
 export const chunkSeed = (seedBase, c) => seedBase * 7919 + c;
@@ -203,9 +204,9 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
     const same = nMin === nMax && nMin === o.chunkN, ref = o.chunkN;
     const norm = (B, a) => (same ? (B.n === 1 ? a : a.map((v) => v / B.n)) : a.map((v) => v * (ref / B.photons)));
     const accs = filled.map((B) => norm(B, B.acc)), cnts = filled.map((B) => norm(B, B.cnt));
-    const stats = tallyStats(job.G, accs, job.obs, cnts);
+    const stats = symStats(job.G, accs, job.obs, cnts, job.sym);   // 대칭 칸 합치기(job.sym, 2026-11-17) — 없으면 tallyStats 그대로
     // 2D 표시·TXT 용 면 전체 지도 — stats.map 과 같은 정규화(제외 구역이 없는 칸은 값이 같음)
-    if (job.G.validAll) { const all = filled.map((B) => norm(B, B.accAll)), m = new Float64Array(job.G.ns * job.G.nw); for (let k = 0; k < m.length; k++) if (job.G.validAll[k]) { let v = 0; for (const a of all) v += a[k]; m[k] = v / all.length / job.G.areaAll[k]; } stats.mapAll = m; }
+    if (job.G.validAll) { const all = filled.map((B) => norm(B, B.accAll)), m = new Float64Array(job.G.ns * job.G.nw); for (let k = 0; k < m.length; k++) if (job.G.validAll[k]) { let v = 0; for (const a of all) v += a[k]; m[k] = v / all.length / job.G.areaAll[k]; } stats.mapAll = m; if (stats.sym?.factor > 1) { const sm = new Float64Array(m.length); for (const x of all) for (let k = 0; k < m.length; k++) sm[k] += x[k]; stats.mapAll = symMapAll(job.G, sm, all.length, job.sym); } }   // 대칭 합치기 중이면 화면 지도도 짝 칸 평균
     const sum = new Float64Array(job.G.ns * job.G.nw);
     for (const B of filled) for (let k = 0; k < sum.length; k++) sum[k] += B.acc[k];
     return { stats, sum, photometry: photometry(job.G, sum, ledger, { fluxLm: job.fluxLm ?? 0, nLeds: job.nLeds ?? 0 }) };

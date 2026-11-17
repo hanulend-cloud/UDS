@@ -26,7 +26,7 @@ import { buildObsOverlay, cellColors, extractFaces } from './colormap.js';
 import { mountCommandBar, obsCmd } from './command-bar.js';
 import { renderFeatureTree, toggleVisibility, viewKeep, togglePcb, makeGroup, ungroup, groupMembers, rangeSelect, obsFacesAfterClick, removeFromGroups, viewCtxItems, showCtxMenu, toggleLed, ledFoldDefault, untraceItem } from './feature-tree.js';
 import { mountSplitter, mountDockSplitter, mountFacSplitter } from './splitter.js';
-import { createOptDash, createSimDash, simPct, traceFrac, histAfterRestore } from './opt-dash.js';
+import { createOptDash, createSimDash, simPct, traceFrac, histAfterRestore, symNote } from './opt-dash.js';
 import { geomQuery, geomLimit, geomClash } from './geom-client.js';
 import { renderPropertyPanel } from './property-panel.js';
 import { optCtl, rerunAsk } from './run-ctl.js';
@@ -46,6 +46,7 @@ import { migrateFinishCatalog, reflectPatch, copyAsUser, entryFromForm, addSampl
 import { intersectRay } from '../../engine/mech3d/bvh.js';
 import { runAutoDesign, shapeTotal, shapeBudget, sameDesign } from '../../engine/mech3d/autodesign.js';
 import { milkyRows, milkyTraceOpts, MILKY_STEADY_SE } from '../../engine/mech3d/milky-search.js';
+import { detectSym, ledsSW, symStats, symInfo } from '../../engine/mech3d/symmetry.js';
 import { candidateGrid } from '../../engine/mech3d/basis.js';
 import { ledAtS, clampRowGap, rowGapOptions, wrapS } from '../../engine/mech3d/placement.js';
 import { virtualEmittersAt, stepRefEmitter } from '../../engine/mech3d/virtual-leds.js';
@@ -395,7 +396,7 @@ export function jobFor(M, mechParts, { emitters = null, line = null, G = null, o
     ms.light.step = { ...ms.light.step, offset: [0, 0, 0], rot: [0, 0, 0], leds: lay.leds, pcb: lay.pcb, excluded: lay.excluded, emitters: JSON.parse(JSON.stringify(lay.emitters)), virtual: null };
   }
   return {
-    sceneKey: `s${++sceneSeq}`, G: g, obs: o, nLeds: em.length, fluxLm: M.light.spec.fluxLm ?? 0, maxPhotons: photonCap(o.quality),   // 화질이 높을수록(칸 많음) 계산 한도도 — 오차 목표 1%(2%의 4배 광자)에 맞춰 4억 기준
+    sceneKey: `s${++sceneSeq}`, G: g, obs: o, sym: jobSym(g, ln, em), nLeds: em.length, fluxLm: M.light.spec.fluxLm ?? 0, maxPhotons: photonCap(o.quality),   // 화질이 높을수록(칸 많음) 계산 한도도 — 오차 목표 1%(2%의 4배 광자)에 맞춰 4억 기준
     scene: { mechParts: L.rawParts(mechParts), mspec: ms, ledParts, lineData: lightData(ln), G: g, obs: o, emitters: em },
   };
 }
@@ -915,6 +916,11 @@ let pathKey = '';
 export const pathsOn = () => { try { return localStorage.getItem('uds.m3.paths') !== '0'; } catch { return true; } };
 export function setPathsOn(v) { try { localStorage.setItem('uds.m3.paths', v ? '1' : '0'); } catch {} pathKey = ''; drawLightPaths(); syncViewBtns(); }
 // 투시 보기(전체 반투명) — 보는 사람별 설정(uds.m3.xray)
+// 대칭 영역 검토(2026-11-17 사용자 확인: 기본 켜짐) — 대칭 칸을 합쳐 빠르게. 최종 판정에는 쓰지 않음. 보는 사람별(uds.m3.sym)
+export const symOn = () => { try { return localStorage.getItem('uds.m3.sym') !== '0'; } catch { return true; } };
+export function setSymOn(v) { try { localStorage.setItem('uds.m3.sym', v ? '1' : '0'); } catch {} if (A) restartCalc(); }
+// 작업의 대칭 정보 — 꺼짐 = null. 계산 중 비대칭이 보이면 symStats 가 off 를 적음(그 작업 동안 유지)
+const jobSym = (G, line, em) => { if (!symOn()) return null; try { return detectSym(G, ledsSW(line, em)); } catch { return null; } };
 export const xrayOn = () => { try { return localStorage.getItem('uds.m3.xray') === '1'; } catch { return false; } };
 export function setXrayOn(v) { try { localStorage.setItem('uds.m3.xray', v ? '1' : '0'); } catch {} A?.view?.setXray?.(v); syncViewBtns(); }
 // 선 보기(부품별 색 외곽선만) — 보는 사람별 설정(uds.m3.lines)
@@ -1121,6 +1127,9 @@ async function adRun(opt = {}) {
   const lowQ = (M0.observe.quality ?? 'low') === 'low', obs = tallyObs({ ...M0.observe, quality: 'low' }, M0.observe.dir ?? line.frame.d, line), G = lowQ ? geometry(tallyObs(M0.observe, M0.observe.dir ?? line.frame.d, line)) : tallyGeometry(line, obs), sp = st.sel.shapePart, hp = stages.housing ? hpSel : -1;
   const ctx = { M0, line, G, obs, rt, mp: st.milkyPart };
   const obsS = lowQ ? obs : tallyObs(M0.observe, M0.observe.dir ?? line.frame.d, line), Gs = lowQ ? G : geometry(obsS), ctxS = { ...ctx, G: Gs, obs: obsS };
+  // 후보 설계의 대칭(빠른 검토 합치기) — 형상 칸 변형(kF·kL·kW)이 든 설계는 좌우가 다를 수 있어 합치지 않음
+  const symFor = (d, Md, g = G) => (symOn() && !(d?.shape && (d.shape.kF || d.shape.kL || d.shape.kW)) ? jobSym(g, line, L.currentEmitters(Md, line)) : null);
+  { const i0 = symOn() ? symInfo(G, jobSym(G, line, L.currentEmitters(M0, line))) : null, t = symNote(i0); A.optDash?.setSym(t && !i0.off ? `${t}(빠른 검토)` : t); }   // 진행 줄 안내 — 최종 판정은 전체 영역
   const R = (st.runner = createAdRunner({ ports: A.pool.ports(), chunkTimeoutMs: 90000 }));   // 높은 Milky 청크는 30 초를 넘기기도 함
   // 같은 Worker 를 쓰므로 점진 계산은 멈춤 — 대기(디바운스) 중이면 장면을 곧 보내므로 취소. 사용자 일시정지 여부는 기억(끝나고 그대로)
   const snap0 = A.prog.snapshot(), ps = snap0.state, currentVerified = reusableCurrent(snap0, G), curS = lowQ ? null : reusableCurrent(snap0, Gs), currentScreen = curS ? { ...curS, sharp: true } : null;   // 수렴한 점진 결과 = 현재안(verify 생략)
@@ -1182,7 +1191,7 @@ async function adRun(opt = {}) {
       const { M: Md, parts } = designScene({ ...d, milky: ms[Math.floor(ms.length / 2)] }, ctx);
       const { steady, ...to } = milkyTraceOpts(ms[Math.floor(ms.length / 2)], { precise });   // Milky 3 이상 창 = 오차 ±5%p 까지(30초 상한) — 후보 값 흔들림 줄이기
       const r = await R.trace(adJob(Md, parts, ctx), { ...to, ...(steady ? { until: (bs) => quickErr(tallyStats(G, bs, obs), obs) <= MILKY_STEADY_SE } : {}), rw: { part: ctx.mp, milkies: ms } });
-      const rows = milkyRows(G, obs, { milkies: ms, batches: r.rwBatches, ess: r.ess, emitted: r.ledger.emitted });
+      const rows = milkyRows(G, obs, { milkies: ms, batches: r.rwBatches, ess: r.ess, emitted: r.ledger.emitted, sym: symFor(d, Md) });
       if (!peek && !ref) A.optDash?.evals('milky', rows.filter((q) => q.trusted).map((q) => ({ label: `Milky ${(+q.milky).toFixed(2)}`, v: +q.milky, Ulen: q.Ulen, Uwid: q.Uwid, eff: q.eff })));   // 믿을 수 있는(ESS 충분) 격자점만
       return rows;
     },
@@ -1236,7 +1245,7 @@ async function adRun(opt = {}) {
         if (R.stopped) break;
         progress('leds', (0.3 * i) / cs.length, `LED 폭 위치 ${c > 0 ? '+' : ''}${c} mm (${i + 1}/${cs.length})`);
         const dd = { ...d, positions: ss.map((s) => ({ s, w: c })), count: ss.length, rows: 1, rowGap: 0, stepVirt: true }, { M: Md, parts } = designScene(dd, ctx);
-        const r = await R.trace(adJob(Md, parts, ctx), { N, batches: 4, crn: SHAPE_CRN }), stt = tallyStats(G, r.batches, obs);
+        const r = await R.trace(adJob(Md, parts, ctx), { N, batches: 4, crn: SHAPE_CRN }), stt = symStats(G, r.batches, obs, null, symFor(dd, Md));
         const layout = { count: ss.length, pitch: 0, rows: 1, rowGap: 0, positions: dd.positions, wCenter: c, stepVirt: true, layoutKind: 'lateral-current', layoutText: `현재 배치 · 폭 위치 ${c > 0 ? '+' : ''}${c} mm` };
         out.push({ cand: { wCenter: c, layout }, ok: !stt.empty, stats: stt, eff: adEff(r) });
         A.optDash?.evals('leds', [{ label: `폭 위치 ${c > 0 ? '+' : ''}${c} mm`, Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty, eff: adEff(r) }]);
@@ -1249,7 +1258,7 @@ async function adRun(opt = {}) {
         if (R.stopped) break;
         if (stages[stg]) { const k = ++varI[stg]; progress(stg, Math.min(1, (k - 1) / varTot[stg]), `${nm} 후보 ${Math.min(k, varTot[stg])}/${varTot[stg]}`); }   // ① 보완 계산(④ 미선택)은 ① 진행률 그대로
         const { M: Md, parts } = designScene({ ...d, ...('dz' in c ? { dz: c.dz } : { finish: c.finish }) }, ctx);
-        const r = await R.trace(adJob(Md, parts, ctx), { N, maxMs, minN: Math.min(N, 3e4), batches: 4 }), stt = tallyStats(G, r.batches, obs);
+        const r = await R.trace(adJob(Md, parts, ctx), { N, maxMs, minN: Math.min(N, 3e4), batches: 4 }), stt = symStats(G, r.batches, obs, null, symFor({ ...d, ...c }, Md));
         out.push({ cand: c, ok: !stt.empty, stats: stt, eff: adEff(r) });
         if (stages[stg]) A.optDash?.evals(stg, [{ label: 'dz' in c ? `높이 ${c.dz >= 0 ? '+' : ''}${(+c.dz).toFixed(2)} mm` : finishText(c.finish, reflCat()), Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty, eff: adEff(r) }]);
       }
@@ -1260,8 +1269,8 @@ async function adRun(opt = {}) {
       const { M: Md, parts } = designScene(d, ctx);
       const scr = screen && !lowQ, gridK = scr && !from?.screen ? Math.max(G.ds / Gs.ds, G.cell / Gs.cell) : 1, capN = photonCap(scr ? obsS.quality : 'low'), sig = JSON.stringify(d), resume = noise ? resumable(from, sig, scr) : null;   // 같은 설계·격자를 더 정밀하게 잴 때는 앞 계산에 이어서(N = 전체 광자 수)
       const eff0 = currentVerified?.eff ?? snap0.photometry?.eff, r = await R.trace(adJob(Md, parts, scr ? ctxS : ctx), noise ? { N: Math.ceil(Math.min(capN, 1.1 * gridK * (from?.photons ?? 5e7) * ((from?.stats?.relNoise ?? 0.01) / noise) ** 2)), maxMs, minN: rough ? 2e5 : 1.5e6, chunkN: 2e5, batches: 10, keepRaw: true, resume, onProgress: traceTick } : { N: Math.ceil(Math.min(1.5e7, 5e6 * Math.max(1, 0.5 / (eff0 > 0 ? eff0 : 0.5)))), maxMs: quick ? QUICK_MS : estimate ? 8000 : d.shape?.kF ? 60000 : 45000, minN: quick ? 0 : rough || estimate ? 2e5 : 1.5e6, firstN: 1000, ...(quick ? { until: (bs) => quickErr(tallyStats(scr ? Gs : G, bs, scr ? obsS : obs), obs) <= QUICK_SE } : {}), batches: 10, keepRaw: true, onProgress: traceTick });   // 효율이 낮으면 관측면에 닿는 빛이 적어 광자를 더. 실측: 20 초(노이즈 2%) 판정 0.73~0.76 vs 수렴값 0.78~0.79 — 노이즈가 칸 최소·최대를 벌려 낮게 나오므로 시간을 늘림(2026-11-03). 입광면 보정 메쉬는 추적이 느려 같은 시간이면 노이즈가 커져 현재안과 공정하게 비교가 안 됨 → 시간 더
-      const qk = quick && !noise;
-      let stt = scr ? tallyStats(Gs, r.batches, obsS) : tallyStats(G, r.batches, obs);   // 판정 값 = 노이즈 보정값(빠른 검토·정밀 모두 같은 추정)
+      const qk = quick && !noise, sy = qk ? symFor(d, Md, scr ? Gs : G) : null;   // 대칭 합치기 = 빠른 검토만(정밀 검증·최종 판정은 전체 영역 그대로, 2026-11-17)
+      let stt = scr ? symStats(Gs, r.batches, obsS, null, sy) : symStats(G, r.batches, obs, null, sy);   // 판정 값 = 노이즈 보정값(빠른 검토·정밀 모두 같은 추정)
       if (qk) stt = { ...stt, quick: true };
       A.optDash?.evals('final', [{ label: verifyLabel(d), Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty, est: estimate || rough || qk }]);   // 그래프 네모 점(짧은 추정 = 속 빈 네모)
       return { stats: stt, eff: adEff(r), photons: r.photons, screen: scr, sig, raw: scr || lowQ ? r.kept : null, ...(qk ? { quick: true } : {}) };
