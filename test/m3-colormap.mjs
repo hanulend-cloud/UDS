@@ -1,7 +1,7 @@
 // 관측면 색지도: node test/m3-colormap.mjs
 import { recognizeLine } from '../src/engine/mech3d/line.js';
 import { tallyGeometry } from '../src/engine/mech3d/tally.js';
-import { ramp, NO_DATA, srgbColorsToLinear, extractFaces, subdivide, cellIndex, vertexCells, cellColors, buildObsOverlay, mapMinCell, obsPoint } from '../src/ui/m3/colormap.js';
+import { ramp, NO_DATA, srgbColorsToLinear, extractFaces, subdivide, cellIndex, vertexCells, cellColors, buildObsOverlay, mapMinCell, mapMaxCell, obsPoint } from '../src/ui/m3/colormap.js';
 import { topFaceMesh, rectTris, boxMesh, ok, done } from './mech3d-util.mjs';
 
 const top = topFaceMesh(rectTris(0, 0, 100, 6), 2), faces = [{ part: 0, face: 1 }];
@@ -64,5 +64,9 @@ ok(ramp(0).every((v, k) => Math.abs(v - [0x20, 0x30, 0x6e][k] / 255) < 1e-12) &&
   ok(G.valid[k] && ov.sw.length === ov.positions.length / 3 * 2 && Math.abs(Math.hypot(ps - cs, pw - cw) - best) < 1e-4 && best < Math.max(G.ds, G.cell) && Math.abs(p[2] - 2.01) < 1e-5, `칸 중심 (${cs.toFixed(1)}, ${cw.toFixed(2)}) → 관측면 위 점 (${ps.toFixed(2)}, ${pw.toFixed(2)}), z ${p[2].toFixed(2)}`);
   const ring = { positions: Float32Array.from([1, 0, 0, 2, 0, 0]), sw: Float32Array.from([0.5, 0, 99.5, 0]) }, RG = { closed: true, L: 100 };
   ok(obsPoint(ring, RG, 99.9, 0)[0] === 2 && obsPoint(ring, RG, 0.1, 0)[0] === 1 && obsPoint(ring, { closed: false, L: 100 }, 60, 0)[0] === 2 && obsPoint({ positions: new Float32Array(0), sw: new Float32Array(0) }, RG, 1, 0) === null, '링은 이음매 너머도 가까운 점 · 정점 없으면 없음');
+}
+{ // 최고점(2026-11-17 사용자) — 유효 칸 중 가장 높은 값, 같으면 앞 칸
+  const Gt = { ns: 2, nw: 3, valid: Uint8Array.from([1, 1, 0, 1, 1, 1]) };
+  ok(mapMaxCell(Gt, Float64Array.from([5, 9, 99, 2, 9, 3])) === 1 && mapMaxCell(Gt, new Float64Array(6)) === -1, '최고 칸 = 유효 칸만 · 같으면 앞 칸 · 빛 없으면 없음');
 }
 done();

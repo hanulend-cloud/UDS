@@ -102,6 +102,12 @@ export function mapMinCell(G, map) {
   for (let k = 0; k < map.length; k++) if (G.valid[k] && (k0 < 0 || map[k] < map[k0])) k0 = k;
   return k0;
 }
+// 최고 칸(2026-11-17 사용자: 최고점도 2D·3D 에 흰 고리) — 유효 칸 중 가장 높은 값, 같으면 앞 칸. 빛이 없으면 −1
+export function mapMaxCell(G, map) {
+  let k0 = -1;
+  for (let k = 0; k < map.length; k++) if (G.valid[k] && (k0 < 0 || map[k] > map[k0])) k0 = k;
+  return k0 >= 0 && map[k0] > 0 ? k0 : -1;
+}
 // (s, w) → 관측면 덧그림 위 가장 가까운 정점의 3D 위치(2026-11-17 사용자: 2D 최저점을 3D 관측면에도) · 링은 이음매 너머도. 정점 없으면 null
 export function obsPoint(ov, G, s, w) {
   let best = -1, bd = Infinity;

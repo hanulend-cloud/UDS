@@ -22,7 +22,7 @@ import { createStore, PHYSICS, GEOM_CHECK, PERSIST_TAGS } from './store.js';
 import { createProgressive, photonCap, fmtProg } from './progressive.js';
 import { createPool } from './pool.js';
 import * as L from './leds.js';
-import { buildObsOverlay, cellColors, extractFaces, mapMinCell, obsPoint } from './colormap.js';
+import { buildObsOverlay, cellColors, extractFaces, mapMinCell, mapMaxCell, obsPoint } from './colormap.js';
 import { mountCommandBar, obsCmd } from './command-bar.js';
 import { renderFeatureTree, toggleVisibility, viewKeep, togglePcb, makeGroup, ungroup, groupMembers, rangeSelect, obsFacesAfterClick, removeFromGroups, viewCtxItems, showCtxMenu, toggleLed, ledFoldDefault, untraceItem } from './feature-tree.js';
 import { mountSplitter, mountDockSplitter, mountFacSplitter } from './splitter.js';
@@ -487,7 +487,9 @@ function paintObs(snap) {
   v.setObsColors(cellColors(Gc.overlay.cells, st.map, Gc.G.valid));
   // 2D 광량 분포 빨간 점과 같은 최저 칸(전체 칸 지도 · 2D 와 같은 규칙)을 3D 관측면에도(2026-11-17 사용자)
   const FG = Gc.G.validAll ? { ...Gc.G, valid: Gc.G.validAll } : Gc.G, kMin = mapMinCell(FG, st.mapAll ?? st.map);
-  v.setObsMin?.(kMin >= 0 ? obsPoint(Gc.overlay, Gc.G, (Math.floor(kMin / Gc.G.nw) + 0.5) * Gc.G.ds, Gc.G.w0 + ((kMin % Gc.G.nw) + 0.5) * Gc.G.cell) : null);
+  const at = (k) => (k >= 0 ? obsPoint(Gc.overlay, Gc.G, (Math.floor(k / Gc.G.nw) + 0.5) * Gc.G.ds, Gc.G.w0 + ((k % Gc.G.nw) + 0.5) * Gc.G.cell) : null);
+  v.setObsMin?.(at(kMin));
+  v.setObsMax?.(st.relNoise <= 0.05 ? at(mapMaxCell(FG, st.mapAll ?? st.map)) : null);   // 최고점 = 흰 고리 · 계산 초반(노이즈 5% 넘음)은 숨김(2026-11-17)
 }
 
 // ---- 설계 점검 ----
