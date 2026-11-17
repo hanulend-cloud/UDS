@@ -540,6 +540,13 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   const r = await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 3, count: 5, pitch: 0, shape: null }, milkyMax: 5, screenGrid: true }, io);
   ok(!r.feasible && r.verified.stats.Ulen === 0.795 && r.verified.stats.relNoise === 0.005 && calls.some((o) => o.screen && o.noise === 0.005), `화면 격자 0.795 = 미달(저화질 0.82 통과여도) · 노이즈 ${r.verified.stats.relNoise}`);
   ok(r.current.stats.Ulen === 0.795, '현재안도 같은 화면 격자로 비교'); }
+{ // 겨우 통과(목표 + 표준오차 2배 안)는 1% 까지 다시 재서 판정(2026-11-17 사용자: 링 같은 설계 78.6% / 80.3%) — 1% 에서도 근처면 거기서 멈춤
+  for (const screenGrid of [true, false]) {
+    const calls = [], io = { milkyRows: async (d, ms) => rowsOf(ms), verify: async (d, o = {}) => { calls.push(o); const n = o.noise ?? 0.02; return { stats: { ...st(0.803, 0.9), seLen: n * 0.85, seWid: n * 0.5, relNoise: n }, eff: 0.5, photons: 1e7 }; }, progress() {}, cancelled: () => false };
+    const r = await runAutoDesign({ stages: { milky: true }, obs: { ...obs, targetNoise: 0.02 }, current: { milky: 3, count: 5, pitch: 0, shape: null }, milkyMax: 5, screenGrid }, io);
+    ok(r.feasible && r.verified.stats.relNoise === 0.01 && calls.some((o) => o.noise === 0.01) && !calls.some((o) => o.noise === 0.005), `${screenGrid ? '화면 격자' : '최적화 격자'}: 80.3%(노이즈 2%) → 1% 까지 다시 잼 · 0.5% 는 안 감 (${calls.map((o) => o.noise ?? '-').join(',')})`);
+  }
+}
 { // 화면 격자 통과 = 통과, 먼 값은 목표 노이즈(1%)까지만 · 점진 결과가 있으면 현재안은 다시 재지 않음
   const calls = [], cs = { stats: { ...st(0.7, 0.9), relNoise: 0.01 }, eff: 0.5, sharp: true }, io = { milkyRows: async (d, ms) => rowsOf(ms), verify: async (d, o = {}) => { calls.push(o); return { stats: { ...st(o.screen ? 0.85 : 0.82, 0.9), relNoise: o.noise ?? 0.01 }, eff: 0.5, photons: 1e7 }; }, progress() {}, cancelled: () => false };
   const r = await runAutoDesign({ stages: { milky: true }, obs: { ...obs, targetNoise: 0.01 }, current: { milky: 3, count: 5, pitch: 0, shape: null }, milkyMax: 5, screenGrid: true, currentScreen: cs }, io);

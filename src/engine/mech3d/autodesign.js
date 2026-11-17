@@ -1,7 +1,7 @@
 // P4 자동설계 단계 실행기 — spec §1·§2. 순서 ② → ⑤ LED 높이 → ④ 케이스 면 → ① → ③(§2.3c), 체크 안 한 항목은 현재 값 고정. 계산은 io 가 맡는다(Worker / 시험 가짜).
 // ① 재가중 창은 기준 ±0.25(ESS 한계, spec §2.1). U(Milky) 는 단봉형(§2.1a) — 거친 탐색으로 최고점을 지나면 멈추고, 오르는 구간에서만 할선/이분으로 최소 통과 Milky. ② 는 기준(①·④ 함께면 거친 최고점 Milky ≤ 5·케이스 최고 등급, §2.2c)에서 최소 개수를 구한 뒤 ④·① 이 고른다.
 // io.milkyRows(d, ms, { precise }) — precise = 경계가 든 창의 재추적(광자 많이). 결과 { feasible, best(design), steps:[{stage, …}], reason, verified, current(현재안 io.verify), cancelled }
-import { nearTarget, fmtJudge, JUDGE_NOISE, JUDGE_BAND, fmtTg, passChance } from './tally.js';
+import { nearTarget, sharpNoise, fmtJudge, JUDGE_NOISE, JUDGE_BAND, fmtTg, passChance } from './tally.js';
 import { hasCurve, hasField } from './shape-opt.js';
 import { milkyAxis } from './reweight.js';
 import { pickMilky, margin } from './milky-search.js';
@@ -711,9 +711,19 @@ export async function runAutoDesign(cfg, io) {
   io.progress?.('verify', 0, '최종안 정밀 재계산');   // 진행 표시만: 긴 최종 계산 시작 = 0.5(예전 0.9 — 남은 몇 분 동안 멈춰 보였음). 판정·계산은 그대로
   const sharpen = async (e, v) => {   // 목표 바로 아래면 노이즈 0.5% 로 다시 재서 판정 — 값이 노이즈로 낮게 나와 통과안을 미달로 판정하는 것을 막음
     if (v.stats?.quick && !v.sharp && !stop()) v = await io.verify(e);   // 빠른 검토 값은 판정에 쓰지 않음 — 최종안·현재안은 정밀 재계산
-    if (v.sharp || !nearTarget(v.stats, obs) || !(v.stats.relNoise > JUDGE_NOISE * 1.1) || stop()) return v;
-    io.progress?.('verify', 0.5, `목표 근처 — 노이즈 ${JUDGE_NOISE * 100}% 까지 다시 계산(몇 분 걸림)`);
-    return { ...await io.verify(e, { noise: JUDGE_NOISE, from: v }), sharp: true };
+    if (v.sharp || stop()) return v;
+    const r = await sharpTo(v, (o) => io.verify(e, o), {});
+    return r === v ? v : { ...r, sharp: true };   // 더 잴 것 없으면 받은 값 그대로
+  };
+  // 판정 노이즈까지 이어서 계산(sharpNoise: 목표 바로 아래 0.5% · 겨우 통과 1%, 2026-11-17) — 1% 에서 목표 바로 아래로 내려오면 0.5% 까지 한 번 더
+  const sharpTo = async (r, run, extra) => {
+    for (let k = 0; k < 2 && !stop(); k++) {
+      const t = sharpNoise(r.stats, obs);
+      if (t == null || !(r.stats.relNoise > t * 1.1)) break;
+      io.progress?.('verify', 0.5, `목표 근처 — 노이즈 ${t * 100}% 까지 다시 계산(몇 분 걸림)`);
+      r = await run({ noise: t, from: r, ...extra });
+    }
+    return r;
   };
   // 최종 판정 = 화면 화질 격자(2026-11-03) — 최적화 격자(저화질)에서 통과해도 화면에서 미달로 나오지 않게, 화면과 같은 규칙(목표 노이즈, 목표 근처면 0.5%)으로 잼
   const judge = async (e, v) => {
@@ -725,7 +735,7 @@ export async function runAutoDesign(cfg, io) {
     let r = await io.verify(e, { noise: tn, from: v, screen: true, ...(far ? { maxMs: FAR_MS } : {}) });
     // 광자 수를 짧은 추정으로 정했으면 목표 노이즈에 못 닿을 수 있음 — 같은 계산에 이어서 목표까지(판정 규칙 그대로, 2026-11-12)
     if (!far && r.stats.relNoise > tn * 1.1 && !stop()) r = await io.verify(e, { noise: tn, from: r, screen: true });
-    if (nearTarget(r.stats, obs) && r.stats.relNoise > JUDGE_NOISE * 1.1 && !stop()) r = await io.verify(e, { noise: JUDGE_NOISE, from: r, screen: true });
+    r = await sharpTo(r, (o) => io.verify(e, o), { screen: true });
     return { ...r, sharp: true };
   };
   const judgeCurrent = async (v) => {

@@ -14,7 +14,15 @@ export function nearTarget(s, obs) {
   const m = Math.min(s.Ulen - obs.targetLen, s.Uwid == null ? Infinity : s.Uwid - obs.targetWid);
   return m < 0 && m >= -JUDGE_BAND;
 }
-export const judgeNoise = (s, obs, noise) => (nearTarget(s, obs) ? Math.min(noise, JUDGE_NOISE) : noise);
+// 겨우 통과(목표와의 차이 < 표준오차 2배)도 1% 까지(2026-11-17 사용자 승인) — 노이즈 2% 판정이 같은 설계에서 78.6% / 80.3% 로 갈림
+export const PASS_NOISE = 0.01;
+export function sharpNoise(s, obs) {
+  if (nearTarget(s, obs)) return JUDGE_NOISE;
+  if (!s || s.empty || !Number.isFinite(s.Ulen)) return null;
+  const j = judgeStats(s, obs);
+  return j.all === 'near' && j.len !== 'bad' && j.wid !== 'bad' ? PASS_NOISE : null;
+}
+export const judgeNoise = (s, obs, noise) => { const t = sharpNoise(s, obs); return t == null ? noise : Math.min(noise, t); };
 // 화면 판정(2026-11-04) — 목표와의 차이가 노이즈보다 작으면 통과·미달을 가를 수 없어 '근처'. 같은 설계 고화질 3회 실측 0.7925 · 0.802 · 0.8027(표준오차 ≈ 0.004) → 표준오차의 2배.
 // 표시만 바꿈 — 최적화의 후보 선택(margin)은 그대로
 export const NEAR_SE = 2;
