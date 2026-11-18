@@ -1423,3 +1423,12 @@ done();
   say(/\.m3-next\.opt\s*\{[^}]*background:\s*var\(--step-opt\)/.test(css) && !/#6a4fc8|#a08cf0/i.test(css), '최적화 단추도 같은 주황(옛 보라 남지 않음)');
   say(/\.m3-big-in,\s*\.m3-mon\s*\{[^}]*border:\s*1px solid color-mix\(in srgb, var\(--win-tint\)/.test(css) && !/border:\s*1\.5px solid color-mix\(in srgb, var\(--win-tint\)/.test(css), '창 테두리 얇게(1px)');
 }
+{ // 2026-11-18 사용자: 색 점검 1·2·3 — ① 창 머리 번호 원은 끝나도 창 색 ② 최적화 창 안 강조색 = 주황 ③ 다크 테마 인자 카드 = 어두운 바탕
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const css = (await import('fs')).readFileSync('styles.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  say(/\.m3-big-hd \.m3-fl\.done,\s*#mech3d-wrap \.m3-mon-hd \.m3-fl\.done\s*\{[^}]*background:\s*var\(--win-tint\)/.test(css), '① 창 머리 번호 원 = 끝나도 창 색(✓ 글자로 끝 표시)');
+  say(/\.m3-mon\s*\{[^}]*--m3-acc:\s*var\(--step-opt\)/.test(css) && /\.m3-big-in\s*\{[^}]*--m3-acc:\s*var\(--step-sim\)/.test(css), '② 창 안 강조색 = 창 색(탭 등)');
+  say(/\.fb-card \.od-chip\.st-run\s*\{[^}]*background:\s*var\(--m3-acc/.test(css) && !/\.fb-card \.od-chip\.st-run\s*\{[^}]*#1f6fd1/.test(css), '② 계산 중 칩도 창 강조색');
+  const dk = (sel) => css.split('}').some((r) => { const [h, b = ''] = r.split('{'); return h.trim().endsWith('[data-theme="dark"] ' + sel) && /background:\s*(var\(--m3-(panel|head)\)|color-mix\(in srgb, var\(--fb\) \d+%, var\(--m3-panel\)\))/.test(b); });
+  say(dk('.fb-card') && dk('.fb-card.fb-off') && dk('.fb-card.fb-on'), '③ 다크 테마 인자 카드(꺼짐·켜짐 포함) = 어두운 바탕');
+}

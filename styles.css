@@ -1098,7 +1098,7 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 .fb-card .od-chip.st-off { background: #e7eaf0; color: #5a6475; }
 .fb-card .od-chip.st-on { background: #dbe8fb; color: #1b57ad; }
 .fb-card .od-chip.st-wait { background: #fff; color: #5a6475; border-color: #b8c0cd; }
-.fb-card .od-chip.st-run { background: #1f6fd1; color: #fff; }
+.fb-card .od-chip.st-run { background: var(--m3-acc); color: #fff; }
 .fb-card .od-chip.st-done, .fb-card .od-chip.st-lock { background: #d6f2e1; color: #17693f; }
 
 /* 기구 최적화 창(2026-11-05): 설계 인자 3개를 맨 위 한 줄로 — 아래 진행 현황이 넓게 보이게. 그 아래 왼쪽 실행·결과 | 오른쪽 진행 */
@@ -1585,3 +1585,22 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 /* 기구 최적화 창·광분포 창 회색 글 = 부품 설정과 같게(2026-11-18 사용자) */
 .m3-mon .mut, .m3-big-in .mut { font-size: 11px; }
 .m3-mon [title].mut, .m3-big-in [title].mut { cursor: help; }
+/* 2026-11-18 사용자 색 점검 ①②③ */
+/* ① 창 머리 번호 원 = 끝나도 창 색(끝 표시는 ✓ 글자) — 상단 ④·⑤ 칩과 짝 */
+#mech3d-wrap .m3-big-hd .m3-fl.done, #mech3d-wrap .m3-mon-hd .m3-fl.done { background: var(--win-tint); box-shadow: none; }
+/* ② 창 안 강조색(탭·진행 막대·계산 중 칩 등) = 그 창 색. 설계 인자별 색(--fb)은 그대로 */
+.m3-big-in { --m3-acc: var(--step-sim); --m3-accbg: color-mix(in srgb, var(--step-sim) 14%, var(--m3-panel)); }
+.m3-mon { --m3-acc: var(--step-opt); --m3-accbg: color-mix(in srgb, var(--step-opt) 14%, var(--m3-panel)); }
+#mech3d-wrap[data-theme="dark"] .m3-mon-tabs button.on, #mech3d-wrap[data-theme="dark"] .fb-card .od-chip.st-run { color: #0b1220; }
+/* ③ 다크 테마 설계 인자 카드 = 어두운 바탕 */
+#mech3d-wrap[data-theme="dark"] .fb-card { background: var(--m3-panel); color: var(--ui-text, #d8dee9); border-color: var(--m3-edge); --m3-mut: #8e98ab; }
+#mech3d-wrap[data-theme="dark"] .fb-card .fb-head, #mech3d-wrap[data-theme="dark"] .fb-card .fb-in { color: var(--ui-text, #d8dee9); }
+#mech3d-wrap[data-theme="dark"] .fb-card .fb-head { background: color-mix(in srgb, var(--fb, #888) 16%, var(--m3-panel)); }
+#mech3d-wrap[data-theme="dark"] .fb-card.fb-off { background: var(--m3-head) !important; border-color: #3a4558 !important; border-left-color: #3a4558 !important; }
+#mech3d-wrap[data-theme="dark"] .fb-card.fb-off .fb-head { color: #8e98ab !important; }
+#mech3d-wrap[data-theme="dark"] .fb-card.fb-off .fb-head .fb-dot { background: #3a4558 !important; }
+#mech3d-wrap[data-theme="dark"] .fb-card.fb-on { background: color-mix(in srgb, var(--fb) 12%, var(--m3-panel)) !important; }
+#mech3d-wrap[data-theme="dark"] .fb-card.fb-on .fb-head { background: var(--fb) !important; color: #fff; }
+#mech3d-wrap[data-theme="dark"] .fb-card .od-chip.st-off { background: #2c3546; color: #aeb7c7; }
+#mech3d-wrap[data-theme="dark"] .fb-card .od-chip.st-wait { background: transparent; color: #aeb7c7; border-color: #4a5568; }
+#mech3d-wrap[data-theme="dark"] .fb-sw input { color-scheme: dark; }
