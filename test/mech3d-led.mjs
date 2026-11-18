@@ -130,4 +130,14 @@ ok(autoLedGroup([scene[0], scene[1], ...[-25, -15, -5, 5].map((x) => transformMe
   ok(autoStepLeds([stepPcb, stepLeds[0]], far) === null, 'LED STEP 에 LED 1개 → 못 찾음(같은 부품 2개 이상)');
   ok(autoStepLeds([], far) === null, 'LED STEP 비었음 → 못 찾음');
 }
+// 2026-11-18 사용자: 자동으로 잡힌 발광면 크기 표시 — faceInfo.size = [장축 길이, 직교 길이] mm, 인식 결과(emitters)에도 실림
+{
+  const near = (a, b) => Math.abs(a - b) < 1e-6;
+  const s0 = faceInfo(rect, 1).size, s1 = faceInfo(rr, 1).size, sq = faceInfo(boxMesh(-1, -1, 0, 2, 2, 1), 1).size;
+  ok(s0 && near(s0[0], 2) && near(s0[1], 1), `직사각형 발광면 크기 2×1 (${s0})`);
+  ok(s1 && near(s1[0], 2) && near(s1[1], 1), `37° 회전해도 2×1 (${s1})`);
+  ok(sq && near(sq[0], 2) && near(sq[1], 2), `정사각형 2×2 (${sq})`);
+  const e0 = findEmitters(parts, leds, 1, 7)[1];
+  ok(e0.size && near(e0.size[0], 1) && near(e0.size[1], 1), `인식된 LED 에 발광면 크기 1×1 (${e0.size})`);
+}
 done();

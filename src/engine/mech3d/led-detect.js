@@ -30,6 +30,23 @@ export function meshStats(m) {
   return s;
 }
 
+// 발광면 크기(2026-11-18) [장축 방향 폭, 직교 폭] mm. 장축(xAxis)이 있으면 그 방향, 등방(정사각형·원)이면
+// 면의 모서리 방향 중 외곽 사각형이 가장 작은 방향(정사각형이 대각선으로 재지지 않게)
+function faceSize(P, T, tris, c, n, e1, e2, xAxis) {
+  const q = [];
+  for (const t of tris) for (let j = 0; j < 3; j++) { const v = T[t * 3 + j] * 3, d = [P[v] - c[0], P[v + 1] - c[1], P[v + 2] - c[2]]; q.push([dot(d, e1), dot(d, e2)]); }
+  const box = (cs, sn) => { let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity; for (const [a, b] of q) { const u = a * cs + b * sn, w = -a * sn + b * cs; if (u < x0) x0 = u; if (u > x1) x1 = u; if (w < y0) y0 = w; if (w > y1) y1 = w; } return [x1 - x0, y1 - y0]; };
+  if (xAxis) return box(dot(xAxis, e1), dot(xAxis, e2));
+  let best = box(1, 0);
+  const step = Math.max(1, Math.floor(q.length / 3 / 64));   // 모서리 방향 후보 최대 ~64×3개
+  for (let k = 0; k + 2 < q.length; k += 3 * step) for (let j = 0; j < 3; j++) {
+    const a = q[k + j], b = q[k + (j + 1) % 3], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy);
+    if (L < 1e-9) continue;
+    const r = box(dx / L, dy / L);
+    if (r[0] * r[1] < best[0] * best[1] - 1e-12) best = r[0] >= r[1] ? r : [r[1], r[0]];
+  }
+  return best;
+}
 // 면 정보: 면적, 면적 가중 중심, 바깥 법선(면적 가중 평균), 면 안 장축 방향(삼각형별 정확한 면적 가중 2차 모멘트의 주축).
 // 거의 등방(정사각형·원 등)이면 xAxis = null. 면적벡터 합이 면적의 1e-3 미만(닫힌·원통형 면)이면 degenerate = true.
 export function faceInfo(m, face) {
@@ -61,7 +78,7 @@ export function faceInfo(m, face) {
     const th = 0.5 * Math.atan2(2 * sxy, sxx - syy);
     xAxis = unit([Math.cos(th) * e1[0] + Math.sin(th) * e2[0], Math.cos(th) * e1[1] + Math.sin(th) * e2[1], Math.cos(th) * e1[2] + Math.sin(th) * e2[2]]);
   }
-  return { area, c, n: nn, xAxis, degenerate };
+  return { area, c, n: nn, xAxis, degenerate, size: faceSize(P, T, tris, c, nn, e1, e2, xAxis) };
 }
 
 const close = (a, b, tol) => Math.abs(a - b) <= tol * Math.max(Math.abs(a), Math.abs(b));
@@ -175,7 +192,7 @@ export function findEmitters(parts, leds, ref, face, pcb = -1) {
     const st = meshStats(parts[i]), v = pcb >= 0 ? towardLed(parts[pcb], st.center) : null;
     const fi0 = faceInfo(parts[i], face), ok0 = match(st, fi0);
     const bad = { part: i, face: -1, needsCheck: true };
-    const good = (f, fi) => { const pos = emitPoint(parts[i], fi); return pos ? { part: i, face: f, pos, axis: fi.n, xAxis: fi.xAxis, needsCheck: false } : bad; };   // 발광점이 자기 솔리드 안에서 못 나오면 확인 필요
+    const good = (f, fi) => { const pos = emitPoint(parts[i], fi); return pos ? { part: i, face: f, pos, axis: fi.n, xAxis: fi.xAxis, size: fi.size, needsCheck: false } : bad; };   // 발광점이 자기 솔리드 안에서 못 나오면 확인 필요
     if (!v) {   // PCB 정보 없음: 면 순서 일치 우선, 아니면 첫 기술자 일치 면
       if (ok0) return good(face, fi0);
       for (let k = 0; k < parts[i].faceCount; k++) { const c = faceInfo(parts[i], k); if (match(st, c)) return good(k, c); }

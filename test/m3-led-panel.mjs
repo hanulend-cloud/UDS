@@ -102,6 +102,15 @@ const ui = (o = {}) => ({ line, ledList: list, ledGap: 6.25, ...o });
   setLpTab('leds', 'basic'); const h = ledPanelHtml(man, ui()); ok(!h.includes('LED 수동 선택') && !h.includes('data-lp-mauto') && !h.includes('data-lp-kind') && h.includes('지향각') && h.includes('role="tab"'), 'LED 기본 탭 = 사양만');
   const one = ledPanelHtml(man, ui({ led: led({}) })); ok(!one.includes('LED 수동 선택') && !one.includes('data-lp-kind'), 'LED 한 개 = 지정 없음');
   setLpTab('leds', 'detail'); const d = ledPanelHtml(man, ui()); ok(!d.includes('data-lp-kind') && !d.includes('인식 고치기') && (d.match(/data-lp-man="count"/g) ?? []).length === 1, 'LED 상세 탭 = 지정 없음'); setLpTab('leds', 'basic'); }
+// 2026-11-18 사용자: 자동으로 잡힌 LED 발광면 크기 표시 + [이 크기로] (입력칸은 그대로 — 바로 바꾸지 않음)
+{ setLpTab('leds', 'basic');
+  const stp = { light: { ...defaultLight(), kind: 'step', spec: { ...defaultLight().spec, sizeX: 2, sizeY: 2 }, step: { name: 'a.step', leds: [1, 2], pcb: 0, excluded: [], ref: { part: 1, face: 7 }, emitters: [{ part: 1, face: 7, pos: [0, 0, 0], axis: [0, 0, 1], size: [2.84, 1.26] }, { part: 2, face: 7, pos: [5, 0, 0], axis: [0, 0, 1], size: [2.84, 1.26] }] } } };
+  let h = ledPanelHtml(stp, ui());
+  ok(h.includes('인식 2.8 × 1.3 mm') && /data-lp-sizeauto="2.84,1.26"/.test(h) && /value="2" data-lp-spec="sizeX"/.test(h), `인식된 발광면 크기 표시 + [이 크기로] (입력은 2 그대로)`);
+  stp.light.spec.sizeX = 2.84; stp.light.spec.sizeY = 1.26; h = ledPanelHtml(stp, ui());
+  ok(/data-lp-sizeauto="2.84,1.26"[^>]*disabled/.test(h), '이미 같은 크기 = [이 크기로] 꺼짐');
+  ok(!ledPanelHtml(man, ui()).includes('data-lp-sizeauto'), '직접 배치(인식 면 없음) = 표시 없음');
+}
 done();
 { // 3D 빛 원뿔 크기(2026-11-08): 넓은 지향각도 보이게 — 반각 60° 넘으면 빗변 길이 고정, 최대 89.5°(179°)
   const { coneDims } = await import('../src/ui/m3/cone-dims.js');

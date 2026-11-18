@@ -1897,7 +1897,8 @@ function propHandlers() {
     }),
     onPcbOff: (on) => st.update('light', (m) => { setPcbOff(m, on); }),
     onPcbR: (v) => { const R = clampPcbPct(v); if (R != null) st.update('light', (m) => { m.light.pcbR = R; }); else st.update('session', () => {}); },   // 빈칸·숫자 아님 = 원래 값으로 다시 그림
-    onLedSpec: (key, v) => st.update(key === 'fluxLm' ? 'target' : 'light', (m) => { m.light.spec[key] = v; }),   // 광속은 휘도 환산만 — 재계산 없음
+    onLedSpec: (key, v) => st.update(key === 'fluxLm' ? 'target' : 'light', (m) => { m.light.spec[key] = v; }),
+    onLedSize: (a, b) => st.update('light', (m) => { m.light.spec.sizeX = a; m.light.spec.sizeY = b; }),   // [이 크기로] = 인식된 발광면 크기(한 번에 — 되돌리기 1번)   // 광속은 휘도 환산만 — 재계산 없음
     // LED 선택·속성(spec §4a)
     onLedSel: (n) => st.update('session', (_, x) => { x.ledSel = n; if (n != null) { x.node = 'leds'; x.sel = null; } }),
     onLedBeam: (a) => { const b = beamSpec(a); if (b) st.update('light', (m) => { Object.assign(m.light.spec, b); }); },   // 120 = 램버시안, 그 밖 = 가우시안

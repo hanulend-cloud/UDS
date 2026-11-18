@@ -112,7 +112,12 @@ export function stepLayoutRowHtml(st, line = null, n = null) {
 }
 // LED 노드 본문(순수 HTML): 인식 상태 · (LED STEP) 배치 · 배광 · 지향각 · 발광면 크기 · 광속(lm/개, 0 = 상대값) · PCB 색
 // adv = LED 속성 창의 '배치·인식 (고급)' 구역 — 배치·배광·광속은 창 위쪽에 있으므로 뺀다
-const ledSizeRow = (L) => `<div class="m3-row"><label>발광면</label><input type="number" min="0" step="0.1" value="${L.spec.sizeX}" data-lp-spec="sizeX">×<input type="number" min="0" step="0.1" value="${L.spec.sizeY}" data-lp-spec="sizeY">mm</div>`;
+// 2026-11-18 사용자: 도면에서 자동으로 잡힌 발광면 크기(기준 LED) 표시 + [이 크기로] — 입력칸은 사용자가 정한 값 그대로(바로 바꾸지 않음)
+const ledAutoSize = (L) => { const st = L.kind === 'step' ? L.step : null, em = st?.emitters ?? [], e = em.find((x) => x.part === st?.ref?.part && x.size) ?? em.find((x) => x.size); return e ? e.size.map((v) => +v.toFixed(2)) : null; };
+const ledSizeRow = (L) => {
+  const z = ledAutoSize(L), same = z && Math.abs(z[0] - L.spec.sizeX) < 0.005 && Math.abs(z[1] - L.spec.sizeY) < 0.005;
+  return `<div class="m3-row"><label>발광면</label><input type="number" min="0" step="0.1" value="${L.spec.sizeX}" data-lp-spec="sizeX">×<input type="number" min="0" step="0.1" value="${L.spec.sizeY}" data-lp-spec="sizeY">mm</div>${z ? `<div class="m3-row"><label></label><span class="mut" title="LED 도면에서 자동으로 잡힌 발광면(빛 나오는 면)의 크기 · 긴 쪽 × 짧은 쪽">인식 ${z[0].toFixed(1)} × ${z[1].toFixed(1)} mm</span> <button type="button" data-lp-sizeauto="${z[0]},${z[1]}"${same ? ' disabled' : ''} title="발광면 크기를 인식된 크기로 바꿈">이 크기로</button></div>` : ''}`;
+};
 function ledNodeBodyHtml(m, ui, adv = false, showBeam = false, noSize = false) {   // showBeam = 노드 상세 탭(배광 모델·지향각 직접 입력)
   const L = m.light, st = L.step, v = L.kind === 'step' ? st?.virtual : null, lay = ui.lay ?? null;
   const nLed = (st?.leds ?? []).filter((i) => !(st.excluded ?? []).includes(i)).length;
@@ -225,6 +230,7 @@ export function renderLedProps(el, m, ui, h) {
     if (val != null) h.onLedSpec(k, val); else if (k === 'fluxLm') h.onLedSpec(k, 0);   // 광속 빈칸 = 0(상대값)
   });
   on(el, '[data-lp-pcbr]', 'change', (x) => h.onPcbR(x.value));
+  on(el, '[data-lp-sizeauto]', 'click', (x) => { const [a, b] = x.dataset.lpSizeauto.split(',').map(Number); h.onLedSize?.(a, b); });
   on(el, '[data-lp-mauto]', 'click', () => h.onMechAuto?.());
   on(el, '[data-lp-kind]', 'change', (x) => h.onLightKind(x.value));
   on(el, '[data-lp-manual]', 'click', () => { MANUAL_OPEN = !MANUAL_OPEN; renderLedProps(el, m, ui, h); });
