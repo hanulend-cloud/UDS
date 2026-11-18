@@ -228,4 +228,13 @@ ok(S.counted === nV && S.noiseWarn === false, `집계 셀 ${S.counted}, 노이�
   ok(g.Uwid >= g.rawUwid - 0.005 && g.Uwid >= 0.975, `길이 경사 있음: 폭 판정값 ${(g.Uwid * 100).toFixed(1)}% ≥ 보정 전 ${(g.rawUwid * 100).toFixed(1)}% · 실제 100% 에 가까움`);
   ok(u.Uwid >= 0.98, `완전 균일: 폭 판정값 ${(u.Uwid * 100).toFixed(1)}% (전과 같이 100% 가까움)`);
 }
+// 2026-11-18 점검: 밝기가 급히 바뀌는 곳(계단)이 있으면 길이 보정값이 보정 전보다 낮게 나옴(링 경사 · 광선 40만: 12.5% vs 보정 전 17.2%)
+// 원인 = 주기 성분으로 다듬을 때 계단 양옆이 넘침(최저 더 낮게 · 최고 더 높게) → 다듬은 값은 칸 평균의 최저~최고 안으로
+{ const ringL = recognizeLine([topFaceMesh(annulusTris(0, 0, 37, 43), 2)], [{ part: 0, face: 1 }], [0, 0, 1]);
+  const ob = { faces: [{ part: 0, face: 1 }], dir: [0, 0, 1], cone: 10, edgeExcl: 0.5, targetLen: 0.8, targetWid: 0.5 };
+  const GR = tallyGeometry(ringL, ob), L = GR.L ?? ringL.length, q = rng(3), A3 = [];
+  for (let b = 0; b < 10; b++) { const a = makeAccumulator(GR, ringL, ob); for (let k = 0; k < 40000; k++) { const rad = Math.sqrt(37 * 37 + q() * (43 * 43 - 37 * 37)), th = q() * 2 * Math.PI, x = rad * Math.cos(th), y = rad * Math.sin(th), w = 20 + 100 * th / (2 * Math.PI); a.onExit(0, 1, x, y, 2, 0, 0, 1, w, k); a.onEscape(x, y, 2.5, 0, 0, 1, w, k); } A3.push(a.acc); }
+  const SR = tallyStats(GR, A3, ob);
+  ok(SR.Ulen >= SR.rawUlen - 0.015, `계단 있는 링: 길이 판정값 ${(SR.Ulen * 100).toFixed(1)}% — 보정 전 ${(SR.rawUlen * 100).toFixed(1)}% 보다 크게 낮지 않음`);
+}
 done();

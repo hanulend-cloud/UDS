@@ -208,6 +208,9 @@ export function denoiseProfile(mean, nv) {
     v = Math.max(v, w * Vn);   // 광자가 적으면 칸별 분산 추정이 흔들림 — 전체 평균보다 작게 보지 않음
     if (v > 0 && Math.abs(r) > 4.5 * Math.sqrt(v)) for (let q = i; q < i + w; q++) out[q] += r / w;
   }
+  // 계단(급한 밝기 변화) 양옆의 넘침을 자름(2026-11-18) — 노이즈는 최저·최고를 넓히기만 하므로 참 모양은 칸 평균의 최저~최고 안
+  let lo = Infinity, hi = -Infinity; for (const v of mean) { if (v < lo) lo = v; if (v > hi) hi = v; }
+  for (let i = 0; i < n; i++) out[i] = Math.min(hi, Math.max(lo, out[i]));
   return { out, hid: Math.sqrt((2 * thr) / n), w0 };
 }
 const estU = (vecs) => {
