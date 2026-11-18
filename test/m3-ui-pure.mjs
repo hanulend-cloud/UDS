@@ -1368,3 +1368,16 @@ done();
   okS(/repeat\(3,/.test(last('.m3-mon .fb-cards')), `기구 최적화 창 설계 인자 = 가로 3칸: ${last('.m3-mon .fb-cards')}`);
   okS(/grid/.test(last('.m3-mon .fb-tbl tr')) && /grid-row:\s*1/.test(last('.m3-mon .fb-tbl .fb-res')) && /grid-row:\s*2/.test(last('.m3-mon .fb-tbl .fb-cs')), '좁은 칸: 결과 줄 위, 후보 줄 아래');
 }
+// 큰 창 그림 크기(2026-11-18 사용자 스크린숏: 2D·1D 가 세로로 크게 늘어나 보임) — 칩에서 펼쳐지는 동안(transform scale) 잰 크기가 아니라 실제 칸 크기로
+{
+  const okS = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
+  const { canvasPx } = await import('../src/ui/m3/results-panel.js');
+  const cv = { clientWidth: 978, clientHeight: 306, getBoundingClientRect: () => ({ width: 300, height: 20 }) };
+  const [W, H] = canvasPx(cv, 1.25);
+  okS(W === 1223 && H === 383, `펼치는 중에도 실제 칸 크기 × DPR: ${W}x${H}`);
+}
+{
+  const okS = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
+  const { readFileSync } = await import('node:fs'), rp = readFileSync(new URL('../src/ui/m3/results-panel.js', import.meta.url), 'utf8');
+  okS(/big\.ro\.observe\(ov\);\s*for \(const k of KINDS\) big\.ro\.observe\(cvs\[k\]\)/.test(rp), '큰 창: 그림 칸 크기가 바뀌어도 다시 그림(창 크기만 보지 않음)');
+}

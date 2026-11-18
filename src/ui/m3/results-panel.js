@@ -533,6 +533,9 @@ function wireMapHover(cv) {
 }
 const clearCanvas = (c) => c.getContext('2d').clearRect(0, 0, c.width, c.height);
 const dprNow = () => Math.max(1, globalThis.devicePixelRatio || 1);
+// 큰 창 그림의 실제 픽셀 크기(2026-11-18) — 칸의 레이아웃 크기 × DPR. getBoundingClientRect 는 창이 ④ 칩에서 펼쳐지는 동안(가로·세로 다른 scale) 줄어든 크기라
+// 그때 잰 크기로 그리면 펼친 뒤 그림이 세로로 늘어나 보였음(계산이 멈춰 있으면 다시 그릴 일이 없어 그대로 남음)
+export const canvasPx = (cv, d) => [Math.round(cv.clientWidth * d), Math.round(cv.clientHeight * d)];
 // 캔버스를 화면 크기 × DPR 로 맞춘다(가로세로 비는 만들 때의 비 유지). 크기가 바뀌면 true
 // 넓은 화면(> 1024px) = 칸 높이에 맞춤(CSS 가 높이를 정함 — 결과 창이 스크롤 없이 한 화면), 좁은 화면 = 가로세로 비
 function sizeCanvas(cv, ratio) {
@@ -666,7 +669,7 @@ export function createResultsPanel(el, { anchor = () => null, onOpt = null, onQu
     if (!big) return;
     for (const k of KINDS) {
       const cv = big.cvs[k]; if (!cv.offsetParent) continue;   // 숨긴 그림(한 그림만 보기)은 건너뜀
-      const r = cv.getBoundingClientRect(), d = dprNow(), W = Math.round(r.width * d), H = Math.round(r.height * d);
+      const [W, H] = canvasPx(cv, dprNow());
       if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
       paint(k, cv);
     }
@@ -800,7 +803,7 @@ export function createResultsPanel(el, { anchor = () => null, onOpt = null, onQu
     // 진행 그래프 칸 높이 = 따로 손잡이(2026-11-08) — 2D·1D 를 '이 그림만'으로 볼 때도 조절. 아래 그림이 최소 120px 은 남게
     { const pg = ov.querySelector('[data-big-prog]'); mountHeightHandle(pg, { key: 'uds.m3.bigProgH', min: 120, max: () => Math.max(120, big.grid.clientHeight - 140), onChange: () => paintBig() }); }
     mountSplit([C('prof'), C('wprof')], { key: 'uds.m3.bigH', dir: 'row', min: 160, onChange: () => paintBig() });
-    if (typeof ResizeObserver !== 'undefined') { big.ro = new ResizeObserver(() => paintBig()); big.ro.observe(ov); }
+    if (typeof ResizeObserver !== 'undefined') { big.ro = new ResizeObserver(() => paintBig()); big.ro.observe(ov); for (const k of KINDS) big.ro.observe(cvs[k]); }   // 그림 칸 자체 크기도(창 크기는 그대로인데 안쪽 칸이 커지면 다시 그리지 않아 늘어나 보였음, 2026-11-18)
     setMin(false); raiseWin(ov); setFocus(null); syncBig(); showRegion(); onBig?.(ov.querySelector('[data-big-prog]'));
     flyWin(ov, anchor(), false);   // ④ 칩에서 펼쳐짐
   }
