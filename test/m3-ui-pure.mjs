@@ -1412,3 +1412,14 @@ done();
   okS(/title="길이 프로파일\(각 최대 = 1\)[^"]*">회색 현재 · 색 최적</.test(ap) && /title="[^"]*다른 인자는 최적안 그대로의 추정[^"]*">— 낮추면 효율↑ · 균일도↓</.test(ap), '최적화 결과 회색 글 짧게');
   okS(rp.includes("'링 · 두께 확대 — [실제 비율] = 실제 모양'"), '2D 링 캡션 짧게');
 }
+{ // 2026-11-18 사용자: 광분포 창 = 파랑 · 기구 최적화 창 = 주황, 상단 ④·⑤ 칩과 같은 색(일체형) · 더 심플하게
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const css = (await import('fs')).readFileSync('styles.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const last = (re) => { const m = [...css.matchAll(re)]; return m.length ? m[m.length - 1][1].toLowerCase() : ''; };
+  const hue = (hex) => { const n = parseInt(hex.slice(1), 16), r = (n >> 16) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255, mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; if (!d) return -1; let h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return (h * 60 + 360) % 360; };
+  const sim = last(/--step-sim:\s*(#[0-9a-fA-F]{6})/g), opt = last(/--step-opt:\s*(#[0-9a-fA-F]{6})/g);
+  say(hue(sim) >= 200 && hue(sim) <= 230, `광분포 창 색 = 파랑 (${sim})`);
+  say(hue(opt) >= 15 && hue(opt) <= 35, `기구 최적화 창 색 = 주황 (${opt})`);
+  say(/\.m3-next\.opt\s*\{[^}]*background:\s*var\(--step-opt\)/.test(css) && !/#6a4fc8|#a08cf0/i.test(css), '최적화 단추도 같은 주황(옛 보라 남지 않음)');
+  say(/\.m3-big-in,\s*\.m3-mon\s*\{[^}]*border:\s*1px solid color-mix\(in srgb, var\(--win-tint\)/.test(css) && !/border:\s*1\.5px solid color-mix\(in srgb, var\(--win-tint\)/.test(css), '창 테두리 얇게(1px)');
+}

@@ -1451,10 +1451,11 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 @media (max-width: 900px) { header { flex-wrap: wrap; } .hd-left { flex-wrap: wrap; } }
 @media (max-width: 900px) { .m3-cmd { flex-wrap: wrap; overflow-x: visible; } }   /* 좁으면 단계 막대는 두 줄로(옆으로 숨지 않게) */
 
-/* 떠 있는 두 창 구분(2026-11-12 사용자) — 같은 머리 모양에 옅은 색 기운만: 광분포 시뮬레이션 = 청록, 기구 최적화 = 보라. 밝은·어두운 테마마다 채도를 따로 */
+/* 떠 있는 두 창 구분 — 광분포 시뮬레이션 = 파랑, 기구 최적화 = 주황(2026-11-18). 밝은·어두운 테마마다 채도를 따로 */
 /* 단계 색(2026-11-16 사용자: 상단 ④·⑤ 칩과 떠 있는 창이 이어져 보이게) — 칩 번호 원·열림 밑줄·창 머리가 같은 색 */
-#mech3d-wrap { --step-sim: #0f8f84; --step-opt: #6a4fc8; }
-#mech3d-wrap[data-theme="dark"] { --step-sim: #3cc8b8; --step-opt: #a08cf0; }
+/* 2026-11-18 사용자: 광분포 = 파랑 · 기구 최적화 = 주황(상단 칩과 일체) */
+#mech3d-wrap { --step-sim: #2563eb; --step-opt: #ea580c; }
+#mech3d-wrap[data-theme="dark"] { --step-sim: #60a5fa; --step-opt: #fb923c; }
 .m3-big-in { --win-tint: var(--step-sim); }
 .m3-mon { --win-tint: var(--step-opt); }
 .m3-cmd .m3-flow[data-c="sim"] { --step: var(--step-sim); }
@@ -1464,16 +1465,16 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .m3-cmd .m3-flow { position: relative; box-shadow: inset 3px 0 0 var(--step); }   /* 왼쪽 단계 색 줄(테두리는 다크 단추 규칙이 덮어써서 그림자로) */
 .m3-cmd .m3-flow.win-open { box-shadow: inset 3px 0 0 var(--step), inset 0 -3px 0 var(--step); background: color-mix(in srgb, var(--step) 14%, transparent); outline: none; }   /* 창이 열려 있음(aria-pressed=true — 다크 단추 규칙 밖) */
 .m3-cmd .m3-flow.win-open::after { content: '▾'; position: absolute; left: 50%; bottom: -9px; transform: translateX(-50%); color: var(--step); font-size: 11px; line-height: 1; pointer-events: none; }
-.m3-big-in, .m3-mon { background: color-mix(in srgb, var(--win-tint) 4%, var(--m3-panel)); border: 1.5px solid color-mix(in srgb, var(--win-tint) 55%, var(--m3-edge)); }
-.m3-big-hd, .m3-mon-hd { background: color-mix(in srgb, var(--win-tint) 14%, var(--m3-head)); border-bottom-color: color-mix(in srgb, var(--win-tint) 35%, var(--m3-edge)); }
-#mech3d-wrap[data-theme="dark"] .m3-big-hd, #mech3d-wrap[data-theme="dark"] .m3-mon-hd { background: color-mix(in srgb, var(--win-tint) 20%, var(--m3-head)); }
-.m3-big-hd > b, .m3-mon-hd > b { color: color-mix(in srgb, var(--win-tint) 45%, var(--m3-headtx)); }
+.m3-big-in, .m3-mon { background: var(--m3-panel); border: 1px solid color-mix(in srgb, var(--win-tint) 40%, var(--m3-edge)); box-shadow: 0 12px 32px rgba(16,24,40,.16), 0 2px 6px rgba(16,24,40,.06); }   /* 심플 — 본문은 무늬 없이, 색은 머리줄 윗선·번호 원에만 */
+.m3-big-hd, .m3-mon-hd { background: color-mix(in srgb, var(--win-tint) 7%, var(--m3-panel)); border-bottom-color: color-mix(in srgb, var(--win-tint) 22%, var(--m3-edge)); box-shadow: inset 0 3px 0 var(--win-tint); }
+#mech3d-wrap[data-theme="dark"] .m3-big-hd, #mech3d-wrap[data-theme="dark"] .m3-mon-hd { background: color-mix(in srgb, var(--win-tint) 12%, var(--m3-head)); }
+.m3-big-hd > b, .m3-mon-hd > b { color: var(--m3-headtx); }
 .m3-big-hd .m3-fl, .m3-mon-hd .m3-fl { background: var(--win-tint); }
 /* 판정 배지 옆 '다음 할 일' 단추 · ④⑤ 창 열림 표시(2026-11-12) */
 .m3-next { flex: none; min-height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--m3-line); background: var(--m3-panel, #fff); color: inherit; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .m3-next[hidden] { display: none; }
-#mech3d-wrap .m3-next.opt { background: #6a4fc8; border-color: #6a4fc8; color: #fff; }
-#mech3d-wrap[data-theme="dark"] .m3-res-h button.m3-next.opt.opt.opt { background: #a08cf0; border-color: #a08cf0; color: #0b1220; }   /* 어두운 테마 단추 일괄 규칙보다 우선 */
+#mech3d-wrap .m3-next.opt { background: var(--step-opt); border-color: var(--step-opt); color: #fff; }
+#mech3d-wrap[data-theme="dark"] .m3-res-h button.m3-next.opt.opt.opt { background: var(--step-opt); border-color: var(--step-opt); color: #0b1220; }   /* 어두운 테마 단추 일괄 규칙보다 우선 */
 .m3-cmd .m3-winic { margin-left: 4px; font-size: 11px; opacity: .65; }
 .om-last { font-size: 11px; opacity: .85; white-space: nowrap; }
 /* 3D 보기 막대 = 오른쪽 위(2026-11-12 사용자: 가운데는 떠 있는 창 머리의 메뉴와 겹쳐 보임) · 밝게/어둡게는 상단 바 ☀/☾ 하나로(막대의 단추는 숨김 — 메뉴·☀/☾ 가 이 단추를 눌러 3D 배경까지 바꿈) */
