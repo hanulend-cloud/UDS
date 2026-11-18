@@ -29,6 +29,8 @@ const on = (el, q, ev, fn) => el.querySelectorAll(q).forEach((x) => x.addEventLi
 // 기본 | 상세 탭(LED·관측면 노드) — 노드별로 세션 동안 기억. 부품 속성 탭과 같은 모양
 const LP_TAB = { leds: 'basic', obs: 'basic', pcb: 'basic' };
 export const lpTab = (k) => LP_TAB[k];
+// 가장자리 제외 안내(2026-11-18 사용자: 2~3 mm 좁은 면은 폭의 10% 정도) — 실제 쓰는 값이 설정보다 작으면 그 값을 보여 줌
+export const edgeNote = (O, auto) => (Number.isFinite(auto?.edge) && auto.edge < (O.edgeExcl ?? 0.5) - 1e-9 ? `좁은 면 → 폭 10% = ${+auto.edge.toFixed(2)} mm` : '판정에서 뺌');
 export function setLpTab(k, t) { LP_TAB[k] = t === 'detail' ? 'detail' : 'basic'; }
 const TAB_SUB = { leds: ['지향각 · 발광면', '배치 · 밝기 · 배광'], obs: ['면 · 목표', '방향 · 계산 · 점검'], pcb: ['지정 · 반사율', '위치 · 크기'] };   // 탭에 무엇이 있는지
 const tabsHtml = (k, dSum = '') => `<div class="m3-tabs" role="tablist"><button type="button" role="tab" data-lp-tab="basic" aria-selected="${LP_TAB[k] === 'basic'}">기본 <span class="m3-tab-s">${TAB_SUB[k][0]}</span></button><button type="button" role="tab" data-lp-tab="detail" aria-selected="${LP_TAB[k] === 'detail'}">상세 <span class="m3-tab-s">${esc(dSum || TAB_SUB[k][1])}</span></button></div>`;
@@ -326,7 +328,7 @@ export function renderObserveProps(el, m, ui, h) {
       <div class="m3-row">x<input type="number" step="0.1" value="${numIn(ui.dir?.[0], 3)}" data-lp-dir="0"> y<input type="number" step="0.1" value="${numIn(ui.dir?.[1], 3)}" data-lp-dir="1"> z<input type="number" step="0.1" value="${numIn(ui.dir?.[2], 3)}" data-lp-dir="2"> ${O.dir ? '<button data-lp-dirauto>자동으로</button>' : ''}</div></div>` : ''}
     <div class="m3-card"><div class="m3-sub">보는 범위</div>
       <div class="m3-row"><label>보는 각도 ±</label><input type="number" min="2" max="90" step="1" value="${O.cone}" data-lp-obs="cone">° <span class="mut" title="균일도·2D 분포에 적용 · 기본 30 · 좁히면 정면 외관에 가깝지만 계산 노이즈 큼 · 휘도·필요 광속은 항상 ±10°">기본 30</span></div>
-      <div class="m3-row"><label>가장자리 제외</label><input type="number" min="0" step="0.1" value="${O.edgeExcl}" data-lp-obs="edgeExcl">mm <span class="mut" title="테두리 근처는 균일도 판정에서 뺌">판정에서 뺌</span></div></div>
+      <div class="m3-row"><label>가장자리 제외</label><input type="number" min="0" step="0.1" value="${O.edgeExcl}" data-lp-obs="edgeExcl">mm <span class="mut" title="테두리 근처는 균일도 판정에서 뺌 · 폭 5 mm 미만인 좁은 면은 폭의 10% 까지만 뺌">${edgeNote(O, ui.auto)}</span></div></div>
     <div class="m3-card"><div class="m3-sub">계산 <span class="mut">(빈칸 = 자동)</span></div>
       <div class="m3-row"><label>길이 칸</label><input type="number" min="0.2" step="0.5" value="${O.cellS ?? ''}" placeholder="${autoPh(ui.auto?.cellS)}" data-lp-obs="cellS" data-lp-auto>mm <label>폭 칸</label><input type="number" min="0.1" step="0.1" value="${O.cellW ?? ''}" placeholder="${autoPh(ui.auto?.cellW)}" data-lp-obs="cellW" data-lp-auto>mm</div>
       <div class="m3-row"><label>폭 판정 창</label><input type="number" min="1" step="1" value="${O.winS ?? ''}" placeholder="${autoPh(ui.auto?.winS)}" data-lp-obs="winS" data-lp-auto>mm <span class="mut" title="폭 균일도를 볼 때 길이 방향으로 묶는 길이">폭 균일도용</span></div>

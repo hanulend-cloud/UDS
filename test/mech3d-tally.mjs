@@ -1,5 +1,5 @@
 // 관측 집계: node test/mech3d-tally.mjs
-import { autoWidthCell, LUM_CONE, fmtJudge, nearTarget, judgeNoise, JUDGE_NOISE, sharpNoise, PASS_SE, tallyGeometry, makeAccumulator, tallyStats, windowProfile, autoCells } from '../src/engine/mech3d/tally.js';
+import { edgeOf, autoWidthCell, LUM_CONE, fmtJudge, nearTarget, judgeNoise, JUDGE_NOISE, sharpNoise, PASS_SE, tallyGeometry, makeAccumulator, tallyStats, windowProfile, autoCells } from '../src/engine/mech3d/tally.js';
 import { recognizeLine, lightData, lineFromData } from '../src/engine/mech3d/line.js';
 import { rng } from '../src/engine/l2/mc-slab.js';
 import { runMC3D } from '../src/engine/mech3d/mc3d.js';
@@ -111,11 +111,11 @@ ok(S.counted === nV && S.noiseWarn === false, `집계 셀 ${S.counted}, 노이�
   ok(one.noiseWarn === true, '배치 1개 → 노이즈 경고');
   const noDir = makeAccumulator(G, line, { ...obs, dir: null }); noDir.onExit(0, 1, 50, 3, 2, 0, 0, 1, 1, 0); noDir.onEscape(50, 3, 5, 0, 0, 1, 1, 0);
   ok(noDir.acc.some((v) => v > 0), 'obs.dir null → 라인 관측 방향 사용');
-  const nar = recognizeLine([topFaceMesh(rectTris(0, 0, 100, 1.4), 2)], [{ part: 0, face: 1 }], [0, 0, 1]);
+  const nar = recognizeLine([topFaceMesh(rectTris(0, 0, 100, 0.4), 2)], [{ part: 0, face: 1 }], [0, 0, 1]);
   const GN = tallyGeometry(nar, { ...obs, cellW: 0.5 }), sn = tallyStats(GN, [new Float64Array(GN.ns * GN.nw).fill(1), new Float64Array(GN.ns * GN.nw).fill(1)], obs);
   ok(sn.narrow === true && sn.Uwid === null, `좁은 띠(유효 열 <2): narrow, Uwid null`);
-  const emptyG = tallyGeometry(nar, { ...obs, edgeExcl: 1 }), se = tallyStats(emptyG, [new Float64Array(emptyG.ns * emptyG.nw), new Float64Array(emptyG.ns * emptyG.nw)], obs);
-  ok(se.empty === true && se.sWorst === null, '유효 셀 없음 → empty');
+  const emptyG = tallyGeometry(nar, { ...obs, cellW: 5 }), se = tallyStats(emptyG, [new Float64Array(emptyG.ns * emptyG.nw), new Float64Array(emptyG.ns * emptyG.nw)], obs);
+  ok(se.empty === true && se.sWorst === null, '유효 셀 없음(폭 칸이 띠보다 훨씬 큼) → empty');   // 가장자리 제외 = 폭의 10% 까지라 제외만으로는 비지 않음(2026-11-18)
 }
 {   // Worker 경로: 래스터 없는 lightData 선으로 같은 집계 — G 는 메인에서 전체 선으로 만든 것
   const light = lineFromData(structuredClone(lightData(line))), A = makeAccumulator(G, line, obs), Bq = makeAccumulator(G, light, obs), q = rng(5);
@@ -177,7 +177,7 @@ ok(S.counted === nV && S.noiseWarn === false, `집계 셀 ${S.counted}, 노이�
     ok(uniq.size === 1, `${quality}: 안쪽 ${cols.length}행의 폭 칸 구성 ${uniq.size}가지 (${[...uniq].map((u) => u.split(',').length).join('/')}칸)`);
   }
   // 정말 좁은 면(모든 칸이 일부만 걸침)은 예전 기준 그대로 — 절반 미만이면 칸을 만들지 않음
-  const N = recognizeLine([topFaceMesh(rectTris(0, 0, 100, 1.2), 2)], [{ part: 0, face: 1 }], [0, 0, 1]), Gn = tallyGeometry(N, { faces: [{ part: 0, face: 1 }], dir: [0, 0, 1], cone: 10, edgeExcl: 0.5, targetLen: 0.8, targetWid: 0.5, cellS: 1, cellW: 1 });
+  const N = recognizeLine([topFaceMesh(rectTris(0, 0, 100, 0.8), 2)], [{ part: 0, face: 1 }], [0, 0, 1]), Gn = tallyGeometry(N, { faces: [{ part: 0, face: 1 }], dir: [0, 0, 1], cone: 10, edgeExcl: 0.5, targetLen: 0.8, targetWid: 0.5, cellS: 1, cellW: 2 });   // 2026-11-18: 가장자리 제외 = 폭 10% 라 띠 0.64 mm ÷ 칸 2 mm = 32%
   let nv = 0; for (let k = 0; k < Gn.valid.length; k++) nv += Gn.valid[k];
   ok(nv === 0, `좁은 면: 칸의 절반 미만만 걸치면 칸 없음 (유효 ${nv})`);
 }
@@ -247,11 +247,20 @@ ok(S.counted === nV && S.noiseWarn === false, `집계 셀 ${S.counted}, 노이�
     const cols = []; for (let j = 0; j < G2.nw; j++) { let c = 0; for (let i = 0; i < G2.ns; i++) if (G2.valid[i * G2.nw + j]) c++; if (c > G2.ns * 0.9) cols.push(j); }
     return { G: G2, S: tallyStats(G2, A4, ob), cols };
   };
-  const r2 = ring(2, 'low'), want2 = (1 + 0.625 / 2) / (1 + 1.375 / 2);   // 남은 띠 [0.5, 1.5] mm 를 0.25 mm 4칸 → 칸 중심 0.625 · 1.375
+  const r2 = ring(2, 'low'), want2 = (1 + 0.4 / 2) / (1 + 1.6 / 2);   // 가장자리 제외 0.2 mm(폭 10%) → 남은 띠 [0.2, 1.8] mm 를 0.4 mm 4칸 → 칸 중심 0.4 · 1.6
   ok(r2.cols.length >= 4 && r2.S.Uwid != null && Math.abs(r2.S.rawUwid - want2) < 0.03, `2 mm 링: 폭 칸 ${r2.G.cell.toFixed(2)} mm · 유효 열 ${r2.cols.length} · 폭 균일도 ${r2.S.Uwid == null ? '판정 불가' : (r2.S.rawUwid * 100).toFixed(1) + '%'} (칸 평균 참값 ${(want2 * 100).toFixed(1)}%)`);
   const r20 = ring(20, 'low');
   ok(Math.abs(r20.G.cell - 1.5) < 1e-9, `넓은 링(20 mm)은 칸 그대로 ${r20.G.cell} mm`);
   const L2 = recognizeLine([topFaceMesh(annulusTris(0, 0, 39, 41), 2)], [{ part: 0, face: 1 }], [0, 0, 1]);
   ok(Math.abs(autoWidthCell(L2, { edgeExcl: 0.5, quality: 'low' }) - r2.G.cell) < 1e-12, '화면의 자동 폭 칸 안내 = 실제 쓰는 칸');
+}
+// 2026-11-18 사용자: 2~3 mm 좁은 면은 가장자리 제외를 폭의 10% 정도로 — 0.5 mm 씩 빼면 2.3 mm 링은 1.3 mm(칸 4개)만 남아 평균 곡선이 가운데만 그려짐.
+// 제외 = min(설정값, 폭 × 10%) → 폭 5 mm 이상은 그대로
+{ const ringL = (W) => recognizeLine([topFaceMesh(annulusTris(0, 0, 90.63 - W / 2, 90.63 + W / 2), 2)], [{ part: 0, face: 1 }], [0, 0, 1]);
+  const L23 = ringL(2.3), L20 = ringL(20);
+  ok(Math.abs(edgeOf(L23, { edgeExcl: 0.5 }) - 0.23) < 1e-6 && edgeOf(L20, { edgeExcl: 0.5 }) === 0.5 && edgeOf(L23, { edgeExcl: 0 }) === 0 && edgeOf(L23, {}) > 0.2, `가장자리 제외: 2.3 mm → ${edgeOf(L23, { edgeExcl: 0.5 }).toFixed(2)} mm · 20 mm → 0.5 mm · 0 은 0`);
+  const G = tallyGeometry(L23, { edgeExcl: 0.5, quality: 'low' }); let wmin = 1e9, wmax = -1e9;
+  for (let j = 0; j < G.nw; j++) { let c = 0; for (let i = 0; i < G.ns; i++) if (G.valid[i * G.nw + j]) c++; if (c > G.ns * 0.9) { wmin = Math.min(wmin, G.w0 + j * G.cell); wmax = Math.max(wmax, G.w0 + (j + 1) * G.cell); } }
+  ok(wmax - wmin > 1.7 && wmax - wmin < 1.95, `2.3 mm 링 판정 폭 ${(wmax - wmin).toFixed(2)} mm (2.3 − 2×0.23 = 1.84)`);
 }
 done();

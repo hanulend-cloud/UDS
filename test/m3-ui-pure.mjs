@@ -1401,6 +1401,8 @@ done();
   const { readFileSync } = await import('node:fs'), lp = readFileSync(new URL('../src/ui/mech3d-light-panel.js', import.meta.url), 'utf8'), rp = readFileSync(new URL('../src/ui/m3/results-panel.js', import.meta.url), 'utf8');
   const longs = ['균일도·2D 분포에 적용 · 기본 30', '이 오차 이하가 되면 계산을 멈춤', '폭 균일도를 볼 때 길이 방향으로 묶는 길이', '테두리 근처는 균일도 판정에서 뺌', '도면·LED STEP 에서 LED 를 찾음'];
   okS(longs.every((t) => lp.includes(`title="${t}`) && !lp.includes(`>${t}`)), '긴 설명은 보이는 글이 아니라 툴팁');
+  const { edgeNote } = await import('../src/ui/mech3d-light-panel.js');
+  okS(edgeNote({ edgeExcl: 0.5 }, { edge: 0.23 }) === '좁은 면 → 폭 10% = 0.23 mm' && edgeNote({ edgeExcl: 0.5 }, { edge: 0.5 }) === '판정에서 뺌' && edgeNote({ edgeExcl: 0.5 }, null) === '판정에서 뺌', '좁은 면은 실제 가장자리 제외 값(폭 10%)을 보여 줌');
   okS(/sub: '최대 대비'/.test(rp) && /data-r="avgs" title="/.test(rp), '평균 광량 아래 = 최대 대비(설명은 툴팁)');
 }
 // 기구 최적화 창·광분포 창 회색 글(2026-11-18 사용자) — 짧게 + 긴 설명은 title

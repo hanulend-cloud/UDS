@@ -14,7 +14,7 @@ import { findLeds, supportPart, emitterFaceAway, autoLedGroup, autoStepLeds, fin
 import { loadClear, saveClear, clearExportJson, clearImport, parseMaterialFile } from '../../model/material-io.js';
 import { setPartMaterial, setPartMaterialParam, syncPcb, setPcbOff, pcbAllOff, setPcbR, pcbPickPlan, pcbNames, clampPcbPct, CLEAR_BASE, applyClearEntry, clearEntryFromForm, editClearEntry, syncClearParts } from '../../engine/mech3d/materials.js';
 import { lineFromData, lightData, obsDirection, widthDirection } from '../../engine/mech3d/line.js';
-import { tallyGeometry, tallyStats, autoCells, autoWidthCell, quickErr, QUICK_SE } from '../../engine/mech3d/tally.js';
+import { tallyGeometry, tallyStats, autoCells, autoWidthCell, edgeOf, quickErr, QUICK_SE } from '../../engine/mech3d/tally.js';
 import { isUntraced, tracedParts } from '../../engine/mech3d/scene3d.js';
 import { bounds } from '../../engine/mech3d/mesh.js';
 import { runGeomChecks, checkInterference, boxTravel, checkLeak } from '../../engine/mech3d/checks.js';
@@ -2157,7 +2157,7 @@ function lineInfo() {
   return M.observe.faces.length && !S.lineErr ? '라인 인식 중…' : '';
 }
 // 자동 격자 값(표시용 — tally.js 규칙과 같음. w 칸은 최대 국소 폭 대신 라인 폭으로 근사) (main.js:376)
-function autoGrid() { const l = A.store.session.line, O = A.store.mspec.observe; return l ? { ...autoCells(l.length, l.width, O.quality), cellW: autoWidthCell(l, O), winS: Math.max(5, l.length / 10) } : null; }   // 폭 칸 = 실제 쓰는 값(좁은 면은 띠 ÷ 4)
+function autoGrid() { const l = A.store.session.line, O = A.store.mspec.observe; return l ? { ...autoCells(l.length, l.width, O.quality), cellW: autoWidthCell(l, O), edge: edgeOf(l, O), winS: Math.max(5, l.length / 10) } : null; }   // 폭 칸 = 실제 쓰는 값(좁은 면은 띠 ÷ 4)
 function renderAll(tag = 'all') {
   const st = A.store, M = st.mspec, S = st.session;
   const LS = ledsNow();

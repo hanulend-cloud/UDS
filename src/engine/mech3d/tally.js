@@ -54,19 +54,22 @@ export function autoCells(L, width, quality) {
 // 면의 최대 반폭(중심선에서 가장 먼 점) mm
 const maxHalfOf = (line) => { const R = line.data.raster; let dtMax = 0; for (let k = 0; k < R.mask.length; k++) if (R.mask[k] && R.dt[k] > dtMax) dtMax = R.dt[k]; return Math.max(line.width / 2, dtMax * R.cell); };
 // 자동 폭 칸(좁은 면 = 가장자리 제외 뒤 남은 띠 ÷ 4, 최소 0.2 mm) — 화면의 '자동' 안내도 같은 값
+// 가장자리 제외(2026-11-18 사용자: 2~3 mm 좁은 면은 폭의 10% 정도) = min(설정값, 폭 × 10%) — 폭 5 mm 이상(기본 0.5 mm)은 그대로
+export const EDGE_FRAC = 0.1;
+export const edgeOf = (line, obs) => { const e = obs.edgeExcl ?? 0.5, w = line?.width; return Number.isFinite(w) && w > 0 ? Math.min(e, EDGE_FRAC * w) : e; };
 export const narrowBand = (maxHalf, edge, cell) => { const band = 2 * (maxHalf - edge); return band > 0 && band / cell < 4 - 1e-9 ? band : 0; };
 export function autoWidthCell(line, obs) {
-  const mh = maxHalfOf(line), c = autoCells(line.length, 2 * mh, obs.quality).cellW, band = narrowBand(mh, obs.edgeExcl ?? 0.5, c);
+  const mh = maxHalfOf(line), c = autoCells(line.length, 2 * mh, obs.quality).cellW, band = narrowBand(mh, edgeOf(line, obs), c);
   return band ? Math.max(band / 4, 0.2) : c;
 }
 export function tallyGeometry(line, obs) {
-  const edge = obs.edgeExcl ?? 0.5, L = line.length, R = line.data.raster;
+  const edge = edgeOf(line, obs), L = line.length, R = line.data.raster;
   const maxHalf = maxHalfOf(line);
   const ac = autoCells(L, 2 * maxHalf, obs.quality), cellS = obs.cell ?? obs.cellS ?? ac.cellS;
   let cell = obs.cell ?? obs.cellW ?? ac.cellW;   // cell = w 칸
   const ns = Math.max(1, Math.round(L / cellS)), ds = L / ns;
   let nw = Math.ceil((2 * (maxHalf + 2 * cell)) / cell), w0 = -nw * cell / 2;
-  // 좁은 면(2026-11-18 사용자: 2 mm 링의 폭 방향을 못 잡음) — 가장자리 제외 뒤 남은 띠에 자동 칸이 4개 미만이면 띠를 4칸으로 나누고(최소 0.2 mm)
+  // 좁은 면(2026-11-18 사용자: 2 mm 링의 폭 방향을 제대로 인식 못 함) — 가장자리 제외 뒤 남은 띠에 자동 칸이 4개 미만이면 띠를 4칸으로 나누고(최소 0.2 mm)
   // 칸 경계를 띠 가장자리에 맞춤. 전에는 칸이 띠에 걸쳐 절반 넘게 들어간 열이 1~2개뿐이라 폭 판정이 안 되거나 틀렸음. 칸을 직접 지정했거나 넓은 면은 그대로
   const band = narrowBand(maxHalf, edge, cell);
   if (obs.cell == null && obs.cellW == null && band) {
