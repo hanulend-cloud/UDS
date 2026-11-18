@@ -55,7 +55,14 @@ export function nextProgress(p, photons, noise, goal) {
 export const fmtProg = (v) => (Number.isFinite(v) ? (Math.floor(v * 10 + 1e-9) / 10).toFixed(1) : '0.0');
 // 광선 한도(2026-11-11) — 보는 각도 ±30° 기준 16억(±90° 때 4억의 4배) × 화질(칸이 많을수록 더)
 export const photonCap = (quality) => 1.6e9 * ({ mid: 2, high: 4 }[quality] ?? 1);
-export function createProgressive({ ports, timers = globalThis, onUpdate = () => {}, opts = {} }) {
+// 늦은 포트 기록(2026-11-18 사용자) — iv = 3D 화면 조작 구간 [[시작, 끝|null(진행 중)]] (ms). [t0, t1] 과 겹친 ms
+export function interactOverlap(iv, t0, t1) { let s = 0; for (const [a, b] of iv ?? []) s += Math.max(0, Math.min(t1, b ?? t1) - Math.max(t0, a)); return s; }
+export function slowPortText({ gpu, N, ms, last }, interactMs, spanMs) {
+  const it = interactMs > 0 ? `그동안 3D 화면 조작 ${(interactMs / 1000).toFixed(1)}초(${Math.round((interactMs / Math.max(1, spanMs)) * 100)}%)` : '3D 화면 조작 없음';
+  return `계산 Worker 늦어 뺌 — ${gpu ? 'GPU' : 'CPU'} Worker · 청크 ${(N / 1e4).toFixed(1)}만 광선 · ${Math.round(ms / 1000)}초 안에 답 없음 · ${it}${last ? ' · 남은 Worker 없음 → 계산 실패' : ''}`;
+}
+// onSlow({ k, gpu, N, ms, t0, t1, last }) = 청크 제한 시간에 걸려 이번 계산에서 뺀 포트(last = 남은 포트 없음 → 곧 실패)
+export function createProgressive({ ports, timers = globalThis, onUpdate = () => {}, onSlow = null, opts = {} }) {
   let prog = null;   // 표시 진행률(nextProgress)
   const o = { ...PROG_DEFAULTS, ...opts };
   const cap = () => job?.maxPhotons ?? o.maxPhotons;   // 계산 한도 — 작업(화질)별, 없으면 기본
@@ -149,7 +156,9 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
           // 그 청크 번호는 다른 포트가 같은 시드로 다시 계산. 늦게 오는 답은 버림(pump 가 끝났으므로). 남은 포트가 없을 때만 실패
           if (g !== gen) return;
           dead[k] = g; retry.push({ c, N, b });
-          if (!ports.some((p, q) => dead[q] !== g && !p.off?.())) { fail(g, e); return; }
+          const last = !ports.some((p, q) => dead[q] !== g && !p.off?.());
+          try { onSlow?.({ k, gpu: !!ports[k].gpu, N, ms: chunkLimit, t0, t1: now(), last }); } catch { /* 기록 실패가 계산을 막지 않게 */ }
+          if (last) { fail(g, e); return; }
           pumpAll(g); return;
         }
         if (g !== gen) return;   // 그사이 다시 시작·취소됨 — 버림

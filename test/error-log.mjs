@@ -54,4 +54,8 @@ const mem = (init = {}) => { const d = { ...init }; return { getItem: (k) => d[k
   ok(g.includes('스크립트 밖 8.6초') && g.includes('(이름 없음) (viewer.js:5)'), `스크립트가 아니면 그리기·GPU 대기로 표시: ${g}`);
   ok(stallCause([]) === '' && stallCause(null) === '' && stallCause([{ startTime: 0, duration: 300, scripts: [] }]) === '', '기록이 없거나 짧은 프레임뿐이면 빈 문구');
 }
+{ // 늦은 Worker 하나만 뺌(2026-11-18) — 경고(계산은 계속). GPU 낱말이 있어도 'GPU 드라이버 멈춤' 이 아님
+  const x = explainError('계산 Worker 늦어 뺌 — GPU Worker · 청크 9.0만 광선 · 30초 안에 답 없음 · 그동안 3D 화면 조작 12.3초');
+  ok(x.level === 'warn' && /늦어/.test(x.title) && /계속/.test(x.todo), `늦은 Worker = 경고: ${x.title}`);
+}
 console.log(fail ? `${fail} FAIL` : 'all PASS'); if (fail) process.exit(1);

@@ -1,5 +1,5 @@
 // 점진 계산 제어기(가짜 Worker 포트 + Worker 모의 동등성): node test/m3-progressive.mjs
-import { createProgressive, chunkSeed, photometry, requiredFlux, photonCap, nextProgress, fmtProg } from '../src/ui/m3/progressive.js';
+import { createProgressive, interactOverlap, slowPortText, chunkSeed, photometry, requiredFlux, photonCap, nextProgress, fmtProg } from '../src/ui/m3/progressive.js';
 import { runJob } from '../src/engine/mech3d/job.js';
 import { makeChunkHost } from '../src/engine/mech3d/chunk-host.js';
 import { lightData } from '../src/engine/mech3d/line.js';
@@ -182,6 +182,26 @@ const OPT = { chunkN: 1000, fixedChunk: true, bins: 10, debounceMs: 500, tickMs:
   P.restart(job(2)); await T.advance(500);
   ok(scenes(a).length === 2 && chunks(a).length === nA + 1, '다음 계산에서는 그 포트도 다시 씀');
   P.dispose();
+}
+{   // 늦어서 뺀 포트 알림(2026-11-18 사용자: 오류 기록에 어느 Worker·3D 조작 여부) — onSlow({ k, gpu, N, ms, t0, t1, last })
+  const T = fakeTimers(), a = manualPort(), b = delayedPort(T, 100), got = [];
+  a.gpu = true;
+  const P = createProgressive({ ports: [a, b], timers: T, onSlow: (x) => got.push(x), opts: { ...OPT, chunkTimeoutMs: 3000, targetNoise: 1e-9 } });
+  P.restart(job(1)); await T.advance(500 + 3000);
+  ok(got.length === 1 && got[0].gpu === true && got[0].k === 0 && got[0].N === 1000 && got[0].ms === 3000 && got[0].t1 - got[0].t0 === 3000 && got[0].last === false, `늦은 포트 알림: ${JSON.stringify(got[0])}`);
+  P.dispose();
+  const T2 = fakeTimers(), c = manualPort(), g2 = [];
+  const Q = createProgressive({ ports: [c], timers: T2, onSlow: (x) => g2.push(x), opts: { ...OPT, chunkTimeoutMs: 3000 } });
+  Q.restart(job(1)); await T2.advance(500 + 3000);
+  ok(g2.length === 1 && g2[0].gpu === false && g2[0].last === true && Q.snapshot().state === 'error', '마지막 포트도 알린 뒤 실패(last = true)');
+  Q.dispose();
+}
+{   // 조작 시간 겹침 · 기록 문구(순수)
+  const iv = [[0, 2000], [5000, 9000], [12000, null]];
+  ok(interactOverlap(iv, 1000, 13000) === 6000 && interactOverlap([], 0, 9) === 0 && interactOverlap(iv, 2500, 4000) === 0, `조작 겹침: ${interactOverlap(iv, 1000, 13000)}`);
+  const t1 = slowPortText({ gpu: true, N: 90000, ms: 30000, last: false }, 12300, 30000), t2 = slowPortText({ gpu: false, N: 5000, ms: 30000, last: true }, 0, 30000);
+  ok(t1 === '계산 Worker 늦어 뺌 — GPU Worker · 청크 9.0만 광선 · 30초 안에 답 없음 · 그동안 3D 화면 조작 12.3초(41%)', t1);
+  ok(t2 === '계산 Worker 늦어 뺌 — CPU Worker · 청크 0.5만 광선 · 30초 안에 답 없음 · 3D 화면 조작 없음 · 남은 Worker 없음 → 계산 실패', t2);
 }
 {   // 모든 포트가 늦으면 지금처럼 error
   const T = fakeTimers(), a = manualPort(), b = manualPort();

@@ -19,7 +19,7 @@ import { isUntraced, tracedParts } from '../../engine/mech3d/scene3d.js';
 import { bounds } from '../../engine/mech3d/mesh.js';
 import { runGeomChecks, checkInterference, boxTravel, checkLeak } from '../../engine/mech3d/checks.js';
 import { createStore, PHYSICS, GEOM_CHECK, PERSIST_TAGS } from './store.js';
-import { createProgressive, photonCap, fmtProg } from './progressive.js';
+import { createProgressive, photonCap, fmtProg, interactOverlap, slowPortText } from './progressive.js';
 import { createPool } from './pool.js';
 import * as L from './leds.js';
 import { buildObsOverlay, cellColors, extractFaces, mapMinCell, mapMaxCell, obsPoint } from './colormap.js';
@@ -91,6 +91,9 @@ export function materialsChanged(msg) {
   A.store.update('material', (m, x) => { for (const e of list) m.parts = syncClearParts(m.parts, e.id, e); x.status = msg; });
 }
 export function adminChanged() { if (A) A.store.update('session', (_, x) => { x.status = isAdmin() ? '관리자 모드 켬 — 소재 DB 관리·숫자 물성 칸이 보임' : '관리자 모드 끔'; }); }
+// 3D 화면 조작 구간(2026-11-18) — 늦은 계산 Worker 기록에 '그동안 조작했는지'. 최근 50개만
+const interactIv = [];
+function noteInteract(on) { const t = performance.now(), l = interactIv.at(-1); if (on) { if (!l || l[1] != null) interactIv.push([t, null]); if (interactIv.length > 50) interactIv.shift(); } else if (l && l[1] == null) l[1] = t; }
 export function setStatus(t) { if (/실패|오류|응답 없음|시간 초과/.test(t ?? '')) reportError('작업', t); A?.store.update('session', (_, s) => { s.status = t; }); }
 // 오류 기록에 함께 남길 '그때 하던 일' — 최적화 단계 · 계산 상태 · 도면 크기 · 장치
 export function errorContext() {
@@ -179,7 +182,7 @@ globalThis.__m3 = () => A;   // 브라우저 점검용: __m3().prog.snapshot(), 
 
 function getView() {
   viewP ??= import('../mech3d-view.js').then(({ createMech3dView }) => {
-    const v = createMech3dView($('#mech3d-canvas'), { onPick: (s) => { if (A) onPick(s); }, onContext: (c) => { if (A) onViewContext(c); }, gizmo: $('#m3-axes'), onInteract: (on) => pool?.setInteractive?.(on),
+    const v = createMech3dView($('#mech3d-canvas'), { onPick: (s) => { if (A) onPick(s); }, onContext: (c) => { if (A) onViewContext(c); }, gizmo: $('#m3-axes'), onInteract: (on) => { noteInteract(on); pool?.setInteractive?.(on); },
       onLost: () => { const n = getMech3d()?.combined?.partOf?.length ?? 0; reportError('3D 화면', `3D 화면 끊김 — 그래픽 메모리 부족으로 보임(삼각형 ${Math.round(n / 1e4)}만 개)`); setStatus(`3D 화면이 끊겨 도면이 안 보임 — 그래픽 메모리 부족으로 보임(삼각형 ${Math.round(n / 1e4)}만 개). 다른 프로그램·탭을 닫고 새로고침하세요`); } });
     const el = $('#m3-views');
     el.innerHTML = viewBarHtml();
@@ -234,7 +237,7 @@ export async function mount(ctx) {
     ctx.persist();
   }
   const a = A = { ctx, store, pool, view: null, meshShown: null, lineKey: '', Gc: null, obsShown: null, checks: {}, markKey: '', timing: { start: 0, first: null, noise5: null } };
-  a.prog = createProgressive({ ports: pool.ports(), onUpdate: onCalc, opts: { targetNoise: ctx.mspec.observe.targetNoise ?? 0.01 } });
+  a.prog = createProgressive({ ports: pool.ports(), onUpdate: onCalc, onSlow: (x) => reportError('계산', slowPortText(x, interactOverlap(interactIv, x.t0, x.t1), x.t1 - x.t0)), opts: { targetNoise: ctx.mspec.observe.targetNoise ?? 0.01 } });
   a.results = createResultsPanel($('#m3-res'), { onOpt: () => { if (monitor) { monitor.open(); monitor.expand(); } }, onNote: (t) => setStatus(t), onCalc: (k) => calcCtl(k), calcBusy: () => !!A?.ad?.running, onLeak: () => A.store.update('session', (_, s) => { s.focusCheck = s.focusCheck === 'leak' ? null : 'leak'; }), onBig: (node) => { A?.simDash?.attach(node); winOpenChip('sim', !!node); }, anchor: () => document.querySelector('#m3-cmd [data-c="sim"]'), fileName: () => String(A?.store?.mspec?.name ?? 'uds').replace(/\.(stp|step)$/i, ''), onQuality: (v) => A.store.update('observe', (m) => { m.observe.quality = v; }) });
   // 균일도 그래프 칸 = 창 왼쪽 아래(실행·결과 밑, 2026-11-05)
   let chartEl = $('#m3-odchart'); if (!chartEl) { chartEl = document.createElement('div'); chartEl.id = 'm3-odchart'; $('#m3-factor')?.appendChild(chartEl); }
