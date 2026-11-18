@@ -81,7 +81,10 @@ export function createAdRunner({ ports, now: now0 = () => globalThis.performance
         const m = Math.min(size, N - issued);
         let b = 0; for (let i = 1; i < batches; i++) if (bIss[i] < bIss[b]) b = i;   // 보낸 광자가 가장 적은 배치(고정 청크면 k % batches 와 같음)
         issued += m; bIss[b] += m; k++;
-        const t = now(), r = await send(job, { p, body: { N: m, ...(rw ? { rw } : {}) } });
+        const t = now(), r = await send(job, { p, body: { N: m, ...(timed ? { cpuMax: chunkN } : {}), ...(rw ? { rw } : {}) } });
+        // GPU 가 이 묶음 중에 멈춰 꺼짐 — Worker 가 큰 GPU 묶음을 CPU 로 통째 돌리지 않고 돌려보냄(돌리면 'Worker 응답 없음 (chunk 90초)', 2026-11-18 다른 PC).
+        // 이 묶음은 세지 않고 CPU 크기로 이어 감(화면 계산 progressive 와 같은 규칙)
+        if (r.gpuRetry) { issued -= m; bIss[b] -= m; k--; size = Math.min(size, MIN_CHUNK); continue; }
         if (timed) { const ms = r.ms > 0 ? r.ms : now() - t; if (ms > 0) size = Math.max(MIN_CHUNK, Math.min(chunkN * (r.gpu ? 8 : 1), Math.round((m / ms) * chunkMs * (r.gpu ? 4 : 1)))); }   // GPU 포트는 큰 청크가 빠름 — 묶음마다 고정 비용(실측 ~0.7초: 1000개 1.0초 · 4000개 1.9초)이 있어 목표 시간을 4배로(2026-11-15)
         bDone[b] += m;
         onProgress?.(Math.min(1, Math.max(issued / N, timed ? (now() - t0) / maxMs : 0)));   // 광선 수와 시간 한도 중 먼저 닿는 쪽

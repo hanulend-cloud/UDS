@@ -152,4 +152,18 @@ const fakePorts = (log, delay = 0) => Array.from({ length: 3 }, (_, w) => ({ sen
   const r2 = await R.trace({ sceneKey: 'u', scene: { G: { ns: 2, nw: 2 } } }, { N: 5e6, maxMs: 10000, minN: 0, firstN: 1000, batches: 2, untilMs: 2000, until: () => { asked++; return false; } });
   ok(r2.ms >= 10000 && r2.ms <= 12000 && asked >= 3, `기준에 못 닿으면 시간 한도까지 (${r2.ms} ms · 확인 ${asked}회)`);
 }
+{ // 2026-11-18 다른 PC: 최종 판정 중 GPU 가 멈추면 큰 GPU 묶음(최대 160만)을 CPU 가 통째로 돌려 'Worker 응답 없음 (chunk 90초)' — 화면 계산처럼 cpuMax 를 보내고
+  // gpuRetry 가 오면 그 묶음은 세지 않고 CPU 크기로 이어 감
+  let t = 0, gpuOn = true; const got = [];
+  const port = { gpu: true, send: async (m) => { if (m.type === 'scene') return { sceneKey: m.sceneKey, ready: true };
+    got.push({ N: m.N, cpuMax: m.cpuMax, gpu: gpuOn });
+    if (gpuOn && got.length === 3) { gpuOn = false; return { sceneKey: m.sceneKey, gpuRetry: true }; }   // 세 번째 묶음 중 GPU 꺼짐
+    t += gpuOn ? m.N / 1000 : m.N / 50;
+    return { sceneKey: m.sceneKey, acc: new Float64Array(4).fill(1), cnt: new Uint32Array(4), ledger: { emitted: m.N, escaped: 0, absSurf: 0, absVol: 0, lost: 0, rrLoss: 0, rrGain: 0 }, leak: {}, escObs: 0, ms: gpuOn ? m.N / 1000 : m.N / 50, ...(gpuOn ? { gpu: true } : {}) }; } };
+  const R = createAdRunner({ ports: [port], now: () => t }), r = await R.trace({ sceneKey: 'g', scene: { G: { ns: 2, nw: 2 } } }, { N: 3e6, maxMs: 60000, minN: 1.5e6, chunkN: 2e5, batches: 2 });
+  const afterOff = got.slice(3), big = got[2];
+  ok(got.every((g) => g.cpuMax === 2e5), `묶음마다 CPU 한도 전달 (${got[0].cpuMax})`);
+  ok(big.N > 2e5 && afterOff.length > 0 && afterOff.every((g) => g.N <= 2e5), `GPU 꺼진 뒤 CPU 묶음 ≤ 20만 (꺼질 때 묶음 ${big.N} · 뒤 최대 ${Math.max(...afterOff.map((g) => g.N))})`);
+  ok(r.photons === got.filter((g, i) => i !== 2).reduce((a, g) => a + g.N, 0), `돌려보낸 묶음은 광자 수에 안 셈 (${r.photons})`);
+}
 done();
