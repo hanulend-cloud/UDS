@@ -63,6 +63,7 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
   let paths = {}, bins, binIssued, ledger, leak, nextChunk, issued, retry, doneChunks, photons, ignored, snap, early, nMin, nMax, seeded = false;   // seeded = 최종 판정 값을 넘겨받음 → 대칭 합치기 안 함(판정은 전체 영역)
   let pendingSeed = null, wantPaused = false, disposed = false;   // wantPaused: 대기·시작 중 일시정지 요청 → 시작될 때 적용
   const busy = ports.map(() => 0);   // 포트별로 돌고 있는 펌프의 세대(0 = 쉼)
+  const dead = ports.map(() => 0);   // 포트별로 늦어서 뺀 세대 — 그 계산 동안만 뺌(다음 계산에서는 다시 씀)
   const ready = ports.map(() => 0);  // 포트별로 장면이 준비된 세대 — 준비된 포트부터 바로 청크를 보낸다
   const size = ports.map(() => o.minChunk);   // 포트별 다음 청크 크기(적응형)
   const now = () => (typeof timers.now === 'function' ? timers.now() : globalThis.performance?.now?.() ?? Date.now());
@@ -123,7 +124,7 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
   }
   function fail(g, e) { if (g !== gen) return; stopTick(); state = 'error'; error = String(e?.message ?? e); emit(); }
   let chunkLimit = o.chunkTimeoutMs;   // 이번 도면의 청크 제한 시간(begin 에서 정함)
-  function pumpAll(g) { ports.forEach((_, k) => { if (ready[k] === g && busy[k] !== g) pump(k, g); }); }
+  function pumpAll(g) { ports.forEach((_, k) => { if (ready[k] === g && busy[k] !== g && dead[k] !== g) pump(k, g); }); }
   // 다음 청크 크기 — 잰 계산 시간(Worker 의 r.ms, 없으면 왕복 시간)으로 ≈chunkMs 분량
   // GPU 포트(응답 gpu:true)는 한 번에 많이 보낼수록 빠름(청크마다 광원 표본·되읽기 비용) — 목표 시간 ×3, 상한 ×20
   function adapt(k, N, ms, gpu = false) {
@@ -143,7 +144,14 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
         else { c = nextChunk++; N = Math.min(o.fixedChunk ? o.chunkN : size[k], cap() - issued); issued += N; b = pickBin(c); binIssued[b] += N; }
         let r;
         const t0 = now();
-        try { r = await send(ports[k], { type: 'chunk', sceneKey: job.sceneKey, seed: chunkSeed(o.seedBase, c), N, cpuMax: o.maxChunk }, chunkLimit); } catch (e) { fail(g, e); return; }
+        try { r = await send(ports[k], { type: 'chunk', sceneKey: job.sceneKey, seed: chunkSeed(o.seedBase, c), N, cpuMax: o.maxChunk }, chunkLimit); } catch (e) {
+          // 이 포트만 늦음(2026-11-18 — 3D 화면을 돌리는 동안 GPU 청크가 몇 배 느려져 'Worker 응답 없음 (chunk 30초)' 로 계산 전체가 실패) → 이번 계산에서 이 포트만 빼고
+          // 그 청크 번호는 다른 포트가 같은 시드로 다시 계산. 늦게 오는 답은 버림(pump 가 끝났으므로). 남은 포트가 없을 때만 실패
+          if (g !== gen) return;
+          dead[k] = g; retry.push({ c, N, b });
+          if (!ports.some((p, q) => dead[q] !== g && !p.off?.())) { fail(g, e); return; }
+          pumpAll(g); return;
+        }
         if (g !== gen) return;   // 그사이 다시 시작·취소됨 — 버림
         // GPU 가 이 청크 중에 멈춰 꺼짐 — Worker 가 큰 GPU 몫을 CPU 로 통째 돌리지 않고 돌려보냄. 광자를 세지 않고 CPU 크기로 이어 감(2026-11-12)
         if (r.gpuRetry) {

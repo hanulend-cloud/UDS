@@ -166,6 +166,30 @@ const OPT = { chunkN: 1000, fixedChunk: true, bins: 10, debounceMs: 500, tickMs:
   await T2.advance(1);
   ok(Q.snapshot().state === 'error' && /Worker 응답 없음/.test(Q.snapshot().error), '청크 응답 없음 → error');
 }
+{   // 포트 하나만 늦음(2026-11-18 사용자 'Worker 응답 없음 (chunk 30초)' 7번 — 3D 화면을 돌리면 GPU 청크가 몇 배 느려짐) → 그 포트만 이번 계산에서 빼고 나머지로 계속
+  const T = fakeTimers(), a = manualPort(), b = delayedPort(T, 100);
+  const P = createProgressive({ ports: [a, b], timers: T, opts: { ...OPT, chunkTimeoutMs: 3000, targetNoise: 1e-9 } });
+  P.restart(job(1)); await T.advance(500);
+  const c0 = chunks(a)[0];
+  await T.advance(3000);
+  const s = P.snapshot(), nA = chunks(a).length, nB = chunks(b).length;
+  ok(s.state === 'running' && !s.error, `늦은 포트 하나 → 계산 계속 (${s.state} ${s.error ?? ''})`);
+  ok(chunks(b).some((m) => m.seed === c0.seed), '늦은 포트의 청크 번호는 다른 포트가 다시 계산(같은 시드)');
+  await T.advance(2000);
+  ok(chunks(a).length === nA && chunks(b).length > nB, `늦은 포트에는 더 보내지 않음 (a ${nA}→${chunks(a).length}, b ${nB}→${chunks(b).length})`);
+  const ph = P.snapshot().photons; a.pend.shift().res(make(c0)); await T.advance(0);
+  ok(P.snapshot().photons === ph, '늦게 도착한 답은 세지 않음(같은 청크를 두 번 세지 않게)');
+  P.restart(job(2)); await T.advance(500);
+  ok(scenes(a).length === 2 && chunks(a).length === nA + 1, '다음 계산에서는 그 포트도 다시 씀');
+  P.dispose();
+}
+{   // 모든 포트가 늦으면 지금처럼 error
+  const T = fakeTimers(), a = manualPort(), b = manualPort();
+  const P = createProgressive({ ports: [a, b], timers: T, opts: { ...OPT, chunkTimeoutMs: 3000 } });
+  P.restart(job(1)); await T.advance(500 + 3000);
+  ok(P.snapshot().state === 'error' && /Worker 응답 없음 \(chunk 3초\)/.test(P.snapshot().error), `모든 포트 응답 없음 → error (${P.snapshot().error})`);
+  P.dispose();
+}
 {   // 대기·시작 중 일시정지 → 시작하면 바로 paused, 재개하면 진행
   const T = fakeTimers(), p = delayedPort(T);
   const P = createProgressive({ ports: [p], timers: T, opts: OPT });
