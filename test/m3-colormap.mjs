@@ -1,8 +1,8 @@
 // 관측면 색지도: node test/m3-colormap.mjs
 import { recognizeLine } from '../src/engine/mech3d/line.js';
 import { tallyGeometry } from '../src/engine/mech3d/tally.js';
-import { ramp, NO_DATA, srgbColorsToLinear, extractFaces, subdivide, cellIndex, vertexCells, cellColors, buildObsOverlay, mapMinCell, mapMaxCell, obsPoint } from '../src/ui/m3/colormap.js';
-import { topFaceMesh, rectTris, boxMesh, ok, done } from './mech3d-util.mjs';
+import { ramp, NO_DATA, srgbColorsToLinear, extractFaces, subdivide, cellIndex, vertexCells, cellColors, buildObsOverlay, mapMinCell, mapMaxCell, obsPoint, startSection } from '../src/ui/m3/colormap.js';
+import { topFaceMesh, rectTris, annulusTris, boxMesh, ok, done } from './mech3d-util.mjs';
 
 const top = topFaceMesh(rectTris(0, 0, 100, 6), 2), faces = [{ part: 0, face: 1 }];
 const line = recognizeLine([top], faces, [0, 0, 1]), obs = { faces, dir: [0, 0, 1], cone: 90, edgeExcl: 0.5, targetLen: 0.8, targetWid: 0.8, cellS: 1, cellW: 0.75 };   // 격자 직접 지정(아래 행·칸 번호 = 1 mm 칸 기준)
@@ -68,5 +68,15 @@ ok(ramp(0).every((v, k) => Math.abs(v - [0x20, 0x30, 0x6e][k] / 255) < 1e-12) &&
 { // 최고점(2026-11-17 사용자) — 유효 칸 중 가장 높은 값, 같으면 앞 칸
   const Gt = { ns: 2, nw: 3, valid: Uint8Array.from([1, 1, 0, 1, 1, 1]) };
   ok(mapMaxCell(Gt, Float64Array.from([5, 9, 99, 2, 9, 3])) === 1 && mapMaxCell(Gt, new Float64Array(6)) === -1, '최고 칸 = 유효 칸만 · 같으면 앞 칸 · 빛 없으면 없음');
+}
+// 2026-11-18 사용자: 링(닫힌 선)은 2D 를 펼칠 때 시작점 s = 0 이 3D 어디인지 — 그 자리 단면선(폭 방향) + 진행 방향 화살표
+{ const ring = topFaceMesh(annulusTris(0, 0, 37, 43), 2), fr = [{ part: 0, face: 1 }], lr = recognizeLine([ring], fr, [0, 0, 1]);
+  const Gr = tallyGeometry(lr, { faces: fr, dir: [0, 0, 1], cone: 90, edgeExcl: 0.5, targetLen: 0.8, targetWid: 0.8 }), ov = buildObsOverlay([ring], fr, lr, Gr);
+  const sec = startSection(ov, Gr), P = sec?.line ?? [], rad = (p) => Math.hypot(p[0], p[1]);
+  const [x0, y0] = lr.fromSW(0, 0), ang = Math.atan2(y0, x0), angOf = (p) => Math.atan2(p[1], p[0]), dA = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+  ok(P.length >= 2 && Math.abs(rad(P[0]) - rad(P.at(-1))) > 5 && P.every((p) => dA(angOf(p), ang) < 0.05), `링 시작 단면: 점 ${P.length}개 · 안→밖 ${rad(P[0]).toFixed(1)}~${rad(P.at(-1)).toFixed(1)} mm · s = 0 각도 그대로`);
+  const pa = (s) => { const [x, y] = lr.fromSW(s, 0); return Math.atan2(y, x); }, ar = sec?.arrow, Lr = Gr.L;
+  ok(ar && dA(angOf(ar[1]), pa(10)) < dA(angOf(ar[1]), pa(Lr - 10)), '화살표 = s 가 늘어나는 쪽');
+  ok(startSection(ov, { ...Gr, closed: false }) === null, '열린 선(직선) = 없음');
 }
 done();

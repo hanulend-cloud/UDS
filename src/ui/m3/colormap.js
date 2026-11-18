@@ -118,6 +118,23 @@ export function obsPoint(ov, G, s, w) {
   }
   return best < 0 ? null : [ov.positions[3 * best], ov.positions[3 * best + 1], ov.positions[3 * best + 2]];
 }
+// 닫힌 선(링)의 시작점 s = 0 단면(2026-11-18 사용자) — 2D 를 펼칠 때 0 이 3D 어디인지·어느 쪽으로 도는지.
+// line = s ≈ 0 인 덧그림 정점을 폭(w) 순서로(안 → 밖), arrow = [가운데 s=0 점, s 가 늘어나는 쪽 점]. 열린 선 = null
+export function startSection(ov, G) {
+  if (!G?.closed || !ov?.sw?.length) return null;
+  const n = ov.sw.length / 2, L = G.L, lim = 0.6 * G.ds, by = new Map();
+  for (let v = 0; v < n; v++) {
+    const s = ((ov.sw[2 * v] % L) + L) % L, d = Math.min(s, L - s);
+    if (d > lim) continue;
+    const w = ov.sw[2 * v + 1], key = Math.round(w / (0.01 * G.cell)), o = by.get(key);
+    if (!o || d < o.d) by.set(key, { d, w, v });
+  }
+  const pts = [...by.values()].sort((a, b) => a.w - b.w);
+  if (pts.length < 2) return null;
+  const P = (v) => [ov.positions[3 * v], ov.positions[3 * v + 1], ov.positions[3 * v + 2]], wc = (pts[0].w + pts.at(-1).w) / 2;
+  const a0 = obsPoint(ov, G, 0, wc), a1 = obsPoint(ov, G, Math.min(10 * G.ds, L / 12), wc);
+  return { line: pts.map((p) => P(p.v)), arrow: a0 && a1 ? [a0, a1] : null };
+}
 // 칸 값(map) → 정점 색(유효 칸 최대 대비, 같은 색 막대). 칸 없음(−1) = 회색
 export function cellColors(cells, map, valid, out = null) {
   let mx = 0;

@@ -157,7 +157,8 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   const render = () => {
     if (pathItems.length) pathLayout();   // 광경로 화살표·글씨 = 화면 px 크기
     if (obsUi) obsLayout();
-    for (const d of [obsMinDot, obsMaxDot]) if (d?.visible) d.scale.setScalar(OBS_MIN_PX * worldPerPx(d.position));   // 화면 크기 고정(최저·최고 같은 크기)
+    for (const d of [obsMinDot, obsMaxDot]) if (d?.visible) d.scale.setScalar(OBS_MIN_PX * worldPerPx(d.position));
+    obsStart?.children.forEach((o) => { if (o.isSprite && obsStart.visible) o.scale.setScalar(o.userData.px * worldPerPx(o.position)); });   // '0' 글자 = 화면 크기 고정   // 화면 크기 고정(최저·최고 같은 크기)
     renderer.render(scene, camera);
     if (gz) { gz.c.position.copy(camera.position).sub(controls.target).normalize().multiplyScalar(5.6); gz.c.up.copy(camera.up); gz.c.lookAt(0, 0, 0); gz.r.render(gz.s, gz.c); }
   };
@@ -414,7 +415,7 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   }
   function setDim(fn) { dim = fn; meshes.forEach((_, i) => colorize(i)); render(); }
   function setLines(on) { lines = !!on; meshes.forEach((_, i) => colorize(i)); render(); }
-  function setObsShow(on) { obsShow = !!on; if (obsMesh) obsMesh.visible = obsShow; for (const d of [obsMinDot, obsMaxDot]) if (d) d.visible = obsShow && d.userData.on; if (lastOver) setOverlay(lastOver); else render(); }
+  function setObsShow(on) { obsShow = !!on; if (obsMesh) obsMesh.visible = obsShow; if (obsStart) obsStart.visible = obsShow && !!obsMesh; for (const d of [obsMinDot, obsMaxDot]) if (d) d.visible = obsShow && d.userData.on; if (lastOver) setOverlay(lastOver); else render(); }
   function setXray(on) { xray = !!on; meshes.forEach((_, i) => colorize(i)); if (lastOver) setOverlay(lastOver); else render(); }
   // 화면 1 px 이 pos 에서 몇 mm 인지 — 광경로 화살표·글씨를 확대·축소와 상관없이 같은 화면 크기로(render 마다)
   function worldPerPx(pos) {
@@ -600,7 +601,8 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
       obsDir = geom.dir ?? null; liftObs(); obsMesh.visible = obsShow;
       scene.add(obsMesh);
     }
-    if (!obsMesh) for (const d of [obsMinDot, obsMaxDot]) if (d) { d.userData.on = false; d.visible = false; }   // 색지도가 없어지면 최저·최고점도
+    if (!obsMesh) for (const d of [obsMinDot, obsMaxDot]) if (d) { d.userData.on = false; d.visible = false; }
+    if (!obsMesh && obsStart) obsStart.visible = false;   // 색지도가 없어지면 최저·최고점도
     if (had !== !!obsMesh && lastOver) { setOverlay(lastOver); return; }   // 색지도가 생기거나 없어지면 관측면 채움 진하기를 바꿈
     render();
   }
@@ -623,6 +625,31 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
   function setObsMax(pos) {
     if (!obsMaxDot && pos) obsMaxDot = obsDot(false);
     if (obsMaxDot) placeDot(obsMaxDot, pos);
+    render();
+  }
+  // 링 시작점 s = 0 단면(2026-11-18 사용자) — 흰 점선(폭 방향) + 진행 방향 화살표 + '0'. sec = { line:[p], arrow:[a0,a1]|null } | null. 색지도와 함께 보이고 숨음, 가려도 보임
+  let obsStart = null;
+  function setObsStart(sec) {
+    if (obsStart) { scene.remove(obsStart); obsStart.traverse((o) => { o.geometry?.dispose(); o.material?.map?.dispose(); o.material?.dispose(); }); obsStart = null; }
+    if (sec?.line?.length >= 2) {
+      const grp = new THREE.Group(), lift = obsMesh ? obsMesh.position.clone() : new THREE.Vector3(), V = (p) => new THREE.Vector3(...p).add(lift);
+      const mat = (o) => ({ color: 0xffffff, depthTest: false, depthWrite: false, transparent: true, clippingPlanes: clip, ...o });
+      const len = V(sec.line[0]).distanceTo(V(sec.line.at(-1)));
+      const ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints(sec.line.map(V)), new THREE.LineDashedMaterial(mat({ dashSize: len / 12, gapSize: len / 18 })));
+      ln.computeLineDistances(); ln.renderOrder = 4.2; grp.add(ln);
+      if (sec.arrow) {
+        const a0 = V(sec.arrow[0]), a1 = V(sec.arrow[1]), u = a1.clone().sub(a0).normalize(), h = a0.distanceTo(a1) * 0.35;
+        const n = obsDir ? new THREE.Vector3(...obsDir).normalize() : new THREE.Vector3(0, 0, 1), side = new THREE.Vector3().crossVectors(n, u).normalize().multiplyScalar(h * 0.6);
+        const tip = a1, b = a1.clone().addScaledVector(u, -h);
+        const ar = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints([a0, a1, tip, b.clone().add(side), tip, b.clone().sub(side)]), new THREE.LineBasicMaterial(mat({})));
+        ar.renderOrder = 4.2; grp.add(ar);
+        const cv = document.createElement('canvas'); cv.width = cv.height = 64; const x = cv.getContext('2d');
+        x.font = 'bold 44px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.lineWidth = 8; x.strokeStyle = 'rgba(10,14,22,.85)'; x.strokeText('0', 32, 34); x.fillStyle = '#fff'; x.fillText('0', 32, 34);
+        const lb = new THREE.Sprite(new THREE.SpriteMaterial(mat({ map: new THREE.CanvasTexture(cv) })));
+        lb.position.copy(a0).addScaledVector(u, -h * 1.2); lb.userData.px = 16; lb.renderOrder = 4.3; grp.add(lb);
+      }
+      grp.visible = obsShow && !!obsMesh; obsStart = grp; scene.add(grp);
+    }
     render();
   }
   function setObsColors(colors) {
@@ -782,5 +809,5 @@ export function createMech3dView(canvas, { onPick, onContext = null, gizmo = nul
 
   // 다 쓴 보기(불러오기 미리보기)의 그래픽 메모리를 돌려줌 — 큰 도면에서 3D 문맥 두 개가 메모리를 나눠 쓰지 않게
   function dispose() { dropProxies(); for (const m of meshes) { scene.remove(m); m.geometry.dispose(); } meshes = []; for (const m of partMats.values()) m.dispose(); partMats.clear(); renderer.dispose(); renderer.forceContextLoss(); }
-  return { dispose, setTheme, theme: () => theme, setLightPaths, setXray, xray: () => xray, setLines, lines: () => lines, setObsShow, obsShow: () => obsShow, setDim, setParts, setKinds, setHidden, setSelection, setOverlay, setPickMode, render, setView, fit, fitAll, viewName: () => viewName, setSection, setObsSurface, setObsColors, setObsMin, setObsMax, setCheckMarkers };
+  return { dispose, setTheme, theme: () => theme, setLightPaths, setXray, xray: () => xray, setLines, lines: () => lines, setObsShow, obsShow: () => obsShow, setDim, setParts, setKinds, setHidden, setSelection, setOverlay, setPickMode, render, setView, fit, fitAll, viewName: () => viewName, setSection, setObsSurface, setObsColors, setObsMin, setObsMax, setObsStart, setCheckMarkers };
 }

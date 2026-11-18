@@ -405,6 +405,18 @@ export function regionOutline(R, toPx, n = 32) {
   const sa = Math.min(R.s0, R.s1), sb = Math.max(R.s0, R.s1), wa = Math.min(R.w0, R.w1), wb = Math.max(R.w0, R.w1), at = (q) => sa + ((sb - sa) * q) / n;
   return [...Array.from({ length: n + 1 }, (_, q) => toPx(at(q), wb)), ...Array.from({ length: n + 1 }, (_, q) => toPx(at(n - q), wa))];
 }
+// 링 시작점 s = 0 단면(2026-11-18 사용자) — 흰 점선(폭 방향) + s 가 늘어나는 쪽 화살표 + '0'. 3D 관측면의 흰 점선과 같은 자리
+function startMark(x, Ly, G, rows, dpr) {
+  const wA = G.w0 + rows[0] * G.cell, wB = G.w0 + (rows[1] + 1) * G.cell, wc = (wA + wB) / 2, p = Ly.toPx(0, wA), q = Ly.toPx(0, wB);
+  x.save(); x.strokeStyle = '#ffffff'; x.lineWidth = 1.6 * dpr; x.setLineDash([4 * dpr, 3 * dpr]);
+  x.beginPath(); x.moveTo(p[0], p[1]); x.lineTo(q[0], q[1]); x.stroke(); x.setLineDash([]);
+  const a0 = Ly.toPx(0, wc), a1 = Ly.toPx(Math.min(10 * G.ds, G.L / 12), wc), dx = a1[0] - a0[0], dy = a1[1] - a0[1], d = Math.hypot(dx, dy) || 1, ux = dx / d, uy = dy / d, h = 5 * dpr;
+  const tip = [a0[0] + ux * Math.max(d, 14 * dpr), a0[1] + uy * Math.max(d, 14 * dpr)];
+  x.beginPath(); x.moveTo(a0[0], a0[1]); x.lineTo(tip[0], tip[1]); x.moveTo(tip[0] - ux * h - uy * h * 0.6, tip[1] - uy * h + ux * h * 0.6); x.lineTo(tip[0], tip[1]); x.lineTo(tip[0] - ux * h + uy * h * 0.6, tip[1] - uy * h - ux * h * 0.6); x.stroke();
+  x.font = `bold ${11 * dpr}px sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle'; x.lineWidth = 3 * dpr; x.strokeStyle = 'rgba(10,14,22,.85)';
+  const lx = a0[0] - ux * 9 * dpr, ly = a0[1] - uy * 9 * dpr; x.strokeText('0', lx, ly); x.fillStyle = '#ffffff'; x.fillText('0', lx, ly);
+  x.restore();
+}
 function drawShapeMap(cv, v, dpr, hover, mode) {
   const { G, map } = v, x = cv.getContext('2d'), W = cv.width, H = cv.height, VG = mapViewG(G), rows = [VG.jA ?? 0, VG.jB ?? G.nw - 1];
   const box = { x: 14 * dpr, y: MAP_PAD.t * dpr, w: W - (14 + MAP_PAD.r) * dpr, h: H - (MAP_PAD.t + 22) * dpr };
@@ -421,6 +433,7 @@ function drawShapeMap(cv, v, dpr, hover, mode) {
     x.beginPath(); x.moveTo(q[0][0], q[0][1]); for (let a = 1; a < 4; a++) x.lineTo(q[a][0], q[a][1]); x.closePath();
     x.fillStyle = c; x.fill(); x.strokeStyle = c; x.stroke();   // 같은 색 테두리 = 칸 사이 틈 없앰
   }
+  if (G.closed) startMark(x, Ly, G, rows, dpr);   // 링 시작점 s = 0 — 3D 의 흰 점선과 같은 자리(2026-11-18)
   colorBar(x, W, H, dpr);
   x.font = `${10.5 * dpr}px sans-serif`; x.fillStyle = '#8a93a6'; x.textAlign = 'right'; x.textBaseline = 'bottom';
   x.fillText(mode === 'ring' ? '링 · 두께 확대 — [실제 비율] = 실제 모양' : `실제 모양 · 가로 ${Ly.info.mm[0].toFixed(1)} × 세로 ${Ly.info.mm[1].toFixed(1)} mm`, box.x + box.w, H - 3 * dpr);

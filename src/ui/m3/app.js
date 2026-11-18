@@ -22,7 +22,7 @@ import { createStore, PHYSICS, GEOM_CHECK, PERSIST_TAGS } from './store.js';
 import { createProgressive, photonCap, fmtProg, interactOverlap, slowPortText, previewWanted } from './progressive.js';
 import { createPool } from './pool.js';
 import * as L from './leds.js';
-import { buildObsOverlay, cellColors, extractFaces, mapMinCell, mapMaxCell, obsPoint } from './colormap.js';
+import { buildObsOverlay, cellColors, extractFaces, mapMinCell, mapMaxCell, obsPoint, startSection } from './colormap.js';
 import { mountCommandBar, obsCmd } from './command-bar.js';
 import { renderFeatureTree, toggleVisibility, viewKeep, togglePcb, makeGroup, ungroup, groupMembers, rangeSelect, obsFacesAfterClick, removeFromGroups, viewCtxItems, showCtxMenu, toggleLed, ledFoldDefault, untraceItem } from './feature-tree.js';
 import { mountSplitter, mountDockSplitter, mountFacSplitter } from './splitter.js';
@@ -510,6 +510,7 @@ function paintObs(snap) {
   if (A.obsShown !== Gc) {
     Gc.overlay ??= buildObsOverlay(getMech3d().parts, A.store.mspec.observe.faces, A.store.session.line, Gc.G);
     v.setObsSurface({ ...Gc.overlay, dir: A.store.session.line.frame.d });   // dir: 큰 모델에서 덧그림을 더 띄움(buildObsOverlay 와 같은 방향)
+    v.setObsStart?.(startSection(Gc.overlay, Gc.G));   // 링 = 시작점 s = 0 단면 흰 점선 + 방향(2026-11-18) · 직선 = 없음
     A.obsShown = Gc; $('#m3-legend').hidden = false;
   }
   v.setObsColors(cellColors(Gc.overlay.cells, st.map, Gc.G.valid));
