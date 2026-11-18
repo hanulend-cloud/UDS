@@ -1168,7 +1168,7 @@ done();
     const m = monitorHtml(S, 5), t = m.indexOf('om-ct'), pl = m.indexOf('od-plot');
     okU(t >= 0 && t < pl && !/class="om-k\b/.test(m) && !/om-kpi"/.test(m), '균일도 = 그래프 제목 줄(그래프 위) · 카드 없음');
     const P = monitorParts(S, 5, { chart: false }), vis = P.kpi.replace(/\s(title)="[^"]*"/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    okU(!P.main.includes('om-ct') && /진행 그래프/.test(vis) && /길이 ≈50\.0%/.test(vis) && /폭 ≈40\.0%/.test(vis), `그래프를 따로 그리면 제목 줄도 그래프 칸으로: ${vis}`);
+    okU(!P.main.includes('om-ct') && /진행/.test(vis) && /길이 ≈50\.0%/.test(vis) && /폭 ≈40\.0%/.test(vis), `그래프를 따로 그리면 제목 줄도 그래프 칸으로: ${vis}`);
     okU(!/om-more/.test(P.main), '진행 칸의 \'상세 — 항목별 현황\' 표는 없앰(항목 아래 표로 옮김)');
     const src = (await import('node:fs')).readFileSync(new URL('../src/ui/m3/opt-dash.js', import.meta.url), 'utf8');
     okU(/put\(h\.chart, '<div class="om-kpi-host"><\/div>' \+ chartHtml\(\)\)/.test(src), '그래프 칸 = 제목 줄(균일도) 먼저, 그 아래 그래프');
@@ -1380,4 +1380,18 @@ done();
   const okS = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
   const { readFileSync } = await import('node:fs'), rp = readFileSync(new URL('../src/ui/m3/results-panel.js', import.meta.url), 'utf8');
   okS(/big\.ro\.observe\(ov\);\s*for \(const k of KINDS\) big\.ro\.observe\(cvs\[k\]\)/.test(rp), '큰 창: 그림 칸 크기가 바뀌어도 다시 그림(창 크기만 보지 않음)');
+}
+// 그래프 제목 = 짧게(2026-11-18 사용자) — 2D 광량 · 길이 1D · 폭 1D · 진행 · 계산 추이
+{
+  const okS = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
+  const { readFileSync } = await import('node:fs'), rd = (p) => readFileSync(new URL(p, import.meta.url), 'utf8'), rp = rd('../src/ui/m3/results-panel.js'), od = rd('../src/ui/m3/opt-dash.js');
+  okS(/m3-tt">2D 광량 <i/.test(rp) && /m3-tt">길이 1D <i/.test(rp) && /m3-tt">폭 1D <i/.test(rp) && /TITLE = \{ map: '2D 광량', prof: '길이 1D', wprof: '폭 1D' \}/.test(rp), '결과 칸·큰 창 그래프 제목 짧게');
+  okS(/<b>진행<\/b>/.test(od) && />계산 추이<\/summary>/.test(od) && !/방향 1D 프로파일/.test(rp + od), '진행 · 계산 추이 · 옛 긴 제목 없음');
+}
+// 부품 설정 회색 글(2026-11-18 사용자) — 보이는 글은 짧게, 긴 설명은 title 로 남김
+{
+  const okS = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
+  const { readFileSync } = await import('node:fs'), mp = readFileSync(new URL('../src/ui/mech3d-panel.js', import.meta.url), 'utf8'), css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
+  okS(!/>\(삭제 아님|>3D 뷰에서 면을 클릭하면|>체크 = 공기층 없이|>이 부품에 닿은 다른 부품 없음|>mm · 위치 = 부품 외곽 중심/.test(mp) && /title="삭제 아님 — 빛이 이 부품을 그냥 지나감"/.test(mp) && />면별 지정 = 3D 에서 면 클릭</.test(mp), '긴 회색 설명 → 짧은 글 + 툴팁');
+  okS(/#m3-props \.mut \{ font-size: 11px; \}/.test(css), '부품 설정 회색 글 11px');
 }

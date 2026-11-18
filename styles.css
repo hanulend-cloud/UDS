@@ -1576,3 +1576,8 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .m3-uni b { font-size: 14px; font-variant-numeric: tabular-nums; }
 .m3-uni small { opacity: .7; font-size: 11px; }
 .m3-uni.ok b { color: var(--m3-ok, #3fae7a); } .m3-uni.near b { color: var(--m3-warn, #e0a030); } .m3-uni.bad b { color: var(--m3-bad, #e5484d); }
+
+/* 부품 설정 회색 글 = 작게(2026-11-18 사용자) — 긴 설명은 마우스를 올리면(title) */
+#m3-props .mut { font-size: 11px; }
+#m3-props .m3-note { font-size: 10.5px; margin: 1px 0; }
+#m3-props [title].mut, #m3-props .m3-note[title], #m3-props .m3-sw[title] { cursor: help; }
