@@ -1468,3 +1468,12 @@ done();
   say(b?.k === 'auto' && /미리보기/.test(b.label), '정밀 + 광효율 낮음 = [미리보기로]');
   say(c === null && previewBtn(null, 'auto') === null, '보통 = 단추 없음');
 }
+
+// 노이즈 목표 재계산(기구 최적화 '목표 근처 — 노이즈 0.5% 까지')도 첫 묶음을 작게 재고 시작해야 함(2026-11-18 다른 PC: 첫 묶음 ≈19만 광자를
+// 속도를 모른 채 보내 느린 PC 에서 'Worker 응답 없음 (chunk 90초)')
+{
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const { readFileSync } = await import('node:fs'), app = readFileSync(new URL('../src/ui/m3/app.js', import.meta.url), 'utf8');
+  const m = app.match(/noise \? \{ N: Math\.ceil\(Math\.min\(capN[^}]*\}/);
+  say(!!m && /firstN: 1000/.test(m[0]), `노이즈 목표 재계산도 첫 묶음 1000 광자로 속도부터 잼 (${m ? 'firstN ' + (/firstN/.test(m[0]) ? '있음' : '없음') : '호출 못 찾음'})`);
+}
