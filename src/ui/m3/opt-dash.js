@@ -164,7 +164,7 @@ export function beforeAfterHtml(k, b0, best, tl, tw, n = 0) {
   return `<table class="od-ba"><tr><th></th><th>전</th><th>후</th></tr>
     ${row('사양', esc(SPEC_NOW[k]?.(b0) ?? '–'), esc(best.label))}
     ${row('길이 균일도', fmtJudge(b0.Ulen), fmtJudge(best.Ulen), pass(best.Ulen, tl))}
-    ${row('폭 균일도', fmtJudge(b0.Uwid), fmtJudge(best.Uwid), pass(best.Uwid, tw))}</table><div class="mut od-tx">후보 ${n}개 중 최고 · 적용은 위 [적용]</div>`;
+    ${row('폭 균일도', fmtJudge(b0.Uwid), fmtJudge(best.Uwid), pass(best.Uwid, tw))}</table><div class="mut od-tx" title="적용은 위 [적용]">후보 ${n}개 중 최고</div>`;
 }
 // 후보 결과 받기(순수) — 항목 단계 = 그 항목 칸 + 그래프 순서. 정밀 검증(최종안·대안, 지난 후보 표의 값) = 그래프 순서에만(vf, 2026-11-13 — 전에는 마지막 값만 남겨 그래프에 안 보였음)
 export function pushEvals(S, stage, list) {
@@ -394,7 +394,7 @@ export function reachDiag(ledger, leak, names = []) {
   const abs = ((ledger.absSurf ?? 0) + (ledger.absVol ?? 0)) / E;
   const few = reach < 0.001;   // 0.1% 미만 = 설정 문제일 가능성 큼, 1% 미만 = 구조상 적음(계산이 오래 걸림)
   return { reach, html: `<b>관측면에 도착한 빛 ${(reach * 100).toFixed(few ? 3 : 2)}%</b> — ${few ? '거의 없음(설정 확인 필요)' : '매우 적음(계산이 오래 걸림)'}. 빛이 간 곳: ${top.join(' · ') || '–'}${abs > 0.05 ? ` · 흡수 ${(abs * 100).toFixed(0)}%` : ''}
-    ${few ? '' : '<div class="mut">관측면 쪽을 뺀 바깥면을 반사 처리(불투명 백색)하면 도착 빛이 늘어 빨라집니다</div>'}<div class="mut">확인: ① 관측면 화살표가 빛이 나오는 바깥쪽을 향하는지 ② LED 노란 점선(발광 방향)이 부품 쪽을 향하는지 ③ 관측면이 다른 부품에 덮여 있지 않은지 — 3D 의 주황 면 = 가장 많이 새는 곳</div>` };
+    ${few ? '' : '<div class="mut" title="관측면 쪽을 뺀 바깥면을 반사 처리(불투명 백색)하면 도착 빛이 늘어 빨라집니다">팁: 바깥면 반사 처리 → 빨라짐</div>'}<div class="mut" title="확인: ① 관측면 화살표가 빛이 나오는 바깥쪽을 향하는지 ② LED 노란 점선(발광 방향)이 부품 쪽을 향하는지 ③ 관측면이 다른 부품에 덮여 있지 않은지 — 3D 의 주황 면 = 가장 많이 새는 곳">확인: 관측면 방향 · LED 방향 · 덮임 ⓘ</div>` };
 }
 // 진행 현황 그래프(순수, 2026-11-03) — 가로 = 광선 수(0 ~ 예상 총광선), 세로 = 균일도 %(점선 = 목표). H = [{ ph, noise, Ulen, Uwid }]
 export const simTotal = (last, tgt) => (last ? Math.max(last.ph, Number.isFinite(last.noise) ? last.ph * (last.noise / tgt) ** 2 : 0) : 0);

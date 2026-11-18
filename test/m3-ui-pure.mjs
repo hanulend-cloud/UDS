@@ -1403,3 +1403,12 @@ done();
   okS(longs.every((t) => lp.includes(`title="${t}`) && !lp.includes(`>${t}`)), '긴 설명은 보이는 글이 아니라 툴팁');
   okS(/sub: '최대 대비'/.test(rp) && /data-r="avgs" title="/.test(rp), '평균 광량 아래 = 최대 대비(설명은 툴팁)');
 }
+// 기구 최적화 창·광분포 창 회색 글(2026-11-18 사용자) — 짧게 + 긴 설명은 title
+{
+  const okS = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
+  const { readFileSync } = await import('node:fs'), rd = (p) => readFileSync(new URL(p, import.meta.url), 'utf8'), od = rd('../src/ui/m3/opt-dash.js'), ap = rd('../src/ui/m3/autodesign-panel.js'), rp = rd('../src/ui/m3/results-panel.js');
+  okS(/title="적용은 위 \[적용\]">후보 \$\{n\}개 중 최고</.test(od), '후보 n개 중 최고(적용 안내는 툴팁)');
+  okS(/title="[^"]*관측면 화살표[^"]*">[^<]{1,30}</.test(od) && /title="관측면 쪽을 뺀 바깥면을 반사 처리[^"]*">[^<]{1,30}</.test(od), '빛 적음 안내 2줄 짧게');
+  okS(/title="길이 프로파일\(각 최대 = 1\)[^"]*">회색 현재 · 색 최적</.test(ap) && /title="[^"]*다른 인자는 최적안 그대로의 추정[^"]*">— 낮추면 효율↑ · 균일도↓</.test(ap), '최적화 결과 회색 글 짧게');
+  okS(rp.includes("'링 · 두께 확대 — [실제 비율] = 실제 모양'"), '2D 링 캡션 짧게');
+}

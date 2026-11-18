@@ -55,7 +55,7 @@ export function profileSvg(cur, best, W = 200, H = 48) {
   };
   const a = line(cur, 'cur', 'var(--m3-mut, #888)'), b = line(best, 'best', 'var(--m3-acc, #2a6)');
   if (!a || !b) return '';
-  return `<div class="m3-row"><span class="mut">길이 프로파일(각 최대 = 1) · 회색 현재 · 색 최적</span></div><svg class="m3-ad-prof" viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" role="img" aria-label="길이 프로파일 현재 대 최적">${a}${b}</svg>`;
+  return `<div class="m3-row"><span class="mut" title="길이 프로파일(각 최대 = 1) · 회색 = 현재 · 색 = 최적">회색 현재 · 색 최적</span></div><svg class="m3-ad-prof" viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" role="img" aria-label="길이 프로파일 현재 대 최적">${a}${b}</svg>`;
 }
 
 // 광경로 위로 치는 최소 비중(1%) — 이보다 적게 닿는 부품은 대상 목록에서 뺌
@@ -278,7 +278,7 @@ export function milkyTableHtml(rows, chosen, tg = {}) {
   const pm = (v, t) => (Number.isFinite(v) && Number.isFinite(t) ? (v + 1e-9 >= t ? ' <b class="ok">✓</b>' : ' <b class="bad">✕</b>') : '');
   const tr = (r) => { const sel = Math.abs(r.milky - chosen) < 0.005;
     return `<tr${sel ? ' class="sel"' : ''}><td>${r.milky.toFixed(2)}${sel ? ' <span class="mut">최적</span>' : ''}</td><td>${fmtJudge(r.Ulen)}${pm(r.Ulen, tg.len)}</td><td>${fmtJudge(r.Uwid)}${pm(r.Uwid, tg.wid)}</td><td>${Number.isFinite(r.eff) ? `${(r.eff * 100).toFixed(1)}%` : '–'}</td><td>${sel ? '' : `<button type="button" data-ad="applyMilky" data-v="${r.milky}">적용</button>`}</td></tr>`; };
-  return `<details class="m3-mtab"><summary>Milky 조정 <span class="mut">— 낮추면 광 효율↑ · 균일도↓ (다른 인자는 최적안 그대로의 추정)</span></summary>
+  return `<details class="m3-mtab"><summary>Milky 조정 <span class="mut" title="낮추면 광 효율↑ · 균일도↓ (다른 인자는 최적안 그대로의 추정)">— 낮추면 효율↑ · 균일도↓</span></summary>
     <table class="m3-cmp m3-cmp-s"><tr><th>Milky</th><th>길이 균일도</th><th>폭 균일도</th><th>광 효율</th><th></th></tr>${rows.map(tr).join('')}</table></details>`;
 }
 // 결과 카드(2026-10-29: 같은 내용이 여러 번 반복되던 것을 하나로) — 판정 한 단어 · 작은 비교표(바뀐 사양 + 길이 균일도·폭 균일도·광 효율) ·

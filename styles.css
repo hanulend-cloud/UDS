@@ -1581,3 +1581,6 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 #m3-props .mut { font-size: 11px; }
 #m3-props .m3-note { font-size: 10.5px; margin: 1px 0; }
 #m3-props [title].mut, #m3-props .m3-note[title], #m3-props .m3-sw[title] { cursor: help; }
+/* 기구 최적화 창·광분포 창 회색 글 = 부품 설정과 같게(2026-11-18 사용자) */
+.m3-mon .mut, .m3-big-in .mut { font-size: 11px; }
+.m3-mon [title].mut, .m3-big-in [title].mut { cursor: help; }
