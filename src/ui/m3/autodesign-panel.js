@@ -397,7 +397,7 @@ function changeTableHtml(r, effects) {
 // 짧은 글(2026-11-08) — 상자 안 글자 수 제한. 넘치면 … + 마우스 올리면 전체
 export const clip = (t, n = 22) => { const s = String(t ?? ''); return s.length > n ? `<span title="${esc(s)}">${esc(s.slice(0, n - 1))}…</span>` : esc(s); };
 const ledShort = (x, stepN) => (x?.stepOrig !== false && stepN != null && !x?.layoutText ? `LED ${x?.count ?? stepN}개` : `${x?.rows === 2 ? '2열×' : ''}${x?.count ?? '?'}개${x?.pitch > 0 ? ` · ${(+x.pitch).toFixed(1)}mm` : ''}`);
-const FB = { position: ['① 위치/개수', '#0d9488'], shape: ['② 형상', '#7c3aed'], milky: ['③ Milky', '#475569'] };   // 2026-11-18 사용자: 창 색(파랑·주황)·판정 색과 안 겹치게
+const FB = { position: ['① 위치/개수', '#0d9488'], shape: ['② 형상', '#7c3aed'], milky: ['③ Milky', '#db2777'] };   // 2026-11-18 사용자: 창 색(파랑·주황)·판정 색과 안 겹치게 · Milky = 3D·메뉴의 Milky 부품 색(핑크)
 // 인자별 결과(설계 인자 상자에 넣음) — { chg, chip(바뀜/그대로/고정/안 돌림), body(이전 → 이후, 짧게), eff(효과 ≈) } | null
 export function factorResult(x, effects, locked = {}, k) {
   if (!x || !FB[k]) return null;
