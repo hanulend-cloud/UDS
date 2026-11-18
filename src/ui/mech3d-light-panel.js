@@ -78,9 +78,9 @@ function ledPickCardHtml(m, ui, ready = true) {
     <div class="m3-row">발광 <select data-lp-man="side"><option value="direct" ${sel(man.side, 'direct')}>직하(관측 방향)</option><option value="left" ${sel(man.side, 'left')}>측면 왼쪽</option><option value="right" ${sel(man.side, 'right')}>측면 오른쪽</option></select></div>`;
   const open = MANUAL_OPEN || ui.pick === 'mled' || ui.pick === 'led' || ui.pick === 'ledx' || L.kind === 'manual' || (L.kind === 'step' && !fromMech);   // 직접 지정 중이면 늘 펼침
   return `<div class="m3-card m3-ledpick"><div class="m3-sub"><i class="m3-fl">1</i> LED 지정</div>
-    <div class="m3-row"><button type="button" class="${L.kind === 'none' || !ready ? 'm3-primary' : ''}" data-lp-mauto title="같은 모양 부품 2개 이상 · PCB 위에 올라간 것 = LED, 발광면 = PCB 반대쪽. 도면 부품에 없으면 LED STEP 파일에서 찾음">LED 자동 선택</button> <span class="mut">도면·LED STEP 에서 LED 를 찾음</span></div>
-    ${stepHtml ? '' : `<div class="m3-row"><label class="shape-btn">LED STEP 불러오기<input type="file" accept=".stp,.step" hidden data-lp-file></label> <span class="mut">LED 가 따로 STEP 파일이면</span></div>`}
-    <div class="m3-row"><button type="button" data-lp-manual aria-expanded="${open}">LED 수동 선택 ${open ? '▴' : '▾'}</button> <span class="mut">방식을 골라 직접 지정</span></div>
+    <div class="m3-row"><button type="button" class="${L.kind === 'none' || !ready ? 'm3-primary' : ''}" data-lp-mauto title="같은 모양 부품 2개 이상 · PCB 위에 올라간 것 = LED, 발광면 = PCB 반대쪽. 도면 부품에 없으면 LED STEP 파일에서 찾음">LED 자동 선택</button> <span class="mut" title="도면·LED STEP 에서 LED 를 찾음">도면에서 찾음</span></div>
+    ${stepHtml ? '' : `<div class="m3-row"><label class="shape-btn">LED STEP 불러오기<input type="file" accept=".stp,.step" hidden data-lp-file></label> <span class="mut" title="LED 가 따로 STEP 파일이면">LED 가 별도 파일</span></div>`}
+    <div class="m3-row"><button type="button" data-lp-manual aria-expanded="${open}">LED 수동 선택 ${open ? '▴' : '▾'}</button> <span class="mut" title="방식을 골라 직접 지정">직접 지정</span></div>
     ${open ? `<div class="m3-ledman"><div class="m3-row"><label>방식</label><select data-lp-kind aria-label="광원 지정 방식"><option value="click" ${fromMech || ui.pick === 'mled' ? 'selected' : ''}>3D 도면에서 지정</option><option value="step" ${L.kind === 'step' && !fromMech && ui.pick !== 'mled' ? 'selected' : ''}>LED STEP 불러오기</option><option value="manual" ${sel(L.kind, 'manual')}>관측 라인 따라 직접 배치</option><option value="none" ${L.kind === 'none' && ui.pick !== 'mled' ? 'selected' : ''}>지정 안 함</option></select></div>
     ${mechHtml}${stepHtml}${manHtml}${recogHtml(m, ui)}</div>` : ''}</div>`;
 }
@@ -284,28 +284,28 @@ export function renderObserveProps(el, m, ui, h) {
   const ln = ui.line ?? null, nF = O.faces.length;
   const state = !nF ? '<span class="warn">아직 지정 안 함</span>' : ui.lineErr ? `<span class="warn">면 ${nF}개 · 라인 인식 실패</span>` : ln ? `<b>면 ${nF}개</b> · ${esc(ui.lineInfo ?? '')}` : `면 ${nF}개 · <span class="mut">라인 인식 중</span>`;
   // 기본 탭(2026-10-30 정리, 2026-11-03 목표 통합): ① 어디를 보나(면 지정·상태) ② 목표와 지금 결과(한 표) · 밝기 목표
-  const basic = `<div class="m3-card"><div class="m3-sub"><i class="m3-fl">2</i> 관측면 지정 <span class="mut">빛이 고르게 보여야 하는 면</span></div>
+  const basic = `<div class="m3-card"><div class="m3-sub"><i class="m3-fl">2</i> 관측면 지정 <span class="mut" title="빛이 고르게 보여야 하는 면">ⓘ</span></div>
       <div class="m3-row">${state}</div>
       <div class="m3-row">${pickBtn(ui, 'obs', ui.pick === 'obs' ? '클릭 대기 중 — 끝내기(Esc)' : nF ? '면 다시 지정 (더하기·빼기)' : '👁 3D 에서 면 클릭')} ${nF ? '<button data-lp-clear>모두 지우기</button>' : ''} ${ui.lineErr ? '<button data-lp-reline>라인 다시 인식</button>' : ''}</div>
-      <div class="m3-row mut">${nF ? '3D 의 하늘색 테두리 = 관측면 · 화살표 = 보는 방향 · 같은 면을 다시 클릭 = 빼기' : '예: 확산판·도광판의 윗면(사람이 보는 면)을 3D 에서 클릭'}</div>
+      <div class="m3-row mut" title="${nF ? '3D 의 하늘색 테두리 = 관측면 · 화살표 = 보는 방향 · 같은 면을 다시 클릭 = 빼기' : '예: 확산판·도광판의 윗면(사람이 보는 면)을 3D 에서 클릭'}">${nF ? '하늘색 = 관측면 · 다시 클릭 = 빼기' : '3D 에서 보는 면을 클릭'}</div>
       ${ui.lineErr ? `<div class="m3-row warn">${esc(ui.lineErr)}</div>` : ''}</div>
     <div class="m3-card m3-goal"><div class="m3-sub"><i class="m3-fl">3</i> 목표 설정 <span class="m3-req">꼭 입력</span></div>
       <table class="m3-cmp m3-obs-t"><tr><th></th><th>목표</th><th>지금${O.faces.length ? '' : ' <span class="mut">(관측면 먼저)</span>'}</th></tr>
         <tr><th>길이 균일도</th><td><input type="number" min="0" max="100" step="1" value="${+(O.targetLen * 100).toFixed(1)}" data-lp-tgt="targetLen" data-lp-pct aria-label="길이 균일도 목표 %">%</td><td data-lp-now="len">${pass(R?.Ulen, O.targetLen, R?.seLen)}${verdict(R?.Ulen, O.targetLen, R?.seLen)}</td></tr>
         <tr><th>폭 균일도</th><td><input type="number" min="0" max="100" step="1" value="${+(O.targetWid * 100).toFixed(1)}" data-lp-tgt="targetWid" data-lp-pct aria-label="폭 균일도 목표 %">%</td><td data-lp-now="wid">${pass(R?.Uwid, O.targetWid, R?.seWid)}${verdict(R?.Uwid, O.targetWid, R?.seWid)}</td></tr></table>
-      <div class="m3-row mut">균일도 = 가장 어두운 곳 ÷ 가장 밝은 곳 (1 = 완전히 고름)</div>
-      <div class="m3-row"><label>밝기 목표</label><input type="number" min="0" step="10" value="${O.targetLum ?? ''}" placeholder="없음" data-lp-tgt="targetLum" data-lp-auto aria-label="평균 휘도 목표 cd/m²"> cd/m² <span class="mut">선택 · 합격 판정은 LED 밝기(lm) 입력 시</span></div>
+      <div class="m3-row mut" title="균일도 = 가장 어두운 곳 ÷ 가장 밝은 곳 (1 = 완전히 고름)">균일도 = 최저 ÷ 최고</div>
+      <div class="m3-row"><label>밝기 목표</label><input type="number" min="0" step="10" value="${O.targetLum ?? ''}" placeholder="없음" data-lp-tgt="targetLum" data-lp-auto aria-label="평균 휘도 목표 cd/m²"> cd/m² <span class="mut" title="선택 · 합격 판정은 LED 밝기(lm) 입력 시">선택</span></div>
       <div class="m3-row" data-lp-now="need">${obsNeedHtml(O, ui.photometry ?? null)}</div></div>`;
   // 상세 탭: 보는 방향 · 보는 범위 · 계산 · 설계 점검 기준(라인 상태·다시 인식은 기본 탭)
-  const detail = `${nF ? `<div class="m3-card"><div class="m3-sub">보는 방향 <span class="mut">${O.dir ? '(직접 지정)' : '(자동 = 면에 수직)'}</span></div>
+  const detail = `${nF ? `<div class="m3-card"><div class="m3-sub">보는 방향 <span class="mut">${O.dir ? '(직접)' : '(자동)'}</span></div>
       <div class="m3-row">x<input type="number" step="0.1" value="${numIn(ui.dir?.[0], 3)}" data-lp-dir="0"> y<input type="number" step="0.1" value="${numIn(ui.dir?.[1], 3)}" data-lp-dir="1"> z<input type="number" step="0.1" value="${numIn(ui.dir?.[2], 3)}" data-lp-dir="2"> ${O.dir ? '<button data-lp-dirauto>자동으로</button>' : ''}</div></div>` : ''}
     <div class="m3-card"><div class="m3-sub">보는 범위</div>
-      <div class="m3-row"><label>보는 각도 ±</label><input type="number" min="2" max="90" step="1" value="${O.cone}" data-lp-obs="cone">° <span class="mut">균일도·2D 분포에 적용 · 기본 30 · 좁히면 정면 외관에 가깝지만 계산 노이즈 큼 · 휘도·필요 광속은 항상 ±10°</span></div>
-      <div class="m3-row"><label>가장자리 제외</label><input type="number" min="0" step="0.1" value="${O.edgeExcl}" data-lp-obs="edgeExcl">mm <span class="mut">테두리 근처는 균일도 판정에서 뺌</span></div></div>
-    <div class="m3-card"><div class="m3-sub">계산 <span class="mut">(칸 빈칸 = 자동)</span></div>
+      <div class="m3-row"><label>보는 각도 ±</label><input type="number" min="2" max="90" step="1" value="${O.cone}" data-lp-obs="cone">° <span class="mut" title="균일도·2D 분포에 적용 · 기본 30 · 좁히면 정면 외관에 가깝지만 계산 노이즈 큼 · 휘도·필요 광속은 항상 ±10°">기본 30</span></div>
+      <div class="m3-row"><label>가장자리 제외</label><input type="number" min="0" step="0.1" value="${O.edgeExcl}" data-lp-obs="edgeExcl">mm <span class="mut" title="테두리 근처는 균일도 판정에서 뺌">판정에서 뺌</span></div></div>
+    <div class="m3-card"><div class="m3-sub">계산 <span class="mut">(빈칸 = 자동)</span></div>
       <div class="m3-row"><label>길이 칸</label><input type="number" min="0.2" step="0.5" value="${O.cellS ?? ''}" placeholder="${autoPh(ui.auto?.cellS)}" data-lp-obs="cellS" data-lp-auto>mm <label>폭 칸</label><input type="number" min="0.1" step="0.1" value="${O.cellW ?? ''}" placeholder="${autoPh(ui.auto?.cellW)}" data-lp-obs="cellW" data-lp-auto>mm</div>
-      <div class="m3-row"><label>폭 판정 창</label><input type="number" min="1" step="1" value="${O.winS ?? ''}" placeholder="${autoPh(ui.auto?.winS)}" data-lp-obs="winS" data-lp-auto>mm <span class="mut">폭 균일도를 볼 때 길이 방향으로 묶는 길이</span></div>
-      <div class="m3-row"><label>오차 목표</label><input type="number" min="0.2" max="20" step="0.5" value="${num((O.targetNoise ?? 0.01) * 100, 1)}" data-lp-tgt="targetNoise" data-lp-pct>% <span class="mut">이 오차 이하가 되면 계산을 멈춤(작을수록 오래 걸림)</span></div></div>
+      <div class="m3-row"><label>폭 판정 창</label><input type="number" min="1" step="1" value="${O.winS ?? ''}" placeholder="${autoPh(ui.auto?.winS)}" data-lp-obs="winS" data-lp-auto>mm <span class="mut" title="폭 균일도를 볼 때 길이 방향으로 묶는 길이">폭 균일도용</span></div>
+      <div class="m3-row"><label>오차 목표</label><input type="number" min="0.2" max="20" step="0.5" value="${num((O.targetNoise ?? 0.01) * 100, 1)}" data-lp-tgt="targetNoise" data-lp-pct>% <span class="mut" title="이 오차 이하가 되면 계산을 멈춤(작을수록 오래 걸림)">도달하면 멈춤</span></div></div>
     <div class="m3-card"><div class="m3-sub">설계 점검 기준</div>
       <div class="m3-row"><label>최소 살두께</label><input type="number" min="0.1" step="0.1" value="${C.minWall}" data-lp-chk="minWall"> mm</div>
       <div class="m3-row"><label>최소 도달률</label><input type="number" min="0" max="100" step="5" value="${num(C.minReach * 100, 0)}" data-lp-chk="minReach" data-lp-pct>%</div>

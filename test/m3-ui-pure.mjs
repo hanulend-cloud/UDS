@@ -1395,3 +1395,11 @@ done();
   okS(!/>\(삭제 아님|>3D 뷰에서 면을 클릭하면|>체크 = 공기층 없이|>이 부품에 닿은 다른 부품 없음|>mm · 위치 = 부품 외곽 중심/.test(mp) && /title="삭제 아님 — 빛이 이 부품을 그냥 지나감"/.test(mp) && />면별 지정 = 3D 에서 면 클릭</.test(mp), '긴 회색 설명 → 짧은 글 + 툴팁');
   okS(/#m3-props \.mut \{ font-size: 11px; \}/.test(css), '부품 설정 회색 글 11px');
 }
+// 관측면·광원·결과 칸 회색 글(2026-11-18 사용자) — 짧게 + 긴 설명은 title
+{
+  const okS = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
+  const { readFileSync } = await import('node:fs'), lp = readFileSync(new URL('../src/ui/mech3d-light-panel.js', import.meta.url), 'utf8'), rp = readFileSync(new URL('../src/ui/m3/results-panel.js', import.meta.url), 'utf8');
+  const longs = ['균일도·2D 분포에 적용 · 기본 30', '이 오차 이하가 되면 계산을 멈춤', '폭 균일도를 볼 때 길이 방향으로 묶는 길이', '테두리 근처는 균일도 판정에서 뺌', '도면·LED STEP 에서 LED 를 찾음'];
+  okS(longs.every((t) => lp.includes(`title="${t}`) && !lp.includes(`>${t}`)), '긴 설명은 보이는 글이 아니라 툴팁');
+  okS(/sub: '최대 대비'/.test(rp) && /data-r="avgs" title="/.test(rp), '평균 광량 아래 = 최대 대비(설명은 툴팁)');
+}

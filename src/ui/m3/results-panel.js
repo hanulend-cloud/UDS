@@ -73,8 +73,8 @@ export function lumCard(st, ph, targetLum) {
     return { value: `${li} cd/m²`, sub: ratio == null ? '목표 없음' : `목표 ${ti} cd/m² · ${pass ? '합격' : `미달 −${Math.max(1, ti - li)}`}`, ratio, pass };
   }
   const p = Array.from(st?.profile ?? []).filter(Number.isFinite), mx = finiteMax(p), mean = p.reduce((a, b) => a + b, 0) / p.length;
-  if (!p.length || !(mx > 0)) return { value: '–', sub: '최대 대비(LED 광속 입력 시 cd/m²)', ratio: null, pass: null };
-  return { value: `${((mean / mx) * 100).toFixed(0)}%`, sub: '최대 대비(LED 광속 입력 시 cd/m²)', ratio: null, pass: null };
+  if (!p.length || !(mx > 0)) return { value: '–', sub: '최대 대비', ratio: null, pass: null };
+  return { value: `${((mean / mx) * 100).toFixed(0)}%`, sub: '최대 대비', ratio: null, pass: null };
 }
 
 // 1D 곡선 표시 다듬기(순수, 2026-11-02) — 칸이 많은 방향의 들쭉날쭉한 노이즈만 줄임. 판정·최저점·마우스 값·CSV 는 원자료 그대로.
@@ -581,7 +581,7 @@ export function createResultsPanel(el, { anchor = () => null, onOpt = null, onQu
     <div class="m3-sum">
       <div class="m3-sum-u"><div class="l">길이 균일도</div><div class="v" data-r="ul">–</div>${gaugeHtml('ulg')}<div class="s" data-r="ulj"></div></div>
       <div class="m3-sum-u"><div class="l">폭 균일도</div><div class="v" data-r="uw">–</div>${gaugeHtml('uwg')}<div class="s" data-r="uwj"></div></div>
-      <div class="m3-sum-c"><div class="l">평균 광량</div><div class="v" data-r="avg" title="cd/m² 값은 보는 각도 설정과 상관없이 정면 ±10° 안의 평균 휘도">–</div><div class="s" data-r="avgs"></div><div class="s m3-need" data-r="need"></div>${gaugeHtml('avgg')}</div>
+      <div class="m3-sum-c"><div class="l">평균 광량</div><div class="v" data-r="avg" title="cd/m² 값은 보는 각도 설정과 상관없이 정면 ±10° 안의 평균 휘도">–</div><div class="s" data-r="avgs" title="최대 대비 % — LED 광속(lm)을 넣으면 cd/m² 로 표시"></div><div class="s m3-need" data-r="need"></div>${gaugeHtml('avgg')}</div>
       <div class="m3-sum-c"><div class="l">광 효율</div><div class="v sm" data-r="eff">–</div><div class="s">관측면 원뿔 안 / LED 총 방출</div><div class="m3-effload" data-r="effl" hidden></div></div>
       <div class="m3-sum-x"><div class="m3-regl" data-r="reg" hidden title="큰 창(⤢)에서 고른 영역 — 길이 / 폭 균일도"></div><button type="button" class="m3-leak" data-r="leak" hidden title="누르면 3D 에서 가장 많이 새는 면을 강조"></button></div>
     </div>
