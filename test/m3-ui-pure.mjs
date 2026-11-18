@@ -1432,3 +1432,10 @@ done();
   const dk = (sel) => css.split('}').some((r) => { const [h, b = ''] = r.split('{'); return h.trim().endsWith('[data-theme="dark"] ' + sel) && /background:\s*(var\(--m3-(panel|head)\)|color-mix\(in srgb, var\(--fb\) \d+%, var\(--m3-panel\)\))/.test(b); });
   say(dk('.fb-card') && dk('.fb-card.fb-off') && dk('.fb-card.fb-on'), '③ 다크 테마 인자 카드(꺼짐·켜짐 포함) = 어두운 바탕');
 }
+{ // 2026-11-18 사용자: 설계 인자 색 = 창 색(파랑·주황)·판정 색(초록·빨강)과 겹치지 않게 — ① 위치 청록 · ② 형상 보라 · ③ Milky 슬레이트
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const fs = await import('fs'), od = fs.readFileSync('src/ui/m3/opt-dash.js', 'utf8'), ap = fs.readFileSync('src/ui/m3/autodesign-panel.js', 'utf8');
+  for (const [src, nm] of [[od, '최적화 카드·진행 그래프'], [ap, '결과 화면']]) {
+    say(src.includes("position: ") && src.includes("'#0d9488'") && src.includes("'#7c3aed'") && src.includes("'#475569'") && !/#f59e0b|#a855f7|#3b82f6/i.test(src), `${nm} 인자 색 = 청록·보라·슬레이트`);
+  }
+}

@@ -53,7 +53,7 @@ export function evalSparkSvg(evals, tgLen, tgWid, bestIdx = -1, w = 220, h = 70)
 // 설계 인자 현황판(순수, 왼쪽 창 맨 아래) — S = 최적화 상태(null = 실행 전), nw = 지금 설계 { milky, milkyCap, leds, shape, on:{milky,position,shape}, Ulen, Uwid, tgLen, tgWid }
 // 그래프 1개에 인자 3개: 시험 순서대로 후보의 길이 균일도(실선)·폭 균일도(점선)를 인자 색으로 · 목표선(빨강) · 지금 설계(회색) · 최고 후보(노란 원)
 // 아래 인자별 한 줄(상태 · 지금 → 최고). 그래프는 .fb-plot 자리의 실제 크기로 factorChartSvg 가 그림(스크롤 없이 칸에 맞춤)
-const FB_COL = { milky: '#3b82f6', position: '#f59e0b', shape: '#a855f7', housing: '#10b981' };
+const FB_COL = { milky: '#475569', position: '#0d9488', shape: '#7c3aed', housing: '#10b981' };
 // cfg(k) → { on, box(체크 상자), opt(설정 html), why } — 줄 앞에서 바로 켜고 끔(2026-10-29, 최적화 타일에서 옮김). 없으면 표시만
 // 중지 — 돌던 항목은 '중지됨'(진행 % 가 남아 아직 도는 것처럼 보이지 않게, 2026-11-12)
 // 계산 실패(예외) — 멈춤으로 두고 이유를 남김(전에는 '진행 중' 으로 남아 시간이 계속 올라갔음, 2026-11-16)
