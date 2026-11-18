@@ -32,7 +32,7 @@ import { renderPropertyPanel } from './property-panel.js';
 import { optCtl, rerunAsk } from './run-ctl.js';
 import { judgeStats, fmtJudge } from '../../engine/mech3d/tally.js';
 import { watchNumInputs } from './num-fit.js';
-import { meshInfo, clearDbHtml, clearAddFormHtml, reflAddFormHtml, wireMaterialDb, dbFormState } from '../mech3d-panel.js';
+import { meshInfo, clearDbHtml, clearAddFormHtml, reflAddFormHtml, wireMaterialDb, dbFormState, setPartTab } from '../mech3d-panel.js';
 import { isAdmin } from '../../model/admin.js';
 import { renderAdvanced } from '../l2-advanced.js';
 import { defaultRowGap, renderReflDb, setLpTab, refreshObsNow, refreshLedLum } from '../mech3d-light-panel.js';
@@ -410,6 +410,14 @@ function partMeshInfo(i) {
   if (!m?.positions) return null;
   if (!MESH_INFO.has(m)) MESH_INFO.set(m, meshInfo(m));
   return MESH_INFO.get(m);
+}
+// PCB 메뉴 상세 탭용(2026-11-18) — 도면 PCB·LED STEP PCB 의 실제 메쉬 외곽 크기·중심 mm
+const boxOf = (m) => { if (!m?.positions) return null; const b = bounds(m.positions); return { size: [0, 1, 2].map((k) => b[k + 3] - b[k]), center: [0, 1, 2].map((k) => (b[k + 3] + b[k]) / 2) }; };
+function pcbUi(M) {
+  const parts = getMech3d()?.parts ?? [], st = M.light.kind === 'step' ? M.light.step : null;
+  const pcbInfo = M.parts.map((p, i) => (p.role === 'pcb' ? { i, ...boxOf(parts[i]) } : null)).filter((x) => x?.size);
+  const lp = st && !st.fromMech && st.pcb >= 0 ? L.ledPartsNow(M)?.[st.pcb] : null;
+  return { pcbInfo, stepPcbInfo: boxOf(lp) };
 }
 function makeJob() { return A ? jobFor(A.store.mspec, getMech3d().parts) : null; }
 // 기구 최적화 중이면 미룸 — 점진 계산이 공유 Worker 에 장면을 보내면 실행이 '장면이 바뀜' 으로 실패. 끝나면 adRun 이 다시 부름
@@ -1898,6 +1906,7 @@ function propHandlers() {
     onPcbOff: (on) => st.update('light', (m) => { setPcbOff(m, on); }),
     onPcbR: (v) => { const R = clampPcbPct(v); if (R != null) st.update('light', (m) => { m.light.pcbR = R; }); else st.update('session', () => {}); },   // 빈칸·숫자 아님 = 원래 값으로 다시 그림
     onLedSpec: (key, v) => st.update(key === 'fluxLm' ? 'target' : 'light', (m) => { m.light.spec[key] = v; }),
+    onGoNode: (id, tab = null) => { if (tab) setPartTab(tab); st.update('session', (_, x) => { x.node = id; x.multi = []; x.ledSel = null; x.sel = id.startsWith('part:') ? { part: +id.slice(5), face: null } : null; }); },   // PCB 메뉴 상세 → 그 부품 상세 탭 · LED STEP PCB → 광원(위치 보정)
     onLedSize: (a, b) => st.update('light', (m) => { m.light.spec.sizeX = a; m.light.spec.sizeY = b; }),   // [이 크기로] = 인식된 발광면 크기(한 번에 — 되돌리기 1번)   // 광속은 휘도 환산만 — 재계산 없음
     // LED 선택·속성(spec §4a)
     onLedSel: (n) => st.update('session', (_, x) => { x.ledSel = n; if (n != null) { x.node = 'leds'; x.sel = null; } }),
@@ -2194,7 +2203,7 @@ function renderAll(tag = 'all') {
   const pi = S.node?.startsWith('part:') ? +S.node.slice(5) : -1, clr = pi >= 0 ? clearanceOf(pi) : null;
   if (clr !== A.clrShown) { A.clrShown = clr; renderMarkers(); }
   watchNumInputs($('#m3-props'));
-  if (tag !== 'view') renderPropertyPanel($('#m3-props'), M, S, { admin: isAdmin(), dbList: A.ctx.materialDb()?.list() ?? [], catalog: reflCat(), clearList: clearUser(), clearUsed: M.parts.reduce((o, p) => { const id = p.material?.matId; if (id) o[id] = (o[id] ?? 0) + 1; return o; }, {}), milkyUsed: M.parts.reduce((o, p) => { const id = p.material?.kind === 'milky' && p.material.dbId; if (id) o[id] = (o[id] ?? 0) + 1; return o; }, {}), auto: autoGrid(), dir: M.observe.dir ?? S.line?.frame.d, lineInfo: lineInfo(), clearance: clr, xfInfo: pi >= 0 ? xformInfoOf(pi) : null, meshInfo: pi >= 0 ? partMeshInfo(pi) : null, xfMsg: S.xfMsg?.part === pi ? S.xfMsg.text : '', lay: lay ?? null, led: S.node === 'leds' && S.ledSel != null ? ledUi(LS, S.ledSel) : null, ...(S.node === 'leds' ? { ledList: ledRows(LS), ledGap: minFinite(ledGaps(LS.em)), ledChange: ledChangeNow() } : {}) }, propHandlers());
+  if (tag !== 'view') renderPropertyPanel($('#m3-props'), M, S, { admin: isAdmin(), dbList: A.ctx.materialDb()?.list() ?? [], catalog: reflCat(), clearList: clearUser(), clearUsed: M.parts.reduce((o, p) => { const id = p.material?.matId; if (id) o[id] = (o[id] ?? 0) + 1; return o; }, {}), milkyUsed: M.parts.reduce((o, p) => { const id = p.material?.kind === 'milky' && p.material.dbId; if (id) o[id] = (o[id] ?? 0) + 1; return o; }, {}), auto: autoGrid(), dir: M.observe.dir ?? S.line?.frame.d, lineInfo: lineInfo(), clearance: clr, xfInfo: pi >= 0 ? xformInfoOf(pi) : null, meshInfo: pi >= 0 ? partMeshInfo(pi) : null, xfMsg: S.xfMsg?.part === pi ? S.xfMsg.text : '', lay: lay ?? null, led: S.node === 'leds' && S.ledSel != null ? ledUi(LS, S.ledSel) : null, ...(S.node === 'leds' ? { ledList: ledRows(LS), ledGap: minFinite(ledGaps(LS.em)), ledChange: ledChangeNow() } : {}), ...(S.node === 'pcbs' ? pcbUi(M) : {}) }, propHandlers());
   if (tag === 'session' || tag === 'all') renderMarkers();
   A.cmd.update(S, M);
   renderStatus();

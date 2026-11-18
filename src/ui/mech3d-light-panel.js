@@ -27,10 +27,10 @@ function readNum(x) {
 const pickBtn = (ui, mode, label) => `<button data-lp-pick="${mode}" class="${ui.pick === mode ? 'on' : ''}">${label}</button>`;
 const on = (el, q, ev, fn) => el.querySelectorAll(q).forEach((x) => x.addEventListener(ev, () => fn(x)));
 // 기본 | 상세 탭(LED·관측면 노드) — 노드별로 세션 동안 기억. 부품 속성 탭과 같은 모양
-const LP_TAB = { leds: 'basic', obs: 'basic' };
+const LP_TAB = { leds: 'basic', obs: 'basic', pcb: 'basic' };
 export const lpTab = (k) => LP_TAB[k];
 export function setLpTab(k, t) { LP_TAB[k] = t === 'detail' ? 'detail' : 'basic'; }
-const TAB_SUB = { leds: ['지향각 · 발광면', '배치 · 밝기 · 배광'], obs: ['면 · 목표', '방향 · 계산 · 점검'] };   // 탭에 무엇이 있는지
+const TAB_SUB = { leds: ['지향각 · 발광면', '배치 · 밝기 · 배광'], obs: ['면 · 목표', '방향 · 계산 · 점검'], pcb: ['지정 · 반사율', '위치 · 크기'] };   // 탭에 무엇이 있는지
 const tabsHtml = (k, dSum = '') => `<div class="m3-tabs" role="tablist"><button type="button" role="tab" data-lp-tab="basic" aria-selected="${LP_TAB[k] === 'basic'}">기본 <span class="m3-tab-s">${TAB_SUB[k][0]}</span></button><button type="button" role="tab" data-lp-tab="detail" aria-selected="${LP_TAB[k] === 'detail'}">상세 <span class="m3-tab-s">${esc(dSum || TAB_SUB[k][1])}</span></button></div>`;
 const wireTabs = (el, k, redraw) => on(el, '[data-lp-tab]', 'click', (x) => { if (LP_TAB[k] !== x.dataset.lpTab) { LP_TAB[k] = x.dataset.lpTab; redraw(); } });
 const wirePick = (el, ui, h) => on(el, '[data-lp-pick]', 'click', (x) => h.onPick(ui.pick === x.dataset.lpPick ? null : x.dataset.lpPick));
@@ -186,19 +186,38 @@ function ledTabHtml(m, ui, tab) {
 // PCB 반사율 줄(순수) — LED STEP 의 PCB 는 부품 목록의 PCB 속성에서, 직접 배치는 LED 상세 탭에서
 const pcbRRow = (L, label) => `<div class="m3-row"><label>${label}</label><input type="number" min="0" max="100" step="1" value="${+(100 * (L.pcbR ?? 0.3)).toFixed(1)}" data-lp-pcbr aria-label="PCB 반사율 %"> %</div>`;
 // PCB 메뉴(순수, 2026-11-05) — 수동 선택 + 반사율. LED 는 PCB 위에 있으니 없으면 경고
+// PCB 메뉴 상세 탭(2026-11-18 사용자: 일반 부품처럼) — 도면 PCB = 크기·중심 + [위치·크기 편집](그 부품의 상세 탭) · LED STEP PCB = 크기·중심(LED STEP 과 함께 움직임 → 광원의 위치 보정)
+const mm = (v) => String(+(+v).toFixed(1));
+const sizeTxt = (z) => `${z.map(mm).join(' × ')} mm`;
+const ctrTxt = (c) => (c ? `<span class="mut" title="외곽(바운딩 박스) 중심 x, y, z mm">중심 ${c.map((v) => mm(v)).join(', ')}</span>` : '');
+function pcbDetailHtml(m, ui) {
+  const L = m.light, st = L.kind === 'step' ? L.step : null, info = new Map((ui.pcbInfo ?? []).map((x) => [x.i, x]));
+  const rows = (m.parts ?? []).map((p, i) => {
+    if (p.role !== 'pcb') return '';
+    const x = info.get(i);
+    return `<div class="m3-card"><div class="m3-sub">${esc(p.name)} <span class="mut">도면 부품</span></div><div class="m3-row"><label>크기</label>${x ? sizeTxt(x.size) : '<span class="mut">—</span>'}</div><div class="m3-row"><label>위치</label>${ctrTxt(x?.center)}</div><div class="m3-row"><button type="button" data-lp-pcbopen="${i}" title="이 PCB 부품의 상세 탭(위치·크기·접촉면)을 엶">위치·크기 편집</button></div></div>`;
+  }).join('');
+  const sp = st && !st.fromMech && st.pcb >= 0 ? ui.stepPcbInfo ?? null : null;
+  const stepCard = st && !st.fromMech && st.pcb >= 0 ? `<div class="m3-card"><div class="m3-sub">LED STEP PCB <span class="mut">LED 파일 안</span></div><div class="m3-row"><label>크기</label>${sp ? sizeTxt(sp.size) : '<span class="mut">—</span>'}</div><div class="m3-row"><label>위치</label>${ctrTxt(sp?.center)}</div><div class="m3-row"><button type="button" data-lp-ledpos title="LED STEP 파일 안의 PCB 는 LED 와 한 몸 — 광원의 [위치 보정]으로 함께 옮김">LED 와 함께 옮기기</button></div></div>` : '';
+  return rows || stepCard ? `${rows}${stepCard}` : '<div class="m3-card"><div class="mut">PCB 가 없음 — 기본 탭에서 지정</div></div>';
+}
 export function pcbPanelHtml(m, ui) {
+  if (LP_TAB.pcb === 'detail') return `<div class="m3-h">PCB</div>${tabsHtml('pcb')}<div class="m3-edit" role="tabpanel">${pcbDetailHtml(m, ui)}</div>`;
   const L = m.light, names = pcbNames(m), wait = ui.pick === 'mpcb', st = L.kind === 'step' ? L.step : null;
   const rows = (m.parts ?? []).map((p, i) => (p.role !== 'pcb' ? '' : `<div class="m3-row"><label>${esc(p.name)}</label><input type="number" min="0" max="100" step="1" value="${+(100 * (p.finish?.R ?? 0.3)).toFixed(1)}" data-m3-pcbr data-i="${i}" aria-label="${esc(p.name)} 반사율 %"> %</div>`)).join('');
   const stepRow = st && !st.fromMech && st.pcb >= 0 ? pcbRRow(L, 'LED STEP PCB') : '';
-  return `<div class="m3-h">PCB</div><div class="m3-card m3-untrace pcb"><div class="m3-sub">PCB 지정</div>
+  return `<div class="m3-h">PCB</div>${tabsHtml('pcb')}<div class="m3-edit" role="tabpanel"><div class="m3-card m3-untrace pcb"><div class="m3-sub">PCB 지정</div>
     <div class="m3-row">${pickBtn(ui, 'mpcb', wait ? '클릭 대기 중 — 끝내기' : 'PCB 수동 선택')}</div>
     <div class="m3-row">${names.length ? `<span class="mut">PCB: ${esc(names.join(', '))}</span>` : '<span class="m3-pcbwarn">⚠ PCB 없음 — LED 받침 판을 고르세요</span>'}</div>
     ${wait ? '<div class="mut m3-note">3D 에서 PCB 부품 클릭 · 다시 클릭 = 해제 · 여러 장 가능</div>' : ''}
     ${names.length ? `<label class="m3-sw"><input type="checkbox" data-lp-pcboff${pcbAllOff(m) ? ' checked' : ''}> 빛 계산에서 제외 <span class="mut">PCB 가 없는 것처럼 빛이 지나감</span></label>` : ''}</div>
-  ${rows || stepRow ? `<div class="m3-card"><div class="m3-sub">PCB 면 반사율</div>${rows}${stepRow}<div class="mut">확산 반사면으로 계산 · 기구 최적화에서 면을 바꾸지 않음</div></div>` : ''}`;
+  ${rows || stepRow ? `<div class="m3-card"><div class="m3-sub">PCB 면 반사율</div>${rows}${stepRow}<div class="mut">확산 반사면으로 계산 · 기구 최적화에서 면을 바꾸지 않음</div></div>` : ''}</div>`;
 }
 export function renderPcbProps(el, m, ui, h) {
   el.innerHTML = pcbPanelHtml(m, ui);
+  wireTabs(el, 'pcb', () => renderPcbProps(el, m, ui, h));
+  on(el, '[data-lp-pcbopen]', 'click', (x) => h.onGoNode?.(`part:${x.dataset.lpPcbopen}`, 'detail'));
+  on(el, '[data-lp-ledpos]', 'click', () => h.onGoNode?.('light'));
   wirePick(el, ui, h);
   on(el, '[data-lp-pcbr]', 'change', (x) => h.onPcbR(x.value));
   on(el, '[data-m3-pcbr]', 'change', (x) => h.onPartPcbR(+x.dataset.i, x.value));

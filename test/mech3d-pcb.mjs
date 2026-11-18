@@ -129,4 +129,18 @@ const base = () => { const c = setPartMaterial(defaultPart(1, '커버', 1), 'cle
   const items = viewCtxOf('pcbs').map((x) => x.k);
   ok(items.includes('pcbClick') && items.includes('eye') && items.includes('pcbOff'), `PCB 줄 우클릭 메뉴: ${items.join()}`);
 }
+// 2026-11-18 사용자: PCB 메뉴도 일반 부품처럼 [기본 | 상세] — 상세 = 도면 PCB(크기·위치 + 부품 설정 열기) · LED STEP PCB(크기·위치 = LED STEP 과 함께)
+{ const light = (o) => ({ ...defaultLight(), kind: 'step', step: { name: 'a.stp', leds: [1, 2], excluded: [], pcb: 0, emitters: [], ...o } });
+  const M = { parts: [defaultPart(0, '부품 1', 5)], observe: defaultObserve(), groups: [], light: light({}) };
+  const P2 = syncPcb([defaultPart(0, 'a', 5), defaultPart(1, 'b', 5)], [1]), M2 = { parts: P2, observe: defaultObserve(), groups: [], light: light({ fromMech: [], pcb: -1 }) };
+  setLpTab('pcb', 'basic');
+  let h = pcbPanelHtml(M, {});
+  ok(/data-lp-tab="basic" aria-selected="true"/.test(h) && /data-lp-tab="detail"/.test(h) && /data-lp-pick="mpcb"/.test(h), 'PCB 메뉴 탭 · 기본 = 지정·반사율 그대로');
+  setLpTab('pcb', 'detail');
+  h = pcbPanelHtml(M2, { pcbInfo: [{ i: 1, size: [78, 78, 1.6], center: [0, 0, -0.8] }] });
+  ok(h.includes('78 × 78 × 1.6 mm') && /data-lp-pcbopen="1"/.test(h) && !/data-lp-pick="mpcb"/.test(h), '상세 = 도면 PCB 크기 + [위치·크기 편집]');
+  h = pcbPanelHtml(M, { stepPcbInfo: { size: [60, 10, 1], center: [0, 0, -0.5] } });
+  ok(h.includes('60 × 10 × 1 mm') && h.includes('LED STEP') && /data-lp-ledpos/.test(h), '상세 = LED STEP PCB 크기 + LED 와 함께 움직임(위치 보정으로)');
+  setLpTab('pcb', 'basic');
+}
 done();
