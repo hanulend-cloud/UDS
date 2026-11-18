@@ -129,8 +129,9 @@ ok(S.counted === nV && S.noiseWarn === false, `집계 셀 ${S.counted}, 노이�
 {   // 폭 판정 창 프로파일: 최저 창의 min/max = tallyStats 의 폭 균일도
   const sum = new Float64Array(G.ns * G.nw); for (const a of accs) for (let k = 0; k < sum.length; k++) sum[k] += a[k];
   const wp = windowProfile(G, sum, S.win[0], S.win[1]), f = Array.from(wp).filter(Number.isFinite);
-  ok(Array.isArray(S.win) && wp.length === G.nw && f.length >= 2 && Math.abs(Math.min(...f) / Math.max(...f) - S.Uwid) < 1e-12,
-    `windowProfile: 창 [${S.win}] 유효 ${f.length}칸, min/max = Uwid ${S.Uwid.toFixed(4)}`);
+  // 판정값 Uwid 는 노이즈 보정값(2026-11-15) — 그래프(windowProfile)의 최저÷최고는 보정 전 값(rawUwid)과 같아야 함
+  ok(Array.isArray(S.win) && wp.length === G.nw && f.length >= 2 && Math.abs(Math.min(...f) / Math.max(...f) - S.rawUwid) < 1e-12,
+    `windowProfile: 창 [${S.win}] 유효 ${f.length}칸, min/max = 보정 전 폭 균일도 ${S.rawUwid.toFixed(4)}`);
 }
 { // 노이즈 = U 를 만드는 줄·열 기준 — 2D 칸 하나보다 작다(폭 방향 칸 수만큼 합쳐짐). 같은 광자 수면 √nw 쯤
   const r = rng(7), B = 10, accs3 = Array.from({ length: B }, () => { const a = new Float64Array(G.ns * G.nw); for (let k = 0; k < a.length; k++) if (G.valid[k]) { let s = 0; for (let n = 0; n < 50; n++) s += r() < 0.5 ? 1 : 0; a[k] = (s / 50) * G.area[k]; } return a; });
@@ -215,5 +216,16 @@ ok(S.counted === nV && S.noiseWarn === false, `집계 셀 ${S.counted}, 노이�
   const on4 = makeAccumulator(G, line, obs, null, { virtual: true }); on4.onExit(0, 1, 40, 3, 2, 0, 0, 1, 1, 7); on4.onEscape(40, 3, 2, 0, 0, 1, 1, 7);
   const nm = makeAccumulator(G, line, obs); nm.onExit(0, 1, 40, 3, 2, 0, 0, 1, 1, 7); nm.onEscape(40, 3, 2, 0, 0, 1, 1, 7);
   ok(sum(on4) === 1 && on4.acc.findIndex((v) => v > 0) === nm.acc.findIndex((v) => v > 0), '관측면으로 나온 빛은 한 번만 · 보통 집계와 같은 칸');
+}
+// 2026-11-18 사용자: 길이 방향 밝기 차이가 크면 폭 판정값(노이즈 보정)이 실제보다 낮게 나옴(실제 100% → 93.4%, 보정 전 97.4% 보다도 낮음)
+// 원인 = 폭 칸마다 창 값을 길이 방향으로 보정할 때 공통 경사까지 보정해 끝 창이 칸마다 다르게 틀어짐 → 창 평균으로 나눠 폭 모양만 보정
+{ const wid = (grad, N) => {
+    const o2 = { ...obs }, G2 = tallyGeometry(line, o2), q = rng(1), A2 = [];
+    for (let b = 0; b < 10; b++) { const a = makeAccumulator(G2, line, o2); for (let k = 0; k < N; k++) { const x = q() * 100, y = q() * 6, w = grad ? (20 + x) / 120 : 1; a.onExit(0, 1, x, y, 2, 0, 0, 1, w, k); a.onEscape(x, y, 2.5, 0, 0, 1, w, k); } A2.push(a.acc); }
+    return tallyStats(G2, A2, o2);
+  };
+  const g = wid(1, 200000), u = wid(0, 200000);
+  ok(g.Uwid >= g.rawUwid - 0.005 && g.Uwid >= 0.975, `길이 경사 있음: 폭 판정값 ${(g.Uwid * 100).toFixed(1)}% ≥ 보정 전 ${(g.rawUwid * 100).toFixed(1)}% · 실제 100% 에 가까움`);
+  ok(u.Uwid >= 0.98, `완전 균일: 폭 판정값 ${(u.Uwid * 100).toFixed(1)}% (전과 같이 100% 가까움)`);
 }
 done();

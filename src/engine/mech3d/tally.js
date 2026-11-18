@@ -254,8 +254,12 @@ const widthEst = (colsB) => {
   D.forEach((row, wi) => { let mn = Infinity, mx = -Infinity, c = 0; for (const v of row) if (Number.isFinite(v)) { c++; if (v < mn) mn = v; if (v > mx) mx = v; } if (c < 2) return; const u = mx > 0 ? Math.max(0, mn) / mx : 0; if (u < U) { U = u; iWin = wi; } });
   return iWin < 0 ? null : { U, iWin, hid: hc ? hs / hc : 0 };
 };
-const debiasW = (colsB) => {
-  const B = colsB.length; if (B < 3) return null;
+// 창마다 그 창의 폭 칸 평균으로 나눔(2026-11-18) — 길이 방향 밝기 차이(공통 경사)를 빼고 폭 모양만 보정하게.
+// 그대로 보정하면 칸마다 경사가 다르게 잘려 끝 창이 틀어지고 폭 판정값이 실제보다 낮았음(실제 100% → 93.4%). 최저÷최고는 나눠도 같음
+const perWindowRel = (colsB) => colsB.map((wins) => wins.map((row) => { let s = 0, c = 0; for (const v of row) if (Number.isFinite(v)) { s += v; c++; } const m = c ? s / c : NaN; return row.map((v) => (Number.isFinite(v) && m > 0 ? v / m : NaN)); }));
+const debiasW = (colsB0) => {
+  const B = colsB0.length; if (B < 3) return null;
+  const colsB = perWindowRel(colsB0);
   const all = widthEst(colsB); if (!all) return null;
   const jk = []; for (let b = 0; b < B; b++) { const r = widthEst(colsB.filter((_, q) => q !== b)); if (r) jk.push(r.U); }
   const jm = jk.reduce((x, y) => x + y, 0) / (jk.length || 1), seJ = jk.length > 1 ? Math.sqrt(((jk.length - 1) / jk.length) * jk.reduce((x, y) => x + (y - jm) ** 2, 0)) : 0;
