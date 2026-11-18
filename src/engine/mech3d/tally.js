@@ -51,13 +51,29 @@ export function autoCells(L, width, quality) {
   const c = (GRID_QUALITY[quality] ?? GRID_QUALITY.low).cell;
   return { cellS: Math.min(c, L / 10), cellW: Math.min(c, width / 4) };
 }
+// 면의 최대 반폭(중심선에서 가장 먼 점) mm
+const maxHalfOf = (line) => { const R = line.data.raster; let dtMax = 0; for (let k = 0; k < R.mask.length; k++) if (R.mask[k] && R.dt[k] > dtMax) dtMax = R.dt[k]; return Math.max(line.width / 2, dtMax * R.cell); };
+// 자동 폭 칸(좁은 면 = 가장자리 제외 뒤 남은 띠 ÷ 4, 최소 0.2 mm) — 화면의 '자동' 안내도 같은 값
+export const narrowBand = (maxHalf, edge, cell) => { const band = 2 * (maxHalf - edge); return band > 0 && band / cell < 4 - 1e-9 ? band : 0; };
+export function autoWidthCell(line, obs) {
+  const mh = maxHalfOf(line), c = autoCells(line.length, 2 * mh, obs.quality).cellW, band = narrowBand(mh, obs.edgeExcl ?? 0.5, c);
+  return band ? Math.max(band / 4, 0.2) : c;
+}
 export function tallyGeometry(line, obs) {
   const edge = obs.edgeExcl ?? 0.5, L = line.length, R = line.data.raster;
-  let dtMax = 0; for (let k = 0; k < R.mask.length; k++) if (R.mask[k] && R.dt[k] > dtMax) dtMax = R.dt[k];
-  const maxHalf = Math.max(line.width / 2, dtMax * R.cell);
-  const ac = autoCells(L, 2 * maxHalf, obs.quality), cellS = obs.cell ?? obs.cellS ?? ac.cellS, cell = obs.cell ?? obs.cellW ?? ac.cellW;   // cell = w 칸
+  const maxHalf = maxHalfOf(line);
+  const ac = autoCells(L, 2 * maxHalf, obs.quality), cellS = obs.cell ?? obs.cellS ?? ac.cellS;
+  let cell = obs.cell ?? obs.cellW ?? ac.cellW;   // cell = w 칸
   const ns = Math.max(1, Math.round(L / cellS)), ds = L / ns;
-  const nw = Math.ceil((2 * (maxHalf + 2 * cell)) / cell), w0 = -nw * cell / 2;
+  let nw = Math.ceil((2 * (maxHalf + 2 * cell)) / cell), w0 = -nw * cell / 2;
+  // 좁은 면(2026-11-18 사용자: 2 mm 링의 폭 방향을 못 잡음) — 가장자리 제외 뒤 남은 띠에 자동 칸이 4개 미만이면 띠를 4칸으로 나누고(최소 0.2 mm)
+  // 칸 경계를 띠 가장자리에 맞춤. 전에는 칸이 띠에 걸쳐 절반 넘게 들어간 열이 1~2개뿐이라 폭 판정이 안 되거나 틀렸음. 칸을 직접 지정했거나 넓은 면은 그대로
+  const band = narrowBand(maxHalf, edge, cell);
+  if (obs.cell == null && obs.cellW == null && band) {
+    cell = Math.max(band / 4, 0.2);
+    const nb = Math.max(1, Math.round(band / cell)), k = Math.ceil((maxHalf + 2 * cell - band / 2) / cell);
+    nw = nb + 2 * k; w0 = -band / 2 - k * cell;
+  }
   const area = new Float64Array(ns * nw), areaAll = new Float64Array(ns * nw), pa = R.cell * R.cell, pixOk = new Uint8Array(R.nx * R.ny);
   // areaAll·validAll = 면 전체(가장자리 제외 없음, 2026-11-02) — 2D 표시·TXT 용. 판정(area·valid·acc)은 그대로
   for (let j = 0; j < R.ny; j++) for (let i = 0; i < R.nx; i++) {

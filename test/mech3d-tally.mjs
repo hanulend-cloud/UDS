@@ -1,5 +1,5 @@
 // 관측 집계: node test/mech3d-tally.mjs
-import { LUM_CONE, fmtJudge, nearTarget, judgeNoise, JUDGE_NOISE, sharpNoise, PASS_SE, tallyGeometry, makeAccumulator, tallyStats, windowProfile, autoCells } from '../src/engine/mech3d/tally.js';
+import { autoWidthCell, LUM_CONE, fmtJudge, nearTarget, judgeNoise, JUDGE_NOISE, sharpNoise, PASS_SE, tallyGeometry, makeAccumulator, tallyStats, windowProfile, autoCells } from '../src/engine/mech3d/tally.js';
 import { recognizeLine, lightData, lineFromData } from '../src/engine/mech3d/line.js';
 import { rng } from '../src/engine/l2/mc-slab.js';
 import { runMC3D } from '../src/engine/mech3d/mc3d.js';
@@ -236,5 +236,22 @@ ok(S.counted === nV && S.noiseWarn === false, `집계 셀 ${S.counted}, 노이�
   for (let b = 0; b < 10; b++) { const a = makeAccumulator(GR, ringL, ob); for (let k = 0; k < 40000; k++) { const rad = Math.sqrt(37 * 37 + q() * (43 * 43 - 37 * 37)), th = q() * 2 * Math.PI, x = rad * Math.cos(th), y = rad * Math.sin(th), w = 20 + 100 * th / (2 * Math.PI); a.onExit(0, 1, x, y, 2, 0, 0, 1, w, k); a.onEscape(x, y, 2.5, 0, 0, 1, w, k); } A3.push(a.acc); }
   const SR = tallyStats(GR, A3, ob);
   ok(SR.Ulen >= SR.rawUlen - 0.015, `계단 있는 링: 길이 판정값 ${(SR.Ulen * 100).toFixed(1)}% — 보정 전 ${(SR.rawUlen * 100).toFixed(1)}% 보다 크게 낮지 않음`);
+}
+// 2026-11-18 사용자: 폭이 좁은 링(예: 2 mm)은 반지름(폭) 방향을 못 잡아 폭 판정을 못 함 — 칸 0.5 mm 인데 가장자리 0.5 mm 씩 빼면 1 mm 만 남고
+// 칸이 그 띠에 안 맞아 유효 열이 1개뿐이었음 → 좁으면 남은 띠를 4칸으로 나누고 칸 경계를 띠 가장자리에 맞춤(넓은 면은 그대로)
+{ const ring = (W, q) => {
+    const R0 = 40 - W / 2, R1 = 40 + W / 2, L2 = recognizeLine([topFaceMesh(annulusTris(0, 0, R0, R1), 2)], [{ part: 0, face: 1 }], [0, 0, 1]);
+    const ob = { faces: [{ part: 0, face: 1 }], dir: [0, 0, 1], cone: 10, edgeExcl: 0.5, targetLen: 0.8, targetWid: 0.8, quality: q };
+    const G2 = tallyGeometry(L2, ob), q2 = rng(2), A4 = [];
+    for (let b = 0; b < 10; b++) { const a = makeAccumulator(G2, L2, ob); for (let k = 0; k < 400000; k++) { const rad = Math.sqrt(R0 * R0 + q2() * (R1 * R1 - R0 * R0)), th = q2() * 2 * Math.PI, x = rad * Math.cos(th), y = rad * Math.sin(th), w = 1 + (rad - R0) / W; a.onExit(0, 1, x, y, 2, 0, 0, 1, w, k); a.onEscape(x, y, 2.5, 0, 0, 1, w, k); } A4.push(a.acc); }
+    const cols = []; for (let j = 0; j < G2.nw; j++) { let c = 0; for (let i = 0; i < G2.ns; i++) if (G2.valid[i * G2.nw + j]) c++; if (c > G2.ns * 0.9) cols.push(j); }
+    return { G: G2, S: tallyStats(G2, A4, ob), cols };
+  };
+  const r2 = ring(2, 'low'), want2 = (1 + 0.625 / 2) / (1 + 1.375 / 2);   // 남은 띠 [0.5, 1.5] mm 를 0.25 mm 4칸 → 칸 중심 0.625 · 1.375
+  ok(r2.cols.length >= 4 && r2.S.Uwid != null && Math.abs(r2.S.rawUwid - want2) < 0.03, `2 mm 링: 폭 칸 ${r2.G.cell.toFixed(2)} mm · 유효 열 ${r2.cols.length} · 폭 균일도 ${r2.S.Uwid == null ? '판정 불가' : (r2.S.rawUwid * 100).toFixed(1) + '%'} (칸 평균 참값 ${(want2 * 100).toFixed(1)}%)`);
+  const r20 = ring(20, 'low');
+  ok(Math.abs(r20.G.cell - 1.5) < 1e-9, `넓은 링(20 mm)은 칸 그대로 ${r20.G.cell} mm`);
+  const L2 = recognizeLine([topFaceMesh(annulusTris(0, 0, 39, 41), 2)], [{ part: 0, face: 1 }], [0, 0, 1]);
+  ok(Math.abs(autoWidthCell(L2, { edgeExcl: 0.5, quality: 'low' }) - r2.G.cell) < 1e-12, '화면의 자동 폭 칸 안내 = 실제 쓰는 칸');
 }
 done();
