@@ -35,6 +35,7 @@ export const uVerdict = (v, t, se, relNoise) => (!Number.isFinite(v) || !Number.
 // 길이·폭 판정 + 전체(하나라도 미달 = bad, 아니면 하나라도 근처 = near)
 export function judgeStats(s, obs) {
   if (!s || s.empty) return { len: '', wid: '', all: '' };
+  if (s.preview) return { len: 'preview', wid: 'preview', all: 'preview' };   // 미리보기(칸 3 mm · 노이즈 2%) = 판정 안 함
   const len = uVerdict(s.Ulen, obs.targetLen, s.seLen, s.relNoise), wid = s.Uwid == null ? '' : uVerdict(s.Uwid, obs.targetWid, s.seWid, s.relNoise);
   return { len, wid, all: len === 'bad' || wid === 'bad' ? 'bad' : len === 'near' || wid === 'near' ? 'near' : 'ok' };
 }
@@ -45,7 +46,7 @@ export const flU = (v) => Math.floor(v * 1000 + 1e-9) / 1000;
 export const fmtJudge = (v) => (!Number.isFinite(v) ? '–' : `${(flU(v) * 100).toFixed(1)}%`);
 export const fmtTg = (t) => (!Number.isFinite(t) ? '–' : `${+(t * 100).toFixed(1)}%`);   // 목표(입력값 그대로, 80%)
 export const fmtDp = (d) => (!Number.isFinite(d) ? '–' : `${d >= 0 ? '+' : '−'}${(Math.round(Math.abs(d) * 1000) / 10).toFixed(1)}%p`);   // 차이
-export const GRID_QUALITY = { low: { cell: 1.5 }, mid: { cell: 1 }, high: { cell: 0.5 } };
+export const GRID_QUALITY = { low: { cell: 1.5 }, mid: { cell: 1 }, high: { cell: 0.5 }, preview: { cell: 3 } };   // preview = 광효율 1% 미만 자동 미리보기(2026-11-18, 판정 안 함)
 export function autoCells(L, width, quality) {
   const c = (GRID_QUALITY[quality] ?? GRID_QUALITY.low).cell;
   return { cellS: Math.min(c, L / 10), cellW: Math.min(c, width / 4) };

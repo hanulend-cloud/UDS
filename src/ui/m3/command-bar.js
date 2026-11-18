@@ -23,10 +23,12 @@ export function flowState(calc, stats, M, ad = {}) {
   const running = st === 'running' || st === 'pending' || st === 'starting', done = st === 'done';
   const sim = running ? { text: `계산 중 ${fmtProg(calc?.progress ?? (Number.isFinite(rn) && rn > 0 ? Math.min(1, (tn / rn) ** 2) * 100 : 0))}%${res ? ` · ${res}` : ''}`, cls: 'run', done: false }
     : st === 'paused' ? { text: `${calc?.stopped ? '중지됨' : '일시정지'}${res ? ` · ${res}` : ''}`, cls: '', done: false }
+    : done && J === 'preview' ? { text: `미리보기 · ${res}`, cls: '', done: false }   // 광효율 1% 미만 자동 미리보기 = 판정 안 함(2026-11-18)
     : done && has ? { text: `${res} ${pass ? '목표 통과' : J === 'near' ? '목표 근처' : '목표 미달'}`, cls: pass ? 'ok' : J === 'near' ? 'near' : 'bad', done: true }
     : { text: '–', cls: '', done: false };
   const opt = ad.running ? { text: '진행 중', cls: 'run', done: false }
     : ad.result ? { text: '결과 확인 · 적용', cls: 'run', done: false }
+    : J === 'preview' ? { text: '정밀 계산 뒤', cls: '', done: false }
     : !sim.done ? { text: '시뮬레이션 뒤', cls: '', done: false }
     : ad.applied ? (pass ? { text: '적용됨 · 목표 통과', cls: 'ok', done: true } : { text: `적용됨 · ${J === 'near' ? '목표 근처' : '목표 미달'}`, cls: J === 'near' ? 'near' : 'need', done: false })   // 적용한 뒤(2026-11-12)
     : pass ? { text: '불필요(목표 통과)', cls: 'ok', done: true }

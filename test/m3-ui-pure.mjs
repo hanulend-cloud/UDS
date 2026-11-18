@@ -1439,3 +1439,30 @@ done();
     say(src.includes("position: ") && src.includes("'#0d9488'") && src.includes("'#7c3aed'") && src.includes("'#db2777'") && !/#f59e0b|#a855f7|#3b82f6/i.test(src), `${nm} 인자 색 = 청록·보라·핑크`);
   }
 }
+{ // 2026-11-18 사용자: 미리보기(광효율 1% 미만 · 칸 3 mm · 노이즈 2%) 결과는 합격/불합격 판정을 하지 않음
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const { judgeStats, GRID_QUALITY } = await import('../src/engine/mech3d/tally.js');
+  const { overallVerdict, judgeText } = await import('../src/ui/m3/results-panel.js');
+  const { flowState } = await import('../src/ui/m3/command-bar.js');
+  const O = { targetLen: 0.8, targetWid: 0.8, targetNoise: 0.01 }, st = { Ulen: 0.6, Uwid: 0.9, seLen: 0.001, seWid: 0.001, relNoise: 0.01 }, pv = { ...st, preview: true };
+  say(GRID_QUALITY.preview?.cell === 3, '미리보기 칸 3 mm');
+  say(judgeStats(pv, O).all === 'preview' && judgeStats(st, O).all === 'bad', '미리보기 = 판정 안 함(보통은 그대로 미달)');
+  say(overallVerdict(pv, O).cls === 'preview' && /미리보기/.test(overallVerdict(pv, O).text) && overallVerdict(st, O).cls === 'bad', '결과 배지 = 미리보기 — 판정 아님');
+  say(judgeText(0.6, 0.8, 0.001, 0.01, true).cls === 'preview' && judgeText(0.6, 0.8, 0.001, 0.01).cls === 'bad', '길이·폭 줄도 미리보기면 판정 안 함');
+  const f = flowState({ state: 'done', stats: pv, targetNoise: 0.02, preview: true }, pv, { observe: O }, {});
+  say(/미리보기/.test(f.sim.text) && !/미달|통과/.test(f.sim.text) && !f.sim.done && !/미달/.test(f.opt.text), `상단 ④·⑤ 칩도 판정 안 함 (${f.sim.text} | ${f.opt.text})`);
+}
+{ // 미리보기 — 1D 제목 옆 균일도도 합격/불합격 색 없음
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const { uniTagHtml } = await import('../src/ui/m3/results-panel.js');
+  const st = { Ulen: 0.6, Uwid: 0.9, seLen: 0.001, seWid: 0.001, relNoise: 0.01 };
+  say(/m3-uni bad/.test(uniTagHtml('길이', st, 0.8)) && /m3-uni preview/.test(uniTagHtml('길이', { ...st, preview: true }, 0.8)), '1D 제목 균일도: 미리보기면 색 없음');
+}
+{ // 미리보기 단추(순수) — 미리보기 중 = [정밀 계산] · 정밀로 바꿨고 광효율이 여전히 1% 미만 = [미리보기로] · 그 밖 = 없음
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const { previewBtn } = await import('../src/ui/m3/results-panel.js');
+  const a = previewBtn({ preview: true, photometry: { eff: 0.006 } }, 'auto'), b = previewBtn({ preview: false, photometry: { eff: 0.006 } }, 'precise'), c = previewBtn({ preview: false, photometry: { eff: 0.03 } }, 'auto');
+  say(a?.k === 'precise' && /정밀 계산/.test(a.label) && /0\.6%/.test(a.title) && /3 mm/.test(a.title), `미리보기 중 = [정밀 계산] (${a?.label} · ${a?.title})`);
+  say(b?.k === 'auto' && /미리보기/.test(b.label), '정밀 + 광효율 낮음 = [미리보기로]');
+  say(c === null && previewBtn(null, 'auto') === null, '보통 = 단추 없음');
+}

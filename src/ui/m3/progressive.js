@@ -54,6 +54,14 @@ export function nextProgress(p, photons, noise, goal) {
 // 진행률 글(0~100 → 소수 한 자리, 0.1% 단위 내림 — 끝나기 전에 100.0 으로 보이지 않게)
 export const fmtProg = (v) => (Number.isFinite(v) ? (Math.floor(v * 10 + 1e-9) / 10).toFixed(1) : '0.0');
 // 광선 한도(2026-11-11) — 보는 각도 ±30° 기준 16억(±90° 때 4억의 4배) × 화질(칸이 많을수록 더)
+// 광효율 1% 미만 자동 미리보기(2026-11-18 사용자) — 칸 3 mm · 노이즈 2% · 판정 안 함. [정밀 계산] = mode 'precise'(원래 화질·노이즈 목표)
+// 켜기 = 광효율 < 1%, 끄기 = ≥ 1.2%(그 사이는 지금 상태 유지 — 왔다 갔다 안 함). 광효율을 아직 모르면 그대로
+export const PREVIEW = { cell: 3, noise: 0.02, effOn: 0.01, effOff: 0.012 };
+export function previewWanted(mode, eff, was) {
+  if (mode === 'precise') return false;
+  if (!Number.isFinite(eff)) return !!was;
+  return eff < PREVIEW.effOn ? true : eff >= PREVIEW.effOff ? false : !!was;
+}
 export const photonCap = (quality) => 1.6e9 * ({ mid: 2, high: 4 }[quality] ?? 1);
 // 늦은 포트 기록(2026-11-18 사용자) — iv = 3D 화면 조작 구간 [[시작, 끝|null(진행 중)]] (ms). [t0, t1] 과 겹친 ms
 export function interactOverlap(iv, t0, t1) { let s = 0; for (const [a, b] of iv ?? []) s += Math.max(0, Math.min(t1, b ?? t1) - Math.max(t0, a)); return s; }
@@ -221,14 +229,15 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
     const same = nMin === nMax && nMin === o.chunkN, ref = o.chunkN;
     const norm = (B, a) => (same ? (B.n === 1 ? a : a.map((v) => v / B.n)) : a.map((v) => v * (ref / B.photons)));
     const accs = filled.map((B) => norm(B, B.acc)), cnts = filled.map((B) => norm(B, B.cnt));
-    const stats = symStats(job.G, accs, job.obs, cnts, seeded ? null : job.sym);   // 대칭 칸 합치기(job.sym, 2026-11-17) — 없으면 tallyStats 그대로. 넘겨받은 최종 판정 값은 합치지 않음(전체 영역)
+    const stats = symStats(job.G, accs, job.obs, cnts, seeded ? null : job.sym);
+    if (stats && job.preview) stats.preview = true;   // 미리보기 = 판정 안 함(judgeStats)   // 대칭 칸 합치기(job.sym, 2026-11-17) — 없으면 tallyStats 그대로. 넘겨받은 최종 판정 값은 합치지 않음(전체 영역)
     // 2D 표시·TXT 용 면 전체 지도 — stats.map 과 같은 정규화(제외 구역이 없는 칸은 값이 같음)
     if (job.G.validAll) { const all = filled.map((B) => norm(B, B.accAll)), m = new Float64Array(job.G.ns * job.G.nw); for (let k = 0; k < m.length; k++) if (job.G.validAll[k]) { let v = 0; for (const a of all) v += a[k]; m[k] = v / all.length / job.G.areaAll[k]; } stats.mapAll = m; if (stats.sym?.factor > 1) { const sm = new Float64Array(m.length); for (const x of all) for (let k = 0; k < m.length; k++) sm[k] += x[k]; stats.mapAll = symMapAll(job.G, sm, all.length, job.sym); } }   // 대칭 합치기 중이면 화면 지도도 짝 칸 평균
     const sum = new Float64Array(job.G.ns * job.G.nw);
     for (const B of filled) for (let k = 0; k < sum.length; k++) sum[k] += B.acc[k];
     return { stats, sum, photometry: photometry(job.G, sum, ledger, { fluxLm: job.fluxLm ?? 0, nLeds: job.nLeds ?? 0 }) };
   }
-  const goal = () => (job?.obs ? judgeNoise(snap?.stats, job.obs, o.targetNoise) : o.targetNoise);   // 목표 바로 아래면 더 낮은 노이즈까지
+  const goal = () => (job?.preview ? PREVIEW.noise : job?.obs ? judgeNoise(snap?.stats, job.obs, o.targetNoise) : o.targetNoise);   // 미리보기 = 2% 고정(판정용으로 조이지 않음)   // 목표 바로 아래면 더 낮은 노이즈까지
   function onTick() {
     if (!job) return;
     snap = compute();
@@ -280,7 +289,7 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
       state, stopped, reason, error, photons, progress: state === 'done' ? 100 : prog?.pct ?? 0, chunks: doneChunks, ignored, sceneKey: job?.sceneKey ?? null,
       stats: snap?.stats ?? null, sum: snap?.sum ?? null, photometry: snap?.photometry ?? null,
       ledger: { ...ledger }, leak: { ...leak }, paths: { ...paths }, bins: bins.map((b) => b && { acc: b.acc, n: b.n, photons: b.photons }),
-      G: job?.G ?? null, obs: job?.obs ?? null, targetNoise: goal(),
+      G: job?.G ?? null, obs: job?.obs ?? null, targetNoise: goal(), preview: !!job?.preview,
     };
   }
   return { restart, pause, stop, resume, cancel, dispose, setJudge, snapshot };

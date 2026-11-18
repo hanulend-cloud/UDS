@@ -1,5 +1,5 @@
 import { shapeLayout } from './map-shape.js';
-import { requiredFlux, fmtProg, needText, needShort } from './progressive.js';
+import { requiredFlux, fmtProg, needText, needShort, PREVIEW } from './progressive.js';
 import { mountSplit, mountHeightHandle } from './pane-split.js';
 import { clampRect, fitRect, winTop, dragBy, raiseWin, mountResizers, COLLAPSED_W, maxRect, DEF_RECT, flyWin, collapsedRect } from './monitor.js';
 import { simPct } from './opt-dash.js';
@@ -19,8 +19,9 @@ const fl1000 = (v) => Math.floor(v * 1000 + 1e-9);   // 0.1% 단위 내림 — �
 export const fmtU = fmtJudge;   // 균일도 = % 소수 한 자리(2026-11-08)
 const finiteMax = (a) => { let m = -Infinity; for (const v of a) if (Number.isFinite(v) && v > m) m = v; return m; };
 // 판정도 표시된(내림) 값끼리 비교한다 — 화면에 0.80 / 목표 0.80 인데 "미달"이 뜨는 일이 없게
-export function judgeText(v, tg, se = null, relNoise = null) {
+export function judgeText(v, tg, se = null, relNoise = null, preview = false) {
   if (!Number.isFinite(v)) return { cls: '', text: `목표 ${fmtTg(Math.floor(tg * 100 + 1e-9) / 100)}` };
+  if (preview) return { cls: 'preview', text: `목표 ${fmtTg(Math.floor(tg * 100 + 1e-9) / 100)} · 미리보기 — 판정 아님` };   // 광효율 1% 미만 자동 미리보기(2026-11-18)
   if (relNoise > 0.05) return { cls: 'busy', text: `목표 ${fmtTg(Math.floor(tg * 100 + 1e-9) / 100)} · 노이즈 큼 — 판정 보류(계산 중)` };   // 계산 초반(광선 수천 개) 값은 크게 흔들림 — 빨간 미달로 보이지 않게(2026-11-07)
   if (uVerdict(v, tg, se, relNoise) === 'near') return { cls: 'near', text: `목표 ${fmtTg(Math.floor(tg * 100 + 1e-9) / 100)} · 근처 (오차 ±${(uBand(v, se, relNoise) * 100).toFixed(1)}%p)` };
   const ok = Math.floor(v * 100 + 1e-9) >= Math.floor(tg * 100 + 1e-9), gap = Math.max(1, Math.floor(tg * 100 + 1e-9) * 10 - fl1000(v));   // 판정 규칙은 그대로(1% 단위 내림 비교) · 미달 폭은 0.1%p
@@ -37,6 +38,7 @@ export function nextAction(cls, optFrac = null) {
 // 결과 요약 카드 종합 판정 배지(순수, 2026-11-12) — 길이·폭 judgeText 를 그대로 묶음(판정 규칙·숫자 안 바뀜). 폭 판정 불가면 길이로만
 export function overallVerdict(st, O) {
   if (!st || st.empty || !O) return { cls: '', text: '' };
+  if (st.preview) return { cls: 'preview', text: '미리보기 — 판정 아님' };
   const J = [judgeText(st.Ulen, O.targetLen, st.seLen, st.relNoise), ...(Number.isFinite(st.Uwid) ? [judgeText(st.Uwid, O.targetWid, st.seWid, st.relNoise)] : [])].map((j) => j.cls);
   if (J.includes('busy')) return { cls: 'busy', text: '… 판정 보류(계산 중)' };
   if (J.includes('bad')) return { cls: 'bad', text: '✕ 목표 미달' };
@@ -48,6 +50,13 @@ export function overallVerdict(st, O) {
 // 광효율 → 계산 부담(순수, 표시 전용, 2026-11-12) — 관측면 원뿔에 닿는 광선이 적을수록 같은 노이즈에 광선이 더 필요(대략 광효율에 반비례).
 // 5% 이상 = 표시 없음 · 1~5% = 노랑 '계산 느림' · 1% 미만 = 빨강 '계산 매우 느림'(글은 짧게, 2026-11-12 사용자 요청). 계산 중이면 남은 시간(경과 × 남은 %/진행 %). 자세한 숫자는 툴팁
 export const EFF_HEAVY = 0.05, EFF_VERY = 0.01;
+// 미리보기 단추(순수, 2026-11-18) — 미리보기 중 = [정밀 계산] · [정밀 계산] 뒤에도 광효율 1% 미만 = [미리보기로] · 그 밖 = null
+export function previewBtn(snap, mode) {
+  const eff = snap?.photometry?.eff, e = Number.isFinite(eff) ? `광효율 ${(eff * 100).toFixed(1)}%` : '광효율 낮음';
+  if (snap?.preview) return { k: 'precise', label: '정밀 계산', title: `미리보기 중(${e}) — 칸 ${PREVIEW.cell} mm · 노이즈 ${PREVIEW.noise * 100}% · 합격/불합격 판정 안 함. 누르면 원래 화질·노이즈 목표로 다시 계산해 판정(오래 걸림)` };
+  if (mode === 'precise' && Number.isFinite(eff) && eff < PREVIEW.effOn) return { k: 'auto', label: '미리보기로', title: `${e} — 정밀 계산이 오래 걸림. 누르면 칸 ${PREVIEW.cell} mm · 노이즈 ${PREVIEW.noise * 100}% 미리보기로` };
+  return null;
+}
 export function effLoad(eff, snap, elapsedSec) {
   if (!Number.isFinite(eff) || eff >= EFF_HEAVY) return { text: '', cls: '', title: '' };
   const cls = eff < EFF_VERY ? 'bad' : 'near', pct = snap?.progress ?? 0;
@@ -260,7 +269,7 @@ const MAP_PAD = { l: 40, r: 64, t: 8, b: 30 }, EXAG_MAX = 8, PIN_COLOR = '#ff8a1
 export function uniTagHtml(kind, st, tg) {
   const L = kind === '길이', v = L ? st?.Ulen : st?.Uwid, se = L ? st?.seLen : st?.seWid;
   if (!st || st.empty || !Number.isFinite(v) || !(st.relNoise <= 0.05)) return '';
-  const c = uVerdict(v, tg, se, st.relNoise);
+  const c = st.preview ? 'preview' : uVerdict(v, tg, se, st.relNoise);   // 미리보기 = 판정 색 없음
   return `<span class="m3-uni ${c}" title="${kind} 균일도 · 목표 ${fmtTg(tg)}">${kind} 균일도 <b>${fmtJudge(v)}</b> <small>목표 ${fmtTg(tg)}</small></span>`;
 }
 export const MIN_COLOR = '#e5484d';
@@ -565,7 +574,7 @@ export const mapMenuItems = (hasPin, onCell) => [
 ];
 // 1D 우클릭 메뉴 항목(순수)
 export const plotMenuItems = (title) => [{ k: 'csv', label: `${title} 데이터 CSV 저장` }, { k: 'png', label: '그래프 이미지 저장 (PNG)' }, { k: 'copy', label: '그래프 이미지 복사' }];
-export function createResultsPanel(el, { anchor = () => null, onOpt = null, onQuality = null, fileName = () => 'uds', onLeak = null, onBig = null, onCalc = null, calcBusy = () => false, onNote = null } = {}) {
+export function createResultsPanel(el, { anchor = () => null, onPreview = null, onOpt = null, onQuality = null, fileName = () => 'uds', onLeak = null, onBig = null, onCalc = null, calcBusy = () => false, onNote = null } = {}) {
   let effT = { key: null, t0: null };
   let optFrac = null, vCls = '';   // 기구 최적화 진행률(null = 안 돎) · 지금 종합 판정
   function syncNext() {   // 판정 옆 '다음 할 일' 단추
@@ -582,7 +591,7 @@ export function createResultsPanel(el, { anchor = () => null, onOpt = null, onQu
       <div class="m3-sum-u"><div class="l">길이 균일도</div><div class="v" data-r="ul">–</div>${gaugeHtml('ulg')}<div class="s" data-r="ulj"></div></div>
       <div class="m3-sum-u"><div class="l">폭 균일도</div><div class="v" data-r="uw">–</div>${gaugeHtml('uwg')}<div class="s" data-r="uwj"></div></div>
       <div class="m3-sum-c"><div class="l">평균 광량</div><div class="v" data-r="avg" title="cd/m² 값은 보는 각도 설정과 상관없이 정면 ±10° 안의 평균 휘도">–</div><div class="s" data-r="avgs" title="최대 대비 % — LED 광속(lm)을 넣으면 cd/m² 로 표시"></div><div class="s m3-need" data-r="need"></div>${gaugeHtml('avgg')}</div>
-      <div class="m3-sum-c"><div class="l">광 효율</div><div class="v sm" data-r="eff">–</div><div class="s">관측면 원뿔 안 / LED 총 방출</div><div class="m3-effload" data-r="effl" hidden></div></div>
+      <div class="m3-sum-c"><div class="l">광 효율</div><div class="v sm" data-r="eff">–</div><div class="s">관측면 원뿔 안 / LED 총 방출</div><div class="m3-effload" data-r="effl" hidden></div><button type="button" class="m3-pvbtn" data-r="pv" hidden></button></div>
       <div class="m3-sum-x"><div class="m3-regl" data-r="reg" hidden title="큰 창(⤢)에서 고른 영역 — 길이 / 폭 균일도"></div><button type="button" class="m3-leak" data-r="leak" hidden title="누르면 3D 에서 가장 많이 새는 면을 강조"></button></div>
     </div>
     <div class="m3-blk"><div class="m3-t"><b class="m3-tt">2D 광량 <i class="m3-info" data-r="mapsub" tabindex="0">ⓘ</i></b><span><label class="m3-map-eq" title="가로세로를 같은 축척으로 — 끄면 좁은 폭을 늘려 보여 줌"><input type="checkbox" data-r="mapEq"> 실제 비율</label> <select data-r="quality" title="2D 분포·1D 프로파일 칸 크기(정사각) — 저 1.5 mm(빠름) · 중 1.0 mm(광선 ≈2배) · 고 0.5 mm(광선 ≈4배) · 짧거나 좁은 면은 그 방향만 더 잘게" aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>  <button type="button" class="m3-zoom" data-zoom="map" title="큰 창으로 보기" aria-label="2D 광량 분포 확대">⤢</button></span></div>
@@ -755,7 +764,7 @@ export function createResultsPanel(el, { anchor = () => null, onOpt = null, onQu
     const rect = fitRect(bigRectLoad(), innerWidth, innerHeight, winTop());
     ov.className = 'm3-big-in'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', '광분포 시뮬레이션');
     const cell = (k) => `<div class="m3-big-c" data-k="${k}"><div class="m3-big-ct"><b>${TITLE[k]}</b>${k === 'map' ? '' : `<span data-big-uni="${k}"></span>`}<span class="m3-big-sp"></span>${k === 'map' ? `<label class="m3-big-eq"><input type="checkbox" data-big-eq${eq0 ? ' checked' : ''}> 실제 비율</label><button type="button" data-big-reg-on aria-pressed="false" title="켜 둔 동안 끌 때마다 새 영역 · 그 영역의 균일도를 아래 표로 비교 · 켠 채 클릭 = 영역 지움 · 끄면 영역 결과를 숨김(다시 켜면 보임) · 휠 = 확대 · 오른쪽 끌기 = 이동 · 더블클릭 = 전체 보기">▭ 영역 선택</button><button type="button" data-big-fit disabled title="확대하면 켜짐 — 휠 = 확대 · 오른쪽 끌기 = 이동">전체 보기</button>` : ''}<button type="button" data-big-one="${k}">⤢ 이 그림만</button></div><canvas class="m3-big-cv" data-big-cv="${k}"></canvas>${k === 'map' ? '<div class="m3-big-reg" data-big-reg hidden></div>' : ''}</div>`;
-    ov.innerHTML = `<div class="m3-big-hd" title="끌어서 옮기기"><b title="진행 현황 · 2D · 1D — 2D 클릭 = 그 점 기준 1D 곡선(주황) · 그림 우클릭 = 데이터·이미지 저장"><i class="m3-fl" data-big-step>4</i><span class="m3-tx">광분포 시뮬레이션</span><span class="m3-tx-s">광분포</span></b><span class="m3-mon-sum" data-big-sum></span><span class="m3-big-sp"></span><span class="m3-ctl" data-big-ctl></span><label class="m3-big-q">화질 <select data-big-q aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label><button type="button" data-big-max></button><button type="button" data-big-min></button><button type="button" data-big-close title="Esc" aria-label="닫기">✕<span class="m3-tx"> 닫기</span></button></div>
+    ov.innerHTML = `<div class="m3-big-hd" title="끌어서 옮기기"><b title="진행 현황 · 2D · 1D — 2D 클릭 = 그 점 기준 1D 곡선(주황) · 그림 우클릭 = 데이터·이미지 저장"><i class="m3-fl" data-big-step>4</i><span class="m3-tx">광분포 시뮬레이션</span><span class="m3-tx-s">광분포</span></b><span class="m3-mon-sum" data-big-sum></span><span class="m3-big-sp"></span><span class="m3-ctl" data-big-ctl></span><button type="button" class="m3-pvbtn" data-big-pv hidden></button><label class="m3-big-q">화질 <select data-big-q aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label><button type="button" data-big-max></button><button type="button" data-big-min></button><button type="button" data-big-close title="Esc" aria-label="닫기">✕<span class="m3-tx"> 닫기</span></button></div>
       <div class="m3-big-grid"><div class="m3-big-prog" data-big-prog></div>${cell('map')}<div class="m3-big-row">${cell('prof')}${cell('wprof')}</div></div>`;
     (el.closest('#mech3d-wrap') ?? document.body).appendChild(ov);   // 설계 화면에 붙임(화면을 바꾸면 함께 숨음)
     const cvs = Object.fromEntries(KINDS.map((k) => [k, ov.querySelector(`[data-big-cv="${k}"]`)]));
@@ -808,15 +817,24 @@ export function createResultsPanel(el, { anchor = () => null, onOpt = null, onQu
     flyWin(ov, anchor(), false);   // ④ 칩에서 펼쳐짐
   }
   // 큰 창 머리: 화질 = 지금 값
+  // 미리보기 단추(메인 광 효율 칸 · 큰 창 머리) — 같은 상태
+  const pvSync = (b) => {
+    if (!b) return;
+    const v = previewBtn(last?.snap, last?.calcMode ?? 'auto');
+    b.hidden = !v; if (!v) return;
+    if (b.textContent !== v.label) b.textContent = v.label; b.title = v.title; b.dataset.k = v.k;
+    b.onclick = () => onPreview?.(b.dataset.k);
+  };
   const syncBig = () => {
     if (!big) return;
     const s = big.el.querySelector('[data-big-q]');
     if (document.activeElement !== s) s.value = last?.observe?.quality ?? 'low';
-    const su = big.el.querySelector('[data-big-sum]'), st0 = last?.snap?.stats, O = last?.observe, u = (t, v, g) => `<b class="${Number.isFinite(v) && Number.isFinite(g) ? (v + 1e-9 >= g ? 'ok' : 'bad') : ''}">${t} ${fmtJudge(v)}</b>`;
+    const su = big.el.querySelector('[data-big-sum]'), st0 = last?.snap?.stats, O = last?.observe, u = (t, v, g) => `<b class="${!st0?.preview && Number.isFinite(v) && Number.isFinite(g) ? (v + 1e-9 >= g ? 'ok' : 'bad') : ''}">${t} ${fmtJudge(v)}</b>`;
     const pr = last?.snap?.state === 'done' ? 100 : last?.snap?.progress ?? simPct(st0?.relNoise, last?.snap?.targetNoise ?? 0.01);
     setStepMark(big.el.querySelector('[data-big-step]'), 4, last?.snap?.state === 'done');
     setCtl(big.el.querySelector('[data-big-ctl]'), simCtl(last?.snap, calcBusy()), (k) => onCalc?.(k));
     for (const [k, kind, tg] of [['prof', '길이', O?.targetLen], ['wprof', '폭', O?.targetWid]]) { const n = big.el.querySelector(`[data-big-uni="${k}"]`), h = uniTagHtml(kind, st0, tg); if (n && n.innerHTML !== h) n.innerHTML = h; }   // 큰 창 1D 제목 옆 균일도
+    pvSync(big.el.querySelector('[data-big-pv]'));
     if (su) su.innerHTML = `<b>진행 ${fmtProg(pr)}%</b> ${!st0 || st0.empty || st0.relNoise > 0.05 ? '' : `${u('길이', st0.Ulen, O?.targetLen)} ${u('폭', st0.Uwid, O?.targetWid)}`}`;   // 접었을 때 보이는 현재 결과(계산 초반 값은 노이즈가라 숨김)
   };
   // onclick 대입(addEventListener 아님) — 패널을 다시 만들면(새 도면·프로젝트) 앞 패널의 처리를 대체. 쌓이면 큰 창이 2개 열리고 아래 창은 이전 계산 데이터였음
@@ -827,17 +845,18 @@ export function createResultsPanel(el, { anchor = () => null, onOpt = null, onQu
   const fill = (g, pct, ok, tgPct) => {
     const f = g.querySelector('.f'), w = `${Math.max(0, Math.min(100, pct)).toFixed(0)}%`;
     if (f.style.width !== w) f.style.width = w;
-    f.classList.toggle('ok', !!ok); f.classList.toggle('bad', !ok);
+    f.classList.toggle('ok', ok === true); f.classList.toggle('bad', ok === false);   // null = 판정 없음(미리보기)
     const l = `${tgPct.toFixed(0)}%`, t = g.querySelector('.tg');
     if (t.style.left !== l) t.style.left = l;
   };
   const resetGauge = (g) => { g.querySelector('.f').style.width = '0%'; };
-  const gauge = (key, v, tg, se, relNoise) => {
-    const j = judgeText(v, tg, se, relNoise);
+  const gauge = (key, v, tg, se, relNoise, pv = false) => {
+    const j = judgeText(v, tg, se, relNoise, pv);
     q(key).textContent = fmtU(v); q(key).className = `v ${j.cls}`; q(`${key}j`).textContent = j.text;
-    fill(q(`${key}g`), Number.isFinite(v) ? v * 100 : 0, j.cls === 'ok', tg * 100);
+    fill(q(`${key}g`), Number.isFinite(v) ? v * 100 : 0, pv ? null : j.cls === 'ok', tg * 100);
     q(`${key}g`).querySelector('.f').classList.toggle('near', j.cls === 'near');
     q(`${key}g`).querySelector('.f').classList.toggle('busy', j.cls === 'busy');
+    q(`${key}g`).querySelector('.f').classList.toggle('preview', j.cls === 'preview');   // 미리보기 = 회색(판정 색 없음)
   };
   function clear(message) {
     VIEW.map = VIEW.prof = VIEW.wprof = null; if (big) for (const k of KINDS) clearCanvas(big.cvs[k]);
@@ -873,7 +892,7 @@ export function createResultsPanel(el, { anchor = () => null, onOpt = null, onQu
     VIEW.prof = plotView([{ ys: Array.from(st.profile, (v) => v / pm), color: '#1f6fd1', name: '폭 평균', band: st.relNoise ?? 0 }, ...(pp ? [{ ys: Array.from(pp.along), color: PIN_COLOR, name: `지정 점 w=${pin.w.toFixed(1)}` }] : [])], observe.targetLen, { x0: 0, x1: G.L, xl: 's (mm)', leds: leds.map((p) => p.s), ledsOrig: (args.ledsOrig ?? []).map((p) => p.s) });
     q('psub').title = `${pin ? `폭 평균 + 지정 점(주황, ${ring} 방향) · 같은 점 다시 클릭 또는 바깥 클릭 = 해제` : '폭 평균 · 2D 클릭 = 그 점 기준 곡선 추가'} · 옅은 띠 = 계산 노이즈 범위 · 빨간 점선 = 목표 하한 · 곡선은 노이즈만 살짝 다듬어 그림(LED 리플 높이 유지) · 최저점·마우스 값·CSV·판정 = 원자료`;
     paint('map', q('map')); paint('prof', q('prof'));
-    gauge('ul', st.Ulen, observe.targetLen, st.seLen, st.relNoise);
+    gauge('ul', st.Ulen, observe.targetLen, st.seLen, st.relNoise, !!st.preview);
     if (pp && (st.Uwid == null || !st.win)) {   // 폭 판정이 없어도 지정 점의 폭(원형 = 반경) 방향 곡선은 보여 줌
       VIEW.wprof = plotView([{ ys: Array.from(pp.across), color: PIN_COLOR, name: `지정 점 s=${pin.s.toFixed(1)}` }], null, { x0: G.w0, x1: G.w0 + G.nw * G.cell, xl: 'w (mm)', leds: [] });
       paint('wprof', q('wprof')); resetGauge(q('uwg'));
@@ -887,7 +906,7 @@ export function createResultsPanel(el, { anchor = () => null, onOpt = null, onQu
       VIEW.wprof = plotView([{ ys: Array.from(wp, (v) => v / wm), color: '#1f6fd1', name: `최저 창 s=${st.sWorst.toFixed(0)}`, band: st.relNoise ?? 0 }, { ys: Array.from(wa, (v) => v / wam), color: '#3fae7a', dash: [4, 3], name: '길이 전체 평균' }, ...(pp ? [{ ys: Array.from(pp.across), color: PIN_COLOR, name: `지정 점 s=${pin.s.toFixed(1)}` }] : [])],
         observe.targetWid, { x0: G.w0, x1: G.w0 + G.nw * G.cell, xl: 'w (mm)', leds: [...new Set(leds.map((p) => +p.w.toFixed(2)))] });
       paint('wprof', q('wprof'));
-      gauge('uw', st.Uwid, observe.targetWid, st.seWid, st.relNoise);
+      gauge('uw', st.Uwid, observe.targetWid, st.seWid, st.relNoise, !!st.preview);
       q('wsub').title = `최저 창 s = ${st.sWorst.toFixed(1)} mm${pp ? ` · 지정 점 s = ${pin.s.toFixed(1)} mm(주황, ${rad} 방향)` : ''}`;
     }
     { const V = overallVerdict(st, observe); q('verdict').textContent = V.text; q('verdict').className = `m3-verdict ${V.cls}`; vCls = V.cls; syncNext(); }   // 요약 카드 종합 판정(길이·폭 judgeText 그대로)
@@ -902,6 +921,7 @@ export function createResultsPanel(el, { anchor = () => null, onOpt = null, onQu
       const now = performance.now(); if (snap.sceneKey !== effT.key || snap.state === 'pending' || snap.state === 'starting') effT = { key: snap.sceneKey, t0: null }; if (snap.state === 'running' && effT.t0 == null) effT.t0 = now;
       const L = effLoad(eff, snap, effT.t0 == null ? 0 : (now - effT.t0) / 1000), e = q('effl');
       if (e.textContent !== L.text) e.textContent = L.text; e.className = `m3-effload ${L.cls}`; e.title = L.title; e.hidden = !L.text; }
+    pvSync(q('pv'));
     const lk = args.leak ?? ''; if (q('leak').textContent !== lk) q('leak').textContent = lk; q('leak').hidden = !lk;   // 새는 빛(광 효율 아래)
     paintBig(); syncBig();   // 큰 창도 계산을 따라감
   }

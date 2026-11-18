@@ -1,5 +1,5 @@
 // 점진 계산 제어기(가짜 Worker 포트 + Worker 모의 동등성): node test/m3-progressive.mjs
-import { createProgressive, interactOverlap, slowPortText, chunkSeed, photometry, requiredFlux, photonCap, nextProgress, fmtProg } from '../src/ui/m3/progressive.js';
+import { createProgressive, interactOverlap, slowPortText, previewWanted, PREVIEW, chunkSeed, photometry, requiredFlux, photonCap, nextProgress, fmtProg } from '../src/ui/m3/progressive.js';
 import { runJob } from '../src/engine/mech3d/job.js';
 import { makeChunkHost } from '../src/engine/mech3d/chunk-host.js';
 import { lightData } from '../src/engine/mech3d/line.js';
@@ -393,5 +393,21 @@ const perPhoton = (s) => Array.from(s.sum, (v) => v / (s.photons / 25000));   //
   off = false; await T.advance(1500);
   ok(chunks(c).length > 0, `깨어난 포트에 다음 틱부터 청크 보냄 (${chunks(c).length}개)`);
   P.dispose();
+}
+// 2026-11-18 사용자: 광효율 1% 미만 = 자동 미리보기(칸 3 mm · 노이즈 2% · 판정 안 함) · [정밀 계산] = 원래대로
+{ ok(PREVIEW.cell === 3 && PREVIEW.noise === 0.02 && PREVIEW.effOn === 0.01, '미리보기 = 칸 3 mm · 노이즈 2% · 광효율 1% 미만');
+  ok(previewWanted('auto', 0.006, false) === true && previewWanted('auto', 0.02, false) === false, '자동: 1% 미만이면 켬, 넘으면 끔');
+  ok(previewWanted('precise', 0.001, true) === false, '[정밀 계산] 누르면 광효율이 낮아도 끔');
+  ok(previewWanted('auto', 0.011, true) === true && previewWanted('auto', 0.011, false) === false && previewWanted('auto', 0.013, true) === false, '1.0~1.2% 사이는 지금 상태 유지(왔다 갔다 안 함)');
+  ok(previewWanted('auto', NaN, true) === true && previewWanted('auto', undefined, false) === false, '광효율을 아직 모르면 그대로');
+  const T = fakeTimers(), a = manualPort();
+  const P = createProgressive({ ports: [a], timers: T, opts: { ...OPT, targetNoise: 0.01 } });
+  P.restart({ ...job(1), preview: true }); await T.advance(500);
+  for (let k = 0; k < 2; k++) { a.pend.shift().res(make(chunks(a).at(-1))); await T.advance(0); }
+  const s1 = P.snapshot();
+  ok(s1.preview === true && s1.targetNoise === 0.02 && s1.stats?.preview === true, `미리보기 작업: 노이즈 목표 2% 고정 · 결과에 미리보기 표시 (${s1.targetNoise})`);
+  P.restart(job(2)); await T.advance(500); a.pend.shift().res(make(chunks(a).at(-1))); await T.advance(0);
+  ok(!P.snapshot().preview && !P.snapshot().stats?.preview, '보통 작업은 미리보기 아님');
+  P.cancel();
 }
 done();
