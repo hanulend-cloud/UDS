@@ -128,6 +128,6 @@ process.exitCode = fail ? 1 : 0;
   ok(fn.indexOf('stepReading = bundleReading(') >= 0 && fn.indexOf('stepReading = bundleReading(') < fn.indexOf('applyProjectText(U.text)'), '설정(보관 띠)을 넣기 전에 읽는 중으로 — 저장소에 STEP 넣는 동안 찾을 수 없음 띠가 안 뜸'); }
 { // STEP 변환이 끝나도 설정 복원(LED STEP 읽기 등 기다림)이 끝날 때까지 '읽는 중' — 그 사이 '찾을 수 없음' 띠가 뜨던 문제(2026-11-17)
   const { readFileSync } = await import('node:fs'), m = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
-  const a = m.indexOf('w.onmessage = async'), h = m.slice(a, m.indexOf('w.onerror', a)), cut = h.slice(h.indexOf('w.terminate();'), h.indexOf('if (m.data.error)'));
+  const a = m.indexOf('const handle = async (m0)'), h = m.slice(a, m.indexOf('w.onerror', a)) /* 처리 본체 — 2026-11-19 함께 쓰는 Worker 감싸기로 이름 바뀜 */, cut = h.slice(h.indexOf('w.terminate();'), h.indexOf('if (m.data.error)'));
   ok(!/if \(stepReading\) \{ stepReading = null/.test(cut) && (h.match(/doneReading\(\)/g) ?? []).length >= 5 && h.indexOf('doneReading()', h.indexOf('spec.mech3d = ms;')) > 0, '변환 끝 ≠ 복원 끝: 실패·취소·다음 파일·추가·복원 끝에서만 읽는 중을 풂'); }
 process.exitCode = fail ? 1 : 0;
