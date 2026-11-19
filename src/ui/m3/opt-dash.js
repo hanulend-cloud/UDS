@@ -393,8 +393,11 @@ export function reachDiag(ledger, leak, names = []) {
   const top = Object.entries(leak ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${nm(k)} ${((v / E) * 100).toFixed(0)}%`);
   const abs = ((ledger.absSurf ?? 0) + (ledger.absVol ?? 0)) / E;
   const few = reach < 0.001;   // 0.1% 미만 = 설정 문제일 가능성 큼, 1% 미만 = 구조상 적음(계산이 오래 걸림)
-  return { reach, html: `<b>관측면에 도착한 빛 ${(reach * 100).toFixed(few ? 3 : 2)}%</b> — ${few ? '거의 없음(설정 확인 필요)' : '매우 적음(계산이 오래 걸림)'}. 빛이 간 곳: ${top.join(' · ') || '–'}${abs > 0.05 ? ` · 흡수 ${(abs * 100).toFixed(0)}%` : ''}
-    ${few ? '' : '<div class="mut" title="관측면 쪽을 뺀 바깥면을 반사 처리(불투명 백색)하면 도착 빛이 늘어 빨라집니다">팁: 바깥면 반사 처리 → 빨라짐</div>'}<div class="mut" title="확인: ① 관측면 화살표가 빛이 나오는 바깥쪽을 향하는지 ② LED 노란 점선(발광 방향)이 부품 쪽을 향하는지 ③ 관측면이 다른 부품에 덮여 있지 않은지 — 3D 의 주황 면 = 가장 많이 새는 곳">확인: 관측면 방향 · LED 방향 · 덮임 ⓘ</div>` };
+  // head = 한 줄 요약(접힌 줄), body = 펼친 내용(2026-11-19 — 여러 줄 상자가 나왔다 숨었다 하며 진행 카드 높이를 바꿨음)
+  const head = `<b>관측면에 도착한 빛 ${(reach * 100).toFixed(few ? 3 : 2)}%</b> — ${few ? '거의 없음(설정 확인 필요)' : '매우 적음(계산이 오래 걸림)'}`;
+  const body = `빛이 간 곳: ${top.join(' · ') || '–'}${abs > 0.05 ? ` · 흡수 ${(abs * 100).toFixed(0)}%` : ''}
+    ${few ? '' : '<div class="mut" title="관측면 쪽을 뺀 바깥면을 반사 처리(불투명 백색)하면 도착 빛이 늘어 빨라집니다">팁: 바깥면 반사 처리 → 빨라짐</div>'}<div class="mut" title="확인: ① 관측면 화살표가 빛이 나오는 바깥쪽을 향하는지 ② LED 노란 점선(발광 방향)이 부품 쪽을 향하는지 ③ 관측면이 다른 부품에 덮여 있지 않은지 — 3D 의 주황 면 = 가장 많이 새는 곳">확인: 관측면 방향 · LED 방향 · 덮임 ⓘ</div>`;
+  return { reach, head, body, html: head + body };
 }
 // 진행 현황 그래프(순수, 2026-11-03) — 가로 = 광선 수(0 ~ 예상 총광선), 세로 = 균일도 %(점선 = 목표). H = [{ ph, noise, Ulen, Uwid }]
 export const simTotal = (last, tgt) => (last ? Math.max(last.ph, Number.isFinite(last.noise) ? last.ph * (last.noise / tgt) ** 2 : 0) : 0);
@@ -460,14 +463,17 @@ export function createSimDash(el, { onCtl = null, bar = null } = {}) {
   let H = [], tgt = 0.02, raf = 0, state = '', obs = null, P = [], names = [], reason = '', stopped = false, err = '';
   // names = 부품 이름, nMech = 기구 부품 수(LED STEP 부품 번호는 그 뒤 — 경로에서 뺌)
   let busy = false;   // 기구 최적화 중(점진 계산 일시정지)
-  let diag = null;   // 빛 도달 진단(관측면 도달 < 1%)
+  let diag = null, lastPh = 0;   // 빛 도달 진단(관측면 도달 < 1%) · 앞 갱신의 광선 수(줄면 새 계산)
   let mini = null;   // 광분포 시뮬레이션 창 안의 진행 현황 칸
   let sym = null;   // 대칭 합치기 상태(symStats)
   let prog;   // 점진 계산의 표시 진행률(되돌아가지 않음)
   function sample(snap, targetNoise, observe, nm = names, nMech = nm.length, adBusy = false, skip = []) {
     prog = snap?.progress; busy = adBusy; tgt = targetNoise ?? tgt; obs = observe ?? obs; state = snap?.state ?? ''; reason = snap?.reason ?? ''; err = snap?.error ?? ''; stopped = !!snap?.stopped; names = nm; P = topPaths(snap?.paths, nMech, 3, skip);
     const ph = snap?.photons ?? 0, st = snap?.stats; sym = st?.sym ?? null;
-    diag = ph >= 50000 ? reachDiag(snap?.ledger, snap?.leak, nm) : null;
+    { const d = ph >= 50000 ? reachDiag(snap?.ledger, snap?.leak, nm) : null;   // 한 계산 안에서는 한 번 나오면 유지(1% 근처에서 나왔다 숨었다 하며 카드 높이가 바뀌던 것, 2026-11-19)
+      if (d) diag = d;
+      else if (!ph || ph < lastPh) diag = null;
+      lastPh = ph; }
     if (!st || st.empty || !ph) { if (!ph) H = []; draw(); return; }
     if (H.length && ph < H[H.length - 1].ph) H = [];   // 장면이 바뀌어 다시 시작
     if (!H.length || ph > H[H.length - 1].ph) H.push({ ph, t: performance.now(), noise: st.relNoise, Ulen: st.Ulen, Uwid: st.Uwid, seLen: st.seLen, seWid: st.seWid });
@@ -484,9 +490,9 @@ export function createSimDash(el, { onCtl = null, bar = null } = {}) {
     if (bar && !el.querySelector('.od-simh')) {   // 상태줄 모드: 카드 = 제목 + 접는 칸
       let open = false; try { open = localStorage.getItem('uds.m3.simPlots') === '1'; } catch {}
       el.innerHTML = `<div class="od-h od-simh"><i class="m3-fl" data-s="step">4</i>광분포 시뮬레이션<span class="m3-ad-sp"></span><span class="mut od-simst" data-s="st"></span></div>
-        <div class="od-bar od-cardbar" data-s="cbar" hidden title="계산 오차가 목표에 닿으면 100%"><i></i></div>
+        <div class="od-bar od-cardbar off" data-s="cbar" title="계산 오차가 목표에 닿으면 100%"><i></i></div>
         <details class="od-more od-plots"${open ? ' open' : ''}><summary title="계산 오차(목표 점선까지 내려가면 계산 끝) · 길이·폭 균일도가 광선 수에 따라 어떻게 변했는지">계산 추이</summary><div class="od-simbox"><div class="od-simplot" data-s="svg"></div></div></details>
-        <div class="od-diag" data-s="diag" hidden></div>
+        <details class="od-diag" data-s="diag" hidden><summary data-s="diagh"></summary><div data-s="diagb"></div></details>
         <details class="od-more"><summary><span data-s="sum">광경로</span></summary><div data-s="paths"></div></details>`;
       el.querySelector('.od-plots').addEventListener('toggle', (e) => { try { localStorage.setItem('uds.m3.simPlots', e.target.open ? '1' : '0'); } catch {} draw(); window.dispatchEvent(new Event('resize')); });
     }
@@ -496,13 +502,13 @@ export function createSimDash(el, { onCtl = null, bar = null } = {}) {
     if (!el.querySelector('.od-simh')) {
       el.innerHTML = `<div class="od-h od-simh"><i class="m3-fl" data-s="step">4</i>광분포 시뮬레이션<span class="m3-ad-sp"></span>${onCtl ? '<span class="m3-ctl" data-sim-ctl></span>' : ''}</div>
         <div class="od-pct"><b data-s="pct"></b><div class="od-bar od-bar-big" title="계산 오차가 목표에 닿으면 100%"><i data-s="bar"></i></div><span class="od-simcap od-capr" data-s="row"></span><span class="mut od-simst" data-s="st"></span></div>
-        <div class="od-simbox"><div class="od-simplot" data-s="svg"></div></div><div class="od-diag" data-s="diag" hidden></div>
+        <div class="od-simbox"><div class="od-simplot" data-s="svg"></div></div><details class="od-diag" data-s="diag" hidden><summary data-s="diagh"></summary><div data-s="diagb"></div></details>
         <details class="od-more"><summary><span data-s="sum">광경로</span></summary><div data-s="paths"></div></details>`;
     }
     const set = (k, html) => { const n = el.querySelector(`[data-s="${k}"]`); if (n && n.innerHTML !== html) n.innerHTML = html; };
     set('st', esc(bar ? cTxt : sTxt));   // 메인 화면 카드 = 진행 % 포함(아래 진행 줄은 숨김, 2026-11-17)
     { const n = el.querySelector('[data-s="st"]'); if (n) n.title = n.textContent; }
-    { const cb = el.querySelector('[data-s="cbar"]'); if (cb) { cb.hidden = !(state === 'running' || state === 'paused') || busy; cb.firstElementChild.style.width = `${pctT}%`; } }   // 좁은 칸에서 … 로 잘려도 전체 문구를 볼 수 있게
+    { const cb = el.querySelector('[data-s="cbar"]'); if (cb) { cb.classList.toggle('off', !(state === 'running' || state === 'paused') || busy); cb.firstElementChild.style.width = `${pctT}%`; } }   // 좁은 칸에서 … 로 잘려도 전체 문구를 볼 수 있게
     setStepMark(el.querySelector('[data-s="step"]'), 4, state === 'done');
     setCtl((bar ?? el).querySelector('[data-sim-ctl]'), simCtl({ state, stopped }, busy), (k) => onCtl?.(k));
     if (bar) {
@@ -510,7 +516,7 @@ export function createSimDash(el, { onCtl = null, bar = null } = {}) {
       bt('pct', `${pctT}%`); B('bar').style.width = `${pctT}%`; bt('row', row); bt('st', sTxt);
       const sn = B('st'); sn.title = sTxt; sn.className = `m3-run-st ${state === 'done' ? (reason === 'converged' || reason === 'adopted' ? 'ok' : 'warn') : state === 'error' ? 'bad' : ''}`;
     } else { set('pct', `${pctT}%`); el.querySelector('[data-s="bar"]').style.width = `${pctT}%`; set('row', row); }
-    const dg = el.querySelector('[data-s="diag"]'); if (dg) { dg.hidden = !diag; set('diag', diag?.html ?? ''); }
+    const dg = el.querySelector('[data-s="diag"]'); if (dg) { dg.hidden = !diag; set('diagh', diag?.head ?? ''); set('diagb', diag?.body ?? ''); }   // 머리·내용 따로 — 펼침 상태 유지
     set('svg', svg);
     if (mini) {
       mini.classList.add('od-noplot');   // 진행 현황 그래프는 빼고 2D 분포를 넓게(2026-11-16 사용자) — 진행률 막대·광선 수만

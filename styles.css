@@ -1572,6 +1572,9 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .m3-mon .fb-c { white-space: normal; }
 @media (max-width: 860px) { .m3-mon .fb-cards { grid-template-columns: minmax(0, 1fr); } }
 .od-cardbar { height: 4px; margin: 2px 0 4px; }
+.od-cardbar.off { visibility: hidden; }   /* 계산 중이 아니어도 자리 차지 — 시작·끝에 카드 높이가 바뀌어 아래 결과가 움직이지 않게(2026-11-19) */
+.od-diag > summary { cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }   /* 빛 도달 진단 = 한 줄(누르면 펼침) */
+.od-diag[hidden] { display: none; }
 /* 1D 프로파일 제목 옆 균일도(2026-11-17) — 색 = 판정 */
 .m3-uni { margin-left: 8px; font-weight: 400; font-size: 12px; white-space: nowrap; }
 .m3-uni b { font-size: 14px; font-variant-numeric: tabular-nums; }
@@ -1609,6 +1612,21 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .m3-big-hd .m3-pvbtn { margin-top: 0; border-color: var(--m3-acc); background: var(--m3-acc); color: #fff; font-weight: 600; }
 .m3-big-hd .m3-pvbtn[data-k="auto"] { background: transparent; color: var(--m3-acc); }
 .m3-pvbtn[hidden] { display: none; }
+/* 결과 위 모드 띠(2026-11-19) — 미리보기(회색, 판정 아님) / 정밀 계산(파랑, 판정). 늘 한 줄 · 높이 고정: 글·단추가 바뀌어도 아래 그래프가 움직이지 않게 */
+.m3-mode { display: flex; align-items: center; gap: 8px; height: 26px; white-space: nowrap; overflow: hidden; padding: 0 8px; border-radius: 6px; font-size: 12px; border: 1px solid var(--m3-line); flex: none; }
+.m3-mode > b { flex: none; font-weight: 700; }
+.m3-mode .m3-mode-t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; opacity: .85; }
+.m3-mode .m3-effload { margin-top: 0; flex: none; }
+.m3-mode .m3-pvbtn { margin-top: 0; padding: 1px 10px; }
+.m3-mode.idle { color: #8a93a6; }
+.m3-mode.pv { background: #eceef2; color: #4a5263; border-color: #c9ced8; }
+.m3-mode.precise { background: rgba(31, 111, 209, .08); color: #1f5fb3; border-color: rgba(31, 111, 209, .35); }
+#mech3d-wrap[data-theme="dark"] .m3-mode.pv { background: #2a3140; color: #c3cad6; border-color: #3b4456; }
+#mech3d-wrap[data-theme="dark"] .m3-mode.precise { background: rgba(90, 150, 230, .14); color: #8fb8f0; border-color: rgba(90, 150, 230, .4); }
+.m3-mode-chip { flex: none; font-size: 11.5px; font-weight: 700; padding: 1px 8px; border-radius: 10px; white-space: nowrap; }
+.m3-mode-chip.pv { background: #eceef2; color: #4a5263; }
+.m3-mode-chip.precise { background: rgba(31, 111, 209, .12); color: #1f5fb3; }
+.m3-mode-chip[hidden] { display: none; }
 .m3-pvbtn[data-k="auto"] { background: transparent; color: var(--m3-acc); }
 #mech3d-wrap[data-theme="dark"] .m3-pvbtn:not([data-k="auto"]) { color: #0b1220; }
 .m3-gauge .f.preview { background: #9aa7b8; }   /* 미리보기 = 판정 색 없음 */

@@ -1477,3 +1477,42 @@ done();
   const m = app.match(/noise \? \{ N: Math\.ceil\(Math\.min\(capN[^}]*\}/);
   say(!!m && /firstN: 1000/.test(m[0]), `노이즈 목표 재계산도 첫 묶음 1000 광자로 속도부터 잼 (${m ? 'firstN ' + (/firstN/.test(m[0]) ? '있음' : '없음') : '호출 못 찾음'})`);
 }
+
+// 결과 위 모드 띠(2026-11-19 사용자: 미리보기·정밀 계산 구분이 헷갈림 · 미리보기 뒤 결과 칸이 위아래로 계속 움직임)
+// 띠 = 늘 한 줄(높이 고정) — 미리보기 이유·남은 시간·단추가 광 효율 카드 안에서 줄 수를 바꿔 아래 그래프를 밀던 것을 여기로
+{
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const { modeBand } = await import('../src/ui/m3/results-panel.js');
+  const pv = modeBand({ preview: true, state: 'running', progress: 40, stats: { relNoise: 0.03 }, photometry: { eff: 0.008 }, targetNoise: 0.02 }, 'auto', { quality: 'high' }, 30);
+  say(pv.cls === 'pv' && /미리보기/.test(pv.label) && /판정 아님/.test(pv.text) && /0\.8%/.test(pv.text) && /3 mm/.test(pv.text) && pv.btn?.k === 'precise', `미리보기 띠: 판정 아님 · 이유(광효율) · 칸 · [정밀 계산] (${pv.label} ${pv.text})`);
+  say(/계산 매우 느림/.test(pv.load?.text ?? ''), '미리보기 띠: 계산 부담·남은 시간도 띠에');
+  const pr = modeBand({ preview: false, state: 'done', stats: { relNoise: 0.009 }, photometry: { eff: 0.2 }, targetNoise: 0.01 }, 'auto', { quality: 'high' }, 0);
+  say(pr.cls === 'precise' && /정밀 계산/.test(pr.label) && /판정/.test(pr.text) && /고화질 0\.5 mm/.test(pr.text) && /1%/.test(pr.text) && !pr.btn, `정밀 띠: 판정 · 화질 · 노이즈 목표 (${pr.label} ${pr.text})`);
+  const pl = modeBand({ preview: false, state: 'running', stats: { relNoise: 0.02 }, photometry: { eff: 0.006 }, targetNoise: 0.01 }, 'precise', { quality: 'low' }, 10);
+  say(pl.cls === 'precise' && pl.btn?.k === 'auto', '정밀 + 광효율 1% 미만 = [미리보기로]');
+  const id = modeBand(null, 'auto', { quality: 'low' }, 0);
+  say(id.cls === 'idle' && !!id.label, `계산 전 띠 (${id.label})`);
+  const { readFileSync } = await import('node:fs'), rp = readFileSync(new URL('../src/ui/m3/results-panel.js', import.meta.url), 'utf8');
+  const html = rp.slice(rp.indexOf('el.innerHTML = `'), rp.indexOf('const q = (k) =>'));
+  say(html.indexOf('data-r="mode"') > 0 && html.indexOf('data-r="mode"') < html.indexOf('class="m3-sum"'), '띠는 결과 카드 위');
+  const eff = html.slice(html.indexOf('광 효율'), html.indexOf('m3-sum-x'));
+  say(!/data-r="effl"|data-r="pv"/.test(eff), '광 효율 카드에는 바뀌는 글·단추 없음(높이 고정)');
+  const css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
+  say(/\.m3-mode\s*\{[^}]*height:\s*\d+px[^}]*white-space:\s*nowrap/.test(css), '띠 높이 고정 · 한 줄');
+}
+
+// 진행 카드 높이 고정(2026-11-19 사용자: 미리보기 뒤 결과 칸이 위아래로 계속 움직임) — 빛 도달 진단(관측면 도달 < 1%)이 1% 근처에서
+// 나왔다 숨었다 + 여러 줄 상자라 카드 높이가 바뀌어 아래 결과가 밀렸음. 진단 = 한 줄 요약(누르면 펼침) · 한 계산 안에서는 한 번 나오면 유지 · 진행 막대 자리 늘 차지
+{
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const { reachDiag, createSimDash } = await import('../src/ui/m3/opt-dash.js');
+  const d = reachDiag({ emitted: 1, escaped: 0.7 }, { '1|5': 0.695 }, ['a', 'b']);
+  say(!!d && /관측면에 도착한 빛/.test(d.head) && !/<div/.test(d.head) && /빛이 간 곳/.test(d.body) && d.html === d.head + d.body, '진단 = 한 줄 머리(head) + 펼침 내용(body)');
+  const { readFileSync } = await import('node:fs'), od = readFileSync(new URL('../src/ui/m3/opt-dash.js', import.meta.url), 'utf8');
+  const fn = od.slice(od.indexOf('export function createSimDash'), od.indexOf('function render()', od.indexOf('export function createSimDash')));
+  say(/<details class="od-diag" data-s="diag" hidden><summary data-s="diagh"><\/summary><div data-s="diagb"><\/div><\/details>/.test(od) && !/<div class="od-diag" data-s="diag"/.test(od), '진단 칸 = 접힌 한 줄(details) — 갱신해도 펼침 상태 유지(머리·내용 따로 바꿈)');
+  say(/if \(d\) diag = d;/.test(fn) && /else if \(!ph \|\| ph < lastPh\) diag = null;/.test(fn), '진단: 한 계산 안에서는 한 번 나오면 유지(1% 근처 깜박임 없음) · 새 계산이면 지움');
+  const css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
+  say(/\.od-diag > summary\s*\{[^}]*white-space:\s*nowrap[^}]*text-overflow:\s*ellipsis/.test(css), '진단 요약 = 한 줄(… 줄임)');
+  say(/\.od-cardbar\.off\s*\{[^}]*visibility:\s*hidden/.test(css) && /cb\.classList\.toggle\('off'/.test(od), '진행 막대: 숨겨도 자리 차지(시작·끝에 높이 안 바뀜)');
+}

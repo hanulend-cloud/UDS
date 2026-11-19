@@ -57,6 +57,20 @@ export function previewBtn(snap, mode) {
   if (mode === 'precise' && Number.isFinite(eff) && eff < PREVIEW.effOn) return { k: 'auto', label: '미리보기로', title: `${e} — 정밀 계산이 오래 걸림. 누르면 칸 ${PREVIEW.cell} mm · 노이즈 ${PREVIEW.noise * 100}% 미리보기로` };
   return null;
 }
+// 결과 위 모드 띠(순수, 2026-11-19 사용자: 미리보기·정밀 구분이 헷갈림) — { cls: 'pv'|'precise'|'idle', label, text, title, btn(previewBtn), load(effLoad) }
+// 띠는 늘 한 줄(높이 고정) — 바뀌는 글·단추가 광 효율 카드 줄 수를 바꿔 아래 그래프가 위아래로 움직이던 것을 여기로 모음
+export function modeBand(snap, mode, observe, elapsedSec = 0) {
+  const eff = snap?.photometry?.eff, btn = previewBtn(snap, mode), load = effLoad(eff, snap, elapsedSec);
+  if (!snap?.stats) return { cls: 'idle', label: '계산 전', text: '', title: '', btn: null, load: null };
+  const pc = (v) => `${+(v * 100).toFixed(2)}%`;
+  if (snap.preview) {
+    const why = Number.isFinite(eff) ? `광효율 ${(eff * 100).toFixed(1)}% < ${pc(PREVIEW.effOn)} 라 자동` : '광효율이 낮아 자동';
+    return { cls: 'pv', label: '미리보기', text: `판정 아님 — ${why} · 칸 ${PREVIEW.cell} mm · 노이즈 ${pc(PREVIEW.noise)}`, title: `미리보기 = 빠른 대략 계산(칸 ${PREVIEW.cell} mm · 노이즈 ${pc(PREVIEW.noise)}). 합격/불합격 판정은 [정밀 계산]으로`, btn, load: load.text ? load : null };
+  }
+  const q = observe?.cellS ? `칸 ${observe.cellS}×${observe.cellW ?? observe.cellS} mm` : (QUALITY_OPTS.find(([v]) => v === (observe?.quality ?? 'low'))?.[1] ?? '');
+  const nz = Number.isFinite(snap.targetNoise) ? ` · 노이즈 목표 ${pc(snap.targetNoise)}` : '';
+  return { cls: 'precise', label: '정밀 계산', text: `판정 — ${q}${nz}`, title: '정밀 계산 = 설정한 화질·노이즈 목표로 합격/불합격 판정', btn, load: load.text ? load : null };
+}
 export function effLoad(eff, snap, elapsedSec) {
   if (!Number.isFinite(eff) || eff >= EFF_HEAVY) return { text: '', cls: '', title: '' };
   const cls = eff < EFF_VERY ? 'bad' : 'near', pct = snap?.progress ?? 0;
@@ -620,11 +634,12 @@ export function createResultsPanel(el, { anchor = () => null, onPreview = null, 
   el.innerHTML = `
     <div class="m3-res-h">시뮬레이션 결과 <span class="m3-verdict" data-r="verdict" aria-live="polite"></span><button type="button" class="m3-next" data-r="next" hidden></button></div>
     <div class="m3-msg" data-r="msg" hidden></div>
+    <div class="m3-mode idle" data-r="mode"><b data-r="model">계산 전</b><span class="m3-mode-t" data-r="modet"></span><span class="m3-effload" data-r="effl" hidden></span><button type="button" class="m3-pvbtn" data-r="pv" hidden></button></div>
     <div class="m3-sum">
       <div class="m3-sum-u"><div class="l">길이 균일도</div><div class="v" data-r="ul">–</div>${gaugeHtml('ulg')}<div class="s" data-r="ulj"></div></div>
       <div class="m3-sum-u"><div class="l">폭 균일도</div><div class="v" data-r="uw">–</div>${gaugeHtml('uwg')}<div class="s" data-r="uwj"></div></div>
       <div class="m3-sum-c"><div class="l">평균 광량</div><div class="v" data-r="avg" title="cd/m² 값은 보는 각도 설정과 상관없이 정면 ±10° 안의 평균 휘도">–</div><div class="s" data-r="avgs" title="최대 대비 % — LED 광속(lm)을 넣으면 cd/m² 로 표시"></div><div class="s m3-need" data-r="need"></div>${gaugeHtml('avgg')}</div>
-      <div class="m3-sum-c"><div class="l">광 효율</div><div class="v sm" data-r="eff">–</div><div class="s">관측면 원뿔 안 / LED 총 방출</div><div class="m3-effload" data-r="effl" hidden></div><button type="button" class="m3-pvbtn" data-r="pv" hidden></button></div>
+      <div class="m3-sum-c"><div class="l">광 효율</div><div class="v sm" data-r="eff">–</div><div class="s">관측면 원뿔 안 / LED 총 방출</div></div>
       <div class="m3-sum-x"><div class="m3-regl" data-r="reg" hidden title="큰 창(⤢)에서 고른 영역 — 길이 / 폭 균일도"></div><button type="button" class="m3-leak" data-r="leak" hidden title="누르면 3D 에서 가장 많이 새는 면을 강조"></button></div>
     </div>
     <div class="m3-blk"><div class="m3-t"><b class="m3-tt">2D 광량 <i class="m3-info" data-r="mapsub" tabindex="0">ⓘ</i></b><span><label class="m3-map-eq" title="가로세로를 같은 축척으로 — 끄면 좁은 폭을 늘려 보여 줌"><input type="checkbox" data-r="mapEq"> 실제 비율</label> <select data-r="quality" title="2D 분포·1D 프로파일 칸 크기(정사각) — 저 1.5 mm(빠름) · 중 1.0 mm(광선 ≈2배) · 고 0.5 mm(광선 ≈4배) · 짧거나 좁은 면은 그 방향만 더 잘게" aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>  <button type="button" class="m3-zoom" data-zoom="map" title="큰 창으로 보기" aria-label="2D 광량 분포 확대">⤢</button></span></div>
@@ -797,7 +812,7 @@ export function createResultsPanel(el, { anchor = () => null, onPreview = null, 
     const rect = fitRect(bigRectLoad(), innerWidth, innerHeight, winTop());
     ov.className = 'm3-big-in'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', '광분포 시뮬레이션');
     const cell = (k) => `<div class="m3-big-c" data-k="${k}"><div class="m3-big-ct"><b>${TITLE[k]}</b>${k === 'map' ? '' : `<span data-big-uni="${k}"></span>`}<span class="m3-big-sp"></span>${k === 'map' ? `<label class="m3-big-eq"><input type="checkbox" data-big-eq${eq0 ? ' checked' : ''}> 실제 비율</label><button type="button" data-big-reg-on aria-pressed="false" title="켜 둔 동안 끌 때마다 새 영역 · 그 영역의 균일도를 아래 표로 비교 · 켠 채 클릭 = 영역 지움 · 끄면 영역 결과를 숨김(다시 켜면 보임) · 휠 = 확대 · 오른쪽 끌기 = 이동 · 더블클릭 = 전체 보기">▭ 영역 선택</button><button type="button" data-big-fit disabled title="확대하면 켜짐 — 휠 = 확대 · 오른쪽 끌기 = 이동">전체 보기</button>` : ''}<button type="button" data-big-one="${k}">⤢ 이 그림만</button></div><canvas class="m3-big-cv" data-big-cv="${k}"></canvas>${k === 'map' ? '<div class="m3-big-reg" data-big-reg hidden></div>' : ''}</div>`;
-    ov.innerHTML = `<div class="m3-big-hd" title="끌어서 옮기기"><b title="진행 현황 · 2D · 1D — 2D 클릭 = 그 점 기준 1D 곡선(주황) · 그림 우클릭 = 데이터·이미지 저장"><i class="m3-fl" data-big-step>4</i><span class="m3-tx">광분포 시뮬레이션</span><span class="m3-tx-s">광분포</span></b><span class="m3-mon-sum" data-big-sum></span><span class="m3-big-sp"></span><span class="m3-ctl" data-big-ctl></span><button type="button" class="m3-pvbtn" data-big-pv hidden></button><label class="m3-big-q">화질 <select data-big-q aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label><button type="button" data-big-max></button><button type="button" data-big-min></button><button type="button" data-big-close title="Esc" aria-label="닫기">✕<span class="m3-tx"> 닫기</span></button></div>
+    ov.innerHTML = `<div class="m3-big-hd" title="끌어서 옮기기"><b title="진행 현황 · 2D · 1D — 2D 클릭 = 그 점 기준 1D 곡선(주황) · 그림 우클릭 = 데이터·이미지 저장"><i class="m3-fl" data-big-step>4</i><span class="m3-tx">광분포 시뮬레이션</span><span class="m3-tx-s">광분포</span></b><span class="m3-mon-sum" data-big-sum></span><span class="m3-big-sp"></span><span class="m3-ctl" data-big-ctl></span><span class="m3-mode-chip" data-big-mode hidden></span><button type="button" class="m3-pvbtn" data-big-pv hidden></button><label class="m3-big-q">화질 <select data-big-q aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label><button type="button" data-big-max></button><button type="button" data-big-min></button><button type="button" data-big-close title="Esc" aria-label="닫기">✕<span class="m3-tx"> 닫기</span></button></div>
       <div class="m3-big-grid"><div class="m3-big-prog" data-big-prog></div>${cell('map')}<div class="m3-big-row">${cell('prof')}${cell('wprof')}</div></div>`;
     (el.closest('#mech3d-wrap') ?? document.body).appendChild(ov);   // 설계 화면에 붙임(화면을 바꾸면 함께 숨음)
     const cvs = Object.fromEntries(KINDS.map((k) => [k, ov.querySelector(`[data-big-cv="${k}"]`)]));
@@ -851,6 +866,14 @@ export function createResultsPanel(el, { anchor = () => null, onPreview = null, 
   }
   // 큰 창 머리: 화질 = 지금 값
   // 미리보기 단추(메인 광 효율 칸 · 큰 창 머리) — 같은 상태
+  // 모드 띠(메인 결과 위 · 큰 창 머리 표지) — 같은 상태
+  const modeSync = (M) => {
+    const band = q('mode'); band.className = `m3-mode ${M.cls}`; band.title = M.title;
+    if (q('model').textContent !== M.label) q('model').textContent = M.label;
+    if (q('modet').textContent !== M.text) q('modet').textContent = M.text;
+    const e = q('effl'), L = M.load; e.hidden = !L; if (L) { if (e.textContent !== L.text) e.textContent = L.text; e.className = `m3-effload ${L.cls}`; e.title = L.title; }
+    const c = big?.el.querySelector('[data-big-mode]'); if (c) { c.className = `m3-mode-chip ${M.cls}`; c.textContent = M.cls === 'pv' ? '미리보기 · 판정 아님' : M.cls === 'precise' ? '정밀 계산' : ''; c.title = `${M.label}${M.text ? ` — ${M.text}` : ''}`; c.hidden = M.cls === 'idle'; }
+  };
   const pvSync = (b) => {
     if (!b) return;
     const v = previewBtn(last?.snap, last?.calcMode ?? 'auto');
@@ -901,6 +924,7 @@ export function createResultsPanel(el, { anchor = () => null, onPreview = null, 
     q('avgg').hidden = true;
     q('msg').hidden = false; q('msg').textContent = message || DEFAULT_GUIDE;
     q('verdict').textContent = ''; q('verdict').className = 'm3-verdict'; vCls = ''; q('next').hidden = true;
+    modeSync(modeBand(null)); q('pv').hidden = true;
   }
   function update(args) {
     last = args;
@@ -952,8 +976,7 @@ export function createResultsPanel(el, { anchor = () => null, onPreview = null, 
     q('eff').textContent = Number.isFinite(eff) ? `${(eff * 100).toFixed(1)}%` : '–';
     { // 광효율에 따른 계산 부담(짧은 배지 · 자세히는 툴팁). 경과 시간 = 이 계산(sceneKey)이 처음 돌기 시작한 때부터
       const now = performance.now(); if (snap.sceneKey !== effT.key || snap.state === 'pending' || snap.state === 'starting') effT = { key: snap.sceneKey, t0: null }; if (snap.state === 'running' && effT.t0 == null) effT.t0 = now;
-      const L = effLoad(eff, snap, effT.t0 == null ? 0 : (now - effT.t0) / 1000), e = q('effl');
-      if (e.textContent !== L.text) e.textContent = L.text; e.className = `m3-effload ${L.cls}`; e.title = L.title; e.hidden = !L.text; }
+      modeSync(modeBand(snap, args.calcMode ?? 'auto', observe, effT.t0 == null ? 0 : (now - effT.t0) / 1000)); }
     pvSync(q('pv'));
     const lk = args.leak ?? ''; if (q('leak').textContent !== lk) q('leak').textContent = lk; q('leak').hidden = !lk;   // 새는 빛(광 효율 아래)
     paintBig(); syncBig();   // 큰 창도 계산을 따라감
