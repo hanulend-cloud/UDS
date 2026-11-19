@@ -66,4 +66,13 @@ ok(isBlankMech3d(blank.spec) && blank.spec.contacts.length === 0 && blank.spec.l
   ok(d && !/prep = null/.test(d) && /prepInWorker\([^)]*contacts: true/.test(d), '여러 STEP 합치기: 장면 준비·접촉면을 Worker 에서(prep = null 금지)');
   ok(/prepScene\(ev\.data\.prep, ev\.data\.opts/.test(wk), 'Worker 복원 준비가 접촉면 옵션을 받음');
 }
+// 여러 STEP .uds 열기 시간(2026-11-19) — 파일마다 새 Worker 라 OpenCASCADE(58MB wasm)를 파일 수만큼 다시 로드(3개 = 19초 중 13.5초).
+// 통합 파일의 STEP 은 Worker 하나를 이어 써서 엔진을 한 번만 로드
+{
+  const { readFileSync } = await import('node:fs');
+  const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  const open = main.match(/async function openProjectFile[\s\S]*?\n\}/)?.[0] ?? '', imp = main.match(/function importMech3d[\s\S]*?\n\}/)?.[0] ?? '';
+  ok(/importMech3d\([^;]*worker:/.test(open), '통합 파일 열기: STEP 들이 Worker 하나를 함께 씀');
+  ok(/opts\.worker \?\? new Worker|worker \?\? new Worker/.test(imp), 'importMech3d: 받은 Worker 가 있으면 새로 만들지 않음');
+}
 done();
