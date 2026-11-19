@@ -1631,3 +1631,9 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 #mech3d-wrap[data-theme="dark"] .m3-pvbtn:not([data-k="auto"]) { color: #0b1220; }
 .m3-gauge .f.preview { background: #9aa7b8; }   /* 미리보기 = 판정 색 없음 */
 #mech3d-wrap .v.preview, #mech3d-wrap .m3-uni.preview b { color: inherit; font-weight: 600; }
+/* 2D 돌리기·뒤집기(2026-11-19) */
+.m3-orient { display: inline-flex; gap: 2px; margin-left: 6px; vertical-align: middle; }
+.m3-orient button { min-width: 22px; height: 20px; padding: 0 4px; font-size: 12.5px; line-height: 1; border: 1px solid var(--line, rgba(128,140,160,.45)); border-radius: 4px; background: transparent; color: inherit; cursor: pointer; }
+.m3-orient button:hover:not(:disabled) { background: rgba(31,111,209,.12); }
+.m3-orient button:disabled { opacity: .35; cursor: default; }
+.m3-orient.on [data-orient="reset"] { border-color: #1f6fd1; color: #1f6fd1; }

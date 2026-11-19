@@ -1,4 +1,4 @@
-import { shapeLayout } from './map-shape.js';
+import { shapeLayout, orientStep, orientShape, orientRev, orientIsId, ORIENT0 } from './map-shape.js';
 import { requiredFlux, fmtProg, needText, needShort, PREVIEW } from './progressive.js';
 import { mountSplit, mountHeightHandle } from './pane-split.js';
 import { clampRect, fitRect, winTop, dragBy, raiseWin, mountResizers, COLLAPSED_W, maxRect, DEF_RECT, flyWin, collapsedRect } from './monitor.js';
@@ -157,11 +157,11 @@ export function plotRange(curves, tg) {
   return { y0: Math.max(0, Math.floor((mn - 5) / 10) * 10), y1: 102 };
 }
 const PL = 38, PR = 8;
-function drawPlot(cv, curves, tg, { x0, x1, xl, leds = [], ledsOrig = [] }, dpr = 1, hover = null) {
-  cv._plot = { curves, tg, opt: { x0, x1, xl, leds, ledsOrig }, dpr };
+function drawPlot(cv, curves, tg, { x0, x1, xl, leds = [], ledsOrig = [], rev = false }, dpr = 1, hover = null) {
+  cv._plot = { curves, tg, opt: { x0, x1, xl, leds, ledsOrig, rev }, dpr };
   const x = cv.getContext('2d'), W = cv.width, H = cv.height, pl = PL * dpr, pb = 30 * dpr, pt = 16 * dpr, pr = PR * dpr;
   const { y0, y1 } = plotRange(curves, tg), PW = W - pl - pr, PH = H - pb - pt;
-  const Y = (v) => pt + (1 - (v * 100 - y0) / (y1 - y0)) * PH, XS = (sv) => pl + ((sv - x0) / (x1 - x0 || 1)) * PW;
+  const Y = (v) => pt + (1 - (v * 100 - y0) / (y1 - y0)) * PH, XS = (sv) => pl + ((rev ? x1 - sv : sv - x0) / (x1 - x0 || 1)) * PW;   // rev = 가로축 반대(2D 돌리기·뒤집기를 따름, 2026-11-19)
   x.clearRect(0, 0, W, H);
   x.font = `${10.5 * dpr}px sans-serif`; x.lineWidth = dpr;
   // % 격자·눈금(10% — 범위가 넓으면 20%)
@@ -206,7 +206,7 @@ function drawPlot(cv, curves, tg, { x0, x1, xl, leds = [], ledsOrig = [] }, dpr 
   }
   // 곡선(칸 가운데)
   for (const c of curves) {
-    const n = c.ys.length, X = (i) => pl + ((i + 0.5) / n) * PW;
+    const n = c.ys.length, X = (i) => pl + ((rev ? n - i - 0.5 : i + 0.5) / n) * PW;
     if (c.band > 0) {   // 계산 노이즈 범위(±2σ, 옅은 띠) — 원자료가 이 안에서 흔들리면 노이즈, 띠 밖이면 실제 밝기 차(2026-10-30)
       const k = 2 * c.band, seg = [], ly = c.draw ?? c.ys;
       ly.forEach((v, i) => { if (Number.isFinite(v)) seg.push(i); });
@@ -231,7 +231,7 @@ function drawPlot(cv, curves, tg, { x0, x1, xl, leds = [], ledsOrig = [] }, dpr 
     x.stroke(); x.setLineDash([]);
   }
   // 최저점(첫 곡선)
-  const main = curves[0], mys = main.ys, n = mys.length, Xm = (i) => pl + ((i + 0.5) / n) * PW, at = (i) => x0 + ((i + 0.5) / n) * (x1 - x0);
+  const main = curves[0], mys = main.ys, n = mys.length, Xm = (i) => pl + ((rev ? n - i - 0.5 : i + 0.5) / n) * PW, at = (i) => x0 + ((i + 0.5) / n) * (x1 - x0);
   let im = -1; mys.forEach((v, i) => { if (Number.isFinite(v) && (im < 0 || v < mys[im])) im = i; });
   if (im >= 0) {   // 최저점 = 원자료(판정과 같은 값)
     x.fillStyle = '#d9473a'; x.beginPath(); x.arc(Xm(im), Y(mys[im]), 3.5 * dpr, 0, 2 * Math.PI); x.fill();
@@ -267,7 +267,7 @@ function wireHover(cv) {
   const idx = (e) => {
     const P = cv._plot; if (!P) return null;
     const r = cv.getBoundingClientRect(), pl = PL * P.dpr, pr = PR * P.dpr, px = (e.clientX - r.left) * (cv.width / r.width), n = P.curves[0].ys.length;
-    const i = Math.floor(((px - pl) / (cv.width - pl - pr)) * n);
+    const i0 = Math.floor(((px - pl) / (cv.width - pl - pr)) * n), i = P.opt.rev ? n - 1 - i0 : i0;
     return i >= 0 && i < n ? i : null;
   };
   cv.addEventListener('mousemove', (e) => { const P = cv._plot; if (P) drawPlot(cv, P.curves, P.tg, P.opt, P.dpr, idx(e)); });
@@ -298,7 +298,14 @@ export const minDotR = (w, h, dpr = 1) => Math.max(1.5 * dpr, Math.min(3.5 * dpr
 // equal = 가로세로 같은 축척(확대 창에서 선택) — 줄 안에서 정확히 1:1.
 // 반환 { ox, oy, PW, rowH, pitch, K, segL, w0, w1, L, xy(s, w) → [x, y], at(x, y) → [s, w] | null, exag(폭 과장 배수) }
 // view(선택, 2026-11-12) = 보이는 범위 { s0, s1, w0, w1 } mm(큰 창 확대) — 상자(ox·oy·PW·rowH)는 전체 보기 그대로, 안의 mm 범위만 바꿈
-export function mapLayout(G, W, H, dpr = 1, equal = false, view = null) {
+export function mapLayout(G, W, H, dpr = 1, equal = false, view = null, rev = null) {
+  const B = mapLayout0(G, W, H, dpr, equal, view);
+  if (!rev?.s && !rev?.w) return B;
+  // 뒤집기(2026-11-19) — 상자 안에서 거울. xy 는 그림 좌표만 거울, at 은 원래 s·w 를 돌려줌(클릭·영역·확대가 그대로 맞음)
+  const mx = (px) => (rev.s ? 2 * B.ox + B.PW - px : px), my = (py) => (rev.w ? 2 * B.oy + B.rowH - py : py), xy0 = B.xy, at0 = B.at;
+  return { ...B, rev: { s: !!rev.s, w: !!rev.w }, xy: (sv, w) => { const [px, py] = xy0(sv, w); return [mx(px), my(py)]; }, at: (px, py) => at0(mx(px), my(py)) };
+}
+function mapLayout0(G, W, H, dpr, equal, view) {
   const w0 = G.w0, w1 = G.w0 + G.nw * G.cell, wd = w1 - w0 || 1, L = G.L;
   let ox = MAP_PAD.l * dpr, oy = MAP_PAD.t * dpr, PW = W - (MAP_PAD.l + MAP_PAD.r) * dpr;
   const PH = H - (MAP_PAD.t + MAP_PAD.b) * dpr, gap = 16 * dpr;
@@ -337,24 +344,28 @@ export function toCsv(text) {
   return text.split('\n').map((l) => l.split('\t').map(q).join(',')).join('\r\n');
 }
 // 2D 분포 표(탭 구분, 저장 때 toCsv) — 머리말(#) + 첫 줄 s 칸 중심(mm), 다음 줄부터 w 칸 중심(위 = +w 부터)과 값(최대 대비 %, 관측면 밖 = 빈칸) — 순수
-export function mapTxt(G, map, { name = '', quality = '', photons = null, noise = null } = {}) {
+const seq = (a, b, flip = false) => { const [x, y] = flip ? [b, a] : [a, b], d = y >= x ? 1 : -1, o = []; for (let k = x; d > 0 ? k <= y : k >= y; k += d) o.push(k); return o; };
+const revNote = (rev) => (rev?.s || rev?.w ? [`# 화면 방향대로 — ${[rev.s ? '길이 s 반대' : '', rev.w ? '폭 w 반대' : ''].filter(Boolean).join(' · ')} (좌표 값은 원래 값)`] : []);
+export function mapTxt(G, map, { name = '', quality = '', photons = null, noise = null, rev = null } = {}) {
   let mx = 0; for (let k = 0; k < map.length; k++) if (G.valid[k] && map[k] > mx) mx = map[k];
   const V = mapViewG(G);   // 그림과 같은 w 범위(관측면 밖 빈 줄 뺌)
+  const SI = seq(0, G.ns - 1, rev?.s), WJ = seq(V.jB, V.jA, rev?.w);   // 화면 순서(왼쪽·위부터, 2026-11-19 돌리기·뒤집기)
   const f = (v) => String(+v.toFixed(3)), head = [
     '# UDS 2D 광량 분포 (관측면 전체 · 가장자리 포함 원자료) — 값 = 최대 대비 % · 빈칸 = 관측면 밖',
     `# ${name ? `이름 ${name} · ` : ''}길이 s 0–${f(G.L)} mm · 폭 w ${f(V.w0)}–${f(V.w0 + V.nw * G.cell)} mm · 칸 ${G.ns} × ${V.nw} (${f(G.ds)} × ${f(G.cell)} mm)${quality ? ` · 화질 ${quality}` : ''}${photons ? ` · 광선 ${photons}` : ''}${Number.isFinite(noise) ? ` · 오차 ±${(noise * 100).toFixed(2)}%` : ''}`,
-    ['w\\s(mm)', ...Array.from({ length: G.ns }, (_, i) => f((i + 0.5) * G.ds))].join('\t'),
+    ...revNote(rev),
+    ['w\\s(mm)', ...SI.map((i) => f((i + 0.5) * G.ds))].join('\t'),
   ];
-  for (let j = V.jB; j >= V.jA; j--) {
+  for (const j of WJ) {
     const row = [f(G.w0 + (j + 0.5) * G.cell)];
-    for (let i = 0; i < G.ns; i++) { const k = i * G.nw + j; row.push(G.valid[k] && mx > 0 ? ((map[k] / mx) * 100).toFixed(2) : ''); }
+    for (const i of SI) { const k = i * G.nw + j; row.push(G.valid[k] && mx > 0 ? ((map[k] / mx) * 100).toFixed(2) : ''); }
     head.push(row.join('\t'));
   }
   return head.join('\n') + '\n';
 }
 // 선택 선 TXT(순수, 2026-10-30) — 2D 에서 고른 점을 지나는 길이 방향(그 w 줄)·폭 방향(그 s 칸) 원자료. 평활 없음,
 // 값 = 2D 최대 대비 %(2D TXT 와 같은 기준이라 서로 맞음), 관측면 밖 = 빈칸 · 폭 방향은 2D 그림 범위(빈 줄 뺌)
-export function lineTxt(G, map, pin, { name = '', quality = '', photons = null } = {}) {
+export function lineTxt(G, map, pin, { name = '', quality = '', photons = null, rev = null } = {}) {
   const i = Math.max(0, Math.min(G.ns - 1, Math.floor(pin.s / G.ds))), j = Math.max(0, Math.min(G.nw - 1, Math.floor((pin.w - G.w0) / G.cell)));
   let mx = 0; for (let k = 0; k < map.length; k++) if (G.valid[k] && map[k] > mx) mx = map[k];
   const f = (v) => String(+v.toFixed(3)), val = (k) => (G.valid[k] && mx > 0 ? ((map[k] / mx) * 100).toFixed(2) : ''), V = mapViewG(G);
@@ -362,9 +373,9 @@ export function lineTxt(G, map, pin, { name = '', quality = '', photons = null }
   const out = ['# UDS 선택 선 원자료 — 평활 없음 · 값 = 2D 최대 대비 %(2D CSV 와 같은 기준) · 빈칸 = 관측면 밖',
     `# ${name ? `이름 ${name} · ` : ''}선택 점 s ${f(sC)} mm · w ${f(wC)} mm (칸 ${f(G.ds)} × ${f(G.cell)} mm)${quality ? ` · 화질 ${quality}` : ''}${photons ? ` · 광선 ${photons}` : ''}`,
     '', `# 길이 방향 — w = ${f(wC)} mm 줄`, 's (mm)\t값 (%)'];
-  for (let a = 0; a < G.ns; a++) out.push(`${f((a + 0.5) * G.ds)}\t${val(a * G.nw + j)}`);
+  for (const a of seq(0, G.ns - 1, rev?.s)) out.push(`${f((a + 0.5) * G.ds)}\t${val(a * G.nw + j)}`);
   out.push('', `# 폭 방향 — s = ${f(sC)} mm 칸 (위 = +w)`, 'w (mm)\t값 (%)');
-  for (let b = V.jB; b >= V.jA; b--) out.push(`${f(G.w0 + (b + 0.5) * G.cell)}\t${val(i * G.nw + b)}`);
+  for (const b of seq(V.jB, V.jA, rev?.w)) out.push(`${f(G.w0 + (b + 0.5) * G.cell)}\t${val(i * G.nw + b)}`);
   return out.join('\n') + '\n';
 }
 // 1D 프로파일 TXT(탭 구분) — 그림마다 '# 제목' + 머리줄(x 이름, 곡선 이름) + x 칸 중심과 곡선별 값(최대 대비 %, 원자료 raw 우선, 값 없음 = 빈칸).
@@ -375,7 +386,7 @@ export function profileTxt(list) {
     if (!v?.curves?.length) continue;
     const { x0, x1, xl } = v.opt, n = v.curves[0].ys.length, dx = (x1 - x0) / n;
     out.push('', `# ${title}`, [xl, ...v.curves.map((c) => c.name)].join('\t'));
-    for (let i = 0; i < n; i++) out.push([f(x0 + (i + 0.5) * dx), ...v.curves.map((c) => { const y = c.ys[i]; return Number.isFinite(y) ? (y * 100).toFixed(2) : ''; })].join('\t'));
+    for (const i of seq(0, n - 1, !!v.opt.rev)) out.push([f(x0 + (i + 0.5) * dx), ...v.curves.map((c) => { const y = c.ys[i]; return Number.isFinite(y) ? (y * 100).toFixed(2) : ''; })].join('\t'));
   }
   return out.join('\n') + '\n';
 }
@@ -404,7 +415,7 @@ export function mapViewG(G) {
   const v = jB < 0 ? { ...G, jA: 0, jB: G.nw - 1 } : { ...G, w0: G.w0 + jA * G.cell, nw: jB - jA + 1, jA, jB };
   VIEWG.set(G, v); return v;
 }
-function mapBox(cv, G, dpr, equal) { return mapLayout(mapViewG(G), cv.width, cv.height, dpr, equal, cv._view ?? null); }   // cv._view = 큰 창 확대 범위(mm)
+function mapBox(cv, G, dpr, equal) { return mapLayout(mapViewG(G), cv.width, cv.height, dpr, equal, cv._view ?? null, cv._mapv?.v?.rev ?? null); }   // rev = 돌리기·뒤집기에 따른 길이·폭 방향(2026-11-19)   // cv._view = 큰 창 확대 범위(mm)
 // 색 막대(0~100%) — 펼친 띠·모양 그림 공용
 function colorBar(x, W, H, dpr) {
   const cTop = MAP_PAD.t * dpr, PH = H - (MAP_PAD.t + MAP_PAD.b) * dpr, bx = W - (MAP_PAD.r - 12) * dpr, bw = 11 * dpr;
@@ -514,13 +525,14 @@ export function drawMap(cv, v, dpr = 1, hover = null, equal = false) {
     const ry = oy + r * pitch, s0 = sA + r * segL, s1 = s0 + segL;
     const VG = mapViewG(G);   // 빈 줄을 뺀 w 줄만(그림 위 = +w = 큰 j)
     x.save(); x.beginPath(); x.rect(ox, ry, PW, rowH); x.clip();
+    if (B.rev) { x.translate(ox + PW / 2, ry + rowH / 2); x.scale(B.rev.s ? -1 : 1, B.rev.w ? -1 : 1); x.translate(-(ox + PW / 2), -(ry + rowH / 2)); }   // 뒤집기 = 상자 안 거울(눈금 글씨는 아래에서 바로 씀)
     if (B.view) { const V = B.view; x.drawImage(tmp, V.s0 / G.ds, G.nw - (V.w1 - G.w0) / G.cell, (V.s1 - V.s0) / G.ds, (V.w1 - V.w0) / G.cell, ox, ry, PW, rowH); }   // 확대 = 보이는 칸 범위만
     else x.drawImage(tmp, 0, G.nw - 1 - VG.jB, G.ns, VG.nw, ox - r * PW, ry, PW * K, rowH);
     x.restore();
     x.strokeStyle = 'rgba(128,140,160,.7)'; x.lineWidth = dpr; x.strokeRect(ox, ry, PW, rowH);
     x.fillStyle = '#8a93a6'; x.textAlign = 'center'; x.textBaseline = 'top';   // s 눈금(줄 아래)
     for (let sv = Math.ceil(s0 / ss - 1e-9) * ss; sv <= s1 + 1e-9; sv += ss) {
-      const px = ox + ((sv - s0) / segL) * PW;
+      const px0 = ox + ((sv - s0) / segL) * PW, px = B.rev?.s ? 2 * ox + PW - px0 : px0;
       x.strokeStyle = 'rgba(128,140,160,.6)'; x.beginPath(); x.moveTo(px, ry + rowH); x.lineTo(px, ry + rowH + 3 * dpr); x.stroke();
       x.fillText(`${+sv.toFixed(1)}`, px, ry + rowH + 4 * dpr);
     }
@@ -529,7 +541,7 @@ export function drawMap(cv, v, dpr = 1, hover = null, equal = false) {
   x.fillStyle = '#8a93a6'; x.textAlign = 'right'; x.textBaseline = 'top';
   x.fillText(`s (mm)${B.exag > 1.6 ? ` · 폭 ×${B.exag.toFixed(1)} 확대` : ''}`, ox + PW, yEnd + 17 * dpr);
   // w 눈금(첫 줄 왼쪽)
-  const ws = niceStep(w1 - w0, Math.max(2, Math.round(rowH / (28 * dpr)))), WY = (w) => oy + ((w1 - w) / (w1 - w0)) * rowH;
+  const ws = niceStep(w1 - w0, Math.max(2, Math.round(rowH / (28 * dpr)))), WY = (w) => { const y = oy + ((w1 - w) / (w1 - w0)) * rowH; return B.rev?.w ? 2 * oy + rowH - y : y; };
   x.textBaseline = 'middle'; x.strokeStyle = 'rgba(128,140,160,.6)';
   for (let w = Math.ceil(w0 / ws - 1e-9) * ws; w <= w1 + 1e-9; w += ws) { x.beginPath(); x.moveTo(ox - 3 * dpr, WY(w)); x.lineTo(ox, WY(w)); x.stroke(); x.fillText(`${+w.toFixed(1)}`, ox - 5 * dpr, WY(w)); }
   x.save(); x.translate(10 * dpr, oy + rowH / 2); x.rotate(-Math.PI / 2); x.textAlign = 'center'; x.fillText('w (mm)', 0, 0); x.restore();
@@ -642,7 +654,7 @@ export function createResultsPanel(el, { anchor = () => null, onPreview = null, 
       <div class="m3-sum-c"><div class="l">광 효율</div><div class="v sm" data-r="eff">–</div><div class="s">관측면 원뿔 안 / LED 총 방출</div></div>
       <div class="m3-sum-x"><div class="m3-regl" data-r="reg" hidden title="큰 창(⤢)에서 고른 영역 — 길이 / 폭 균일도"></div><button type="button" class="m3-leak" data-r="leak" hidden title="누르면 3D 에서 가장 많이 새는 면을 강조"></button></div>
     </div>
-    <div class="m3-blk"><div class="m3-t"><b class="m3-tt">2D 광량 <i class="m3-info" data-r="mapsub" tabindex="0">ⓘ</i></b><span><label class="m3-map-eq" title="가로세로를 같은 축척으로 — 끄면 좁은 폭을 늘려 보여 줌"><input type="checkbox" data-r="mapEq"> 실제 비율</label> <select data-r="quality" title="2D 분포·1D 프로파일 칸 크기(정사각) — 저 1.5 mm(빠름) · 중 1.0 mm(광선 ≈2배) · 고 0.5 mm(광선 ≈4배) · 짧거나 좁은 면은 그 방향만 더 잘게" aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>  <button type="button" class="m3-zoom" data-zoom="map" title="큰 창으로 보기" aria-label="2D 광량 분포 확대">⤢</button></span></div>
+    <div class="m3-blk"><div class="m3-t"><b class="m3-tt">2D 광량 <i class="m3-info" data-r="mapsub" tabindex="0">ⓘ</i></b><span><label class="m3-map-eq" title="가로세로를 같은 축척으로 — 끄면 좁은 폭을 늘려 보여 줌"><input type="checkbox" data-r="mapEq"> 실제 비율</label><span class="m3-orient" data-orient-box><button type="button" data-orient="rot" title="2D 를 시계 방향으로 90° 돌림 — 링·실제 비율 그림이 돌아감(펼친 그림·1D 는 길이·폭 방향만 따라감)" aria-label="2D 돌리기">⟳</button><button type="button" data-orient="h" title="2D 좌우 뒤집기 — 1D·CSV 도 화면 방향대로" aria-label="2D 좌우 뒤집기">⇋</button><button type="button" data-orient="v" title="2D 상하 뒤집기 — 1D·CSV 도 화면 방향대로" aria-label="2D 상하 뒤집기">⇅</button><button type="button" data-orient="reset" title="돌리기·뒤집기 원래대로" aria-label="2D 방향 원래대로" disabled>↺</button></span> <select data-r="quality" title="2D 분포·1D 프로파일 칸 크기(정사각) — 저 1.5 mm(빠름) · 중 1.0 mm(광선 ≈2배) · 고 0.5 mm(광선 ≈4배) · 짧거나 좁은 면은 그 방향만 더 잘게" aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>  <button type="button" class="m3-zoom" data-zoom="map" title="큰 창으로 보기" aria-label="2D 광량 분포 확대">⤢</button></span></div>
       <div class="m3-gw"><canvas class="m3-g" data-r="map" width="600" height="200"></canvas></div></div>
     <div class="m3-blk"><div class="m3-t"><b class="m3-tt">길이 1D <i class="m3-info" data-r="psub" tabindex="0">ⓘ</i> <span data-r="uprof"></span></b><span><button type="button" class="m3-zoom" data-zoom="prof" title="큰 창으로 보기" aria-label="길이 프로파일 확대">⤢</button></span></div>
       <div class="m3-gw"><canvas class="m3-g" data-r="prof" width="600" height="150"></canvas></div></div>
@@ -655,6 +667,13 @@ export function createResultsPanel(el, { anchor = () => null, onPreview = null, 
   q('prof')._onMenu = (e, cv) => plotMenu('prof')(e, cv); q('wprof')._onMenu = (e, cv) => plotMenu('wprof')(e, cv);
   // 지정 점(mm — 화질을 바꿔도 같은 위치). 같은 칸을 다시 누르면 해제
   let pin = null;
+  // 2D 돌리기·뒤집기(2026-11-19) — 관측면이 바뀌면 처음으로. 판정·원자료는 그대로, 그림·1D 가로축·CSV 순서만
+  let orient = ORIENT0, oKey = null, oMemo = { src: null, o: null, out: null };
+  const orientedShape = (sh) => { if (oMemo.src !== sh || oMemo.o !== orient) oMemo = { src: sh, o: orient, out: orientShape(sh, orient) }; return oMemo.out; };
+  const orientLabel = () => { if (orientIsId(orient)) return '처음 방향'; return [orient.rot ? `시계 ${orient.rot * 90}°` : '', orient.fh ? '좌우 뒤집음' : '', orient.fv ? '상하 뒤집음' : ''].filter(Boolean).join(' · '); };
+  const syncOrient = () => { for (const b of [el, big?.el]) b?.querySelectorAll('[data-orient-box]').forEach((x) => { const r = x.querySelector('[data-orient="reset"]'); r.disabled = orientIsId(orient); r.title = `돌리기·뒤집기 원래대로 — 지금: ${orientLabel()}`; x.classList.toggle('on', !orientIsId(orient)); }); };
+  const setOrient = (op) => { orient = orientStep(orient, op); syncOrient(); if (last) update(last); };
+  el.addEventListener('click', (e) => { const b = e.target.closest('[data-orient]'); if (b) setOrient(b.dataset.orient); });
   const onPin = ([i, j], G) => { const s = (i + 0.5) * G.ds, w = G.w0 + (j + 0.5) * G.cell; pin = pin && Math.abs(pin.s - s) < G.ds / 2 && Math.abs(pin.w - w) < G.cell / 2 ? null : { s, w }; if (last) update(last); };
   const pinOff = () => { if (!pin) return; pin = null; if (last) update(last); };
   q('map')._onPin = onPin; q('map')._onPinOff = pinOff; q('map')._onMenu = (e, c, cv) => mapMenu(e, c, cv);
@@ -670,11 +689,11 @@ export function createResultsPanel(el, { anchor = () => null, onPreview = null, 
   };
   const txt2D = () => {
     const sn = last?.snap, st = sn?.stats; if (!st || st.empty || !sn.G) return;
-    saveTxt(mapTxt(fullG(sn.G), st.mapAll ?? st.map, { name: String(fileName() ?? 'uds'), quality: { low: '저', mid: '중', high: '고' }[last.observe?.quality ?? 'low'], photons: sn.photons, noise: st.relNoiseCell }), '2D분포');
+    saveTxt(mapTxt(fullG(sn.G), st.mapAll ?? st.map, { name: String(fileName() ?? 'uds'), quality: { low: '저', mid: '중', high: '고' }[last.observe?.quality ?? 'low'], photons: sn.photons, noise: st.relNoiseCell, rev: VIEW.map?.rev }), '2D분포');
   };
   const txtPin = () => {   // 선택 선(지정 점) 원자료
     const sn = last?.snap, st = sn?.stats; if (!pin || !st || st.empty || !sn.G) return;
-    saveTxt(lineTxt(fullG(sn.G), st.mapAll ?? st.map, pin, { name: String(fileName() ?? 'uds'), quality: { low: '저', mid: '중', high: '고' }[last.observe?.quality ?? 'low'], photons: sn.photons }), '선택선');
+    saveTxt(lineTxt(fullG(sn.G), st.mapAll ?? st.map, pin, { name: String(fileName() ?? 'uds'), quality: { low: '저', mid: '중', high: '고' }[last.observe?.quality ?? 'low'], photons: sn.photons, rev: VIEW.map?.rev }), '선택선');
   };
   const txt1D = (k = null) => { const ks = k ? [k] : ['prof', 'wprof'], L = ks.filter((x) => VIEW[x]); if (L.length) saveTxt(profileTxt(L.map((x) => ({ title: TITLE[x], v: VIEW[x] }))), k === 'wprof' ? '폭1D' : k === 'prof' ? '길이1D' : '1D프로파일'); };   // k = 그 그림만
   // 1D 표시: 값 = 원자료(CSV 와 같음), 그리는 선만 칸이 많을 때 다듬음(draw) · 가로축은 값이 있는 범위로
@@ -773,6 +792,8 @@ export function createResultsPanel(el, { anchor = () => null, onPreview = null, 
     cv.addEventListener('pointerdown', (e) => {
       // 오른쪽 끌기 = 이동(2026-11-12) · 왼쪽 끌기 = 영역(영역 선택 켰을 때만). 오른쪽을 끌지 않고 떼면 기존 저장 메뉴
       const pan = e.button === 2; if (!(pan || (e.button === 0 && big.regMode))) return;
+      // 오른쪽 누름은 실제로 끌 때만 링을 펼침(2026-11-19 사용자: 우클릭만 해도 링이 사각으로 바뀌어 보이는 그림 그대로 저장·복사를 못 함)
+      if (pan && cv._mapv?.at) { drag = { lazy: true, p: P(e), pan: true, moved: false }; cv.setPointerCapture?.(e.pointerId); return; }
       unroll();   // 실제 비율로 다시 켜 둔 채 끌어도 바로 이동·영역 선택
       const m = M(); if (!m) return;
       const B = mapBox(cv, m.v.G, m.dpr, m.equal), p = P(e), sw = B.at(...p);
@@ -780,14 +801,20 @@ export function createResultsPanel(el, { anchor = () => null, onPreview = null, 
     });
     cv.addEventListener('contextmenu', (e) => { if (cv._noMenu) { cv._noMenu = false; e.preventDefault(); e.stopImmediatePropagation(); } }, true);
     cv.addEventListener('pointermove', (e) => {
+      if (drag?.lazy) {   // 링 위 오른쪽 누름 — 끌기 시작하면 그때 펼치고 이동
+        const p = P(e); if (Math.hypot(p[0] - drag.p[0], p[1] - drag.p[1]) <= 4 * (cv._mapv?.dpr ?? 1)) return;
+        unroll(); const m = M(); if (!m) { drag = null; return; }
+        const B = mapBox(cv, m.v.G, m.dpr, m.equal); drag = { p: drag.p, sw: B.at(...drag.p), B, pan: true, v: cv._view ?? full(m.v.G), moved: false };
+      }
       if (!drag) return; const m = M(); if (!m) return; const p = P(e), dx = p[0] - drag.p[0], dy = p[1] - drag.p[1];
       if (Math.hypot(dx, dy) > 4 * m.dpr) drag.moved = true; if (!drag.moved) return;
       if (!drag.pan && drag.sw) { const B = mapBox(cv, m.v.G, m.dpr, m.equal), q2 = B.at(Math.max(B.ox, Math.min(B.ox + B.PW, p[0])), Math.max(B.oy, Math.min(B.oy + B.rowH, p[1]))); if (q2) cv._drag = { s0: drag.sw[0], w0: drag.sw[1], s1: q2[0], w1: q2[1] }; }
-      else { const v = drag.v; cv._view = panBy(v, full(m.v.G), (-dx / drag.B.PW) * (v.s1 - v.s0), (dy / drag.B.rowH) * (v.w1 - v.w0)); }
+      else { const v = drag.v; const fs = drag.B.rev?.s ? -1 : 1, fw = drag.B.rev?.w ? -1 : 1; cv._view = panBy(v, full(m.v.G), (-fs * dx / drag.B.PW) * (v.s1 - v.s0), (fw * dy / drag.B.rowH) * (v.w1 - v.w0)); }   // 뒤집은 그림 = 끄는 방향 그대로 따라가게
       redraw();
     });
     const end = () => {
       if (!drag) return; const m = M(), d = drag; drag = null;
+      if (d.lazy) return;   // 끌지 않은 오른쪽 누름 = 링 그대로 · 저장 메뉴
       // 영역 선택 켠 채 끌지 않고 클릭 = 영역 지움(핀은 찍지 않음, 2026-11-12)
       if (!d.moved) { if (!d.pan && big.regMode && region) { region = null; cv._noClick = true; showRegion(); redraw(); paint('map', q('map')); } return; }
       if (d.pan) cv._noMenu = true; else cv._noClick = true;
@@ -811,7 +838,7 @@ export function createResultsPanel(el, { anchor = () => null, onPreview = null, 
     // 떠 있는 창(2026-11-02) — 기구 최적화 창처럼 머리 끌어 옮기기 · 모서리로 크기 · 접기. 뒤 화면을 막지 않음(열어 둔 채 설계·최적화). 위치·크기 = 보는 사람별, 접힘은 열 때마다 펼침
     const rect = fitRect(bigRectLoad(), innerWidth, innerHeight, winTop());
     ov.className = 'm3-big-in'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', '광분포 시뮬레이션');
-    const cell = (k) => `<div class="m3-big-c" data-k="${k}"><div class="m3-big-ct"><b>${TITLE[k]}</b>${k === 'map' ? '' : `<span data-big-uni="${k}"></span>`}<span class="m3-big-sp"></span>${k === 'map' ? `<label class="m3-big-eq"><input type="checkbox" data-big-eq${eq0 ? ' checked' : ''}> 실제 비율</label><button type="button" data-big-reg-on aria-pressed="false" title="켜 둔 동안 끌 때마다 새 영역 · 그 영역의 균일도를 아래 표로 비교 · 켠 채 클릭 = 영역 지움 · 끄면 영역 결과를 숨김(다시 켜면 보임) · 휠 = 확대 · 오른쪽 끌기 = 이동 · 더블클릭 = 전체 보기">▭ 영역 선택</button><button type="button" data-big-fit disabled title="확대하면 켜짐 — 휠 = 확대 · 오른쪽 끌기 = 이동">전체 보기</button>` : ''}<button type="button" data-big-one="${k}">⤢ 이 그림만</button></div><canvas class="m3-big-cv" data-big-cv="${k}"></canvas>${k === 'map' ? '<div class="m3-big-reg" data-big-reg hidden></div>' : ''}</div>`;
+    const cell = (k) => `<div class="m3-big-c" data-k="${k}"><div class="m3-big-ct"><b>${TITLE[k]}</b>${k === 'map' ? '' : `<span data-big-uni="${k}"></span>`}<span class="m3-big-sp"></span>${k === 'map' ? `<label class="m3-big-eq"><input type="checkbox" data-big-eq${eq0 ? ' checked' : ''}> 실제 비율</label><span class="m3-orient" data-orient-box><button type="button" data-orient="rot" title="2D 를 시계 방향으로 90° 돌림 — 링·실제 비율 그림이 돌아감(펼친 그림·1D 는 길이·폭 방향만 따라감)" aria-label="2D 돌리기">⟳</button><button type="button" data-orient="h" title="2D 좌우 뒤집기 — 1D·CSV 도 화면 방향대로" aria-label="2D 좌우 뒤집기">⇋</button><button type="button" data-orient="v" title="2D 상하 뒤집기 — 1D·CSV 도 화면 방향대로" aria-label="2D 상하 뒤집기">⇅</button><button type="button" data-orient="reset" title="돌리기·뒤집기 원래대로" aria-label="2D 방향 원래대로" disabled>↺</button></span><button type="button" data-big-reg-on aria-pressed="false" title="켜 둔 동안 끌 때마다 새 영역 · 그 영역의 균일도를 아래 표로 비교 · 켠 채 클릭 = 영역 지움 · 끄면 영역 결과를 숨김(다시 켜면 보임) · 휠 = 확대 · 오른쪽 끌기 = 이동 · 더블클릭 = 전체 보기">▭ 영역 선택</button><button type="button" data-big-fit disabled title="확대하면 켜짐 — 휠 = 확대 · 오른쪽 끌기 = 이동">전체 보기</button>` : ''}<button type="button" data-big-one="${k}">⤢ 이 그림만</button></div><canvas class="m3-big-cv" data-big-cv="${k}"></canvas>${k === 'map' ? '<div class="m3-big-reg" data-big-reg hidden></div>' : ''}</div>`;
     ov.innerHTML = `<div class="m3-big-hd" title="끌어서 옮기기"><b title="진행 현황 · 2D · 1D — 2D 클릭 = 그 점 기준 1D 곡선(주황) · 그림 우클릭 = 데이터·이미지 저장"><i class="m3-fl" data-big-step>4</i><span class="m3-tx">광분포 시뮬레이션</span><span class="m3-tx-s">광분포</span></b><span class="m3-mon-sum" data-big-sum></span><span class="m3-big-sp"></span><span class="m3-ctl" data-big-ctl></span><span class="m3-mode-chip" data-big-mode hidden></span><button type="button" class="m3-pvbtn" data-big-pv hidden></button><label class="m3-big-q">화질 <select data-big-q aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label><button type="button" data-big-max></button><button type="button" data-big-min></button><button type="button" data-big-close title="Esc" aria-label="닫기">✕<span class="m3-tx"> 닫기</span></button></div>
       <div class="m3-big-grid"><div class="m3-big-prog" data-big-prog></div>${cell('map')}<div class="m3-big-row">${cell('prof')}${cell('wprof')}</div></div>`;
     (el.closest('#mech3d-wrap') ?? document.body).appendChild(ov);   // 설계 화면에 붙임(화면을 바꾸면 함께 숨음)
@@ -833,6 +860,7 @@ export function createResultsPanel(el, { anchor = () => null, onPreview = null, 
       key: (e) => { if (e.key !== 'Escape' || !big.active) return; if (big.regMode) regOff(); else if (big.focus) setFocus(null); else closeBig(true); },
       down: (e) => { big.active = ov.contains(e.target); },
       rs: () => { place(); paintBig(); } };
+    syncOrient();
     document.addEventListener('keydown', big.key); document.addEventListener('pointerdown', big.down, true); window.addEventListener('resize', big.rs);
     ov.addEventListener('pointerdown', () => raiseWin(ov), true);
     // 크게(2026-11-13 사용자: 기구 최적화 창처럼) — 크게 한 채로 끌거나 크기를 바꾸면 그 크기에서 보통 창으로
@@ -847,6 +875,7 @@ export function createResultsPanel(el, { anchor = () => null, onPreview = null, 
     ov.addEventListener('click', (e) => {
       const one = e.target.closest('[data-big-one]'); if (one) { setFocus(big.focus === one.dataset.bigOne ? null : one.dataset.bigOne); return; }
       if (e.target.closest('[data-big-reg-on]')) { if (big.regMode) regOff(); else { big.regMode = true; unroll(); showRegion(); paint('map', big.cvs.map); paint('map', q('map')); } return; }
+      { const b = e.target.closest('[data-orient]'); if (b) { setOrient(b.dataset.orient); return; } }
       if (e.target.closest('[data-big-fit]')) { cvs.map._view = null; if (!big.regMode) cvs.map._flat = false; paint('map', cvs.map); return; }
     });
     ov.querySelector('[data-big-close]').onclick = () => closeBig(true);
@@ -943,15 +972,17 @@ export function createResultsPanel(el, { anchor = () => null, onPreview = null, 
     const pi = pin ? Math.floor(pin.s / G.ds) : -1, pj = pin ? Math.floor((pin.w - G.w0) / G.cell) : -1;
     if (pin && !(pi >= 0 && pi < G.ns && pj >= 0 && pj < G.nw)) pin = null;
     const FG = fullG(G), mapF = st.mapAll ?? st.map, pp = pin ? pointProfiles(FG, mapF, pi, pj) : null, ring = G.closed ? '원주' : '길이', rad = G.closed ? '반경(폭)' : '폭';
-    VIEW.map = { G: FG, map: mapF, leds, pin, smooth: true, shape: args.shape ?? null, showMax: showMax(st) };
+    { const k = JSON.stringify([observe?.faces ?? null, observe?.dir ?? null]); if (k !== oKey) { if (oKey != null && !orientIsId(orient)) { orient = ORIENT0; syncOrient(); } oKey = k; } }
+    const rev = orientRev(args.shape ?? null, orient);   // 펼친 2D·1D·CSV 가 따라갈 길이·폭 방향
+    VIEW.map = { G: FG, map: mapF, leds, pin, smooth: true, shape: orientedShape(args.shape ?? null), rev, showMax: showMax(st) };
     { const k = JSON.stringify([observe?.faces ?? null, observe?.dir ?? null]); if (k !== regKey) { if (regKey != null) { region = null; if (big) big.cvs.map._view = null; } regKey = k; } }
     showRegion(snap, observe);
-    VIEW.prof = plotView([{ ys: Array.from(st.profile, (v) => v / pm), color: '#1f6fd1', name: '폭 평균', band: st.relNoise ?? 0 }, ...(pp ? [{ ys: Array.from(pp.along), color: PIN_COLOR, name: `지정 점 w=${pin.w.toFixed(1)}` }] : [])], observe.targetLen, { x0: 0, x1: G.L, xl: 's (mm)', leds: leds.map((p) => p.s), ledsOrig: (args.ledsOrig ?? []).map((p) => p.s) });
+    VIEW.prof = plotView([{ ys: Array.from(st.profile, (v) => v / pm), color: '#1f6fd1', name: '폭 평균', band: st.relNoise ?? 0 }, ...(pp ? [{ ys: Array.from(pp.along), color: PIN_COLOR, name: `지정 점 w=${pin.w.toFixed(1)}` }] : [])], observe.targetLen, { x0: 0, x1: G.L, xl: 's (mm)', leds: leds.map((p) => p.s), ledsOrig: (args.ledsOrig ?? []).map((p) => p.s), rev: rev.s });
     q('psub').title = `${pin ? `폭 평균 + 지정 점(주황, ${ring} 방향) · 같은 점 다시 클릭 또는 바깥 클릭 = 해제` : '폭 평균 · 2D 클릭 = 그 점 기준 곡선 추가'} · 옅은 띠 = 계산 노이즈 범위 · 빨간 점선 = 목표 하한 · 곡선은 노이즈만 살짝 다듬어 그림(LED 리플 높이 유지) · 최저점·마우스 값·CSV·판정 = 원자료`;
     paint('map', q('map')); paint('prof', q('prof'));
     gauge('ul', st.Ulen, observe.targetLen, st.seLen, st.relNoise, !!st.preview);
     if (pp && (st.Uwid == null || !st.win)) {   // 폭 판정이 없어도 지정 점의 폭(원형 = 반경) 방향 곡선은 보여 줌
-      VIEW.wprof = plotView([{ ys: Array.from(pp.across), color: PIN_COLOR, name: `지정 점 s=${pin.s.toFixed(1)}` }], null, { x0: G.w0, x1: G.w0 + G.nw * G.cell, xl: 'w (mm)', leds: [] });
+      VIEW.wprof = plotView([{ ys: Array.from(pp.across), color: PIN_COLOR, name: `지정 점 s=${pin.s.toFixed(1)}` }], null, { x0: G.w0, x1: G.w0 + G.nw * G.cell, xl: 'w (mm)', leds: [], rev: rev.w });
       paint('wprof', q('wprof')); resetGauge(q('uwg'));
       q('uw').textContent = '–'; q('uw').className = 'v'; q('uwj').textContent = '폭 판정 불가(폭이 격자 2칸 미만)'; q('wsub').title = `지정 점 s = ${pin.s.toFixed(1)} mm · ${rad} 방향`;
     } else if (st.Uwid == null || !st.win) {
@@ -961,7 +992,7 @@ export function createResultsPanel(el, { anchor = () => null, onPreview = null, 
       // 판정 = 최저 창(실선), 비교 = 길이 전체 평균(점선) — 각자 최대 = 100%
       const wp = windowProfile(G, snap.sum, st.win[0], st.win[1]), wm = finiteMax(wp), wa = windowProfile(G, snap.sum, 0, G.ns), wam = finiteMax(wa);
       VIEW.wprof = plotView([{ ys: Array.from(wp, (v) => v / wm), color: '#1f6fd1', name: `최저 창 s=${st.sWorst.toFixed(0)}`, band: st.relNoise ?? 0 }, { ys: Array.from(wa, (v) => v / wam), color: '#3fae7a', dash: [4, 3], name: '길이 전체 평균' }, ...(pp ? [{ ys: Array.from(pp.across), color: PIN_COLOR, name: `지정 점 s=${pin.s.toFixed(1)}` }] : [])],
-        observe.targetWid, { x0: G.w0, x1: G.w0 + G.nw * G.cell, xl: 'w (mm)', leds: [...new Set(leds.map((p) => +p.w.toFixed(2)))] });
+        observe.targetWid, { x0: G.w0, x1: G.w0 + G.nw * G.cell, xl: 'w (mm)', leds: [...new Set(leds.map((p) => +p.w.toFixed(2)))], rev: rev.w });
       paint('wprof', q('wprof'));
       gauge('uw', st.Uwid, observe.targetWid, st.seWid, st.relNoise, !!st.preview);
       q('wsub').title = `최저 창 s = ${st.sWorst.toFixed(1)} mm${pp ? ` · 지정 점 s = ${pin.s.toFixed(1)} mm(주황, ${rad} 방향)` : ''}`;

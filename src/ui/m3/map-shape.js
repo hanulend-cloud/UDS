@@ -59,3 +59,47 @@ export function shapeLayout(G, shape, box, rows, mode) {
   };
   return { P, quad, toPx, at, info };
 }
+
+// 2D 돌리기·뒤집기(2026-11-19 사용자: 3D 에서 보는 방향과 맞추려고) — o = { rot: 0~3(시계 90°씩), fh, fv } · 관측면 좌표(y 위)에 쓰는 2×2 행렬.
+// 순서: 돌린 뒤 좌우·상하 뒤집기. fh·fv 가 둘 다면 180° 돌림으로 바꿔 둠. 판정·원자료는 그대로 — 그림·1D·CSV 순서만
+export const ORIENT0 = Object.freeze({ rot: 0, fh: false, fv: false });
+export function orientMatrix(o = ORIENT0) {
+  let m = [1, 0, 0, 1];
+  for (let k = 0; k < ((o.rot % 4) + 4) % 4; k++) m = [m[2], m[3], -m[0], -m[1]];   // 시계 90°: (x, y) → (y, −x)
+  if (o.fh) m = [-m[0], -m[1], m[2], m[3]];
+  if (o.fv) m = [m[0], m[1], -m[2], -m[3]];
+  return m;
+}
+const normO = (rot, fh, fv) => (fh && fv ? { rot: (rot + 2) % 4, fh: false, fv: false } : { rot: ((rot % 4) + 4) % 4, fh: !!fh, fv: !!fv });
+// op 'rot'(화면에서 시계 90°) | 'h'(화면 좌우) | 'v'(화면 상하) | 'reset' — 뒤집힌 상태에서 돌리면 화면에선 시계 방향이 되도록 rot 를 반대로
+export function orientStep(o = ORIENT0, op) {
+  if (op === 'reset') return ORIENT0;
+  if (op === 'rot') return normO(o.rot + (o.fh !== o.fv ? 3 : 1), o.fh, o.fv);
+  if (op === 'h') return normO(o.rot, !o.fh, o.fv);
+  if (op === 'v') return normO(o.rot, o.fh, !o.fv);
+  return o;
+}
+export const orientIsId = (o) => !o || (!(o.rot % 4) && !o.fh && !o.fv);
+// 모양(mapShape 결과)을 돌림 — 칸 모서리 좌표·시작점 각도·도는 방향(뒤집으면 반대). +w 안팎은 그대로
+export function orientShape(shape, o) {
+  if (!shape || orientIsId(o)) return shape;
+  const [a, b, c, d] = orientMatrix(o), xy = new Float32Array(shape.xy.length);
+  for (let k = 0; k < xy.length; k += 2) { const x = shape.xy[k], y = shape.xy[k + 1]; xy[k] = a * x + b * y; xy[k + 1] = c * x + d * y; }
+  const ux = Math.cos(shape.start), uy = -Math.sin(shape.start), det = a * d - b * c;   // start = 화면 각도(아래 = +)
+  return { ...shape, xy, ccw: det > 0 ? shape.ccw : !shape.ccw, start: Math.atan2(-(c * ux + d * uy), a * ux + b * uy) };
+}
+// 펼친 2D·1D·CSV 가 따라갈 방향 { s, w }(true = 반대로) — 화면에서 길이·폭 방향이 처음과 반대가 됐는지.
+// 링 = 뒤집으면(도는 방향 반대) 길이 반대, 돌리기만은 그대로 · 열린 선 = 처음 길이·폭 방향과 돌린 방향의 내적 < 0(90° = 그대로)
+export function orientRev(shape, o) {
+  if (orientIsId(o)) return { s: false, w: false };
+  const [a, b, c, d] = orientMatrix(o);
+  if (shape?.closed) return { s: a * d - b * c < 0, w: false };
+  let u = [1, 0], n = [0, 1];
+  if (shape?.xy) {
+    const W = shape.nw + 1, p = (i, j) => [shape.xy[(i * W + j) * 2], shape.xy[(i * W + j) * 2 + 1]], jm = Math.floor(shape.nw / 2), im = Math.floor(shape.ns / 2);
+    const p0 = p(0, jm), p1 = p(shape.ns, jm), q0 = p(im, 0), q1 = p(im, shape.nw);
+    u = [p1[0] - p0[0], p1[1] - p0[1]]; n = [q1[0] - q0[0], q1[1] - q0[1]];
+  }
+  const back = (v) => { const tx = a * v[0] + b * v[1], ty = c * v[0] + d * v[1], dd = tx * v[0] + ty * v[1]; return dd < -1e-6 * (v[0] * v[0] + v[1] * v[1]); };
+  return { s: back(u), w: back(n) };
+}
