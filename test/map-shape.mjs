@@ -44,4 +44,26 @@ for (const mode of ['ring', 'real']) {
 }
 
 }
+// 링 2D 그림 속도(2026-11-19) — 칸(고화질 6.8만 칸)마다 fill·stroke 하던 것이 갱신(1초)마다 1초 넘게 화면을 잡아 '화면이 9초 동안 멈춤'.
+// 화소 → 칸 표를 배치가 바뀔 때만 만들고, 갱신 때는 화소에 칸 색만 채움 — 칸 가운데 화소 = 그 칸의 색
+{
+  const { drawMap, buildLut } = await import('../src/ui/m3/results-panel.js');
+  const valid = new Uint8Array(G.ns * G.nw).fill(1), map = Float64Array.from(valid, (_, k) => 1 + (k % 37));
+  let fills = 0, img = null;
+  const ctx = new Proxy({ measureText: () => ({ width: 10 }), createLinearGradient: () => ({ addColorStop() {} }), createImageData: (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
+    fill() { fills++; }, putImageData(d) { img = d; } }, { get: (t, k) => (k in t ? t[k] : () => {}), set: (t, k, v) => { t[k] = v; return true; } });
+  const cv = { width: 600, height: 400, getContext: () => ctx }, v = { G: { ...G, valid }, map, shape: sh };
+  drawMap(cv, v, 1);
+  ok(fills < 50 && !!img, `링 그림: 칸마다 칠하지 않음 (fill ${fills}회 · 칸 ${G.ns * G.nw}개)`);
+  const LUT = buildLut(), Ly = cv._mapv.ly;
+  let good = 0, n = 0;
+  for (let i = 0; i < G.ns; i += 5) for (let j = 0; j < G.nw; j++) {
+    const k = i * G.nw + j, Q = Ly.quad(i, j), q = [Math.floor(Q.reduce((s, p) => s + p[0], 0) / 4), Math.floor(Q.reduce((s, p) => s + p[1], 0) / 4)];   // 칸 가운데 화소
+    const p = (q[1] * img.width + q[0]) * 4, l = Math.max(0, Math.min(255, Math.round((map[k] / 37) * 255))) * 3;
+    n++; if (img.data[p] === LUT[l] && img.data[p + 1] === LUT[l + 1] && img.data[p + 2] === LUT[l + 2] && img.data[p + 3] === 255) good++;
+  }
+  ok(n > 50 && good === n, `링 그림: 칸 가운데 화소 = 그 칸 색 (${good}/${n})`);
+  img = null; map[0] = 99; drawMap(cv, v, 1);
+  ok(!!img && cv._pix?.built === 1, '링 그림: 값만 바뀌면 화소 표를 다시 만들지 않음');
+}
 done();

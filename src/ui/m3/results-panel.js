@@ -417,21 +417,41 @@ function startMark(x, Ly, G, rows, dpr) {
   const lx = a0[0] - ux * 9 * dpr, ly = a0[1] - uy * 9 * dpr; x.strokeText('0', lx, ly); x.fillStyle = '#ffffff'; x.fillText('0', lx, ly);
   x.restore();
 }
+// 화소(가운데) → 칸 번호(없으면 −1). 칸마다 자기 상자 안 화소만 검사(볼록 사각형 안 = 네 변 같은 쪽)
+function pixCells(Ly, G, rows, W, H) {
+  const idx = new Int32Array(W * H).fill(-1);
+  for (let i = 0; i < G.ns; i++) for (let j = rows[0]; j <= rows[1]; j++) {
+    const q = Ly.quad(i, j), k = i * G.nw + j;
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const [px, py] of q) { if (px < x0) x0 = px; if (px > x1) x1 = px; if (py < y0) y0 = py; if (py > y1) y1 = py; }
+    const ax = Math.max(0, Math.ceil(x0 - 0.5)), bx = Math.min(W - 1, Math.floor(x1 - 0.5)), ay = Math.max(0, Math.ceil(y0 - 0.5)), by = Math.min(H - 1, Math.floor(y1 - 0.5));
+    for (let py = ay; py <= by; py++) for (let px = ax; px <= bx; px++) {
+      const cx = px + 0.5, cy = py + 0.5; let pos = 0, neg = 0;
+      for (let a = 0; a < 4; a++) { const [ux, uy] = q[a], [vx, vy] = q[(a + 1) & 3], c = (vx - ux) * (cy - uy) - (vy - uy) * (cx - ux); if (c > 0) pos++; else if (c < 0) neg++; }
+      if (!(pos && neg)) idx[py * W + px] = k;
+    }
+  }
+  return idx;
+}
 function drawShapeMap(cv, v, dpr, hover, mode) {
   const { G, map } = v, x = cv.getContext('2d'), W = cv.width, H = cv.height, VG = mapViewG(G), rows = [VG.jA ?? 0, VG.jB ?? G.nw - 1];
   const box = { x: 14 * dpr, y: MAP_PAD.t * dpr, w: W - (14 + MAP_PAD.r) * dpr, h: H - (MAP_PAD.t + 22) * dpr };
   const Ly = shapeLayout(G, v.shape, box, rows, mode);
-  cv._mapv.at = (px, py) => Ly.at(px, py);
+  cv._mapv.at = (px, py) => Ly.at(px, py); cv._mapv.ly = Ly;
   x.clearRect(0, 0, W, H);
   let mx = 0, kMin = -1; for (let k = 0; k < map.length; k++) if (G.valid[k] && map[k] > mx) mx = map[k];
   x.lineWidth = 0.8 * dpr; x.lineJoin = 'round';
-  for (let i = 0; i < G.ns; i++) for (let j = rows[0]; j <= rows[1]; j++) {
-    const k = i * G.nw + j;
-    if (!G.valid[k] || !(mx > 0)) continue;
-    if (kMin < 0 || map[k] < map[kMin]) kMin = k;
-    const l = lutIndex(map[k] / mx) * 3, c = `rgb(${LUT[l]},${LUT[l + 1]},${LUT[l + 2]})`, q = Ly.quad(i, j);
-    x.beginPath(); x.moveTo(q[0][0], q[0][1]); for (let a = 1; a < 4; a++) x.lineTo(q[a][0], q[a][1]); x.closePath();
-    x.fillStyle = c; x.fill(); x.strokeStyle = c; x.stroke();   // 같은 색 테두리 = 칸 사이 틈 없앰
+  // 화소 → 칸 표(2026-11-19) — 배치(격자·모양·크기·줄)가 같으면 다시 안 만듦. 갱신마다 칸마다 fill·stroke 하던 것이
+  // 고화질 링(6.8만 칸)에서 1초 넘게 화면을 잡아 '화면이 9초 동안 멈춤'. 이제 갱신 = 화소에 칸 색만 채움
+  let T = cv._pix;
+  if (!T || T.G !== G || T.shape !== v.shape || T.W !== W || T.H !== H || T.mode !== mode || T.r0 !== rows[0] || T.r1 !== rows[1] || T.box !== JSON.stringify(box)) {
+    T = cv._pix = { G, shape: v.shape, W, H, mode, r0: rows[0], r1: rows[1], box: JSON.stringify(box), idx: pixCells(Ly, G, rows, W, H), built: (T?.built ?? 0) + 1 };
+  }
+  if (mx > 0) {
+    const img = x.createImageData(W, H), d = img.data, idx = T.idx, col = new Int16Array(map.length).fill(-1);
+    for (let k = 0; k < map.length; k++) if (G.valid[k]) { col[k] = lutIndex(map[k] / mx) * 3; if (kMin < 0 || map[k] < map[kMin]) kMin = k; }
+    for (let p = 0, q = 0; p < idx.length; p++, q += 4) { const k = idx[p]; if (k < 0) continue; const l = col[k]; if (l < 0) continue; d[q] = LUT[l]; d[q + 1] = LUT[l + 1]; d[q + 2] = LUT[l + 2]; d[q + 3] = 255; }
+    x.putImageData(img, 0, 0);
   }
   if (G.closed) startMark(x, Ly, G, rows, dpr);   // 링 시작점 s = 0 — 3D 의 흰 점선과 같은 자리(2026-11-18)
   colorBar(x, W, H, dpr);
