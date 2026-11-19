@@ -129,7 +129,7 @@ self.onmessage = async (ev) => {
   if (ev.data.helper || ev.data.qs) { try { await helper(ev); } catch (e) { self.postMessage({ error: String(e?.message ?? e) }); } return; }
   try {
     if (ev.data.prep) {   // 복원: 저장된 부품 메쉬 → BVH·합친 메쉬(접촉면은 저장된 설정에 있음)
-      const r = prepScene(ev.data.prep);
+      const r = prepScene(ev.data.prep, ev.data.opts ?? {});   // opts.contacts = 여러 STEP 합치기(접촉면도 여기서)
       self.postMessage({ prep: r }, prepTransfer(r));
       return;
     }

@@ -24,7 +24,7 @@ import { drawIso } from './ui/iso.js';
 import { drawPlan } from './ui/plan.js';
 import { drawHeatmap } from './ui/heatmap.js';
 import { buildLevels, updateLevels, renderVerdict, drawProfiles } from './ui/analysis.js';
-import { setMech3dMesh, setBlankMech3d, appendMech3dMesh, contactsWithAdded, getMech3d, initialMech3dSpec, saveMech3dIDB, loadMech3dIDB, loadLedIDB, getLedMesh, applyPartMods, redetectContacts } from './engine/mech3d/runtime.js';
+import { setMech3dMesh, setBlankMech3d, appendMech3dMesh, contactsWithAdded, getMech3d, initialMech3dSpec, saveMech3dIDB, loadMech3dIDB, loadLedIDB, getLedMesh, applyPartMods, redetectContacts, prepInWorker } from './engine/mech3d/runtime.js';
 import { matchesPending, restorePending, appendPartsSpec, sourcesOf, restoreStep, isBlankMech3d } from './engine/mech3d/restore.js';
 import { bounds } from './engine/mech3d/mesh.js';
 import { migrateMech3d } from './engine/mech3d/defs.js';
@@ -539,12 +539,17 @@ function importMech3d(file, onDone = null, { noSplit = false, onMore = null } = 
           if (restoring?.pend !== pend) restoring = { pend, parts: [] };
           const st = restoreStep(pend, partInfo(restoring.parts), partInfo(parts));
           if (st.status === 'more') {
-            restoring.parts.push(...parts); ov?.close();
+            restoring.parts.push(...parts); if (m.data.relaxed) restoring.chord = Math.max(restoring.chord ?? 0, m.data.relaxed.linDefl); ov?.close();
             const t = `${file.name} 읽음 (${st.k}/${st.n}) — 다음 파일을 Import 하세요: ${st.next}`; say(t); $('#m3-start-msg').textContent = t;
             doneReading(); onMore?.();   // 통합 파일에서 여는 중이면 다음 파일을 바로
             return;
           }
-          if (st.status === 'done') { parts = [...restoring.parts, ...parts]; prep = null; sceneName = srcs[0].name; }
+          if (st.status === 'done') {   // 합친 장면의 BVH·접촉면은 Worker 에서(화면 스레드면 부품 52개·34만 삼각형에서 39초 멈춤, 2026-11-19). Worker 실패 = null → 화면 스레드
+            parts = [...restoring.parts, ...parts]; sceneName = srcs[0].name;
+            const ch = Math.max(restoring.chord ?? 0, m.data.relaxed?.linDefl ?? 0);
+            ov?.stage('prep', 1, '여러 STEP 합치는 중'); say(`여러 STEP 합치는 중 — 부품 ${parts.length}개`);
+            prep = await prepInWorker(parts, { contacts: true, ...(ch ? { chord: ch } : {}) });
+            if (prep) { parts = parts.map((p, i) => ({ ...p, ...prep.parts[i] })); prep = { ...prep, parts }; } }
           restoring = null;
         }
         const same = !!pend && matchesPending(pend, partInfo(parts));

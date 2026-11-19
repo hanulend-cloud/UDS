@@ -57,4 +57,13 @@ ok(restoreStep({ parts: P.parts.slice(0, 2) }, [], two).status === 'done', '파�
 const blank = setBlankMech3d();
 ok(blank.parts.length === 0 && getMech3d().combined.partOf.length === 0 && blank.name === '새 프로젝트', '빈 장면: 부품 0개');
 ok(isBlankMech3d(blank.spec) && blank.spec.contacts.length === 0 && blank.spec.light.kind === 'none' && !isBlankMech3d(M), '빈 설정: 부품 없음, 광원 없음');
+// 여러 STEP 이 든 .uds 열기(2026-11-19) — 마지막 파일에서 합친 장면의 BVH·접촉면을 화면 스레드에서 만들어 '화면이 39초 동안 멈춤'(부품 52개 · 삼각형 34만).
+// 합칠 때도 Worker 에서 준비(접촉면 포함)해야 함
+{
+  const { readFileSync } = await import('node:fs');
+  const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8'), wk = readFileSync(new URL('../src/engine/mech3d/mech3d-worker.js', import.meta.url), 'utf8');
+  const d = main.match(/st\.status === 'done'\)[\s\S]*?restoring = null/)?.[0] ?? '';
+  ok(d && !/prep = null/.test(d) && /prepInWorker\([^)]*contacts: true/.test(d), '여러 STEP 합치기: 장면 준비·접촉면을 Worker 에서(prep = null 금지)');
+  ok(/prepScene\(ev\.data\.prep, ev\.data\.opts/.test(wk), 'Worker 복원 준비가 접촉면 옵션을 받음');
+}
 done();

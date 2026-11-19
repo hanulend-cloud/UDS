@@ -140,13 +140,13 @@ export async function saveMech3dIDB() {
   });
 }
 // 복원 때 장면 준비를 Worker 에서(브라우저) — Worker 가 없거나 실패하면 null(화면 스레드에서 만듦)
-function prepInWorker(parts) {
+export function prepInWorker(parts, opts = {}) {
   if (typeof Worker === 'undefined') return Promise.resolve(null);
   return new Promise((res) => {
     let w; try { w = new Worker(new URL('./mech3d-worker.js', import.meta.url), { type: 'module' }); } catch { res(null); return; }
     w.onmessage = (m) => { if (m.data.stage) return; w.terminate(); res(m.data.prep ?? null); };
     w.onerror = () => { w.terminate(); res(null); };
-    w.postMessage({ prep: parts.map(({ positions, triangles, faceIds, faceCount, volume }) => ({ positions, triangles, faceIds, faceCount, volume })) });
+    w.postMessage({ prep: parts.map(({ positions, triangles, faceIds, faceCount, volume }) => ({ positions, triangles, faceIds, faceCount, volume })), opts });
   });
 }
 export async function loadMech3dIDB() {
