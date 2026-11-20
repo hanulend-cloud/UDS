@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "npx --yes serve -l 5173 .",
     "start": "npx --yes serve -l 5173 .",
-    "test": "node test/smoke.mjs && node test/heatmap-labels.mjs && node test/overhang.mjs && node test/layout.mjs && node test/center.mjs && node test/profile-labels.mjs && node test/l3-l4-shapes.mjs",
+    "test": "node test/smoke.mjs && node test/heatmap-labels.mjs && node test/overhang.mjs && node test/layout.mjs && node test/center.mjs && node test/profile-labels.mjs && node test/l3-l4-shapes.mjs && node test/material-catalog.mjs",
     "test:step": "node test/smoke-step.mjs",
     "test:shape": "node test/shape-import.mjs && node test/shape-mc.mjs --quick",
     "test:shape-full": "node test/shape-mc.mjs && node test/shape-fast.mjs && node test/shape-vs5.mjs",

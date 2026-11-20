@@ -1,0 +1,68 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>UDS 실측 소재 카탈로그</title><style>
+@page{size:A4;margin:16mm 14mm}body{font-family:'Malgun Gothic','맑은 고딕',sans-serif;color:#222;font-size:11.5px;line-height:1.55}
+h1{font-size:22px;margin:0 0 2px}h2{font-size:15px;border-bottom:2px solid #2f6fb3;padding-bottom:3px;margin:22px 0 8px}h3{font-size:14px;margin:0 0 6px}
+.mut{color:#777}.tag{font-size:11px;background:#e8f0fa;color:#2f6fb3;border-radius:8px;padding:1px 8px;margin-left:6px;font-weight:normal}
+table{border-collapse:collapse;width:100%}.list th,.list td{border:1px solid #ccd;padding:5px 7px;text-align:center}.list th{background:#eef2f7}.list td:first-child{text-align:left}
+.kv th{width:92px;text-align:left;vertical-align:top;color:#555;font-weight:normal;padding:2px 6px 2px 0}.kv td{padding:2px 0}.small{font-size:10.5px}
+.card{border:1px solid #d6dbe3;border-radius:6px;padding:10px 12px;margin:10px 0;page-break-inside:avoid}details summary{color:#2f6fb3;margin-top:6px;cursor:pointer}
+.box{background:#f6f8fb;border-left:3px solid #2f6fb3;padding:7px 10px;margin:8px 0}.warn{background:#fff7e8;border-left-color:#d08a1e}
+dl{margin:0}dt{font-weight:bold;margin-top:6px}dd{margin:0 0 0 12px}</style></head><body>
+<h1>실측 소재 카탈로그</h1><div class="mut">Uniform Design Simulator(UDS) 소재 DB 정리 · 2026-11-21 기준 · 소재 3종</div>
+<div class="box">이 문서는 UDS 소재 DB 에 들어 있는 <b>측정값이 있는 확산 소재</b>를 정리한 것입니다. 부품 속성 → 소재에서 이 이름을 고르면, 아래 측정값에 맞춘 물성으로 계산합니다. 소재 이름 없이 Milky 숫자만 넣은 부품은 기본 비드로 계산하므로 이 표와 다를 수 있습니다.</div>
+
+<h2>1. 한눈에 보기</h2>
+<table class="list"><tr><th>소재</th><th>투과율 (2 mm)</th><th>HPA (퍼짐)</th><th>UDS Milky</th><th>확산 정도</th></tr><tr><td><b>Makrolon DQ5122</b><br><span class="mut">Covestro · PC</span></td><td>85%</td><td>19°</td><td>1.8</td><td>약한 확산</td></tr><tr><td><b>Makrolon DQ5142</b><br><span class="mut">Covestro · PC</span></td><td>65%</td><td>43°</td><td>4.6</td><td>중간 확산</td></tr><tr><td><b>Makrolon DQ5162</b><br><span class="mut">Covestro · PC</span></td><td>57%</td><td>56°</td><td>6.5</td><td>강한 확산</td></tr></table>
+<p class="mut">Milky 가 클수록 빛이 넓게 퍼져 LED 점이 덜 보이지만, 투과율이 낮아져 어두워집니다.</p>
+<svg viewBox="0 0 520 230" width="100%" style="max-width:520px"><path d="M 170 210 A 90 90 0 0 1 350 210" fill="none" stroke="#ccc" stroke-dasharray="3 3"/><path d="M 80 210 A 180 180 0 0 1 440 210" fill="none" stroke="#ccc" stroke-dasharray="3 3"/><line x1="260" y1="210" x2="260" y2="24" stroke="#999"/><line x1="74" y1="210" x2="446" y2="210" stroke="#999"/><polyline points="260.0,210.0 260.0,210.0 260.0,210.0 260.0,210.0 260.0,210.0 260.0,210.0 260.0,210.0 260.0,210.0 260.0,210.0 260.0,210.0 260.0,210.0 260.0,210.0 260.0,210.0 260.0,210.0 260.0,210.0 260.0,210.0 259.9,210.0 259.9,209.9 259.8,209.9 259.6,209.7 259.4,209.5 259.1,209.2 258.6,208.6 257.9,207.8 256.9,206.6 255.7,204.9 254.2,202.6 252.3,199.4 250.1,195.3 247.6,190.1 244.8,183.7 241.9,175.9 238.9,166.8 236.1,156.3 233.5,144.5 231.5,131.7 230.1,118.0 229.6,103.9 230.0,89.7 231.5,76.0 234.1,63.3 237.8,52.1 242.4,42.7 247.8,35.8 253.8,31.5 260.0,30.0 266.2,31.5 272.2,35.8 277.6,42.7 282.2,52.1 285.9,63.3 288.5,76.0 290.0,89.7 290.4,103.9 289.9,118.0 288.5,131.7 286.5,144.5 283.9,156.3 281.1,166.8 278.1,175.9 275.2,183.7 272.4,190.1 269.9,195.3 267.7,199.4 265.8,202.6 264.3,204.9 263.1,206.6 262.1,207.8 261.4,208.6 260.9,209.2 260.6,209.5 260.4,209.7 260.2,209.9 260.1,209.9 260.1,210.0 260.0,210.0 260.0,210.0 260.0,210.0 260.0,210.0 260.0,210.0 260.0,210.0 260.0,210.0 260.0,210.0 260.0,210.0 260.0,210.0 260.0,210.0 260.0,210.0 260.0,210.0 260.0,210.0 260.0,210.0 260.0,210.0" fill="none" stroke="#2f6fb3" stroke-width="2.2"/><polyline points="260.0,210.0 259.9,210.0 259.5,210.0 258.8,209.9 257.7,209.7 256.3,209.4 254.6,208.8 252.5,208.1 250.0,207.1 247.3,205.9 244.3,204.3 241.0,202.3 237.6,200.0 234.0,197.3 230.2,194.2 226.4,190.6 222.6,186.6 218.8,182.2 215.1,177.4 211.6,172.2 208.2,166.5 205.1,160.5 202.2,154.2 199.7,147.6 197.6,140.7 195.9,133.6 194.6,126.3 193.8,118.9 193.6,111.5 193.8,104.0 194.6,96.7 195.9,89.4 197.7,82.3 200.1,75.4 203.0,68.8 206.4,62.6 210.2,56.8 214.5,51.5 219.3,46.6 224.4,42.3 229.8,38.6 235.5,35.6 241.4,33.2 247.5,31.4 253.7,30.4 260.0,30.0 266.3,30.4 272.5,31.4 278.6,33.2 284.5,35.6 290.2,38.6 295.6,42.3 300.7,46.6 305.5,51.5 309.8,56.8 313.6,62.6 317.0,68.8 319.9,75.4 322.3,82.3 324.1,89.4 325.4,96.7 326.2,104.0 326.4,111.5 326.2,118.9 325.4,126.3 324.1,133.6 322.4,140.7 320.3,147.6 317.8,154.2 314.9,160.5 311.8,166.5 308.4,172.2 304.9,177.4 301.2,182.2 297.4,186.6 293.6,190.6 289.8,194.2 286.0,197.3 282.4,200.0 279.0,202.3 275.7,204.3 272.7,205.9 270.0,207.1 267.5,208.1 265.4,208.8 263.7,209.4 262.3,209.7 261.2,209.9 260.5,210.0 260.1,210.0 260.0,210.0" fill="none" stroke="#d08a1e" stroke-width="2.2"/><polyline points="260.0,210.0 256.7,209.9 252.5,209.5 247.9,208.7 243.0,207.6 238.0,206.1 232.9,204.2 227.8,202.0 222.8,199.3 217.8,196.3 212.9,192.9 208.2,189.1 203.8,185.0 199.5,180.5 195.5,175.7 191.8,170.6 188.4,165.3 185.4,159.7 182.7,153.9 180.5,147.9 178.6,141.7 177.2,135.4 176.1,129.0 175.6,122.6 175.5,116.1 175.8,109.7 176.6,103.2 177.8,96.9 179.5,90.7 181.6,84.6 184.2,78.7 187.2,73.0 190.5,67.5 194.3,62.4 198.4,57.5 202.8,52.9 207.6,48.8 212.7,44.9 218.0,41.5 223.5,38.5 229.3,35.9 235.2,33.8 241.3,32.2 247.5,31.0 253.7,30.2 260.0,30.0 266.3,30.2 272.5,31.0 278.7,32.2 284.8,33.8 290.7,35.9 296.5,38.5 302.0,41.5 307.3,44.9 312.4,48.8 317.2,52.9 321.6,57.5 325.7,62.4 329.5,67.5 332.8,73.0 335.8,78.7 338.4,84.6 340.5,90.7 342.2,96.9 343.4,103.2 344.2,109.7 344.5,116.1 344.4,122.6 343.9,129.0 342.8,135.4 341.4,141.7 339.5,147.9 337.3,153.9 334.6,159.7 331.6,165.3 328.2,170.6 324.5,175.7 320.5,180.5 316.2,185.0 311.8,189.1 307.1,192.9 302.2,196.3 297.2,199.3 292.2,202.0 287.1,204.2 282.0,206.1 277.0,207.6 272.1,208.7 267.5,209.5 263.3,209.9 260.0,210.0" fill="none" stroke="#3c9a5f" stroke-width="2.2"/><text x="12" y="18" font-size="12" fill="#2f6fb3">■ Makrolon DQ5122 — HPA 19°</text><text x="12" y="36" font-size="12" fill="#d08a1e">■ Makrolon DQ5142 — HPA 43°</text><text x="12" y="54" font-size="12" fill="#3c9a5f">■ Makrolon DQ5162 — HPA 56°</text><text x="264" y="22" font-size="11" fill="#666">정면(0°)</text><text x="352" y="206" font-size="10" fill="#888">밝기 50%</text></svg>
+<p class="mut">그림: 판을 지난 빛이 각도마다 얼마나 밝은지(정면 = 1). 곡선이 넓을수록 잘 퍼지는 소재입니다.</p>
+
+<h2>2. 숫자 읽는 법</h2><dl>
+<dt>투과율 (전광선, 2 mm)</dt><dd>판에 수직으로 들어간 빛 중 반대쪽으로 나오는 비율. 높을수록 밝습니다. 투명 PC 는 약 89% 입니다.</dd>
+<dt>HPA (반치각)</dt><dd>나온 빛의 밝기가 정면 밝기의 절반이 되는 각도. 클수록 넓게 퍼져 LED 점이 잘 감춰집니다.</dd>
+<dt>UDS Milky</dt><dd>UDS 의 확산 눈금(0~10). 0 = 투명, 5 = 빛 25% 가림, 10 = 빛 50% 가림(최대). 측정값에서 계산한 값입니다.</dd>
+<dt>값의 출처</dt><dd>“제조사 자료값”은 제조사 공개 자료의 대표값입니다. 실제 생산 로트·두께·색상에 따라 다를 수 있어, 정밀 설계에는 직접 측정한 값(소재 DB 관리 창에서 등록)을 권장합니다.</dd></dl>
+
+<h2 style="page-break-before:always">3. 소재별 상세</h2><section class="card"><h3>Makrolon DQ5122 <span class="tag">약한 확산</span></h3>
+<table class="kv"><tr><th>제조사</th><td>Covestro</td></tr>
+<tr><th>바탕 수지</th><td>폴리카보네이트(PC), 굴절률 1.586</td></tr>
+<tr><th>값의 출처</th><td>제조사 자료값(데이터시트) — Covestro 'Makrolon® polycarbonate for LED lighting' 브로셔, Makrolon DQ 표 (HPA·Transmission @2mm)</td></tr>
+<tr><th>광학 값</th><td>두께 2 mm: 투과율 85%, HPA 19°</td></tr>
+<tr><th>UDS Milky</th><td><b>1.8</b> (빛 약 9% 가림)</td></tr>
+<tr><th>어디에 맞나</th><td>LED 와 거리가 충분하거나 LED 가 촘촘할 때. LED 점이 비쳐 보일 수 있음</td></tr></table>
+<details open><summary>UDS 내부 계산 (개발자용)</summary>
+<table class="kv small"><tr><th>계산 모델</th><td>Mie 산란(입자 크기 분포 포함)</td></tr>
+<tr><th>확산 입자</th><td>PMMA 비드 지름 3 µm <b>(가정 — 제조사 미공개)</b>, 농도 약 0.38 wt% · 같은 측정값을 내는 지름 범위 2.3~4.5 µm</td></tr>
+<tr><th>물성</th><td>μs′ 0.0466 /mm · g 0.9911 · μa 0.0010 /mm</td></tr>
+<tr><th>맞춤 확인</th><td>통과 — T 0.0%p, R 0.0%p, HPA 0.0°, 곡선 RMS 0.0% (기준 T·R ±2%p, HPA ±2°, 곡선 RMS ≤5%)</td></tr>
+<tr><th>참고</th><td>HG 불일치(T 3.5%p, R 0.0%p, HPA 8.4°, 곡선 RMS 0.0%) → Mie(PMMA 가정) 로 재피팅<br>입자 지름 식별 불가 — 2.3~4.5µm 가 측정을 같은 정도로 재현(측정 곡선·2두께 필요). 농도는 선택 지름 기준<br>R 미측정·단일 두께 — μa 를 기본값(투명 PC + 산란제 흡수 임시값)으로 고정</td></tr></table></details></section><section class="card"><h3>Makrolon DQ5142 <span class="tag">중간 확산</span></h3>
+<table class="kv"><tr><th>제조사</th><td>Covestro</td></tr>
+<tr><th>바탕 수지</th><td>폴리카보네이트(PC), 굴절률 1.586</td></tr>
+<tr><th>값의 출처</th><td>제조사 자료값(데이터시트) — Covestro 'Makrolon® polycarbonate for LED lighting' 브로셔, Makrolon DQ 표 (HPA·Transmission @2mm)</td></tr>
+<tr><th>광학 값</th><td>두께 2 mm: 투과율 65%, HPA 43°</td></tr>
+<tr><th>UDS Milky</th><td><b>4.6</b> (빛 약 23% 가림)</td></tr>
+<tr><th>어디에 맞나</th><td>일반 조명 커버·표시등. 밝기와 고르기의 균형</td></tr></table>
+<details open><summary>UDS 내부 계산 (개발자용)</summary>
+<table class="kv small"><tr><th>계산 모델</th><td>Mie 산란(입자 크기 분포 포함)</td></tr>
+<tr><th>확산 입자</th><td>PMMA 비드 지름 3 µm <b>(가정 — 제조사 미공개)</b>, 농도 약 1.42 wt% · 같은 측정값을 내는 지름 범위 2.6~3.2 µm</td></tr>
+<tr><th>물성</th><td>μs′ 0.1724 /mm · g 0.9911 · μa 0.0024 /mm</td></tr>
+<tr><th>맞춤 확인</th><td>통과 — T 1.6%p, R 0.0%p, HPA 2.0°, 곡선 RMS 0.0% (기준 T·R ±2%p, HPA ±2°, 곡선 RMS ≤5%)</td></tr>
+<tr><th>참고</th><td>HG 불일치(T 1.6%p, R 0.0%p, HPA 2.4°, 곡선 RMS 0.0%) → Mie(PMMA 가정) 로 재피팅<br>R 미측정·단일 두께 — μa 를 기본값(투명 PC + 산란제 흡수 임시값)으로 고정</td></tr></table></details></section><section class="card"><h3>Makrolon DQ5162 <span class="tag">강한 확산</span></h3>
+<table class="kv"><tr><th>제조사</th><td>Covestro</td></tr>
+<tr><th>바탕 수지</th><td>폴리카보네이트(PC), 굴절률 1.586</td></tr>
+<tr><th>값의 출처</th><td>제조사 자료값(데이터시트) — Covestro 'Makrolon® polycarbonate for LED lighting' 브로셔, Makrolon DQ 표 (HPA·Transmission @2mm)</td></tr>
+<tr><th>광학 값</th><td>두께 2 mm: 투과율 57%, HPA 56°</td></tr>
+<tr><th>UDS Milky</th><td><b>6.5</b> (빛 약 32% 가림)</td></tr>
+<tr><th>어디에 맞나</th><td>LED 가 가깝거나 듬성할 때 점을 감춤. 대신 어두워짐</td></tr></table>
+<details open><summary>UDS 내부 계산 (개발자용)</summary>
+<table class="kv small"><tr><th>계산 모델</th><td>Mie 산란(입자 크기 분포 포함)</td></tr>
+<tr><th>확산 입자</th><td>PMMA 비드 지름 2 µm <b>(가정 — 제조사 미공개)</b>, 농도 약 2.16 wt% · 같은 측정값을 내는 지름 범위 1.6~10.0 µm</td></tr>
+<tr><th>물성</th><td>μs′ 0.3566 /mm · g 0.9871 · μa 0.0033 /mm</td></tr>
+<tr><th>맞춤 확인</th><td>통과 — T 0.1%p, R 0.0%p, HPA 0.4°, 곡선 RMS 0.0% (기준 T·R ±2%p, HPA ±2°, 곡선 RMS ≤5%)</td></tr>
+<tr><th>참고</th><td>HG 불일치(T 1.4%p, R 0.0%p, HPA 2.2°, 곡선 RMS 0.0%) → Mie(PMMA 가정) 로 재피팅<br>입자 지름 식별 불가 — 1.6~10.0µm 가 측정을 같은 정도로 재현(측정 곡선·2두께 필요). 농도는 선택 지름 기준<br>R 미측정·단일 두께 — μa 를 기본값(투명 PC + 산란제 흡수 임시값)으로 고정</td></tr></table></details></section>
+
+<h2>4. 알아 둘 점</h2>
+<div class="box warn">· 지금 들어 있는 소재는 제조사 자료의 <b>2 mm 투과율·HPA 한 점</b>만으로 맞췄습니다. 반사율과 다른 두께는 측정되지 않아, 두께가 2 mm 에서 멀어질수록 오차가 커질 수 있습니다.<br>
+· 확산 입자 종류(PMMA 비드)와 지름은 제조사가 공개하지 않아 <b>가정</b>한 값입니다.<br>
+· 정확도를 높이려면 두 가지 이상 두께의 투과율·반사율, 또는 각도별 밝기(BSDF)를 측정해 소재 DB 관리 창에 등록하세요.<br>
+· 이 문서는 UDS 계산용 정리 자료이며, 제조사의 공식 데이터시트가 아닙니다.</div>
+</body></html>

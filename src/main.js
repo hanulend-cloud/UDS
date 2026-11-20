@@ -358,7 +358,7 @@ function setupMenubar() {
       { id: 'admin', label: '관리자 모드 (소재 DB 관리)', checked: isAdmin },
       { id: 'mat-db', label: '소재 DB 관리…', enabled: () => m3() && isAdmin() },
     ] },
-    { label: '도움말', items: [{ id: 'guide', label: '사용 순서' }, { id: 'errlog', label: '오류 기록…' }, { id: 'about', label: '버전 정보' }] },
+    { label: '도움말', items: [{ id: 'guide', label: '사용 순서' }, { id: 'catalog', label: '실측 소재 카탈로그 (PDF)' }, { id: 'errlog', label: '오류 기록…' }, { id: 'about', label: '버전 정보' }] },
   ];
   const run = (id) => {
     if (id === 'new') return newProject();
@@ -380,6 +380,7 @@ function setupMenubar() {
     if (id === 'lines') return m3app.setLinesOn(!m3app.linesOn());
     if (id === 'obs') return m3app.setObsOn(!m3app.obsOn());
     if (id === 'guide') return alert(GUIDE);
+    if (id === 'catalog') return window.open('./docs/catalog/material-catalog.pdf', '_blank');   // 소재 DB 의 측정값 소재 설명(tools/material-catalog.mjs 로 다시 만듦)
     if (id === 'errlog') return openErrorLog();
     if (id === 'about') return alert(`Uniform Design Simulator ${APP_VERSION} (${APP_DATE})
 3D 기구 설계 — 도광·확산 부품의 균일도 해석과 기구 최적화
