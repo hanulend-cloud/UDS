@@ -70,7 +70,7 @@ const table = loadTable();
   ok(a.phi > 0 && a.wt > 0 && a.wt < a10.wt && a.preset === 'PC', `Milky 5 → 비드 ${(a.wt * 100).toFixed(2)} wt% · Milky 10 → ${(a10.wt * 100).toFixed(2)} wt%`);
   const b = presetMaterial(table, 2, 'PC'), c = presetMaterial(table, 8, 'PC');
   ok(b.phi < a.phi && a.phi < c.phi && b.mua < a.mua && a.mua < c.mua, 'Milky ↑ = 농도·흡수 ↑');
-  ok(presetMaterial(table, 0, 'PC').mua === presetMaterial(table, 0, 'PC').muaResin, 'Milky 0 = 수지 흡수만');
+  ok(presetMaterial(table, 0, 'PC').clear === true, 'Milky 0 = 투명 수지(2026-11-21 — 아래 블록에서 흡수 확인)');
   ok(presetMaterial(table, 5, 'PMMA').preset === 'PMMA', 'PMMA 모재 = 실리콘 비드');
 }
 
@@ -88,5 +88,16 @@ const table = loadTable();
   ok(o8.g > o.g && o8.phase !== o.phase && near(o8.mus * (1 - o8.g), presetMaterial(table, 8, 'PC').musR, 1e-9), `탁한 구간 = 작은 절단 5°(g* ${o8.g.toFixed(3)} > 10° 의 ${o.g.toFixed(3)}) · μs′ 보존`);
   const grid = milkyGridOptics({ ...part, material: { ...part.material, milky: 4.9 } }, { table, db: null }, [4.8, 4.9, 5.0, 5.1, 5.2]);
   ok(grid.every((g) => g.g === grid[0].g), '재가중 격자가 경계(5)를 넘어도 기준 구간 각도로 통일 — g 같음');
+}
+{
+  // 2026-11-21: Milky 0 = 비드 없음 → 일반 투명 수지로 계산 · 0 초과는 0.1 부터(비드가 조금이라도 든 Milky 수지)
+  const clearPC = partOptics(setPartMaterial(defaultPart(0, 'c', 1), 'clear'), { table, db: null });
+  const part0 = setPartMaterialParam(setPartMaterial(defaultPart(0, 'p', 1), 'milky'), 'milky', 0);
+  const o0 = partOptics(part0, { table, db: null });
+  ok(o0.mus === 0 && o0.phase === null && near(o0.mua, clearPC.mua, 1e-15) && o0.n === clearPC.n, `Milky 0 = 투명 PC 와 같음(μa ${o0.mua.toFixed(4)} = ${clearPC.mua.toFixed(4)})`);
+  const a0 = presetMaterial(table, 0, 'PC');
+  ok(a0.musR === 0 && a0.clear === true && near(a0.mua, clearPC.mua, 1e-15), '평판(L2) Milky 0 도 투명 PC 흡수');
+  const o03 = partOptics(setPartMaterialParam(part0, 'milky', 0.03), { table, db: null }), o1 = partOptics(setPartMaterialParam(part0, 'milky', 0.1), { table, db: null });
+  ok(o03.mus > 0 && near(o03.mus, o1.mus, 1e-12) && near(presetMaterial(table, 0.03, 'PC').musR, presetMaterial(table, 0.1, 'PC').musR, 1e-15), 'Milky 0 초과 0.1 미만 = 0.1 로 계산');
 }
 done();

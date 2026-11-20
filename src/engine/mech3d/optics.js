@@ -2,7 +2,7 @@
 // 반환: 불투명 { transmissive:false } / 투과성 { transmissive:true, n, mus, g, mua, phase(null = HG(g)) }
 import { l2Material, L2_G, MUA_RESIN, MILKY_UI_MAX } from '../l2/material.js';
 import { musRFromMilky } from '../l2/milky.js';
-import { presetMaterial, presetOptics, truncatePhase, thetaCFor } from '../l2/mie-preset.js';
+import { presetMaterial, presetOptics, truncatePhase, thetaCFor, milkyEff, clearResinMua } from '../l2/mie-preset.js';
 
 // 일반 Milky = 기본 비드 Mie + 델타 절단(spec 2026-11-20 §3.4) — 위상함수·g 는 비드마다 하나(Milky 는 μs·μa 만 바꿈 → 재가중 최적화 유지)
 const cutCache = new Map();
@@ -49,10 +49,14 @@ export function partOptics(part, { table, db = null, thetaC = null }) {
   // milky
   const ent = m.dbId ? db?.get(m.dbId) : null;
   if (!ent) {
-    const a = presetMaterial(table, Math.min(m.milky, MILKY_UI_MAX), m.resin), t = presetCut(a.preset, a.g, thetaC ?? thetaCFor(a.milky));
+    const a = presetMaterial(table, Math.min(m.milky, MILKY_UI_MAX), m.resin);
+    if (a.clear) return { transmissive: true, n: n0, mus: 0, g: 0, mua: a.mua, phase: null };   // Milky 0 = 투명 수지
+    const t = presetCut(a.preset, a.g, thetaC ?? thetaCFor(a.milky));
     return { transmissive: true, n: n0, mus: a.mus * t.scale, g: t.g, mua: a.mua, phase: t.phase };
   }
-  const musR = musRFromMilky(table, Math.min(m.milky, MILKY_UI_MAX)), f = ent.fitted;
+  const mk = milkyEff(Math.min(m.milky, MILKY_UI_MAX));
+  if (mk === 0) return { transmissive: true, n: ent.n, mus: 0, g: 0, mua: clearResinMua(m.resin), phase: null };   // Milky 0 = 투명 수지
+  const musR = musRFromMilky(table, mk), f = ent.fitted;
   const mua = f.musR > 0 ? MUA_RESIN + Math.max(0, f.mua - MUA_RESIN) * (musR / f.musR) : MUA_RESIN;
   return { transmissive: true, n: ent.n, mus: musR / (1 - f.g), g: f.g, mua, phase: ent.model === 'mie' && ent.particle ? miePhaseOf(ent) : null };
 }

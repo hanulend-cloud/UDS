@@ -3,6 +3,7 @@
 import { polyParticleOptics, phaseFromTable, volumeFractionFromMus, wtFromVolume } from './mie.js';
 import { musRFromMilky, presetRef } from './milky.js';
 import { l2Material, MUA_RESIN } from './material.js';
+import { CLEAR_BASE, clearMua } from '../mech3d/materials.js';
 
 export const MIE_PRESETS = {
   PC:   { key: 'PC',   host: 'PC',   nH: 1.586, rhoH: 1.20, bead: 'PMMA',     nP: 1.49, rhoP: 1.19, d_um: 3, sigma: 0.25, lambda_um: 0.55 },
@@ -42,9 +43,15 @@ function kPhi(table, key) {
 }
 
 // 일반 Milky → Mie 물성. 반환 { milky, preset, musR, mus, g, mua, muaResin, phi, wt, n }
+// Milky 0 = 비드 없음 → 일반 투명 수지(2026-11-21). 0 초과는 0.1 부터(비드가 조금이라도 든 Milky 수지)
+export const MILKY_MIN = 0.1;
+export const milkyEff = (m) => (m > 0 ? Math.min(Math.max(m, MILKY_MIN), 10) : 0);
+// 투명 수지 흡수(수지 기본 DB 의 2 mm 투과율에서) — 목록에 없으면 비드 기준 수지(PC/PMMA)
+export function clearResinMua(resin) { const key = presetKeyForResin(resin); return clearMua(CLEAR_BASE.find((e) => e.id === resin) ?? CLEAR_BASE.find((e) => e.id === key)); }
 export function presetMaterial(table, milky, resin) {
   const key = presetKeyForResin(resin), p = MIE_PRESETS[key], opt = presetOptics(key), g = table.mie[key].g;
-  const m = Math.max(0, Math.min(milky ?? 0, 10));
+  const m = milkyEff(milky ?? 0);
+  if (m === 0) return { milky: 0, preset: key, musR: 0, mus: 0, g, mua: clearResinMua(resin), muaResin: MUA_RESIN, phi: 0, wt: 0, n: p.nH, clear: true };
   const musR = musRFromMilky(table, m, presetRef(table, key)), mus = musR / (1 - g);
   const phi = volumeFractionFromMus(opt, mus);
   return { milky: m, preset: key, musR, mus, g, mua: MUA_RESIN + kPhi(table, key) * phi, muaResin: MUA_RESIN, phi, wt: wtFromVolume(phi, p.rhoP, p.rhoH), n: p.nH };
