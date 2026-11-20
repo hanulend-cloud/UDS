@@ -64,7 +64,7 @@ const table = loadTable();
 // 일반 Milky 물성 — 흡수는 비드 농도에 비례, 50% 가림(Milky 10)에서 HG 흡수와 같음
 {
   const a10 = presetMaterial(table, 10, 'PC'), h10 = l2Material(table, 10, 1.586);
-  ok(near(a10.mua, h10.mua, 1e-12), `Milky 10 흡수 = HG 흡수 ${h10.mua.toExponential(3)}`);
+  ok(near(a10.mua - a10.muaResin, h10.mua - 0.0005, 1e-12), `Milky 10 비드 흡수 = HG 흡수 − 수지분 ${(h10.mua - 0.0005).toExponential(3)}`);
   const a = presetMaterial(table, 5, 'PC');
   ok(a.g === table.mie.PC.g && near(a.mus * (1 - a.g), a.musR, 1e-12), 'μs = μs′/(1−g_Mie)');
   ok(a.phi > 0 && a.wt > 0 && a.wt < a10.wt && a.preset === 'PC', `Milky 5 → 비드 ${(a.wt * 100).toFixed(2)} wt% · Milky 10 → ${(a10.wt * 100).toFixed(2)} wt%`);
@@ -99,5 +99,15 @@ const table = loadTable();
   ok(a0.musR === 0 && a0.clear === true && near(a0.mua, clearPC.mua, 1e-15), '평판(L2) Milky 0 도 투명 PC 흡수');
   const o03 = partOptics(setPartMaterialParam(part0, 'milky', 0.03), { table, db: null }), o1 = partOptics(setPartMaterialParam(part0, 'milky', 0.1), { table, db: null });
   ok(o03.mus > 0 && near(o03.mus, o1.mus, 1e-12) && near(presetMaterial(table, 0.03, 'PC').musR, presetMaterial(table, 0.1, 'PC').musR, 1e-15), 'Milky 0 초과 0.1 미만 = 0.1 로 계산');
+}
+{
+  // 2026-11-21: Milky 수지 바탕 흡수 = 같은 수지의 투명 소재 흡수 → 비드가 조금이라도 들면 투명보다 투과율이 낮다
+  for (const r of ['PC', 'PMMA']) {
+    const key = r === 'PMMA' ? 'PMMA' : 'PC', n = MIE_PRESETS[key].nH;
+    const T = (m) => { const a = presetMaterial(table, m, r), q = table.mie[key].query(a.musR * 2, a.g, n, 0, a.mua * 2); return q.Tb + q.Ts; };
+    const T0 = T(0), ms = [0.1, 0.3, 1, 2, 5, 10], Ts = ms.map(T);
+    ok(Ts.every((t, i) => t < (i ? Ts[i - 1] : T0)), `${r}: 투명 ${(T0 * 100).toFixed(1)}% > Milky ${ms.map((m, i) => `${m}:${(Ts[i] * 100).toFixed(1)}%`).join(' > ')}`);
+    ok(near(presetMaterial(table, 1, r).muaResin, presetMaterial(table, 0, r).mua, 1e-15), `${r}: Milky 수지 바탕 흡수 = 투명 수지 흡수`);
+  }
 }
 done();

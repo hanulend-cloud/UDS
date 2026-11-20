@@ -51,8 +51,10 @@ export function clearResinMua(resin) { const key = presetKeyForResin(resin); ret
 export function presetMaterial(table, milky, resin) {
   const key = presetKeyForResin(resin), p = MIE_PRESETS[key], opt = presetOptics(key), g = table.mie[key].g;
   const m = milkyEff(milky ?? 0);
-  if (m === 0) return { milky: 0, preset: key, musR: 0, mus: 0, g, mua: clearResinMua(resin), muaResin: MUA_RESIN, phi: 0, wt: 0, n: p.nH, clear: true };
+  if (m === 0) return { milky: 0, preset: key, musR: 0, mus: 0, g, mua: clearResinMua(resin), muaResin: clearResinMua(resin), phi: 0, wt: 0, n: p.nH, clear: true };
   const musR = musRFromMilky(table, m, presetRef(table, key)), mus = musR / (1 - g);
   const phi = volumeFractionFromMus(opt, mus);
-  return { milky: m, preset: key, musR, mus, g, mua: MUA_RESIN + kPhi(table, key) * phi, muaResin: MUA_RESIN, phi, wt: wtFromVolume(phi, p.rhoP, p.rhoH), n: p.nH };
+  // 바탕 흡수 = 같은 수지의 투명 소재 흡수(2026-11-21) — 비드가 조금이라도 들면 투명보다 투과율이 낮다. 비드 흡수(kPhi)는 그대로
+  const base = clearResinMua(resin);
+  return { milky: m, preset: key, musR, mus, g, mua: base + kPhi(table, key) * phi, muaResin: base, phi, wt: wtFromVolume(phi, p.rhoP, p.rhoH), n: p.nH };
 }
