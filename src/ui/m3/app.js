@@ -65,6 +65,8 @@ import { beamSpec, ledOfHit, ledClashItems, dropStaleAdjust, setLedAdjust, pcbNo
 import { keepStepSource } from '../step-sources.js';
 import { viewBarHtml, oppositeView, baseView } from './view-bar.js';
 import { readTheme, nextTheme, applyPageTheme, THEME_KEY } from '../theme.js';
+import { openDiffusionModelDlg } from './diffusion-model-dlg.js';
+import { trustRows, trustLabel } from '../../model/diffusion-model.js';
 
 const $ = (s) => document.querySelector(s);
 // 보기 방향 단추 = 3D 위 보기 막대(view-bar.js)
@@ -1962,12 +1964,19 @@ function downloadText(name, text, type) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); URL.revokeObjectURL(a.href);
 }
+// 확산 모델 (Mie) 창(개발자 메뉴) — 보기 전용. 부품 두께 = 메시 외곽 크기의 최솟값(부품 속성 요약과 같은 근사)
+function diffusionCtx() {
+  const db = A.ctx.materialDb?.(), parts = A.store.mspec.parts;
+  return { table: A.ctx.l2Table?.(), dbList: db?.list() ?? [], parts, dbGet: (id) => db?.get(id) ?? null,
+    thickOf: (i) => { const s = partMeshInfo(i)?.size; return s ? Math.min(...s) : null; }, trustRows, trustLabel };
+}
+export function openDiffusionModel() { if (A) openDiffusionModelDlg(diffusionCtx()); }
 // 소재 DB 관리 창(관리자 모드) — 확산(실측 Milky: BSDF·투과율·Haze 측정 → 피팅 → 저장) · 투명(측정 굴절률·투과율) · 반사(측정 반사율).
 // 여기서 넣은 항목은 부품의 소재 고르기 목록에 이름으로 나타남. 각 탭: 측정 txt · 파장 가중 · 편집 · 내보내기/불러오기
 const MDB_TABS = [['milky', '확산 (Milky · BSDF)'], ['clear', '투명 (굴절률·투과율)'], ['refl', '반사 (반사율)']];
 export function openMaterialDb(tab = 'milky') {
   if (!A) return;
-  if (!isAdmin()) { setStatus('소재 DB 관리는 관리자 모드에서 — 설정 > 관리자 모드'); return; }
+  if (!isAdmin()) { setStatus('소재 DB 관리는 관리자 모드에서 — 개발자 > 관리자 모드'); return; }
   const ctx = A.ctx, h = propHandlers();
   document.querySelector('.m3-matdb')?.remove();
   const dlg = document.createElement('div');

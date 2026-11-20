@@ -1637,3 +1637,13 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .m3-orient button:hover:not(:disabled) { background: rgba(31,111,209,.12); }
 .m3-orient button:disabled { opacity: .35; cursor: default; }
 .m3-orient.on [data-orient="reset"] { border-color: #1f6fd1; color: #1f6fd1; }
+/* 확산 모델 (Mie) 창 — 개발자 메뉴 */
+.m3-diffmodel .zoom-modal-inner{color:#1a2030;--m3-line:#d6dbe3;--m3-mut:#6b7385}   /* 모달 바탕은 테마와 상관없이 흰색 — 글자·선도 밝은 바탕 기준 */
+.m3-diffmodel .m3-tabs{grid-template-columns:repeat(3,1fr)}
+.m3-diffmodel .dm-preset{margin:6px 0 8px}
+.m3-diffmodel table{border-collapse:collapse;width:100%;font-size:12px}
+.m3-diffmodel th,.m3-diffmodel td{border:1px solid var(--m3-line,#ccd);padding:3px 6px;text-align:right}
+.m3-diffmodel .dm-trust td,.m3-diffmodel .dm-trust th{text-align:left}
+.m3-diffmodel h4{margin:10px 0 2px;font-size:12px}
+.dm-tag{border-radius:8px;padding:0 7px;font-size:11px;white-space:nowrap}
+.dm-t-a{background:rgba(128,128,128,.18)}.dm-t-f{background:rgba(60,154,95,.2);color:#3c9a5f}.dm-t-b{background:rgba(208,138,30,.2);color:#c07a10}.dm-t-r{background:rgba(220,60,60,.18);color:#d04040}
