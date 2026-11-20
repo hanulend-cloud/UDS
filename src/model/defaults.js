@@ -6,7 +6,7 @@ import { LEVEL_DEFAULTS } from './levels.js';
 export { LEVEL_DEFAULTS };
 
 export const DEFAULT_SPEC = {
-  ver: 13,                      // 저장 스펙 마이그레이션용(main.migrate) — L3/L4 콘텐츠 스왑(v12)
+  ver: 14,                      // 저장 스펙 마이그레이션용(main.migrate) — L3/L4 콘텐츠 스왑(v12)
   mode: 'mech3d',               // 'mech3d'(3D 기구 설계 — 메인, 기구 없으면 시작 화면) | 'flat'(평판 초기 검토 — 그 실행에서 고를 때만)
   mech3d: null,                 // 3D 기구 사용자 지정 { name, parts[소재·면 처리], contacts[접촉면] } — 메쉬는 IndexedDB
   target:  { xLen: 100, yLen: 100, shape: 'flat' },

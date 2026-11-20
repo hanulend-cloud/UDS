@@ -14,7 +14,7 @@ export const LEVEL_SCHEMA = {
   2: {
     label: '확산소재', hint: 'Milky = 소재 산란 성능 · 0=투명 ~ 10=완전 차폐(두께 무관)',
     fields: [
-      { key: 'milky', label: 'Milky(0~10)', unit: '', min: 0, max: 9.9, step: 0.1, searchMax: 9.5 },
+      { key: 'milky', label: 'Milky(0~10)', unit: '', min: 0, max: 10, step: 0.1, searchMax: 10 },
       { key: 'pcb', label: 'PCB 색', type: 'select', options: ['혼재', '백색', '녹색', '흑색'], adv: true, fixed: true },
       { key: 'decenterX', label: 'De-centerX', unit: 'mm', min: -30, max: 30, step: 1, adv: true },
       { key: 'decenterY', label: 'De-centerY', unit: 'mm', min: -30, max: 30, step: 1, adv: true },

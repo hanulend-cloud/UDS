@@ -19,10 +19,15 @@ import { buildBodyGeometry } from './shape/body-geom.js';
 import { shapeField } from './shape/fast-body.js';
 import { milkyShapeField, milkyPsf } from './shape/milky-body.js';
 import { MUA_RESIN } from './l2/material.js';
+import { presetMaterial } from './l2/mie-preset.js';
 
 // Mie 소재의 합성 응답표(소재표 + 주 응답표) — DB 항목별 1회 디코드
 const _mieTables = new Map();
-function tableFor(ent, main) {
+// 일반 Milky(실측 DB 아님) = 기본 비드 Mie(spec 2026-11-20 §3) — 모재 굴절률 1.55 미만이면 PMMA 비드표
+const presetResin = (n) => (n < 1.55 ? 'PMMA' : 'PC');
+function generalMat(table, milky, n) { return { ...presetMaterial(table, milky, presetResin(n)), n }; }
+function tableFor(ent, main, mat) {
+  if (!ent) return main.mie?.[mat?.preset] ?? main;
   if (ent?.model !== 'mie' || !ent.sysTable) return main;
   let t = _mieTables.get(ent.id);
   if (!t || t.main !== main) {
@@ -244,7 +249,7 @@ export function l2Setup(spec, depth, l2, edgeBoost, step, padX = 0, padY = 0, fa
   if (l2.material && !ent) warnings.push(`선택 소재(${l2.material})를 DB 에서 찾을 수 없음 — 추상 Milky 사용`);
   const mat = ent
     ? { milky: milkyFromMusR(st.table, ent.fitted.musR), musR: ent.fitted.musR, g: ent.fitted.g, mua: ent.fitted.mua, n: ent.n }
-    : l2Material(st.table, l2.milky, spec.body?.n ?? 1.59);
+    : generalMat(st.table, l2.milky, spec.body?.n ?? 1.59);
   let t = spec.levels?.[1]?.thk ?? spec.body?.baseThk ?? 3;
   if (edgeBoost?.kind === 'axis') {
     // L3 동시 사용: 면적 평균 두께(l3BotZAt 정본 형상) — 변동 30% 초과면 경고
@@ -257,10 +262,10 @@ export function l2Setup(spec, depth, l2, edgeBoost, step, padX = 0, padY = 0, fa
   const h = Math.max(0, depth - t), rhoB = pcbReflectance(l2.pcb);
   const li = ledIntensity(spec);
   const BX = spec.target.xLen + 2 * Math.max(0, padX), BY = spec.target.yLen + 2 * Math.max(0, padY);
-  const tbl = tableFor(ent, st.table);
+  const tbl = tableFor(ent, st.table, mat);
   const psf = systemPsf({ table: tbl, mat, t, h, rhoB, intensity: li.intensity, intensityKey: li.key, I0: li.I0, extentX: 2 * BX, extentY: 2 * BY, step, fast });
   if (psf.qn.outOfRange) warnings.push('굴절률·g 가 테이블 격자 밖 — 가장자리 값으로 근사');
-  if (psf.qn.beyondMaterial) warnings.push('두께가 입자 소재표 범위를 넘음 — HG(g≤0.99) 근사');
+  if (psf.qn.beyondMaterial && ent) warnings.push('두께가 입자 소재표 범위를 넘음 — HG(g≤0.99) 근사');
   const tableOk = !!st.check?.ok;
   const check = {
     ok: tableOk && psf.check.ok && !psf.qn.outOfRange,
@@ -563,9 +568,9 @@ function computeFieldShape(spec, opt, g) {
 export function l2TransFast(spec, depth, l2) {
   const st = l2State();
   if (!st.table) return 0;
-  const mat = l2Material(st.table, l2.milky, spec.body?.n ?? 1.59);
+  const mat = generalMat(st.table, l2.milky, spec.body?.n ?? 1.59);
   const t = Math.max(0.1, Math.min(spec.levels?.[1]?.thk ?? 3, depth));
-  return systemTransFast({ table: st.table, mat, t, rhoB: pcbReflectance(l2.pcb), intensity: ledIntensity(spec).intensity });
+  return systemTransFast({ table: tableFor(null, st.table, mat), mat, t, rhoB: pcbReflectance(l2.pcb), intensity: ledIntensity(spec).intensity });
 }
 
 // UI 용 — 현재 사양의 L2 물성·검증 요약(PSF 캐시 재사용)

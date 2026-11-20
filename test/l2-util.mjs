@@ -1,6 +1,7 @@
 // L2 테스트 공용: 저장소 테이블·기준 로드
 import fs from 'node:fs';
 import { createTable } from '../src/engine/l2/slab-table.js';
+import { attachPresets } from '../src/engine/l2/runtime.js';
 
 import { pathToFileURL } from 'node:url';
 import zlib from 'node:zlib';
@@ -16,13 +17,15 @@ const dir = process.env.L2_TABLE_DIR ? pathToFileURL(process.env.L2_TABLE_DIR.re
   : new URL('../src/engine/l2/data/', import.meta.url);
 export function loadTable() {
   const meta = JSON.parse(fs.readFileSync(new URL('slab-meta.json', dir)));
-  return createTable(meta, readData(meta));
+  return attachPresets(createTable(meta, readData(meta)), loadPresets());
 }
+// 기본 비드 Mie 응답표(tools/build-mie-preset.mjs)
+export function loadPresets() { return JSON.parse(fs.readFileSync(new URL('../src/engine/l2/data/mie-presets.json', import.meta.url))); }
 export function loadRefAD() { return JSON.parse(fs.readFileSync(new URL('../src/engine/l2/data/ref-ad.json', import.meta.url))); }
 // runtime.initL2 용 Node 로더
 export function nodeLoader() {
   return async () => {
     const meta = JSON.parse(fs.readFileSync(new URL('slab-meta.json', dir)));
-    return { meta, data: readData(meta), refAD: loadRefAD() };
+    return { meta, data: readData(meta), refAD: loadRefAD(), presets: loadPresets() };
   };
 }

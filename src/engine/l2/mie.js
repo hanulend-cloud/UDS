@@ -56,16 +56,18 @@ export function miePhase(x, mRe, mIm = 0, K = 2400) {
   const mu = Array.from(th, Math.cos);
   const r = bhmie(x, mRe, mIm, mu);
   const p = Float64Array.from({ length: K }, (_, j) => 0.5 * (abs2(r.S1[j]) + abs2(r.S2[j])));
-  // CDF over μ (1 → −1): ∫ p dΩ ∝ ∫ p dμ
-  const cdf = new Float64Array(K);
+  return phaseFromTable(th, p, { g: r.g, qsca: r.qsca, qext: r.qext });
+}
+
+// 위상함수 표(θ 격자, 비정규 p) → 정규화 p, CDF(μ 1 → −1), ⟨cosθ⟩ 검산, 균등 u 역CDF 표(4096) — MC 샘플링 O(1)
+export function phaseFromTable(th, p, extra = {}) {
+  const K = th.length, mu = Array.from(th, Math.cos), cdf = new Float64Array(K);
   for (let j = 1; j < K; j++) cdf[j] = cdf[j - 1] + 0.5 * (p[j] + p[j - 1]) * (mu[j - 1] - mu[j]);
   const tot = cdf[K - 1];
   for (let j = 0; j < K; j++) cdf[j] /= tot;
-  // ⟨cosθ⟩ 수치 검산(= g 와 일치해야 함)
   let gNum = 0;
   for (let j = 1; j < K; j++) gNum += 0.5 * (p[j] * mu[j] + p[j - 1] * mu[j - 1]) * (mu[j - 1] - mu[j]);
   gNum /= tot;
-  // 균등 u 역CDF 표(4096) — MC 샘플링 O(1)
   const NU = 4096, inv = new Float64Array(NU + 1);
   let j = 1;
   for (let k = 0; k <= NU; k++) {
@@ -75,8 +77,9 @@ export function miePhase(x, mRe, mIm = 0, K = 2400) {
     inv[k] = mu[j - 1] + f * (mu[j] - mu[j - 1]);
   }
   const sample = (u) => { const t = u * NU, k = Math.min(NU - 1, t | 0), f = t - k; return inv[k] + f * (inv[k + 1] - inv[k]); };
-  return { theta: th, p: Float64Array.from(p, (v) => v / tot), cdf, g: r.g, gNum, qsca: r.qsca, qext: r.qext, sample, inv };
+  return { theta: th, p: Float64Array.from(p, (v) => v / tot), cdf, gNum, sample, inv, ...extra };
 }
+
 
 // 입자 사양 → 단일 산란 특성. d_um: 지름 µm, nP·kP: 입자 굴절률, nH: 모재, lambda_um: 파장
 export function particleOptics({ d_um, nP, kP = 0, nH, lambda_um = 0.55 }) {
@@ -92,3 +95,20 @@ export function musFromVolumeFraction(opt, phi) { return (phi / opt.vol) * opt.s
 export function volumeFractionFromMus(opt, mus) { return (mus / opt.sigmaS) * opt.vol; }
 export function wtFromVolume(phi, rhoP, rhoH) { return (phi * rhoP) / (phi * rhoP + (1 - phi) * rhoH); }
 export function volumeFromWt(w, rhoP, rhoH) { return (w / rhoP) / (w / rhoP + (1 - w) / rhoH); }
+
+// 로그정규 크기 분포(개수 기준, ln d ~ N(ln d_um, sigma)) — 지름 15점(±2.5σ) 가중(spec 2026-11-20 §3.1).
+// 산란 단면적 가중 평균: σ_s = Σwσ_i, p(θ) = Σ w σ_i p_i / σ_s, g = Σ w σ_i g_i / σ_s, 부피 = Σ w v_i
+export function polyParticleOptics({ d_um, sigma = 0, nP, kP = 0, nH, lambda_um = 0.55, M = 15 }) {
+  if (!(sigma > 0)) return particleOptics({ d_um, nP, kP, nH, lambda_um });
+  const zs = Array.from({ length: M }, (_, i) => -2.5 + 5 * i / (M - 1));
+  const ws = zs.map((z) => Math.exp(-0.5 * z * z)), wsum = ws.reduce((a, b) => a + b, 0);
+  let sigS = 0, sigA = 0, vol = 0, gS = 0, pAcc = null, th = null;
+  zs.forEach((z, i) => {
+    const o = particleOptics({ d_um: d_um * Math.exp(sigma * z), nP, kP, nH, lambda_um }), w = ws[i] / wsum;
+    sigS += w * o.sigmaS; sigA += w * o.sigmaA; vol += w * o.vol; gS += w * o.sigmaS * o.g;
+    th ??= o.phase.theta; pAcc ??= new Float64Array(th.length);
+    for (let j = 0; j < th.length; j++) pAcc[j] += w * o.sigmaS * o.phase.p[j];
+  });
+  const g = gS / sigS, phase = phaseFromTable(th, pAcc, { g });
+  return { x: Math.PI * d_um * nH / lambda_um, m: nP / nH, g, sigmaS: sigS, sigmaA: sigA, vol, phase, sigma };
+}

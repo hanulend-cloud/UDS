@@ -407,7 +407,8 @@ function applyMode() {
   $('#results-wrap').hidden = !flat;
   $('#inputbar').hidden = !flat;
   if (m3) stopFlatSolve();
-  if (m3) m3app.mount(m3ctx()).catch((e) => m3app.setStatus(`3D 화면 오류: ${e.message ?? e}`));
+  if (m3) m3app.mount(m3ctx()).catch((e) => m3app.setStatus(`3D 화면 오류: ${e.message ?? e}`))
+    .then(() => { if (spec._milkyScaleNote) { m3app.setStatus(`Milky 눈금 변경(10 = 빛 50% 가림): 50% 넘게 가리던 ${spec._milkyScaleNote.join(', ')} 은(는) Milky 10 으로 맞춤`); delete spec._milkyScaleNote; } });
   else m3app.unmount();
   renderPendingBanner();
 }
@@ -743,7 +744,8 @@ function applyResult({ combo, common, resEval, solo, heat, evals }, stale) {
     `연산 ${(performance.now() - t0).toFixed(0)} ms (평가 ${evals}회, 백그라운드${poolSize > 1 ? ` · 병렬 ${poolSize}스레드` : ''})${stale ? ' · 입력 변경 반영 중…' : ''} · 목표 균일도 ${(spec.goal.U0 * 100).toFixed(0)}% · 깊이 ${depth}mm`
     + (spec._l2MigrationNote ? ' · ⚠ L2 모델 변경: 저장된 설계의 Milky 를 새 눈금으로 변환했습니다(결과가 이전과 다를 수 있음)' : '');
   $('#timing').textContent = resultText;
-  delete spec._l2MigrationNote;   // 1회성 고지 — 다음 저장부터 빠짐
+  delete spec._l2MigrationNote;
+  delete spec._milkyScaleNote;   // 1회성 고지 — 다음 저장부터 빠짐
 }
 
 // 조도 히트맵 렌더 — 버튼 / 자동. 격자는 X·Y 정사각 셀이며 셀 크기는 최대 0.5mm(타겟이 작아
@@ -1102,6 +1104,15 @@ function migrate(s) {
     s.levels[2].milky = migrateMilkyV13(m);
     s.levels[2].pcb ??= '혼재';
     if (m > 1) s._l2MigrationNote = true;
+  }
+  // ver<14: Milky 눈금 A(2026-11-20, 사용자 결정) — 같은 차폐율이 2배 숫자(10 = 50% 가림). 같은 소재가 유지되도록 ×2.
+  // 이전 5 초과(50% 넘게 가림)는 새 눈금에 없어 10 으로 — 그런 부품이 있으면 1회 안내
+  if (!(s.ver >= 14)) {
+    const capped = [];
+    const x2 = (m, name) => { const v = Math.round((+m || 0) * 2 * 1000) / 1000; if (v > 10) capped.push(name); return Math.min(10, v); };
+    if (s.levels?.[2] && s.levels[2].milky != null) s.levels[2].milky = x2(s.levels[2].milky, 'L2 확산판');
+    for (const p of s.mech3d?.parts ?? []) if (p?.material?.kind === 'milky' && p.material.milky != null) p.material = { ...p.material, milky: x2(p.material.milky, p.name ?? '부품') };
+    if (capped.length) s._milkyScaleNote = capped;
   }
   s.ver = DEFAULT_SPEC.ver;
   // opt.pitchMin은 UI로 편집하지 않는 내부 보조 하한값 — 구버전 저장값(예: 6mm 고정)이

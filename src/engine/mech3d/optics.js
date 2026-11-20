@@ -2,6 +2,11 @@
 // 반환: 불투명 { transmissive:false } / 투과성 { transmissive:true, n, mus, g, mua, phase(null = HG(g)) }
 import { l2Material, L2_G, MUA_RESIN, MILKY_UI_MAX } from '../l2/material.js';
 import { musRFromMilky } from '../l2/milky.js';
+import { presetMaterial, presetOptics, truncatePhase, thetaCFor } from '../l2/mie-preset.js';
+
+// 일반 Milky = 기본 비드 Mie + 델타 절단(spec 2026-11-20 §3.4) — 위상함수·g 는 비드마다 하나(Milky 는 μs·μa 만 바꿈 → 재가중 최적화 유지)
+const cutCache = new Map();
+function presetCut(key, g, deg) { const k = `${key}|${deg}`; if (!cutCache.has(k)) cutCache.set(k, truncatePhase(presetOptics(key).phase, g, deg)); return cutCache.get(k); }
 import { particleOptics } from '../l2/mie.js';
 import { materialN, clearMua } from './materials.js';
 
@@ -29,7 +34,8 @@ function whiteTransMusR(table, T, tRef, n) {
   return Math.exp(0.5 * (lo + hi));
 }
 
-export function partOptics(part, { table, db = null }) {
+// thetaC: 절단 각도 고정(재가중 격자 — 기준 Milky 의 구간 각도로 통일해 위상함수·g 를 같게). 없으면 그 Milky 의 구간 각도
+export function partOptics(part, { table, db = null, thetaC = null }) {
   const m = part.material;
   if (m.kind === 'opaque') return { transmissive: false };
   const n0 = materialN(m);   // 측정 굴절률(있으면) · 수지 기본값
@@ -43,8 +49,8 @@ export function partOptics(part, { table, db = null }) {
   // milky
   const ent = m.dbId ? db?.get(m.dbId) : null;
   if (!ent) {
-    const a = l2Material(table, Math.min(m.milky, MILKY_UI_MAX), n0);
-    return { transmissive: true, n: n0, mus: a.musR / (1 - a.g), g: a.g, mua: a.mua, phase: null };
+    const a = presetMaterial(table, Math.min(m.milky, MILKY_UI_MAX), m.resin), t = presetCut(a.preset, a.g, thetaC ?? thetaCFor(a.milky));
+    return { transmissive: true, n: n0, mus: a.mus * t.scale, g: t.g, mua: a.mua, phase: t.phase };
   }
   const musR = musRFromMilky(table, Math.min(m.milky, MILKY_UI_MAX)), f = ent.fitted;
   const mua = f.musR > 0 ? MUA_RESIN + Math.max(0, f.mua - MUA_RESIN) * (musR / f.musR) : MUA_RESIN;

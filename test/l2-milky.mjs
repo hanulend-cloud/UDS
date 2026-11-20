@@ -7,7 +7,7 @@ const ok = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); if (!
 const table = loadTable();
 
 ok(milkyFromMusR(table, 0) === 0 && milkyFromMusR(table, Infinity) === 10, '끝점: μs\'=0 → 0, ∞ → 10');
-ok(musRFromMilky(table, 0) === 0 && musRFromMilky(table, 10) === Infinity, '역변환 끝점');
+ok(musRFromMilky(table, 0) === 0 && Number.isFinite(musRFromMilky(table, 10)) && musRFromMilky(table, 12) === musRFromMilky(table, 10), '역변환 끝점(눈금 A: 10 = 50% 가림, 유한값 · 그 위는 10)');
 let prev = -1, mono = true;
 for (let e = -4; e <= 6; e += 0.25) { const m = milkyFromMusR(table, 10 ** e); if (m < prev - 1e-6) mono = false; prev = m; }
 ok(mono, 'μs\' 증가 → Milky 단조 증가');

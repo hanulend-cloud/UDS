@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { partOptics, normalRow } from '../src/engine/mech3d/optics.js';
 import { defaultPart, setPartMaterial, setPartMaterialParam } from '../src/engine/mech3d/materials.js';
 import { l2Material, MUA_RESIN } from '../src/engine/l2/material.js';
+import { presetMaterial } from '../src/engine/l2/mie-preset.js';
 import { milkyFromMusR } from '../src/engine/l2/milky.js';
 import { createDb } from '../src/model/materials-db.js';
 import { loadTable } from './l2-util.mjs';
@@ -23,8 +24,9 @@ ok(partOptics(defaultPart(0, 'p', 1), ctx).transmissive === false, '불투명 �
   ok(partOptics(P('clear', { T: 0.95, tRef: 2 }), ctx).mua === 0, '투명 T ≥ 무흡수 슬랩 투과율 → μa 0');
 }
 {
-  const o = partOptics(P('milky', { milky: 3 }), ctx), m = l2Material(table, 3, 1.586);
-  ok(rel(o.mus, m.musR / (1 - m.g)) < 1e-12 && o.g === 0.9 && rel(o.mua, m.mua) < 1e-12 && o.phase === null, `추상 Milky 3: μs ${o.mus.toFixed(4)} = L2, g 0.9, HG`);
+  // 2026-11-20: 일반 Milky = 기본 비드 Mie(절단) — 예전 기대(HG g 0.9, μs = L2) 대신 μs′ 보존·Mie 위상표
+  const o = partOptics(P('milky', { milky: 3 }), ctx), m = presetMaterial(table, 3, 'PC');
+  ok(rel(o.mus * (1 - o.g), m.musR) < 1e-9 && o.g < 0.99 && o.g > 0.9 && rel(o.mua, m.mua) < 1e-12 && o.phase?.inv, `일반 Milky 3: μs′ ${m.musR.toFixed(4)} 보존 · Mie(절단 g* ${o.g.toFixed(3)})`);
 }
 {
   const ent = db.get('covestro-dq5142'), milky = milkyFromMusR(table, ent.fitted.musR);
@@ -42,13 +44,14 @@ ok(partOptics(defaultPart(0, 'p', 1), ctx).transmissive === false, '불투명 �
   const q = table.query(o.mus * (1 - o.g) * 1.5, o.g, o.n, normalRow(table), 0);
   ok(Math.abs(q.Tb + q.Ts - 0.1) < 1e-3 && o.g === 0.9, `반투과 백색 T10%@1.5mm: 표 재계산 T ${(q.Tb + q.Ts).toFixed(4)}`);
 }
-{   // 투명 T 극소 정밀도, Milky 상한 9.9(MILKY_UI_MAX)
+{   // 투명 T 극소 정밀도, Milky 상한 10(MILKY_UI_MAX)
   const n0 = partOptics(P('clear'), ctx).n, R0 = ((n0 - 1) / (n0 + 1)) ** 2, B = (1 - R0) ** 2;
   const o = partOptics(P('clear', { T: 1e-9, tRef: 2 }), ctx), x = Math.exp(-o.mua * 2), T = B * x / (1 - R0 * R0 * x * x);
   ok(Number.isFinite(o.mua) && rel(T, 1e-9) < 1e-6, `투명 T 1e-9: μa ${o.mua.toFixed(3)}, 재계산 T ${T.toExponential(4)}`);
-  const a = partOptics(P('milky', { milky: 9.9 }), ctx), b = partOptics(P('milky', { milky: 10 }), ctx);
-  const ent = db.get('covestro-dq5142'), c = partOptics(P('milky', { dbId: ent.id, milky: 9.9 }), ctx), d = partOptics(P('milky', { dbId: ent.id, milky: 10 }), ctx);
-  ok(a.mus === b.mus && c.mus === d.mus, `Milky 상한 9.9: 추상 μs ${b.mus.toFixed(2)}, DB μs ${d.mus.toFixed(2)}`);
+  // 눈금 A(2026-11-20): 상한 10(= 50% 가림, 유한값) — 그 위는 10 과 같음
+  const a = partOptics(P('milky', { milky: 12 }), ctx), b = partOptics(P('milky', { milky: 10 }), ctx);
+  const ent = db.get('covestro-dq5142'), c = partOptics(P('milky', { dbId: ent.id, milky: 12 }), ctx), d = partOptics(P('milky', { dbId: ent.id, milky: 10 }), ctx);
+  ok(a.mus === b.mus && c.mus === d.mus && Number.isFinite(b.mus), `Milky 상한 10: 추상 μs ${b.mus.toFixed(2)}, DB μs ${d.mus.toFixed(2)}`);
 }
 // 투명 소재(2026-11-05): 고르면 그 소재의 2 mm 투과율 · 두께별 흡수
 { const { defaultMaterial, clearT, CLEAR_BASE } = await import('../src/engine/mech3d/materials.js');

@@ -6,10 +6,10 @@ export const L2_G = 0.9;
 export const MUA_RESIN = 0.0005;   // 1/mm — 투명 PC 수준
 export const KAPPA = 1e-4;         // 산란제 흡수 비율(μa_p = κ·μs)
 export const PCB_REFL = { '혼재': 0.5, '백색': 0.8, '녹색': 0.3, '흑색': 0.05 };   // 임시값
-export const MILKY_UI_MAX = 9.9, MILKY_SEARCH_MAX = 9.5;
+export const MILKY_UI_MAX = 10, MILKY_SEARCH_MAX = 10;   // 눈금 A(2026-11-20): 10 = 50% 가림이 최대
 
 export function l2Material(table, milky, n) {
-  const m = Math.max(0, Math.min(milky ?? 0, 9.999));   // 10 = 투과 0 극한 → 유한값으로 캡
+  const m = Math.max(0, Math.min(milky ?? 0, 10));   // 눈금 A: 10 = 50% 가림(유한값)
   const musR = musRFromMilky(table, m);
   const mus = musR / (1 - L2_G);
   return { milky: m, musR, g: L2_G, mua: MUA_RESIN + KAPPA * mus, n };

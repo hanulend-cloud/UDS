@@ -125,7 +125,7 @@ ok(judgeText(0.8004, 0.8009).cls === 'ok' && judgeText(0.7999, 0.8).cls === 'bad
   ok(cu.includes('현재안 유지') && !cu.includes('data-ad="apply"') && !/data-ad="apply"[^>]*disabled/.test(c), '비교표: 현재안 유지 → 사유 표시 · 적용 단추 없음'); }
 { // Milky 상한 기본: ① 만 = 9.9 · ② 함께 = max(현재, 5) · 카드 값도 같음
   const a = { milky: { ok: true }, leds: { ok: true }, shape: { ok: false } };
-  ok(capDefault({ milky: true }, a, 3) === 5 && capDefault({ milky: true, leds: true }, a, 3) === 5 && capDefault({ milky: true, leds: true }, a, 6) === 5, 'Milky 상한 기본: 언제나 5');
+  ok(capDefault({ milky: true }, a, 3) === 10 && capDefault({ milky: true, leds: true }, a, 3) === 10 && capDefault({ milky: true, leds: true }, a, 6) === 10, 'Milky 상한 기본: 언제나 10(눈금 A — 50% 가림)');
   { // ③ 대상 추천(2026-11-05): 투명 부품 먼저(빛이 처음 맞는 부품 우선), 확산 부품을 고르면 안내
     const pm = (kind) => ({ material: { kind }, faceFinish: {} }), M3 = { parts: [pm('opaque'), pm('milky'), pm('clear'), pm('clear')], light: { kind: 'manual' }, observe: {} };
     const sh = (info) => stageAvailability(M3, { non25: [0, 0, 0, 0], ...info }).shape;
@@ -174,7 +174,7 @@ ok(judgeText(0.8004, 0.8009).cls === 'ok' && judgeText(0.7999, 0.8).cls === 'bad
 // ④ 보완 계산 후보: 현재보다 높은 등급(gradeOf) 중 가장 낮은 것 · 최고 등급이면 null
 ok(nextFinish({ kind: 'whiteDiffuse', R: 0.85 })?.R === 0.95 && nextFinish({ kind: 'whiteDiffuse', R: 0.85 }).kind === 'whiteDiffuse' && nextFinish({ kind: 'whiteDiffuse', R: 0.9 })?.R === 0.97
   && nextFinish({ kind: 'metal', R: 0.88 })?.R === 0.95 && nextFinish({ kind: 'whiteDiffuse', R: 0.97 }) === null && nextFinish(null)?.R === 0.85 && nextFinish({ kind: 'gloss' })?.R === 0.85, '④ 보완 안내: 같은 종류 +0.10 이상 최저(백색 85→95, 90→97) · 최고면 없음');
-ok(clampCap(12) === 9.9 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCap(0) === null && clampCap(-2) === null && clampCap(NaN) === null, 'Milky 상한: 0.5~9.9 로 자름 · 0/음수/NaN = 기본');
+ok(clampCap(12) === 10 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCap(0) === null && clampCap(-2) === null && clampCap(NaN) === null, 'Milky 상한: 0.5~10 으로 자름 · 0/음수/NaN = 기본');
 { const all = { milky: true, leds: true, shape: true }, m = { milky: true };
   ok(overallFrac(m, 'current', 0) === 0 && Math.abs(overallFrac(m, 'milky', 0) - 15 / 85) < 1e-12 && Math.abs(overallFrac(m, 'milky', 0.5) - 32.5 / 85) < 1e-12 && overallFrac(m, 'verify', 1) === 1, '전체 진행률: 켠 단계만 정규화(① 만 = 15+35+35 — 최종 판정은 몇 분 걸려 무게 35, 2026-11-12)');
   ok(Math.abs(overallFrac(all, 'shape', 0) - 50 / 170) < 1e-12 && overallFrac(all, 'shape', 2) <= 1 && overallFrac(m, 'shape', 0.5) === 0, '전체 진행률: 단계 순서(② → ③ → ①)·무게 · 꺼진 단계 = 0');

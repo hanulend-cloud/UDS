@@ -8,10 +8,10 @@ import { FINISH_GRADES, gradeOf, DEFAULT_FINISH_CATALOG } from '../../engine/mec
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const f2 = (v) => (Number.isFinite(v) ? v.toFixed(2) : '–');
 
-// Milky 상한 입력 — 0.5~9.9 로 자름. 빈칸·0·음수·NaN = null(기본값)
-export const clampCap = (v) => (Number.isFinite(v) && v > 0 ? Math.min(9.9, Math.max(0.5, v)) : null);
-// 상한 기본값 = 5(2026-11-05) — 5 초과는 참고 문구로만 — spec §2.1a
-export const capDefault = () => 5;
+// Milky 상한 입력 — 0.5~10 으로 자름(눈금 A: 10 = 50% 가림). 빈칸·0·음수·NaN = null(기본값)
+export const clampCap = (v) => (Number.isFinite(v) && v > 0 ? Math.min(10, Math.max(0.5, v)) : null);
+// 상한 기본값 = 10(눈금 A 2026-11-20 — 이전 5 와 같은 50% 가림) — spec §2.1a
+export const capDefault = () => 10;
 // ④ 보완 계산 후보 — 현재보다 높은 등급 중 가장 낮은 것(없으면 null)
 // ④ 보완 안내용 면 처리: 같은 종류(없으면 백색)에서 반사율 +0.10 이상 중 가장 낮은 것, 없으면 그 종류 최고(현재보다 높을 때만).
 //   실측: 백색 85 → 95 % 가 길이·폭 모두 개선, 경면 88 % 는 폭 균일도 를 낮춤 — 종류를 바꾸지 않는다
@@ -126,7 +126,7 @@ const ITEMS = [['milky', '① Milky 레벨'], ['leds', '② LED 개수·피치']
 // state = { avail, sel, running, names, milkyPart, housingMat } → { on, html }(html = 스위치 + 설정, 쓸 수 없으면 이유)
 // 화면의 기구 최적화 = 3 항목: ① Milky · ② 기구 위치(= 엔진 ② LED 배치 + ⑤ LED 높이) · ③ 기구 형상. 케이스 반사율(④)은 부품 속성에서 직접
 export const AD_ITEMS = [['position', '① 위치/개수', ['leds', 'height']], ['shape', '② 형상', ['shape']], ['milky', '③ 확산도(Milky)', ['milky']]];   // 계산 순서(2026-10-30)
-export const TILE_NOTE = { position: '부족한 방향으로 LED 를 옮기고, 그래도 모자라면 개수를 늘려 피치를 줄임', milky: 'Milky 5 까지에서 균일도 최고점을 찾음(밝기는 줄어듦)', leds: 'LED 개수·피치·열을 바꿈', shape: '도광판 아랫면 형상(두께·끝단·가장자리)', housing: '케이스 반사율(소재 상한 안)', height: 'LED–커버 거리' };
+export const TILE_NOTE = { position: '부족한 방향으로 LED 를 옮기고, 그래도 모자라면 개수를 늘려 피치를 줄임', milky: 'Milky 10(빛 50% 가림)까지에서 균일도 최고점을 찾음(밝기는 줄어듦)', leds: 'LED 개수·피치·열을 바꿈', shape: '도광판 아랫면 형상(두께·끝단·가장자리)', housing: '케이스 반사율(소재 상한 안)', height: 'LED–커버 거리' };
 export function tileConfigHtml(k, { avail, sel, running, names = [], milkyPart = null, housingMat = null, path = null }) {
   const pname = (i) => esc(names[i] ?? `부품 ${i + 1}`), dis = running ? ' disabled' : '';
   const pct = (i) => (path && (path.shares?.[i] ?? 0) > 0 ? ` · 빛 ${Math.round(path.shares[i] * 100)}%` : '');

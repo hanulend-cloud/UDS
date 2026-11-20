@@ -40,7 +40,7 @@ const field = (s, extra = {}) => {
   const rW = d.info.rW, src = [];
   for (const l of leds) src.push({ ...l, I0: 1 }, { x: -l.x, y: l.y, I0: rW }, { x: 200 - l.x, y: l.y, I0: rW }, { x: l.x, y: -l.y, I0: rW }, { x: l.x, y: 200 - l.y, I0: rW });
   const E = bandIrradiance({ sources: src, intensity: (c) => c, h: d.h, nx, ny, step, table: st.table });
-  const ref = solveCavity({ E, nx, ny, step, table: st.table, mat: { musR: d.info.musR, g: d.info.g, mua: d.info.mua, n: d.info.n }, t: d.t, h: d.h, rhoB: d.rhoB, rW: d.info.rW });
+  const ref = solveCavity({ E, nx, ny, step, table: d.table ?? st.table, mat: { musR: d.info.musR, g: d.info.g, mua: d.info.mua, n: d.info.n }, t: d.t, h: d.h, rhoB: d.rhoB, rW: d.info.rW });
   // 중심부(20~80mm) 비교: 기준은 셀 중심 격자, PSF 결과는 노드 격자 → 같은 위치를 쌍선형 표본
   const at = (arr, x, y) => { const i = Math.min(nx - 2, Math.max(0, Math.floor(x - 0.5))), j = Math.min(ny - 2, Math.max(0, Math.floor(y - 0.5))), u = x - 0.5 - i, v = y - 0.5 - j; return (1 - u) * (1 - v) * arr[j * nx + i] + u * (1 - v) * arr[j * nx + i + 1] + (1 - u) * v * arr[(j + 1) * nx + i] + u * v * arr[(j + 1) * nx + i + 1]; };
   let a = [], b = [];

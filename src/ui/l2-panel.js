@@ -34,7 +34,7 @@ export function renderL2Panel(el, desc, tMin, ctx) {
   const cal = m ? (m.V6?.ok ? { cls: 'ok', txt: `실물 보정: 소재 보정됨 (${STATUS[m.status] ?? ''})`, tip: `${m.name} — 측정 재현(V6) 통과${m.V9 ? `, 교차두께(V9) ${m.V9.ok ? '통과' : '불일치'}` : ''}.\n시스템(캐비티·LED 배치) 실측 대조는 아직 없음.` }
     : { cls: 'ng', txt: '실물 보정: 보정 불일치', tip: `${m.name} — 측정 재현(V6) 실패: ${m.V6?.note ?? ''}` })
     : { cls: 'warn', txt: '실물 보정: 미보정', tip: '추상 Milky(g=0.9 가정) 사용 중 — 실측 소재를 선택하면 소재 단위로 보정됩니다.\nLightTools·Speos 시스템 대조 이력 없음.' };
-  const opaque = info.milky >= 9.95, lowT = info.trans < tMin;
+  const opaque = info.trans < 0.02, lowT = info.trans < tMin;
   const list = ctx.db?.list() ?? [];
   const opts = [`<option value="">추상 Milky (슬라이더)</option>`, ...list.map((e) => `<option value="${esc(e.id)}"${e.id === ctx.materialId ? ' selected' : ''}>${esc(e.name)} · Milky ${milkyOf(ctx.table, e).toFixed(1)} · ${STATUS[e.status]}${e.validation?.V6?.ok ? '' : ' ⚠'}</option>`)];
   main.innerHTML = `

@@ -358,6 +358,7 @@ export function limitText(row, obs) {
 // 반환 { cap, rows:[{ milky, Ulen, Uwid, eff, margin }], best(상한보다 나은 행 | null) }. 단계 기록(steps)에 넣지 않음 — Milky 표·적용 대상 아님
 async function peekAbove(d, p, cap, io) {
   const rows = [];
+  if (!MILKY_PEEK.length) return null;   // 눈금 A: 상한 10 위는 없음
   if (p.milky < cap - 0.3) return { cap, rows, best: null };
   let last = p.margin;
   for (const m of MILKY_PEEK) {
@@ -448,7 +449,7 @@ function ledAlternatives(r, two) {
 }
 // 최적화 Milky 상한 = 5(2026-11-05, 사용자 확정) — 높은 Milky 는 광자당 매우 느리고 노이즈가 커서 다른 인자를 그 위에서 최적화하지 않는다. 지금 Milky 가 더 높아도 5 로 낮춰서 — spec §2.1a
 // 5 초과는 '이 정도 차폐력이면 균일도가 어디까지 오르나' 안내용 참고 계산만(MILKY_PEEK, 추천·판정·Milky 표에 안 들어감)
-export const MILKY_OPT_MAX = 5, MILKY_PEEK = [6, 7, 8];
+export const MILKY_OPT_MAX = 10, MILKY_PEEK = [];   // 눈금 A(2026-11-20): 10 = 50% 가림 = 이전 상한 5 와 같은 차폐 · 그 위는 나타낼 수 없어 참고 계산 없음
 // 후보 지도 길이 방향 3칸 평균(제자리, 칸 ≥ 40 일 때만) — 후보당 광자가 적어 칸마다 노이즈가 큼(노이즈를 불균일로 착각하면 개수가 늘어남). 유효 칸만
 const two0 = (B) => typeof B.cand?.[0] === 'object';
 export function smoothMapsS(maps, G) {

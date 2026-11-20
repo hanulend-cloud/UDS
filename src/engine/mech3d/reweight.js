@@ -3,6 +3,7 @@
 // 그래서 경로 길이 L·산란 횟수 k 인 광자의 우도비 = (μs/μs₀)^k · e^{−(μs−μs₀)L} · e^{−(μa−μa₀)L}.
 import { partOptics } from './optics.js';
 import { MILKY_UI_MAX } from '../l2/material.js';
+import { thetaCFor } from '../l2/mie-preset.js';
 
 // 기준 m0 주변 n 점(간격 step). 범위 [step, MILKY_UI_MAX] 를 넘으면 창 전체를 안쪽으로 민다(점 수 유지)
 export function milkyAxis(m0, step = 0.025, max = MILKY_UI_MAX, n = 21) {   // 기본 창 = 기준 ±0.25(ESS 한계, spec §2.1)
@@ -14,9 +15,11 @@ export function milkyAxis(m0, step = 0.025, max = MILKY_UI_MAX, n = 21) {   // �
 }
 
 // 부품(spec.mech3d.parts[i]) 의 Milky 를 바꿔 가며 광학값 — [{ milky, mus, mua, g }]
+// 절단 각도는 기준 Milky(part 의 현재 값) 구간으로 통일 — 격자가 구간 경계(5)를 넘어도 위상함수·g 가 같음
 export function milkyGridOptics(part, { table, db = null }, milkies) {
+  const thetaC = thetaCFor(part.material?.milky);
   return milkies.map((m) => {
-    const o = partOptics({ ...part, material: { ...part.material, milky: m } }, { table, db });
+    const o = partOptics({ ...part, material: { ...part.material, milky: m } }, { table, db, thetaC });
     return { milky: m, mus: o.mus, mua: o.mua, g: o.g };
   });
 }

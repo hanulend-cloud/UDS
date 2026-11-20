@@ -26,7 +26,7 @@ for (let b = 0; b < B; b++) {
   const r3 = runMC3D(S3, { source: src, N: per, seed: 101 + b, onExit: (q, f, x, y, z, dx, dy, dz, w) => { if (q === 0 && f === 1) add(a3, b, x, y, w / F); } });
   ms3 += r3.ms;
   const hf = heightfieldFromFn(W, W, 0.5, () => 0, () => -t);
-  const S1 = makeScene({ hf, ox: 0, oy: 0, depth, n: o.n, medium: { mus: o.mus, g: o.g, mua: o.mua }, rhoB, walls: null });
+  const S1 = makeScene({ hf, ox: 0, oy: 0, depth, n: o.n, medium: { mus: o.mus, g: o.g, mua: o.mua }, phase: o.phase, rhoB, walls: null });
   const r1 = runBodyMC(S1, { leds: [{ x: 0, y: 0 }], led: { model: 'lambertian', beamX: 120, sizeX: 0, sizeY: 0, I0: 1 }, N: per, seed: 9001 + b, onExit: (x, y, w) => add(a1, b, x, y, w / F) });
   ms1 += r1.ms;
 }
