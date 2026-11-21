@@ -81,7 +81,7 @@ export function createAdRunner({ ports, now: now0 = () => globalThis.performance
         const m = Math.min(size, N - issued);
         let b = 0; for (let i = 1; i < batches; i++) if (bIss[i] < bIss[b]) b = i;   // 보낸 광자가 가장 적은 배치(고정 청크면 k % batches 와 같음)
         issued += m; bIss[b] += m; k++;
-        const t = now(), r = await send(job, { p, body: { N: m, ...(timed ? { cpuMax: chunkN } : {}), ...(rw ? { rw } : {}) } });
+        const t = now(), r = await send(job, { p, body: { N: m, ...(timed ? { cpuMax: MIN_CHUNK } : {}), ...(rw ? { rw } : {}) } });   // CPU 한도 = 최소 묶음(2026-11-21): GPU 가 꺼지면 어떤 크기든 돌려받아 CPU 속도로 다시 잼 — 예전 한도 chunkN(20만~100만)은 높은 Milky CPU 에서 100초를 넘겨 'Worker 응답 없음 (chunk 90초)'
         // GPU 가 이 묶음 중에 멈춰 꺼짐 — Worker 가 큰 GPU 묶음을 CPU 로 통째 돌리지 않고 돌려보냄(돌리면 'Worker 응답 없음 (chunk 90초)', 2026-11-18 다른 PC).
         // 이 묶음은 세지 않고 CPU 크기로 이어 감(화면 계산 progressive 와 같은 규칙)
         if (r.gpuRetry) { issued -= m; bIss[b] -= m; k--; size = Math.min(size, MIN_CHUNK); continue; }

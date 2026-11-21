@@ -162,8 +162,24 @@ const fakePorts = (log, delay = 0) => Array.from({ length: 3 }, (_, w) => ({ sen
     return { sceneKey: m.sceneKey, acc: new Float64Array(4).fill(1), cnt: new Uint32Array(4), ledger: { emitted: m.N, escaped: 0, absSurf: 0, absVol: 0, lost: 0, rrLoss: 0, rrGain: 0 }, leak: {}, escObs: 0, ms: gpuOn ? m.N / 1000 : m.N / 50, ...(gpuOn ? { gpu: true } : {}) }; } };
   const R = createAdRunner({ ports: [port], now: () => t }), r = await R.trace({ sceneKey: 'g', scene: { G: { ns: 2, nw: 2 } } }, { N: 3e6, maxMs: 60000, minN: 1.5e6, chunkN: 2e5, batches: 2 });
   const afterOff = got.slice(3), big = got[2];
-  ok(got.every((g) => g.cpuMax === 2e5), `묶음마다 CPU 한도 전달 (${got[0].cpuMax})`);
+  ok(got.every((g) => g.cpuMax === 1000), `묶음마다 CPU 한도 = 최소 묶음 1000 전달 (${got[0].cpuMax}) — GPU 가 꺼지면 어떤 묶음이든 돌려보내 CPU 속도로 다시 잼(2026-11-21)`);
   ok(big.N > 2e5 && afterOff.length > 0 && afterOff.every((g) => g.N <= 2e5), `GPU 꺼진 뒤 CPU 묶음 ≤ 20만 (꺼질 때 묶음 ${big.N} · 뒤 최대 ${Math.max(...afterOff.map((g) => g.N))})`);
   ok(r.photons === got.filter((g, i) => i !== 2).reduce((a, g) => a + g.N, 0), `돌려보낸 묶음은 광자 수에 안 셈 (${r.photons})`);
+}
+{ // 2026-11-21 사용자 오류 'Worker 응답 없음 (chunk 90초)' — LED 58개 재확인(높은 Milky): GPU 가 20만 이하 묶음에서 꺼지면 그 묶음을 CPU 가 통째로 돌려
+  // (CPU 는 높은 Milky 에서 ~2천 광자/초 → 20만 = 100초) 제한 시간을 넘김. CPU 한도 = 최소 묶음 → 돌려받고 CPU 속도로 묶음 크기를 다시 정함
+  const { makeChunkHost } = await import('../src/engine/mech3d/chunk-host.js');
+  let t = 0, gpuOn = true, n = 0; const got = [];
+  const port = { send: async (m) => { if (m.type === 'scene') return { sceneKey: m.sceneKey, ready: true };
+    n++;
+    if (gpuOn && n === 2) { gpuOn = false; if (m.cpuMax > 0 && m.N > m.cpuMax) { got.push({ N: m.N, gpu: true, retry: true }); return { sceneKey: m.sceneKey, gpuRetry: true }; } }   // 둘째 묶음 중 GPU 꺼짐(chunk-host 와 같은 규칙)
+    got.push({ N: m.N, gpu: gpuOn });
+    const ms = gpuOn ? m.N / 100 : m.N / 2; t += ms;   // GPU 10만/초 · CPU 2천/초
+    return { sceneKey: m.sceneKey, acc: new Float64Array(4).fill(1), cnt: new Uint32Array(4), ledger: { emitted: m.N, escaped: 0, absSurf: 0, absVol: 0, lost: 0, rrLoss: 0, rrGain: 0 }, leak: {}, escObs: 0, ms, ...(gpuOn ? { gpu: true } : {}) }; } };
+  const R = createAdRunner({ ports: [port], now: () => t });
+  await R.trace({ sceneKey: 'h', scene: { G: { ns: 2, nw: 2 } } }, { N: 2e6, maxMs: 120000, minN: 0, firstN: 1000, batches: 2 });   // chunkN 기본(= N/2 = 100만)
+  const cpuMs = got.filter((g) => !g.gpu).map((g) => g.N / 2);
+  ok(cpuMs.length > 0 && Math.max(...cpuMs) < 90000 / 4, `GPU 꺼진 뒤 CPU 묶음 하나 ≤ 제한 시간의 ¼ (최대 ${Math.max(...cpuMs) / 1000}초 · 꺼질 때 묶음 ${got[1].N})`);
+  void makeChunkHost;
 }
 done();
