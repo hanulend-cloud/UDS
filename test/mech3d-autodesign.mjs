@@ -13,7 +13,7 @@ const rowsOf = (ms, U = (m) => 0.5 + 0.12 * m) => ms.map((m) => ({ milky: m, Ule
   const bases = [], precise = [], calls = [];
   const io = { milkyRows: async (d, ms, o) => { (o?.precise ? precise : bases).push(ms[10]); return rowsOf(ms); }, verify: async (d) => { calls.push(d.milky); return { stats: st(0.81, 0.9), eff: 1 - d.milky / 20 }; }, progress() {}, cancelled: () => false };
   const r = await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 3, count: 5, pitch: 0, shape: null }, milkyMax: 5 }, io);
-  ok(r.feasible && Math.abs(r.best.milky - 2.5) < 0.03 && calls.at(-1) === r.best.milky && bases.join() === '0.5,1.5,2.5', `① 거친 탐색: 기준 ${bases.map((b) => b.toFixed(2)).join(' → ')} → 최소 Milky ${r.best.milky}`);
+  ok(r.feasible && Math.abs(r.best.milky - 2.75) < 1e-9 && calls.at(-1) === r.best.milky && bases.join() === '0.5,1.5,2.5', `① 거친 탐색: 기준 ${bases.map((b) => b.toFixed(2)).join(' → ')} → 통과 창의 여유 최대 Milky ${r.best.milky}(2026-11-21: 최소 통과 아님)`);
   ok(precise.length === 1 && precise[0] === bases.at(-1) && r.steps.at(-1).precise, `경계가 든 창(기준 ${precise[0]?.toFixed(2)})만 정밀 재추적`);
   ok(calls.length === 2 && calls[0] === 3 && r.current.stats.Ulen === 0.81, '현재안을 먼저 같은 추정기(verify)로 계산 → r.current'); }
 { // cfg.currentVerified(수렴한 점진 결과) → 현재안 verify 생략
@@ -21,12 +21,12 @@ const rowsOf = (ms, U = (m) => 0.5 + 0.12 * m) => ms.map((m) => ({ milky: m, Ule
   const io = { milkyRows: async (d, ms) => rowsOf(ms), verify: async (d) => { calls.push(d.milky); return { stats: st(0.81, 0.9), eff: 1 - d.milky / 20 }; }, progress() {}, cancelled: () => false };
   const r = await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 3, count: 5, pitch: 0, shape: null }, milkyMax: 5, currentVerified: cv }, io);
   ok(calls.length === 1 && calls[0] !== 3 && r.current === cv, `현재안 재사용 → verify 는 최종안만 (${calls})`); }
-{ // 오르는 구간 할선: 경계 3.0 — 거친 2.5 미달 · 3.5 창 전체 통과 → [2.75, 3.25] 할선 근 3.0 → 창 하나로 끝
+{ // 3.5 창 전체 통과 → 그 창에서 멈춤(2026-11-21 사용자: 아래로 다시 안 찾음 — 예전 할선 재기준 없앰) · 여유 최대 3.75
   const bases = [], U = (m) => 0.8 + 0.1 * (m - 3.0);
   const io = { milkyRows: async (d, ms, o) => { if (!o?.precise) bases.push(ms[10]); return rowsOf(ms, U); }, verify: async (d) => ({ stats: st(U(d.milky), 0.9), eff: 1 }), progress() {}, cancelled: () => false };
   const r = await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 4.9 }, milkyMax: 5 }, io);
-  const m = r.steps.filter((x) => x.stage === 'milky').at(-1).pick.milky;
-  ok(bases.length === 5 && Math.abs(bases.at(-1) - 3) < 1e-6 && Math.abs(m - 3) < 0.03, `할선 재기준: ${bases.map((b) => b.toFixed(2)).join(' → ')} (경계 ${m})`); }
+  const vm = r.steps.find((x) => x.stage === 'guard')?.tried.milky ?? r.best.milky;   // 효율이 같아 현재안(4.9) 유지 — 탐색이 고른 값을 봄
+  ok(bases.join() === '0.5,1.5,2.5,3.5' && Math.abs(vm - 3.75) < 1e-9, `통과 창에서 멈춤: ${bases.map((b) => b.toFixed(2)).join(' → ')} → Milky ${vm}`); }
 { // 상한까지 미달(U 가 천천히 오름) → 가장 가까운 안 = 상한 근처 + 상한 안내
   const io = { milkyRows: async (d, ms) => rowsOf(ms, (m) => 0.6 + 0.01 * m), verify: async (d) => ({ stats: st(0.6 + 0.01 * d.milky, 0.9), eff: 1 }), progress() {}, cancelled: () => false };
   const r = await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 3 }, milkyMax: 5 }, io);
@@ -44,11 +44,11 @@ const rowsOf = (ms, U = (m) => 0.5 + 0.12 * m) => ms.map((m) => ({ milky: m, Ule
 // 단봉형 U(Milky) — 최고점 4 · 행에 최저 위치(dark: 길이·폭 0~1) 를 실음
 const peakRows = (ms, top, { len = 0.5, wid = 0.5, Uw = () => 0.9 } = {}) => ms.map((m) => { const Ulen = top - 0.05 * (m - 4) ** 2, Uwid = Uw(m);
   return { milky: m, Ulen, Uwid, eff: 1 - m / 12, ess: 1, trusted: true, margin: Math.min(Ulen - 0.8, Uwid - 0.6), dark: { len, wid } }; });
-{ // 단봉형·통과: 최소 통과 Milky 는 오르는 쪽(3.0) — 최고점(4) 너머(5.0) 가 아님
+{ // 단봉형·통과: 오르는 쪽 첫 통과 창(3.5)에서 멈추고 그 창의 여유 최대(3.75) — 최고점(4) 너머(5.0) 가 아님
   const bases = [], U = (m) => 0.85 - 0.05 * (m - 4) ** 2;   // verify +0.001: 경계 3.0 의 부동소수 0.7999… 가 정밀 판정에서 미달로 잡히지 않게
   const io = { milkyRows: async (d, ms, o) => { if (!o?.precise) bases.push(ms[10]); return peakRows(ms, 0.85); }, verify: async (d) => ({ stats: st(U(d.milky ?? 1) + 0.001, 0.9), eff: 1 }), progress() {}, cancelled: () => false };
   const r = await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 1 } }, io);
-  ok(r.feasible && Math.abs(r.best.milky - 3) < 0.03 && Math.max(...bases) <= 3.5 + 1e-9, `단봉형 통과 → 최소 Milky ${r.best.milky} (기준 ${bases.map((b) => b.toFixed(2)).join(' → ')})`); }
+  ok(r.feasible && Math.abs(r.best.milky - 3.75) < 1e-9 && Math.max(...bases) <= 3.5 + 1e-9, `단봉형 통과 → 통과 창 여유 최대 Milky ${r.best.milky} (기준 ${bases.map((b) => b.toFixed(2)).join(' → ')})`); }
 { // 단봉형·미달(길이 끝단이 가장 어두움) → 최고점 Milky ≈ 4 · '가장자리 감쇠' · 거친 탐색은 최고점 뒤 두 번 내려가면 멈춤
   const bases = [], precise = [], U = (m) => 0.75 - 0.05 * (m - 4) ** 2;
   const io = { milkyRows: async (d, ms, o) => { (o?.precise ? precise : bases).push(ms[10]); return peakRows(ms, 0.75, { len: 0.03 }); }, verify: async (d) => ({ stats: st(U(d.milky ?? 1), 0.9), eff: 1 }), progress() {}, cancelled: () => false };
@@ -119,7 +119,7 @@ const peakRows = (ms, top, { len = 0.5, wid = 0.5, Uw = () => 0.9 } = {}) => ms.
   const G = { ns: 2, nw: 1, ds: 1, cell: 1, w0: -0.5, L: 2, closed: false, winS: 5, area: new Float64Array([1, 1]), valid: new Uint8Array([1, 1]) };
   const io = { basis: async (d) => { basisMilky = d.milky; return { cand: [0, 1, 2], maps: [0, 1, 2].map(() => Float32Array.from([1, 1])), emitted: 1 }; }, milkyRows: async (d, ms) => rowsOf(ms), verify: async () => ({ stats: st(0.9, 0.9), eff: 1 }), progress() {}, cancelled: () => false };
   const r = await runAutoDesign({ stages: { milky: true, leds: true }, obs: { targetLen: 0.8, targetWid: 0 }, current: { milky: 3, count: 5, pitch: 0 }, milkyMax: 5, G, line: { length: 2, closed: false }, nMax: 4 }, io);
-  ok(basisMilky >= 4.7 && basisMilky <= 5 && r.best.count === 1 && Math.abs(r.best.milky - 2.5) < 0.03, `②: 기준 ${basisMilky}(U 단조 → 상한 근처) 에서 최소 ${r.best.count}개 → ① Milky ${r.best.milky}`); }
+  ok(basisMilky >= 4.7 && basisMilky <= 5 && r.best.count === 1 && Math.abs(r.best.milky - 2.75) < 1e-9, `②: 기준 ${basisMilky}(U 단조 → 상한 근처) 에서 최소 ${r.best.count}개 → ① Milky ${r.best.milky}(통과 창 여유 최대)`); }
 { // 단계적 압축: 27 → 6 → 2 → 1, 각 단계 광자 수 증가
   const seen = [];
   const evalFn = async (cands) => { return cands.map((c) => ({ cand: c, stats: st(0.7 + c.k / 100, 0.9), eff: 0.5 + c.k / 1000, ok: c.k !== 26 })); };
@@ -320,7 +320,7 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   ok(a.basisD.length === 1 && Math.abs(a.basisD[0].milky - 4) <= 0.25 && a.basisD[0].finish?.R === 0.95 && a.basisD[0].finish.part === 1, `② 기준 d: Milky ${a.basisD[0]?.milky}(최고점 ≈4, 상한 5 아님) · 케이스 ${a.basisD[0]?.finish?.R}(최고 등급)`);
   ok(a.bases.join() === '0.5,1.5,2.5,3.5,4.5' && a.prog.some((t) => /^ledsRef:위치 계산용 기준 Milky 찾기 \(Milky 0\.5\)/.test(t)), `거친 최고점 탐색 ${a.bases.join(' → ')} (≤ 상한 5, 정밀 없음)`);
   ok(a.ref && a.ref.milky === a.basisD[0].milky && a.ref.finish?.R === 0.95, `steps ledsRef: Milky ${a.ref?.milky} · 케이스 ${a.ref?.finish?.R}`);
-  ok(a.r.best.count === 1 && a.r.best.finish?.R === 0.9 && Math.abs(a.r.best.milky - 3) < 0.05, `개수 ${a.r.best.count} → ④ 최저 통과 ${a.r.best.finish?.R} → ① 최소 Milky ${a.r.best.milky}`);
+  ok(a.r.best.count === 1 && a.r.best.finish?.R === 0.9 && Math.abs(a.r.best.milky - 3.75) < 1e-9, `개수 ${a.r.best.count} → ④ 최저 통과 ${a.r.best.finish?.R} → ① 통과 창 여유 최대 Milky ${a.r.best.milky}`);
   const b = await run({ leds: true, milky: true });
   ok(Math.abs(b.basisD[0].milky - 4) <= 0.25 && b.basisD[0].finish === null && b.ref?.finish === null, `②+①: 기준 Milky ${b.basisD[0].milky} · 케이스 그대로`);
   const c = await run({ leds: true, housing: true });
@@ -673,14 +673,11 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   const steps = [{ stage: 'milky', phase: 'ledsRef', rows: [row(4, 0.2)] }, { stage: 'milky', phase: 'coarse', rows: [row(2.4, -0.01), row(2.6, 0.004), row(2.7, 0.02), row(2.8, 0.015), row(3, 0.05, false)] }];
   ok(milkyRecheckPick(steps, 2.55) === 2.7, `★ = 최종 탐색 행 중 지금보다 높고 통과한 최고(위치 단계 전 ledsRef·믿지 못하는 행 제외): ${milkyRecheckPick(steps, 2.55)}`);
   ok(milkyRecheckPick(steps, 2.75) === 2.8 && milkyRecheckPick(steps, 2.9) === null && milkyRecheckPick([], 1) === null, '지금보다 높은 통과 행이 없으면 null');
-  const calls = [], U = (m) => 0.5 + 0.12 * m - 0.02;   // 정밀 값이 빠른 검토보다 2%p 낮음 → 경계 2.5 는 최종 79%(목표 근처)
-  const io = { milkyRows: async (d, ms) => rowsOf(ms), verify: async (d) => { calls.push(d.milky); return { stats: st(U(d.milky), 0.9), eff: 1 - d.milky / 20 }; }, progress() {}, cancelled: () => false };
+  // 2026-11-21 재요청 뒤: 최종 Milky = 통과 창의 ★(여유 최대) → 더 높은 통과 행이 없어 재확인이 따로 돌지 않음(같은 계산을 두 번 하지 않음)
+  const U = (m) => 0.5 + 0.12 * m - 0.04;   // 정밀 값이 빠른 검토보다 4%p 낮음 → 최종 2.75 = 79%(목표 근처)
+  const io = { milkyRows: async (d, ms) => rowsOf(ms), verify: async (d) => ({ stats: st(U(d.milky), 0.9), eff: 1 - d.milky / 20 }), progress() {}, cancelled: () => false };
   const r = await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 1, count: 5, pitch: 0, shape: null }, milkyMax: 5 }, io);
-  const rc = r.steps.find((x) => x.stage === 'milkyRecheck');
-  ok(!r.feasible && rc && rc.design.milky > r.best.milky + 0.1 && rc.verified.stats.Ulen >= 0.8 && calls.includes(rc.design.milky), `최종 ${r.best.milky} 목표 근처 → ★ Milky ${rc?.design.milky} 정밀 재확인 ${rc?.verified.stats.Ulen.toFixed(3)}`);
-  ok(r.best.milky < rc.design.milky && /Milky [\d.]+ 정밀 재확인/.test(r.reason) && /지난 후보/.test(r.reason), `최종안은 그대로 · 이유에 재확인 결과: ${r.reason}`);
-  const h = histFromRun(r, { targets: { len: 0.8, wid: 0.6 } }, '12:00', (d) => `Milky ${d.milky}`);
-  ok(h.some((e) => e.kind === 'alt' && e.design.milky === rc.design.milky && !e.quick && e.Ulen >= 0.8), `지난 후보 표에 정밀 값 대안으로: ${h.map((e) => `${e.label}(${e.kind})`).join(', ')}`);
+  ok(Math.abs(r.best.milky - 2.75) < 1e-9 && !r.steps.some((x) => x.stage === 'milkyRecheck') && histFromRun(r, { targets: { len: 0.8, wid: 0.6 } }, '12:00', (d) => `Milky ${d.milky}`).length >= 1, `최종 = 통과 창 ★ ${r.best.milky} → 재확인 중복 없음`);
   const far = { milkyRows: async (d, ms) => rowsOf(ms), verify: async (d) => ({ stats: st(0.5, 0.9), eff: 1 }), progress() {}, cancelled: () => false };
   const r2 = await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 1, count: 5, pitch: 0, shape: null }, milkyMax: 5 }, far);
   ok(!r2.steps.some((x) => x.stage === 'milkyRecheck'), '목표에서 먼 미달(3%p 넘게)은 재확인 안 함');
@@ -717,21 +714,32 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   const h = histFromRun(r, { targets: { len: 0.8, wid: 0.8 } }, '12:00', (d) => `LED ${d.count}`);
   ok([21, 22].every((n) => h.some((e) => e.kind === 'alt' && e.design.count === n)), `지난 후보 표에 개수별 후보: ${h.map((e) => e.label).join(', ')}`);
 }
-{ // 2026-11-21 사용자(2번): 1열 최종안의 폭이 미달이면 2열을 자동 검토 — 2열에서 길이가 미달이면 2열 그대로 LED 를 늘림 → 정밀 판정 → 지난 후보 대안(최종안은 그대로)
+{ // 2026-11-21 사용자(재요청): 폭 미달이면 '위치/개수' 단계에서 먼저 2열 검토 — 2열에서 길이가 미달이면 2열 그대로 LED 를 늘리고, 나으면 2열로 이어서 다음 단계(Milky 등)를 한 번만
   const { histFromRun } = await import('../src/ui/m3/autodesign-panel.js');
   const nw = 4, G = { ns: 100, nw, ds: 1, cell: 2, w0: -4, L: 100, closed: false, winS: 10, area: new Float64Array(100 * nw).fill(1), valid: new Uint8Array(100 * nw).fill(1) }, line = { length: 100, closed: false };
   const wc = [-3, -1, 1, 3], gs = [1, 2, 3], cand = candidateGrid(line, { sStep: 2, wOffsets: [0, ...gs.flatMap((d) => [-d, d])] });
   const maps = cand.map(({ s, w }) => Float32Array.from({ length: 100 * nw }, (_, k) => Math.exp(-(((k / nw | 0) + 0.5 - s) ** 2) / 72) * Math.exp(-((wc[k % nw] - w) ** 2) / 4.5)));
-  const run = (U) => runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.5, targetWid: 0.99 }, current: { milky: 1, count: 5, pitch: 0, rows: 1 }, G, line, nMax: 40, rowsOptions: [1, 2], ladderMs: 60000 },
-    { basis: async () => ({ cand, maps: maps.map((m) => m.slice()), emitted: 1, gaps: gs, sMargin: 0 }), progress() {}, cancelled: () => false, verify: async (d) => ({ stats: U(d), eff: 0.5 }) });
-  const r0 = await run((d) => (d.rows === 2 ? st(0.3, 0.995) : st(0.8, 0.2))), c0 = r0.twoRow?.layout.count;
-  ok(c0 > 0 && r0.best.rows !== 2, `기준 2열 배치 열당 ${c0}개 · 최종안은 1열 그대로`);
-  const r = await run((d) => (d.rows === 2 ? st(d.count >= c0 + 3 ? 0.6 : 0.4, 0.995) : st(0.8, 0.2))), t = r.steps.find((x) => x.stage === 'twoRowAuto');
-  ok(t && t.design.rows === 2 && t.design.count >= c0 + 3 && t.verified.stats.Ulen >= 0.5 && r.best.rows !== 2, `2열 길이 미달 → 늘려 통과: 2열 × ${t?.design.count} (기준 ${c0})`);
-  ok(/2열 자동 검토/.test(r.reason) && /지난 후보/.test(r.reason), `이유에 2열 자동 검토 결과: ${r.reason}`);
+  const run = (U, extra = {}, io2 = {}) => { const tr = [], mk = []; return runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.5, targetWid: 0.99 }, current: { milky: 1, count: 5, pitch: 0, rows: 1 }, G, line, nMax: 40, rowsOptions: [1, 2], ladderMs: 60000, ...extra },
+    { basis: async () => ({ cand, maps: maps.map((m) => m.slice()), emitted: 1, gaps: gs, sMargin: 0 }), progress() {}, cancelled: () => false, verify: async (d) => ({ stats: U(d), eff: 0.5 }), trace: (stg, list) => tr.push(...list.map((e) => ({ stg, ...e }))),
+      milkyRows: async (d, ms, o = {}) => { mk.push({ rows: d.rows ?? 1, ref: !!o.ref }); return ms.map((m) => { const s = U({ ...d, milky: m }); return { milky: m, Ulen: s.Ulen, Uwid: s.Uwid, eff: 0.5, ess: 1, trusted: true, margin: Math.min(s.Ulen - 0.5, s.Uwid - 0.99) }; }); }, ...io2 }).then((r) => ({ ...r, tr, mk })); };
+  const r0 = await run((d) => (d.rows === 2 ? st(0.3, 0.995) : st(0.8, 0.2))), s0 = r0.steps.find((x) => x.stage === 'ledsTwoRow'), c0 = s0?.tried[0].design.count;
+  ok(c0 > 0, `위치 단계에서 2열 검토: 기준 2열 열당 ${c0}개`);
+  const U = (d) => (d.rows === 2 ? st(d.count >= c0 + 3 ? 0.6 : 0.4, 0.995) : st(0.8, 0.2));
+  const r = await run(U), t = r.steps.find((x) => x.stage === 'ledsTwoRow');
+  ok(t?.chosen && r.best.rows === 2 && r.best.count >= c0 + 3 && r.feasible, `2열 길이 미달 → 늘려 통과 → 2열로 이어서: 최종 2열 × ${r.best.count} (기준 ${c0}) · ${r.reason}`);
+  ok(r.tr.some((e) => e.stg === 'leds' && /2열/.test(e.label) && !e.est) && !r.steps.some((x) => x.stage === 'twoRowAuto'), `2열 검토 값은 위치/개수 카드에: ${r.tr.filter((e) => /2열/.test(e.label)).map((e) => e.label).join(' | ')}`);
   const h = histFromRun(r, { targets: { len: 0.5, wid: 0.99 } }, '12:00', (d) => `${d.rows}x${d.count}`);
-  ok(h.some((e) => e.kind === 'alt' && e.design.rows === 2 && e.design.count === t.design.count), `지난 후보 표에 2열 대안: ${h.map((e) => e.label).join(', ')}`);
+  ok(h.some((e) => e.kind === 'alt' && (e.design.rows ?? 1) === 1), `지난 후보 표에 1열 안도 대안으로: ${h.map((e) => e.label).join(', ')}`);
+  const rm = await run(U, { stages: { leds: true, milky: true }, milkyMax: 2 });
+  ok(rm.best.rows === 2 && !rm.mk.some((x) => !x.ref && x.rows === 1), `Milky 는 2열 배치로 한 번만 찾음(1열 Milky 탐색 없음): ${rm.mk.map((x) => `${x.rows}${x.ref ? 'r' : ''}`).join(',')}`);
   const rw = await run((d) => st(0.8, 0.995));
-  ok(!rw.steps.some((x) => x.stage === 'twoRowAuto'), '폭이 통과하면 2열 자동 검토 안 함');
+  ok(!rw.steps.some((x) => x.stage === 'ledsTwoRow') && (rw.best.rows ?? 1) === 1, '폭이 통과하면 2열 검토 안 함');
+}
+{ // 2026-11-21 사용자(재요청): Milky 는 목표를 만족한 창에서 멈춤(더 낮은 Milky 를 찾아 내려가지 않음) — 그 창의 통과 행 중 여유가 가장 큰 것(상세 검토 ★)
+  const calls = [];
+  const io = { milkyRows: async (d, ms, o = {}) => { calls.push({ m: ms[10], precise: !!o.precise }); return rowsOf(ms); }, verify: async (d) => ({ stats: st(0.5 + 0.12 * d.milky, 0.9), eff: 0.5 }), progress() {}, cancelled: () => false };
+  const r = await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 1, count: 5, pitch: 0, shape: null }, milkyMax: 10 }, io);
+  ok(Math.max(...calls.map((c) => c.m)) <= 2.5 + 1e-9 && Math.min(...calls.slice(-2).map((c) => c.m)) >= 2.5 - 1e-9 && calls.at(-1).precise, `통과 창(2.5)에서 멈춤 — 아래로 다시 안 찾음: ${calls.map((c) => `${c.m}${c.precise ? 'p' : ''}`).join(',')}`);
+  ok(Math.abs(r.best.milky - 2.75) < 1e-9 && r.feasible, `통과 행 중 여유 최대(★) = ${r.best.milky}`);
 }
 done();

@@ -313,40 +313,9 @@ export function nextBase(pts, lo, hi) {
   return (lo + hi) / 2;
 }
 
-// ① 오르는 구간 [lo, hi] 탐색(여유가 단조 증가로 봄) — 창 전체 통과면 위쪽 끝을 창 아래로, 전부 미달이면 아래쪽 끝을 창 위로, 다음 기준은 할선(밖이면 이분). 중지 = null
-// pts = 이미 아는 (Milky, 여유) — 첫 기준부터 할선. f0 = 진행률 시작
-async function searchMilky(d, cfg, io, steps, mCap, { lo = 0.25, hi = mCap, pts = [], f0 = 0 } = {}) {
-  let m0 = nextBase(pts, lo, hi), found = null, nearest = null;
-  pts = [...pts];   // 기준별 (대표 Milky, 여유)
-  for (let it = 0; it < MILKY_ITERS; it++) {
-    if (io.cancelled?.()) return null;
-    io.progress?.('milky', f0 + (1 - f0) * it / MILKY_ITERS, `최소 Milky 탐색 (기준 ${m0.toFixed(2)})`);
-    const ms = milkyAxis(m0, MILKY_STEP, mCap);
-    let rows = await io.milkyRows(d, ms), pick = pickMilky(rows, cfg.obs), precise = false;
-    if (pick.feasible && pick.edge === null) {   // 창 안에 경계 — 같은 창을 광자를 늘려 다시(노이즈로 경계가 흔들리지 않게)
-      if (io.cancelled?.()) return null;
-      io.progress?.('milky', it / MILKY_ITERS, `Milky 경계 정밀 확인 (기준 ${m0.toFixed(2)})`);
-      rows = await io.milkyRows(d, ms, { precise: true }); pick = pickMilky(rows, cfg.obs); precise = true;
-    }
-    steps.push({ stage: 'milky', base: m0, rows, pick, precise });
-    if (pick.best) pts.push([pick.best.milky, pick.best.margin]);
-    if (pick.feasible) {
-      found = pick;
-      if (pick.edge !== 'low' || ms[0] <= lo + 1e-9) break;   // 창 안에서 경계를 찾음 / 더 내려갈 곳 없음
-      hi = ms[0];
-    } else {
-      if (!pick.best) break;   // 믿을 격자점 없음
-      if (!nearest || pick.best.margin > nearest.best.margin) nearest = pick;
-      lo = ms.at(-1);
-      if (lo >= hi - 1e-9) break;   // 상한까지 미달
-    }
-    m0 = nextBase(pts, lo, hi);
-  }
-  return { found, nearest };
-}
-
 export const COARSE_STEP = 1, EDGE_FRAC = 0.15;
 const bestRow = (rows) => rows.filter((r) => r.trusted).reduce((a, b) => (!a || b.margin > a.margin ? b : a), null);
+const passRow = (rows) => { const b = bestRow(rows); return b && b.margin >= 0 ? b : null; };   // 통과 행 중 여유 최대(같으면 앞 = 낮은 Milky)
 // 최고점에서 막는 쪽과 원인 — 여유가 작은 쪽(길이/폭), 최저 위치가 바깥 15 % 면 가장자리 감쇠, 아니면 LED 리플(dark 없으면 원인 생략)
 export function limitText(row, obs) {
   const wid = row.Uwid != null && obs.targetWid != null && row.Uwid - obs.targetWid < row.Ulen - obs.targetLen;
@@ -396,12 +365,9 @@ async function searchMilkyPeak(d, cfg, io, steps, cap) {
   const obs = cfg.obs, S = [];   // 거친 표본 { m, row(창 최고 믿는 행), ms }
   const bases = coarseBases(cap), nB = bases.length;
   let lo = 0.25;   // 지금까지 미달 창의 위 끝(오르는 구간 아래 경계)
-  const rising = async (ms, pick, f0) => {   // 통과 창 → 최소 통과 Milky: 경계가 창 안이면 그대로, 창 맨 아래부터 통과면 [lo, 창 아래] 탐색
-    if (pick.edge === null || ms[0] <= lo + 1e-9) return { found: pick };
-    const below = S.filter((x) => x.row && x.row.milky <= lo + 1e-9).slice(-1).map((x) => [x.row.milky, x.row.margin]);
-    const r = await searchMilky(d, cfg, io, steps, cap, { lo, hi: ms[0], pts: [...below, [pick.best.milky, pick.best.margin]], f0 });
-    return r && { found: r.found ?? pick };
-  };
+  // 목표를 만족한 창에서 멈춤(2026-11-21 사용자) — 더 낮은 Milky 를 찾아 내려가지 않고, 그 창(정밀 재확인 값)의 통과 행 중 여유가 가장 큰 것(상세 검토 ★).
+  // 예전 '최소 통과 Milky' 는 여유 0 인 경계를 골라 정밀 판정에서 미달로 떨어지고, 아래 창을 더 재느라 시간도 걸렸음
+  const atBest = (pick, rows) => { const b = passRow(rows) ?? pick.best; return { found: { ...pick, best: b, milky: b.milky } }; };
   for (let k = 0; k < nB; k++) {
     if (io.cancelled?.()) return null;
     const m = bases[k], ms = milkyAxis(m, MILKY_STEP, cap);
@@ -409,14 +375,14 @@ async function searchMilkyPeak(d, cfg, io, steps, cap) {
     let rows = await io.milkyRows(d, ms), pick = pickMilky(rows, obs), precise = false;
     // 한 줄만 통과(2026-11-21 사용자 1번) — 노이즈일 수 있어 통과로 치지 않지만 최고점 근처라는 뜻: 같은 창을 정밀 재확인하고, 그래도 미달이면 위로 더 찾지 않음(시간 단축)
     const single = !pick.feasible && rows.some((r) => r.trusted && r.margin >= 0);
-    if ((pick.feasible && pick.edge === null) || single) {   // 창 안에 경계 — 같은 창을 광자를 늘려 다시
+    if (pick.feasible || single) {   // 통과(또는 한 줄 통과) 창 — 같은 창을 광자를 늘려 다시 재서 확인
       if (io.cancelled?.()) return null;
       io.progress?.('milky', 0.6 * k / nB, `${single ? '한 줄 통과 — ' : ''}Milky 경계 정밀 확인 (기준 ${m.toFixed(2)})`);
       rows = await io.milkyRows(d, ms, { precise: true }); pick = pickMilky(rows, obs); precise = true;
     }
     steps.push({ stage: 'milky', phase: 'coarse', base: m, rows, pick, precise });
     S.push({ m, row: bestRow(rows), ms });
-    if (pick.feasible) { const r = await rising(ms, pick, 0.6); return r && { ...r, cap }; }   // 아직 하락 전(오르는 쪽) 통과 창
+    if (pick.feasible) return { ...atBest(pick, rows), cap };   // 통과 창에서 멈춤
     if (single) return { found: null, peak: bestRow(rows) ?? S.at(-1).row, cap };   // 정밀 재확인도 미달 = 이 창이 최고점 근처
     lo = Math.max(lo, ms.at(-1));
     const g = S.map((x) => x.row?.margin ?? -Infinity), n = g.length, ib = g.indexOf(Math.max(...g));
@@ -436,7 +402,7 @@ async function searchMilkyPeak(d, cfg, io, steps, cap) {
     io.progress?.('milky', 0.65, `균일도 최고점 정밀 (Milky ${c.toFixed(2)})`);
     const rows = await io.milkyRows(d, ms, { precise: true }), pick = pickMilky(rows, obs);
     steps.push({ stage: 'milky', phase: 'peak', base: c, rows, pick, precise: true });
-    if (pick.feasible) { const r = await rising(ms, pick, 0.7); return r && { ...r, cap }; }   // 최고점 여유 ≥ 0
+    if (pick.feasible) return { ...atBest(pick, rows), cap };   // 최고점 여유 ≥ 0 — 그 창에서 멈춤
     lo = Math.max(lo, ms.at(-1)); peakRows.push(...rows);
   }
   return { found: null, peak: bestRow(peakRows) ?? S[ib].row, cap };
@@ -594,6 +560,44 @@ export async function runAutoDesign(cfg, io) {
     if (atCount) { const g0 = r.rowGap ?? 0; ledMore = (n) => { if (n % ledRows) return null; const e = atCount(n / ledRows, ledRows, g0); return e?.positions?.length ? lay(e) : null; }; }
     if (atCount && ledTwoRow) { const g2 = ledTwoRow.layout.rowGap ?? 0; ledMore2 = (n) => { if (n % 2) return null; const e = atCount(n / 2, 2, g2); return e?.positions?.length ? lay(e) : null; }; }   // 2열 자동 검토의 개수 늘리기(2026-11-21 사용자 2번)
     if (!r.feasible) { feasible = false; reason = keepCount ? `배치를 바꿔도 목표에서 멀어 LED ${totalLeds(cfg.current)}개를 유지 — Milky·형상으로 보완하세요` : r.reason; }
+    // 폭 미달이면 위치/개수 단계에서 먼저 2열 검토(2026-11-21 사용자) — 1열 최선안을 빠르게 재서 폭이 목표 미달이면 2열 배치를 재고, 길이가 미달이면 2열 그대로 LED 를 늘림.
+    // 2열이 더 나으면 2열로 이어서 다음 단계(높이·Milky)를 한 번만(끝에 2열만 따로 Milky 를 다시 찾던 것 = 시간 두 배·Milky 칸에 섞임 → 없앰). 1열 안은 지난 후보 표 대안
+    if (ledMore2 && obs.targetWid > 0 && !keepCount && !stop()) {
+      const lenM = (s) => quickMargin({ ...s, Uwid: null }, obs), lab = (e) => e.layoutText ?? `LED ${totalLeds(e)}개`;
+      const ut = (s) => `길이 균일도 ${fmtJudge(s.Ulen, obs.targetLen)}${s.Uwid == null ? '' : ` · 폭 균일도 ${fmtJudge(s.Uwid, obs.targetWid)}`}`;
+      io.progress?.('leds', 0.9, '1열 최선안 빠른 검토(폭 확인)');
+      const one = { design: d, verified: await qv(d) };
+      if (stop()) return halt();
+      if (one.verified.stats.Uwid != null && one.verified.stats.Uwid < obs.targetWid) {
+        io.progress?.('leds', 0.92, '폭 미달 — 2열 배치 검토');
+        const e0 = { ...d, ...ledTwoRow.layout }, tried2 = [{ design: e0, verified: await qv(e0) }];
+        if (stop()) return halt();
+        if (lenM(tried2[0].verified.stats) < 0) {   // 2열에서 길이 미달 → 2열 그대로 LED 늘림(사용자)
+          const t0 = clock();
+          await ladderUp(async (n) => {
+            const L = ledMore2(n);
+            if (!L) return null;
+            if (io.clash) { try { if (await io.clash({ ...e0, ...L }) > 0) return null; } catch { /* 검사 실패 = 겹침 아님으로 봄(기존 clashes 와 같음) */ } }
+            io.progress?.('leds', 0.95, `2열 길이 미달 — LED ${n}개로 늘려 재확인`);
+            const t = { design: { ...e0, ...L }, verified: await qv({ ...e0, ...L }) };
+            tried2.push(t);
+            return lenM(t.verified.stats);
+          }, { from: totalLeds(e0) + 2, cap: cfg.nMax ?? 0, step: 2, base: lenM(tried2[0].verified.stats), inTime: () => clock() - t0 < (cfg.ladderMs ?? LADDER_MS), cancelled: stop });
+          if (stop()) return halt();
+        }
+        const P = tried2.filter((t) => lenM(t.verified.stats) >= 0);
+        const two2 = P.length ? P.reduce((a, b) => (totalLeds(b.design) < totalLeds(a.design) ? b : a)) : tried2.reduce((a, b) => (lenM(b.verified.stats) > lenM(a.verified.stats) ? b : a));
+        const chosen = quickMargin(two2.verified.stats, obs) > quickMargin(one.verified.stats, obs) + SCORE_EPS;
+        // 위치/개수 카드에 한 묶음으로(기준 줄 = 지금 Milky)
+        io.trace?.('leds', [one, ...tried2].map((t) => ({ label: lab(t.design), Ulen: t.verified.stats.Ulen, Uwid: t.verified.stats.Uwid ?? null, ok: !t.verified.stats.empty, eff: t.verified.eff, base: `폭 미달 — 2열 검토 (Milky ${d.milky ?? 0})` })));
+        steps.push({ stage: 'ledsTwoRow', one, tried: tried2, pick: two2, chosen });
+        if (chosen) {
+          d = two2.design; ledRows = 2; ledMore = ledMore2; ledAlts = []; ledLimit = null; ledTwoRow = null;
+          const okQ = quickMargin(two2.verified.stats, obs) >= 0;
+          feasible = okQ; reason = okQ ? '' : `2열 ${lab(d)} 에서도 목표 미달 — ${ut(two2.verified.stats)}`;
+        }
+      }
+    }
   }
   if (stages.leds) keep('leds');
   const evalV = (cands, N, ms) => io.evalVariants(d, cands, N, ms), uText = (s) => `길이 균일도 ${fmtJudge(s.Ulen, obs.targetLen)}${s.Uwid == null ? '' : ` · 폭 균일도 ${fmtJudge(s.Uwid, obs.targetWid)}`}`;
@@ -933,44 +937,6 @@ export async function runAutoDesign(cfg, io) {
       steps.push(recheck);
     }
   }
-  // 폭 미달 → 2열 자동 검토(2026-11-21 사용자 2번) — 1열 최종안의 폭이 목표 미달이면 계산해 둔 2열 배치를 빠르게 재고, 길이가 미달이면 2열 그대로 LED 를 늘림(사용자: 개수 자동 증가)
-  // → Milky 를 그 배치로 다시 찾고 → 정밀 판정 → 지난 후보 표 대안. 최종안은 그대로(PCB 를 넓혀야 할 수 있어 자동 적용 안 함)
-  let twoAuto = null;
-  const tr2 = stages.leds ? twoRowFor(d, verified) : null;
-  if (tr2 && !stop()) {
-    io.progress?.('verify', 0.85, '폭 미달 — 2열 배치 자동 검토');
-    const lenM = (s) => quickMargin({ ...s, Uwid: null }, obs), e0 = { ...d, ...tr2.layout }, tried2 = [{ design: e0, verified: await qv(e0) }];
-    if (stop()) return halt();
-    if (lenM(tried2[0].verified.stats) < 0 && ledMore2) {
-      const t0 = clock();
-      await ladderUp(async (n) => {
-        const L = ledMore2(n);
-        if (!L || await clashes({ ...e0, ...L })) return null;
-        io.progress?.('verify', 0.87, `2열 길이 미달 — LED ${n}개로 늘려 재확인`);
-        const e = { ...e0, ...L }, v = await qv(e);
-        tried2.push({ design: e, verified: v });
-        return lenM(v.stats);
-      }, { from: totalLeds(e0) + 2, cap: cfg.nMax ?? 0, step: 2, base: lenM(tried2[0].verified.stats), inTime: () => clock() - t0 < (cfg.ladderMs ?? LADDER_MS), cancelled: stop });
-      if (stop()) return halt();
-    }
-    const P = tried2.filter((t) => lenM(t.verified.stats) >= 0);
-    let e = (P.length ? P.reduce((a, b) => (totalLeds(b.design) < totalLeds(a.design) ? b : a)) : tried2.reduce((a, b) => (lenM(b.verified.stats) > lenM(a.verified.stats) ? b : a))).design;
-    if (stages.milky) {
-      io.progress?.('verify', 0.9, '2열 배치로 Milky 다시 찾기');
-      const m = await searchMilkyPeak(e, cfg, io, steps, sCap);
-      if (!m) return halt();
-      const mk = m.found?.milky ?? m.peak?.milky;
-      if (mk != null) e = { ...e, milky: mk };
-    }
-    io.progress?.('verify', 0.92, '2열 자동 검토 — 정밀 판정(몇 분 걸림)');
-    const v0 = await io.verify(e, cfg.screenGrid ? { estimate: true } : {});
-    if (stop()) return halt();
-    const v2 = await judge(e, v0);
-    if (stop()) return halt();
-    twoAuto = { stage: 'twoRowAuto', design: e, verified: v2, tried: tried2 };
-    steps.push(twoAuto);
-  }
-  const twoText = () => { if (!twoAuto) return ''; const t = twoAuto.design, ok3 = quickMargin(twoAuto.verified.stats, obs) >= 0; return `2열 자동 검토 ${t.layoutText ?? `2열 ${totalLeds(t)}개`}${t.milky != null ? ` · Milky ${t.milky}` : ''}: ${uText(twoAuto.verified.stats)} — ${ok3 ? '통과 · 지난 후보 표에서 [적용](PCB 폭 확인)' : '이것도 목표 미달'}`; };
   currentVerified = await judgeCurrent(currentVerified);   // 같은 격자·노이즈로 비교
   if (stop()) return halt();
   // 노이즈 방어(①②③ 공통): 검증값이 현재안보다 SCORE_EPS 이상 낫지 않으면 현재안 유지. 둘 다 통과면 총 LED 수(rows·count) 감소도 이득
@@ -983,7 +949,7 @@ export async function runAutoDesign(cfg, io) {
   if (!cfg.fixedShape && !fewer && !fixGain && !regular && !(sc(verified) - sc(currentVerified) >= SCORE_EPS)) {
     steps.push({ stage: 'guard', tried: d, triedVerified: verified, triedReason: reason });
     if (stages.shape && d.shape && !shapeNote) shapeNote = '찾은 형상이 최종 판정에서 지금보다 낫지 않음 — 현재 형상 유지';
-    return { feasible: quickMargin(currentVerified.stats, obs) >= 0, best: { ...cfg.current }, steps, reason: `현재안보다 나은 설계를 찾지 못함 — 현재안 유지${reason ? ` (${reason})` : ''}${twoAuto ? ` · ${twoText()}` : ''}`, verified: currentVerified, current: currentVerified, unchanged: true, cancelled: false, hint, peek, milkyLowered: lowered, shapeNote, twoRow: twoRowFor(cfg.current, currentVerified) };
+    return { feasible: quickMargin(currentVerified.stats, obs) >= 0, best: { ...cfg.current }, steps, reason: `현재안보다 나은 설계를 찾지 못함 — 현재안 유지${reason ? ` (${reason})` : ''}`, verified: currentVerified, current: currentVerified, unchanged: true, cancelled: false, hint, peek, milkyLowered: lowered, shapeNote, twoRow: twoRowFor(cfg.current, currentVerified) };
   }
   // 판정·문구는 정밀 재계산 값 기준(후보 평가값은 광자가 적어 노이즈가 큼)
   const vs = verified.stats, ok = quickMargin(vs, obs) >= 0;
@@ -1001,6 +967,5 @@ export async function runAutoDesign(cfg, io) {
     }
   }
   if (recheck) { const ok2 = quickMargin(recheck.verified.stats, obs) >= 0; reason = `${reason ? `${reason} · ` : ''}Milky ${recheck.design.milky} 정밀 재확인: ${uText(recheck.verified.stats)} — ${ok2 ? '통과 · 지난 후보 표에서 [적용]' : '이것도 목표 미달'}`; }
-  if (twoAuto) reason = `${reason ? `${reason} · ` : ''}${twoText()}`;
   return { feasible, best: d, steps, reason, verified, current: currentVerified, cancelled: false, hint, peek, milkyLowered: lowered, shapeNote, twoRow: twoRowFor(d, verified) };
 }
