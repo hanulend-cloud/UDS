@@ -120,6 +120,20 @@ const OPT = { chunkN: 1000, fixedChunk: true, bins: 10, debounceMs: 500, tickMs:
   const s = P.snapshot();
   ok(s.state === 'done' && s.reason === 'max' && s.photons === 4000 && chunks(p).length === 4, `광자 상한 4000: 청크 ${chunks(p).length}개 후 멈춤`);
 }
+{   // 목표 경계 5분 한도(2026-11-22 사용자) — 목표 바로 아래라 노이즈 목표를 0.5% 로 조인 뒤 5분(계산 중 시간)이 지나면 멈춤. 실측: 8시간 넘게 안 끝남(80.5% / 79.7% ±1.5%p)
+  const T = fakeTimers(), log = [];
+  const nz = (msg) => ({ ...make(msg), acc: Float64Array.from({ length: 8 }, (_, k) => (k < 2 ? 0.79 : 1) * (1 + 0.08 * Math.sin(msg.seed * 7 + k * 3))) });
+  const p = { log, send(msg) { log.push(msg); return msg.type === 'scene' ? Promise.resolve({ sceneKey: msg.sceneKey, ready: true }) : new Promise((res) => T.setTimeout(() => res(nz(msg)), 10000)); } };
+  const P = createProgressive({ ports: [p], timers: T, opts: OPT });
+  P.restart(job(1)); await T.advance(120000);
+  const a = P.snapshot();
+  ok(a.state === 'running' && a.targetNoise === 0.005 && a.stats.relNoise > 0.005, `목표 바로 아래 → 노이즈 목표 0.5% 로 조임, 계속 계산 (Ulen ${a.stats?.Ulen?.toFixed(3)} · 노이즈 ${(a.stats?.relNoise * 100).toFixed(2)}%)`);
+  P.pause(); await T.advance(600000); P.resume();
+  ok(P.snapshot().state === 'running', '일시정지 시간은 한도에 안 셈');
+  await T.advance(240000);
+  const b = P.snapshot();
+  ok(b.state === 'done' && b.reason === 'judgeLimit' && b.stats.relNoise > 0.005, `조인 뒤 5분 → 멈춤(목표 경계): ${b.state}/${b.reason}`);
+}
 {   // 준비 안 됨(작업 함수 null) · 작업 함수 오류
   const T = fakeTimers(), p = delayedPort(T);
   const P = createProgressive({ ports: [p], timers: T, opts: OPT });

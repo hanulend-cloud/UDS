@@ -984,7 +984,8 @@ done();
   okS(simStateText('running') === '계산 중' && simStateText('paused', '', true) === '중지됨' && simStateText('paused') === '일시정지', '계산 중 · 중지됨 · 일시정지');
   okS(simStateText('done', 'converged') === '계산 완료 — 노이즈 충분히 작음' && simStateText('done', 'adopted') === '계산 완료 — 기구 최적화 최종 판정 값' && simStateText('done', 'limit') === '계산 한도 도달 — 노이즈가 아직 큼', '완료 이유별 글');
   // '목표'는 균일도 판정에만(2026-11-12 평가: "완료 — 목표 정확도 도달" 옆 "✕ 목표 미달" 이 헷갈림)
-  okS(['converged', 'adopted', 'limit'].every((r) => !/목표|미달/.test(simStateText('done', r))), '계산 상태 글에 목표·미달 없음');
+  okS(simStateText('done', 'judgeLimit') === '계산 멈춤 — 판정 경계에서 5분 더 계산함(노이즈 0.5% 못 닿음)', '판정 경계 5분 한도 글(2026-11-22)');
+  okS(['converged', 'adopted', 'limit', 'judgeLimit'].every((r) => !/목표|미달/.test(simStateText('done', r))), '계산 상태 글에 목표·미달 없음');
   const { simCtl, optCtl } = await import('../src/ui/m3/run-ctl.js');
   okS(simCtl({ state: 'done' }).runLabel === '▶ 시뮬레이션 실행' && optCtl({}).runLabel === '▶ 최적화 시작' && optCtl({ running: true, paused: true }).runLabel === '▶ 최적화 이어서', '실행 단추 이름 = 무엇을 실행하는지');
   okS(simStateText('running', '', false, true) === '기구 최적화 중 — 일시정지(끝나면 이어서)' && simStateText('') === '', '기구 최적화 중 · 상태 없음');

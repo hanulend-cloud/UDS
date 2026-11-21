@@ -4,10 +4,10 @@
 // 적응형에서는 청크 c ≥ bins 를 보낸 광자가 가장 적은 배치에 넣는다(크기가 제각각이어도 배치 무게가 고르게).
 // 청크 크기: 기본은 적응형 — 포트마다 minChunk 로 시작해 잰 속도로 다음 청크를 ≈chunkMs 분량으로(minChunk~maxChunk).
 //   fixedChunk: true 면 chunkN 고정(runJob 과 비트 일치 시험용).
-import { judgeNoise, LUM_CONE } from '../../engine/mech3d/tally.js';
+import { judgeNoise, LUM_CONE, JUDGE_MS } from '../../engine/mech3d/tally.js';
 import { symStats, symMapAll } from '../../engine/mech3d/symmetry.js';
 
-export const PROG_DEFAULTS = { chunkN: 25000, fixedChunk: false, minChunk: 1000, maxChunk: 50000, chunkMs: 500, bins: 10, targetNoise: 0.02, maxPhotons: 1e8, debounceMs: 500, tickMs: 1000, seedBase: 1, maxIgnored: 16, sceneTimeoutMs: 60000, chunkTimeoutMs: 30000 };
+export const PROG_DEFAULTS = { chunkN: 25000, fixedChunk: false, minChunk: 1000, maxChunk: 50000, chunkMs: 500, bins: 10, targetNoise: 0.02, maxPhotons: 1e8, debounceMs: 500, tickMs: 1000, seedBase: 1, maxIgnored: 16, sceneTimeoutMs: 60000, chunkTimeoutMs: 30000, judgeMs: JUDGE_MS };
 export const chunkSeed = (seedBase, c) => seedBase * 7919 + c;
 const ledger0 = () => ({ lumEsc: 0, emitted: 0, escaped: 0, absSurf: 0, absVol: 0, lost: 0, rrLoss: 0, rrGain: 0 });
 
@@ -76,6 +76,7 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
   const cap = () => job?.maxPhotons ?? o.maxPhotons;   // 계산 한도 — 작업(화질)별, 없으면 기본
   let gen = 0, state = 'idle', reason = null, error = null, job = null, pendingJob = null, debounce = null, ticker = null;
   let paths = {}, bins, binIssued, ledger, leak, nextChunk, issued, retry, doneChunks, photons, ignored, snap, early, nMin, nMax, seeded = false;   // seeded = 최종 판정 값을 넘겨받음 → 대칭 합치기 안 함(판정은 전체 영역)
+  let tightMs = 0, lastTick = null;   // 노이즈 목표를 조인(목표 경계) 뒤 계산 중이던 시간 — 일시정지 시간은 안 셈
   let pendingSeed = null, wantPaused = false, disposed = false;   // wantPaused: 대기·시작 중 일시정지 요청 → 시작될 때 적용
   const busy = ports.map(() => 0);   // 포트별로 돌고 있는 펌프의 세대(0 = 쉼)
   const dead = ports.map(() => 0);   // 포트별로 늦어서 뺀 세대 — 그 계산 동안만 뺌(다음 계산에서는 다시 씀)
@@ -84,7 +85,7 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
   const now = () => (typeof timers.now === 'function' ? timers.now() : globalThis.performance?.now?.() ?? Date.now());
   resetAcc();
 
-  function resetAcc() { prog = null; bins = Array.from({ length: o.bins }, () => null); binIssued = new Float64Array(o.bins); ledger = ledger0(); leak = {}; paths = {}; nextChunk = 0; issued = 0; retry = []; nMin = Infinity; nMax = 0; doneChunks = 0; photons = 0; ignored = 0; snap = null; early = false; seeded = false; }
+  function resetAcc() { prog = null; bins = Array.from({ length: o.bins }, () => null); binIssued = new Float64Array(o.bins); ledger = ledger0(); leak = {}; paths = {}; nextChunk = 0; issued = 0; retry = []; nMin = Infinity; nMax = 0; doneChunks = 0; photons = 0; ignored = 0; snap = null; early = false; seeded = false; tightMs = 0; lastTick = null; }
   function stopTick() { if (ticker != null) { timers.clearInterval(ticker); ticker = null; } }
   function startTick() { stopTick(); ticker = timers.setInterval(onTick, o.tickMs); }
   const emit = () => { if (!disposed) onUpdate(snapshot()); };
@@ -244,6 +245,13 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
     const rn = snap.stats?.relNoise;
     if (state === 'running') prog = nextProgress(prog, photons, rn, goal());
     if (state === 'running' && doneChunks >= o.bins && rn != null && rn <= goal()) { finish('converged'); return; }
+    // 목표 경계 한도(2026-11-22 사용자) — 노이즈 목표를 조인 뒤(목표 바로 아래·겨우 통과) 계산 중 시간이 judgeMs(5분, 최적화와 같음)를 넘으면 멈춤.
+    // 고화질에서 80% 가 판정 오차 안이면 끝나지 않았음(8시간+). 일시정지 사이는 lastTick 을 지워 안 셈
+    if (state === 'running') {
+      const t = now();
+      if (goal() < o.targetNoise) { if (lastTick != null) tightMs += t - lastTick; lastTick = t; } else lastTick = null;
+      if (tightMs >= o.judgeMs) { finish('judgeLimit'); return; }
+    }
     if (state === 'running') pumpAll(gen);   // 쉬던 포트가 깨어났으면(GPU 꺼짐 → CPU 포트) 그 포트도 돌림(2026-11-12)
     emit();
   }
@@ -252,7 +260,7 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
   function pause() {
     if (state === 'pending' || state === 'starting') { wantPaused = true; return; }
     if (state !== 'running') return;
-    state = 'paused'; stopTick(); emit();
+    state = 'paused'; stopTick(); lastTick = null; emit();
   }
   // 중지 = 계산을 끝냄: 지금까지의 결과는 남고 이어서 못 함(다음 실행은 restart)
   function stop() { stopped = true; if (state === 'paused') emit(); else pause(); }
