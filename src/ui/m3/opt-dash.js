@@ -269,12 +269,16 @@ export function itemTableHtml(t, tl, tw, maxShow = 5) {
   const best = stageBest(t, tl, tw), cls = (v, tg) => (Number.isFinite(v) && Number.isFinite(tg) ? (v + 1e-9 >= tg ? 'od-ok' : 'od-bad') : '');
   const hasEff = ev.some((e) => Number.isFinite(e.eff)), nCol = hasEff ? 6 : 5;
   const val = (e, v, tg) => (Number.isFinite(v) ? (e.est ? `<span class="mut" title="배치 추정값 — 실제 계산 아님">≈${fmtJudge(v)}</span>` : `<b class="${cls(v, tg)}">${fmtJudge(v)}</b>`) : '<span class="mut">–</span>');
+  let prevBase = null;   // 기준 줄 = 묶음 첫 줄 위, 앞 묶음과 다를 때만(2026-11-21 사용자)
   const rows = [...groups.values()].flatMap((g, n) => {
     const sorted = [...g].sort((a, b) => scoreOf(b, tl, tw) - scoreOf(a, tl, tw)), shown = sorted.slice(0, maxShow), more = sorted.length - shown.length;
     const out = shown.map((e, j) => {
       const star = e === best, sp = splitLabel(e.label), nm = sp ? `<td>${esc(sp[0])}</td><td>${esc(sp[1])}</td>` : `<td colspan="2">${esc(e.label)}</td>`;
       return `<tr class="fb-tr${j === 0 ? ' fb-tr-top fb-tr-g' : ''}${star ? ' fb-tr-best' : ''}">${j === 0 ? `<td class="fb-n" rowspan="${shown.length + (more > 0 ? 1 : 0)}">${n + 1}</td>` : ''}${nm.replace('<td', `<td title="${esc(e.label)}"`)}<td class="fb-v">${star ? '★ ' : ''}${val(e, e.Ulen, tl)}</td><td class="fb-v">${val(e, e.Uwid, tw)}</td>${hasEff ? `<td class="fb-v">${Number.isFinite(e.eff) ? `${(e.eff * 100).toFixed(1)}%` : '–'}</td>` : ''}</tr>`;
     });
+    const base = g.find((e) => e.base)?.base ?? null;
+    if (base && base !== prevBase) out.unshift(`<tr class="fb-base"><td colspan="${nCol}" class="mut">기준: ${esc(base)}</td></tr>`);
+    if (base) prevBase = base;
     if (more > 0) out.push(`<tr class="fb-more-r"><td colspan="${nCol - 1}" class="mut">외 ${more}개(더 낮음)</td></tr>`);
     return out;
   });

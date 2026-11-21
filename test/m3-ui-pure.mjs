@@ -1334,6 +1334,16 @@ done();
   c(/60\.0%/.test(rows[0]) && /35\.0%/.test(rows[0]), '길이·폭 값 칸');
   const many = { evals: Array.from({ length: 40 }, (_, i) => ({ label: `후보 ${i}`, Ulen: i / 100, Uwid: i / 100, bi: 1, eff: 0.5 })) }, hm = itemTableHtml(many, 0.8, 0.8);
   c((hm.match(/<tr class="fb-tr[ "]/g) ?? []).length === 5 && /외 35개/.test(hm) && /후보<\/td><td>39/.test(hm) && /<th>효율<\/th>/.test(hm) && /50\.0%/.test(hm), '후보가 많은 묶음 = 좋은 순 5줄 + 외 N개 · 효율 있으면 효율 칸');
+  { // 2026-11-21 사용자: 묶음마다 '기준'(그때 함께 정해진 다른 인자) 한 줄 — 앞 묶음과 같으면 반복하지 않음
+    const tb = { evals: [{ label: '폭 위치 0 mm', Ulen: 0.5, Uwid: 0.5, bi: 1, base: 'Milky 4.50' }, { label: '폭 위치 -1 mm', Ulen: 0.4, Uwid: 0.5, bi: 2, base: 'Milky 4.50' }, { label: '높이 +0.00 mm', Ulen: 0.7, Uwid: 0.8, bi: 3, base: 'Milky 7.35 · 2열×29개' }, { label: '높이 +0.48 mm', Ulen: 0.6, Uwid: 0.8, bi: 3, base: 'Milky 7.35 · 2열×29개' }, { label: '폭 위치 +1 mm', Ulen: 0.3, Uwid: 0.3, bi: 4 }] };
+    const hb = itemTableHtml(tb, 0.8, 0.8), bl = [...hb.matchAll(/<tr class="fb-base"><td colspan="(\d)"[^>]*>기준: ([^<]*)<\/td><\/tr>/g)];
+    c(bl.length === 2 && bl[0][2] === 'Milky 4.50' && bl[1][2] === 'Milky 7.35 · 2열×29개' && bl.every((m) => m[1] === '6' || m[1] === '5'), `기준 줄 = 바뀔 때만: ${bl.map((m) => m[2]).join(' | ')}`);
+    c(hb.indexOf('기준: Milky 7.35') < hb.indexOf('높이 +0.00') && hb.indexOf('기준: Milky 4.50') < hb.indexOf('폭 위치 0 mm'), '기준 줄은 그 묶음 첫 줄 바로 위');
+    const { readFileSync } = await import('node:fs'), app = readFileSync(new URL('../src/ui/m3/app.js', import.meta.url), 'utf8');
+    const sites = [...app.matchAll(/A\.optDash\?\.evals\('(milky|shape|leds)'|A\.optDash\?\.evals\(stg,/g)];
+    const lines = app.split('\n').filter((l) => /A\.optDash\?\.evals\((?:'(?:milky|shape|leds)'|stg)/.test(l));
+    c(lines.length === 5 && lines.every((l) => /base: baseOf\(/.test(l)), `후보 기록 5곳 모두 기준(base) 함께: ${lines.map((l) => /base: baseOf\(/.test(l)).join(',')}`);
+  }
   const { splitLabel } = await import('../src/ui/m3/opt-dash.js');
   const sp = (x) => JSON.stringify(splitLabel(x));
   c(sp('폭 위치 -1 mm') === '["폭 위치","-1 mm"]' && sp('높이 +0.48 mm') === '["높이","+0.48 mm"]' && sp('Milky 0.75') === '["Milky","0.75"]' && sp('54개 같은 피치 4.2 mm') === '["54개 같은 피치","4.2 mm"]' && splitLabel('두께 +0.20 · 포켓 0.30 R 2.0 mm') === null && splitLabel('변경 없음') === null, `후보 이름 → 항목·치수: ${sp('폭 위치 -1 mm')}`);

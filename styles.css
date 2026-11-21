@@ -1556,6 +1556,8 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .fb-tbl tr.fb-tr-g td { border-top: 1.5px solid var(--m3-line); }
 .fb-tbl tr.fb-tr-top td { font-weight: 600; }
 .fb-tbl tr.fb-tr-best td { background: color-mix(in srgb, var(--fb, var(--m3-acc)) 14%, transparent); }
+.fb-tbl tr.fb-base td { font-size: 11px; padding-top: 6px; padding-bottom: 1px; border-top: 1.5px solid var(--m3-line); border-bottom: 0; font-style: italic; }   /* 묶음 기준(다른 인자) 한 줄(2026-11-21) */
+.fb-tbl tr.fb-base + tr.fb-tr-g td { border-top: 0; }
 .fb-tbl tr.fb-more-r td { font-size: 11px; padding-top: 1px; padding-bottom: 3px; }
 .om-say:empty { display: none; }   /* 끝난 뒤 빈 '지금' 줄(흰 띠) 숨김 */
 

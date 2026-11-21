@@ -1121,6 +1121,8 @@ function verifyLabel(d) {
   if (d.shape) t.push('형상');
   return t.length ? t.join(' · ') : '현재안';
 }
+// 상세 검토 '기준' 줄(2026-11-21 사용자) — 그 후보를 잴 때 함께 정해져 있던 다른 인자. drop = 이 단계가 바꾸는 필드(빼고 씀)
+function baseOf(d, drop) { const e = { ...d, ...drop }, t = verifyLabel(e); return t || (e.count != null ? `LED ${e.rows === 2 ? '2열×' : ''}${e.count}개` : '지금 설계 그대로'); }
 async function adRunBoost() {
   const st = adState();
   dashReset();
@@ -1228,7 +1230,7 @@ async function adRun(opt = {}) {
       const { steady, ...to } = milkyTraceOpts(ms[Math.floor(ms.length / 2)], { precise });   // Milky 3 이상 창 = 오차 ±5%p 까지(30초 상한) — 후보 값 흔들림 줄이기
       const sy = symFor(d, Md), r = await R.trace(adJob(Md, parts, ctx), { ...to, ...(steady ? { until: (bs) => quickErr(symStats(G, bs, obs, null, sy), obs) <= MILKY_STEADY_SE } : {}), rw: { part: ctx.mp, milkies: ms } });
       const rows = milkyRows(G, obs, { milkies: ms, batches: r.rwBatches, ess: r.ess, emitted: r.ledger.emitted, sym: sy });
-      if (!peek && !ref) A.optDash?.evals('milky', rows.filter((q) => q.trusted).map((q) => ({ label: `Milky ${(+q.milky).toFixed(2)}`, v: +q.milky, Ulen: q.Ulen, Uwid: q.Uwid, eff: q.eff })));   // 믿을 수 있는(ESS 충분) 격자점만
+      if (!peek && !ref) A.optDash?.evals('milky', rows.filter((q) => q.trusted).map((q) => ({ label: `Milky ${(+q.milky).toFixed(2)}`, v: +q.milky, Ulen: q.Ulen, Uwid: q.Uwid, eff: q.eff, base: baseOf(d, { milky: null }) })));   // 믿을 수 있는(ESS 충분) 격자점만
       return rows;
     },
     // ② 후보 = (s, w) 격자(spec P4 §2.2b): s 2 mm × w ∈ {0, ±δk}, δk = 0.2/0.27/0.33·W(반폭 − 0.5 로 자름) — 후보 수 ≈ (L/2+1)·7, 후보당 ≤ 1.2만 광자(60 s 예산)
@@ -1266,12 +1268,12 @@ async function adRun(opt = {}) {
         const { M: Md, parts } = designScene({ ...d, shape: { part: sp, ...c } }, ctx), mod = Md.parts[sp].shapeMod;
         const thin = minThickness(H, mod) < Math.min(minWall, (t00 ??= minThickness(H, { ...mod, dt: 0, h: 0, e: 0, c: 0, kL: null, kW: null, kF: null })) - 1e-3);   // 칸 중심 + LED 중심. 원래부터 얇은 자리(뾰족한 가장자리 등)는 더 얇아질 때만 탈락 — 전에는 변형 없는 안까지 탈락할 수 있었음
         const clash = !thin && newInterference(parts[sp], others, lp, before, 0.05) != null;   // 새 겹침 또는 기존보다 0.05 mm 넘게 깊어짐 — 찾는 즉시 멈춤(깊은 겹침도 빠르게)
-        if (thin || clash) { caseLog.push({ c: caseCand(c), ok: false, why: thin ? '살두께' : '간섭' }); out.push({ cand: c, ok: false, why: thin ? '살두께' : '간섭' }); A.optDash?.evals('shape', [{ label: shapeText(c), ok: false, why: thin ? '살두께' : '간섭' }]); continue; }
+        if (thin || clash) { caseLog.push({ c: caseCand(c), ok: false, why: thin ? '살두께' : '간섭' }); out.push({ cand: c, ok: false, why: thin ? '살두께' : '간섭' }); A.optDash?.evals('shape', [{ label: shapeText(c), ok: false, why: thin ? '살두께' : '간섭', base: baseOf(d, { shape: null }) }]); continue; }
         // 같은 난수 비교(crn) — 형상 후보마다 같은 광자 난수(시드·청크·포트 고정)로 추적해 후보 차이만 남김(노이즈 ↓). N 전부(시간 제한 없음)
         const r = await R.trace(adJob(Md, parts, ctx), { N, batches: 4, crn: SHAPE_CRN }), stt = tallyStats(G, r.batches, obs);
         out.push({ cand: c, ok: !stt.empty, stats: stt, eff: adEff(r) });
         caseLog.push({ c: caseCand(c), Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty, ...(stt.empty ? { why: '빛 없음' } : {}), N });
-        A.optDash?.evals('shape', [{ label: shapeText(c), Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty, eff: adEff(r) }]);
+        A.optDash?.evals('shape', [{ label: shapeText(c), Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty, eff: adEff(r), base: baseOf(d, { shape: null }) }]);
       }
       return out;
     },
@@ -1284,7 +1286,7 @@ async function adRun(opt = {}) {
         const r = await R.trace(adJob(Md, parts, ctx), { N, batches: 4, crn: SHAPE_CRN }), stt = symStats(G, r.batches, obs, null, symFor(dd, Md));
         const layout = { count: ss.length, pitch: 0, rows: 1, rowGap: 0, positions: dd.positions, wCenter: c, stepVirt: true, layoutKind: 'lateral-current', layoutText: `현재 배치 · 폭 위치 ${c > 0 ? '+' : ''}${c} mm` };
         out.push({ cand: { wCenter: c, layout }, ok: !stt.empty, stats: stt, eff: adEff(r) });
-        A.optDash?.evals('leds', [{ label: `폭 위치 ${c > 0 ? '+' : ''}${c} mm`, Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty, eff: adEff(r) }]);
+        A.optDash?.evals('leds', [{ label: `폭 위치 ${c > 0 ? '+' : ''}${c} mm`, Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty, eff: adEff(r), base: baseOf(d, { wCenter: 0 }) }]);
       }
       return out;
     },
@@ -1296,7 +1298,7 @@ async function adRun(opt = {}) {
         const { M: Md, parts } = designScene({ ...d, ...('dz' in c ? { dz: c.dz } : { finish: c.finish }) }, ctx);
         const r = await R.trace(adJob(Md, parts, ctx), { N, maxMs, minN: Math.min(N, 3e4), batches: 4 }), stt = symStats(G, r.batches, obs, null, symFor({ ...d, ...c }, Md));
         out.push({ cand: c, ok: !stt.empty, stats: stt, eff: adEff(r) });
-        if (stages[stg]) A.optDash?.evals(stg, [{ label: 'dz' in c ? `높이 ${c.dz >= 0 ? '+' : ''}${(+c.dz).toFixed(2)} mm` : finishText(c.finish, reflCat()), Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty, eff: adEff(r) }]);
+        if (stages[stg]) A.optDash?.evals(stg, [{ label: 'dz' in c ? `높이 ${c.dz >= 0 ? '+' : ''}${(+c.dz).toFixed(2)} mm` : finishText(c.finish, reflCat()), Ulen: stt.Ulen, Uwid: stt.Uwid, ok: !stt.empty, eff: adEff(r) , base: baseOf(d, 'dz' in c ? { dz: 0 } : { finish: null })}]);
       }
       return out;
     },
