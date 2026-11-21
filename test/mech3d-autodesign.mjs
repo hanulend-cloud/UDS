@@ -294,7 +294,8 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
     const calls = [], prog = [];
     const io = { basis: async () => B, verify: async (d) => { calls.push(d); return { stats: st(U(d), 0.9), eff: 1 }; }, progress: (s, f, t) => prog.push(t), cancelled: () => false };
     const r = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0 }, current: { milky: 3, count: 3, pitch: 0, rows: 1 }, currentVerified: cv, G, line, nMax: 4, ladderMs: 0 }, io);
-    return { r, calls, prog };
+    const n3 = r.steps.find((x) => x.stage === 'ledsCount')?.tried.length ?? 0;   // 개수별 후보(2026-11-21)는 빼고 셈
+    return { r, calls: calls.slice(0, calls.length - n3), prog };
   };
   const a = await run((d) => (d.rows === 2 && d.rowGap === 2 ? 0.95 : d.rows === 2 ? 0.7 : 0.6));
   const sv = a.r.steps.find((x) => x.stage === 'ledsVerify');
@@ -405,7 +406,8 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   { const seen2 = [], r2 = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0.95 }, current: cur, G, line, nMax: 40, rowsOptions: [1] }, { basis: async () => ({ cand, maps, emitted: 1, gaps: [], sMargin: 0 }), progress() {}, cancelled: () => false,
       verify: async (d) => { if (!d.positions) return { stats: st(0.7, 0.6), eff: 0.5 }; const n = d.positions.length; seen2.push(n); return { stats: st(n >= seen2[0] + 2 ? 0.8 + 0.02 * (n - seen2[0] - 2) : 0.75, 0.61), eff: 0.5 }; } });
     ok(r2.best.positions.length === seen2[0] + 2, `폭 한계: 길이를 통과하는 가장 적은 개수 (${seen2.join('→')} → ${r2.best.positions.length}개)`); }
-  ok(!r0.unchanged && !r0.feasible && r0.best.positions.length === seen[0] + 2 && seen.length === 4 && /길이 목표는 LED \d+개로 통과/.test(r0.reason) && /한계: 폭 방향 확산 부족/.test(r0.reason), `폭 한계: ${seen.join('→')} 에서 길이 통과 · ${r0.reason}`);
+  const n3 = r0.steps.find((x) => x.stage === 'ledsCount')?.tried.length ?? 0;   // 개수별 후보(2026-11-21)는 빼고 셈
+  ok(!r0.unchanged && !r0.feasible && r0.best.positions.length === seen[0] + 2 && seen.length - n3 === 4 && /길이 목표는 LED \d+개로 통과/.test(r0.reason) && /한계: 폭 방향 확산 부족/.test(r0.reason), `폭 한계: ${seen.join('→')} 에서 길이 통과 · ${r0.reason}`);
 }
 { // ② 1열만(cfg.rowsOptions [1], 재료비) — 2열이 더 나아도 1열 배치만
   const G = { ns: 100, nw: 1, ds: 1, cell: 1, w0: -0.5, L: 100, closed: false, winS: 10, area: new Float64Array(100).fill(1), valid: new Uint8Array(100).fill(1) }, line = { length: 100, closed: false };
@@ -682,5 +684,54 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   const far = { milkyRows: async (d, ms) => rowsOf(ms), verify: async (d) => ({ stats: st(0.5, 0.9), eff: 1 }), progress() {}, cancelled: () => false };
   const r2 = await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 1, count: 5, pitch: 0, shape: null }, milkyMax: 5 }, far);
   ok(!r2.steps.some((x) => x.stage === 'milkyRecheck'), '목표에서 먼 미달(3%p 넘게)은 재확인 안 함');
+}
+{ // 2026-11-21 사용자(1번): 거친 창에서 한 줄만 통과(노이즈일 수 있음) → 같은 창을 정밀 재확인. 정밀도 미달이면 이 창을 최고점으로 보고 위로 더 찾지 않음
+  const mkIo = (preciseOk) => {
+    const bases = [];
+    const io = { milkyRows: async (d, ms, o = {}) => ms.map((m, i) => {
+      if (i === 0) bases.push({ m: ms[10], precise: !!o.precise });
+      let g = -0.01 - Math.abs(m - 7.4) * 0.01;
+      if (o.precise && preciseOk && m >= 7.4 - 1e-9) g = 0.01;
+      if (!o.precise && Math.abs(m - 7.4) < 0.0126) g = 0.005;   // 한 줄 통과(노이즈)
+      return { milky: m, Ulen: 0.8 + g, Uwid: 0.9, eff: 0.5, ess: 1, trusted: true, margin: g };
+    }), verify: async (d) => ({ stats: st(0.8 + (d.milky >= 7.37 && preciseOk ? 0.01 : -0.01 - Math.abs(d.milky - 7.4) * 0.01), 0.9), eff: 0.5 }), progress() {}, cancelled: () => false };
+    return { io, bases };
+  };
+  const a = mkIo(false), ra = await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 1, count: 5, pitch: 0, shape: null }, milkyMax: 10 }, a.io);
+  const ms = ra.steps.filter((x) => x.stage === 'milky');
+  ok(Math.max(...a.bases.map((b) => b.m)) <= 7.5 + 1e-9 && a.bases.at(-1).precise && ms.at(-1).precise, `한 줄 통과 창(7.5) → 정밀 재확인 후 위로 안 찾음: ${a.bases.map((b) => `${b.m}${b.precise ? 'p' : ''}`).join(',')}`);
+  ok(Math.abs(ra.best.milky - 7.4) < 0.06 && !ra.feasible, `정밀도 미달 → 그 창의 최고 Milky ${ra.best.milky}(미달)`);
+  const b = mkIo(true), rb = await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 1, count: 5, pitch: 0, shape: null }, milkyMax: 10 }, b.io);
+  ok(Math.max(...b.bases.map((x) => x.m)) <= 7.5 + 1e-9 && Math.abs(rb.best.milky - 7.4) < 0.06 && rb.feasible, `정밀 재확인 통과 → 그 Milky 로 통과: ${rb.best.milky}`);
+}
+{ // 2026-11-21 사용자(3번): 개수별 후보 — 고른 개수 ±1·±2(열 단위)를 빠른 검토로 재서 지난 후보 표에(최종안은 그대로)
+  const { histFromRun } = await import('../src/ui/m3/autodesign-panel.js');
+  const line = { length: 100, closed: true }, nw = 2, ns = 100, nCell = ns * nw;
+  const G2 = { ns, nw, ds: 1, cell: 1, w0: -1, L: 100, closed: true, winS: 10, area: new Float64Array(nCell).fill(1), valid: new Uint8Array(nCell).fill(1) };
+  const cand = candidateGrid(line, { sStep: 2 });
+  const maps = cand.map(() => { const a = new Float32Array(nCell).fill(1); a[100] = 0; a[101] = 0; return a; });
+  const io = { basis: async () => ({ cand, maps, emitted: 1 }), verify: async (d) => ({ stats: st(0.04 * d.count, 0.9), eff: 0.5 }), progress() {}, cancelled: () => false };
+  const r = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0.8 }, current: { milky: 2, count: 5, pitch: 0, rows: 1, rowGap: 0 }, G: G2, line, nMax: 50, rowsOptions: [1] }, io);
+  const all = r.steps.filter((x) => x.stage === 'ledsVerify' || x.stage === 'ledsCount').flatMap((x) => x.tried.map((t) => t.design.count));
+  ok(r.best.count === 20 && [18, 19, 21, 22].every((n) => all.includes(n)) && r.steps.some((x) => x.stage === 'ledsCount'), `개수별 후보 ±2 확보: ${[...new Set(all)].sort((p, q) => p - q)}`);
+  const h = histFromRun(r, { targets: { len: 0.8, wid: 0.8 } }, '12:00', (d) => `LED ${d.count}`);
+  ok([21, 22].every((n) => h.some((e) => e.kind === 'alt' && e.design.count === n)), `지난 후보 표에 개수별 후보: ${h.map((e) => e.label).join(', ')}`);
+}
+{ // 2026-11-21 사용자(2번): 1열 최종안의 폭이 미달이면 2열을 자동 검토 — 2열에서 길이가 미달이면 2열 그대로 LED 를 늘림 → 정밀 판정 → 지난 후보 대안(최종안은 그대로)
+  const { histFromRun } = await import('../src/ui/m3/autodesign-panel.js');
+  const nw = 4, G = { ns: 100, nw, ds: 1, cell: 2, w0: -4, L: 100, closed: false, winS: 10, area: new Float64Array(100 * nw).fill(1), valid: new Uint8Array(100 * nw).fill(1) }, line = { length: 100, closed: false };
+  const wc = [-3, -1, 1, 3], gs = [1, 2, 3], cand = candidateGrid(line, { sStep: 2, wOffsets: [0, ...gs.flatMap((d) => [-d, d])] });
+  const maps = cand.map(({ s, w }) => Float32Array.from({ length: 100 * nw }, (_, k) => Math.exp(-(((k / nw | 0) + 0.5 - s) ** 2) / 72) * Math.exp(-((wc[k % nw] - w) ** 2) / 4.5)));
+  const run = (U) => runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.5, targetWid: 0.99 }, current: { milky: 1, count: 5, pitch: 0, rows: 1 }, G, line, nMax: 40, rowsOptions: [1, 2], ladderMs: 60000 },
+    { basis: async () => ({ cand, maps: maps.map((m) => m.slice()), emitted: 1, gaps: gs, sMargin: 0 }), progress() {}, cancelled: () => false, verify: async (d) => ({ stats: U(d), eff: 0.5 }) });
+  const r0 = await run((d) => (d.rows === 2 ? st(0.3, 0.995) : st(0.8, 0.2))), c0 = r0.twoRow?.layout.count;
+  ok(c0 > 0 && r0.best.rows !== 2, `기준 2열 배치 열당 ${c0}개 · 최종안은 1열 그대로`);
+  const r = await run((d) => (d.rows === 2 ? st(d.count >= c0 + 3 ? 0.6 : 0.4, 0.995) : st(0.8, 0.2))), t = r.steps.find((x) => x.stage === 'twoRowAuto');
+  ok(t && t.design.rows === 2 && t.design.count >= c0 + 3 && t.verified.stats.Ulen >= 0.5 && r.best.rows !== 2, `2열 길이 미달 → 늘려 통과: 2열 × ${t?.design.count} (기준 ${c0})`);
+  ok(/2열 자동 검토/.test(r.reason) && /지난 후보/.test(r.reason), `이유에 2열 자동 검토 결과: ${r.reason}`);
+  const h = histFromRun(r, { targets: { len: 0.5, wid: 0.99 } }, '12:00', (d) => `${d.rows}x${d.count}`);
+  ok(h.some((e) => e.kind === 'alt' && e.design.rows === 2 && e.design.count === t.design.count), `지난 후보 표에 2열 대안: ${h.map((e) => e.label).join(', ')}`);
+  const rw = await run((d) => st(0.8, 0.995));
+  ok(!rw.steps.some((x) => x.stage === 'twoRowAuto'), '폭이 통과하면 2열 자동 검토 안 함');
 }
 done();

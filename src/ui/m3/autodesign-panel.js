@@ -356,6 +356,8 @@ export function histFromRun(res, r, at, labelOf) {
   if (!(r.clash > 0)) add(res.best, res.verified, 'final');
   for (const t of res.steps?.find((x) => x.stage === 'ledsVerify')?.tried ?? []) if (!t.clash) add(t.design, t.verified, 'alt');
   for (const t of res.steps?.filter((x) => x.stage === 'milkyRecheck') ?? []) add(t.design, t.verified, 'alt');   // 최종 판정 목표 근처 → ★ Milky 정밀 재확인(2026-11-21)
+  for (const t of res.steps?.filter((x) => x.stage === 'twoRowAuto') ?? []) add(t.design, t.verified, 'alt');   // 폭 미달 → 2열 자동 검토(정밀 판정, 2026-11-21)
+  for (const t of res.steps?.find((x) => x.stage === 'ledsCount')?.tried ?? []) add(t.design, t.verified, 'alt');   // 개수별 후보 ±2(빠른 검토, 2026-11-21)
   return out;
 }
 // 실행마다 이어 붙임(같은 사양·같은 값은 한 번) — 오래된 것부터 버려 최대 max 개
