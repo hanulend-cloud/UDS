@@ -882,7 +882,7 @@ export async function runAutoDesign(cfg, io) {
     const sharp = tried.filter((t) => t.verified.sharp), fewestFix = () => { const P = ledLimit ? tried.filter((t) => mgOf(t) >= 0) : []; return P.length ? P.reduce((a, b) => (totalLeds(b.design) < totalLeds(a.design) ? b : a)) : null; };   // 폭이 개수로 안 오르면 길이를 통과하는 가장 적은 개수(2026-11-11)
     const pick0 = fewestPass() ?? fewestFix() ?? (sharp.length ? sharp.reduce((a, b) => (mgOf(b) > mgOf(a) + SCORE_EPS ? b : a)) : more ? near() : tried.reduce((a, b) => (scV(b.verified) > scV(a.verified) ? b : a)));
     let pick = pick0;
-    if (cfg.screenGrid && ledMore) {   // 최적화 격자 통과안이 화면 격자에서 조금 미달이면 LED 를 늘려 화면 격자로 확인(최대 SHARPEN_MAX 개)
+    if (ledMore) {   // 빠른 검토 통과안이 정밀 판정(화면 격자 · 저화질은 노이즈 0.5%)에서 조금 미달이면 LED 를 늘려 정밀 확인(최대 SHARPEN_MAX 개) — 저화질도(2026-11-22 사용자: 2열 × 29 가 79.2% 로 끝남)
       pick.verified = await judge(pick.design, pick.verified);
       let left = SHARPEN_MAX - 1;
       for (let n = upTo(totalLeds(pick.design) + 1); left > 0 && quickMargin(pick.verified.stats, obs) < 0 && quickMargin(pick.verified.stats, obs) >= -JUDGE_BAND && n <= cfg.nMax; n += ledRows) {

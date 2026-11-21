@@ -527,7 +527,7 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   const run = async (hi) => { const fine = []; const r = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0.5 }, current: { milky: 1, count: 5, pitch: 0, rows: 1 }, G, line, nMax: 30, rowsOptions: [1], ladderMs: 1e9 },
     { progress() {}, cancelled: () => false, basis: async () => B, verify: async (d, o) => { const n = d.count; if (o?.noise) fine.push(n); return { stats: { Ulen: o?.noise ? hi(n) : n === 5 ? 0.4 : 0.785, Uwid: 0.9, empty: false, relNoise: o?.noise ?? 0.011 }, eff: 0.2, photons: 1e7 }; } }); return { r, fine }; };
   const a = await run((n) => (n >= Infinity ? 0 : 0.79)), first = a.fine[0];
-  ok(a.fine.length >= 2 && a.fine.length <= 3 && [...a.fine].sort((x, y) => x - y).join() === a.fine.join() && !a.r.feasible, `전부 미달: 적은 개수부터 ${a.fine.join()} (최대 3개)`);
+  ok(a.fine.length >= 2 && a.fine.length <= 5 && [...a.fine].sort((x, y) => x - y).join() === a.fine.join() && !a.r.feasible, `전부 미달: 적은 개수부터 ${a.fine.join()} (근처 최대 3개 + 늘려 확인 최대 2개 — 저화질도, 2026-11-22)`);
   const b = await run((n) => (n > first ? 0.81 : 0.79));
   ok(b.r.feasible && b.r.best.count > first && b.r.verified.stats.Ulen === 0.81 && b.fine.length === 2, `개수 ${b.fine.join()}: 두 번째가 통과 → 그 안 (${b.r.best.count}개)`);
 }
@@ -734,6 +734,16 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   ok(rm.best.rows === 2 && !rm.mk.some((x) => !x.ref && x.rows === 1), `Milky 는 2열 배치로 한 번만 찾음(1열 Milky 탐색 없음): ${rm.mk.map((x) => `${x.rows}${x.ref ? 'r' : ''}`).join(',')}`);
   const rw = await run((d) => st(0.8, 0.995));
   ok(!rw.steps.some((x) => x.stage === 'ledsTwoRow') && (rw.best.rows ?? 1) === 1, '폭이 통과하면 2열 검토 안 함');
+}
+{ // 2026-11-22 사용자(2열 × 29 길이 79.2% 로 끝남): 저화질(screenGrid 없음)에서도 정밀 판정이 목표 바로 아래면 LED 를 늘려 정밀 재확인 — 전에는 화면 격자일 때만 해서 바로 옆 개수(빠른 검토 81.7%)를 안 봄
+  const line = { length: 100, closed: true }, nw = 2, ns = 100, nCell = ns * nw;
+  const G2 = { ns, nw, ds: 1, cell: 1, w0: -1, L: 100, closed: true, winS: 10, area: new Float64Array(nCell).fill(1), valid: new Uint8Array(nCell).fill(1) };
+  const cand = candidateGrid(line, { sStep: 2 });
+  const maps = cand.map(() => { const a = new Float32Array(nCell).fill(1); a[100] = 0; a[101] = 0; return a; });
+  const io = { basis: async () => ({ cand, maps, emitted: 1 }), progress() {}, cancelled: () => false,
+    verify: async (d, o = {}) => ({ stats: { ...st(0.04 * d.count - (o.quick ? 0 : 0.02), 0.9), ...(o.quick ? { quick: true } : {}) }, eff: 0.5 }) };   // 정밀 = 빠른 검토보다 2%p 낮음
+  const r = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.8, targetWid: 0.8 }, current: { milky: 2, count: 5, pitch: 0, rows: 1, rowGap: 0 }, G: G2, line, nMax: 50, rowsOptions: [1] }, io);
+  ok(r.best.count === 21 && r.feasible && r.verified.stats.Ulen >= 0.8, `저화질: 빠른 검토 통과 20개 → 정밀 미달(78%) → 21개 정밀 통과: ${r.best.count}개 · ${r.verified.stats.Ulen.toFixed(2)}`);
 }
 { // 2026-11-21 사용자(재요청): Milky 는 목표를 만족한 창에서 멈춤(더 낮은 Milky 를 찾아 내려가지 않음) — 그 창의 통과 행 중 여유가 가장 큰 것(상세 검토 ★)
   const calls = [];
