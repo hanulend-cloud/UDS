@@ -664,4 +664,23 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   ok((await run([1], 0.2)).twoRow == null, '1열만 = 2열 대안 없음');
   ok((await run([1, 2], 0.995)).twoRow == null, '최종 판정에서 폭이 통과하면 2열 대안 없음');
 }
+{ // 2026-11-21 사용자(1번): 최종 판정이 목표 바로 아래(목표 근처)면 상세 검토 최고(★) Milky 를 정밀 재확인 → 지난 후보 표 대안(자동으로 바꾸지 않음)
+  const { milkyRecheckPick } = await import('../src/engine/mech3d/autodesign.js');
+  const { histFromRun } = await import('../src/ui/m3/autodesign-panel.js');
+  const row = (milky, margin, trusted = true) => ({ milky, margin, trusted });
+  const steps = [{ stage: 'milky', phase: 'ledsRef', rows: [row(4, 0.2)] }, { stage: 'milky', phase: 'coarse', rows: [row(2.4, -0.01), row(2.6, 0.004), row(2.7, 0.02), row(2.8, 0.015), row(3, 0.05, false)] }];
+  ok(milkyRecheckPick(steps, 2.55) === 2.7, `★ = 최종 탐색 행 중 지금보다 높고 통과한 최고(위치 단계 전 ledsRef·믿지 못하는 행 제외): ${milkyRecheckPick(steps, 2.55)}`);
+  ok(milkyRecheckPick(steps, 2.75) === 2.8 && milkyRecheckPick(steps, 2.9) === null && milkyRecheckPick([], 1) === null, '지금보다 높은 통과 행이 없으면 null');
+  const calls = [], U = (m) => 0.5 + 0.12 * m - 0.02;   // 정밀 값이 빠른 검토보다 2%p 낮음 → 경계 2.5 는 최종 79%(목표 근처)
+  const io = { milkyRows: async (d, ms) => rowsOf(ms), verify: async (d) => { calls.push(d.milky); return { stats: st(U(d.milky), 0.9), eff: 1 - d.milky / 20 }; }, progress() {}, cancelled: () => false };
+  const r = await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 1, count: 5, pitch: 0, shape: null }, milkyMax: 5 }, io);
+  const rc = r.steps.find((x) => x.stage === 'milkyRecheck');
+  ok(!r.feasible && rc && rc.design.milky > r.best.milky + 0.1 && rc.verified.stats.Ulen >= 0.8 && calls.includes(rc.design.milky), `최종 ${r.best.milky} 목표 근처 → ★ Milky ${rc?.design.milky} 정밀 재확인 ${rc?.verified.stats.Ulen.toFixed(3)}`);
+  ok(r.best.milky < rc.design.milky && /Milky [\d.]+ 정밀 재확인/.test(r.reason) && /지난 후보/.test(r.reason), `최종안은 그대로 · 이유에 재확인 결과: ${r.reason}`);
+  const h = histFromRun(r, { targets: { len: 0.8, wid: 0.6 } }, '12:00', (d) => `Milky ${d.milky}`);
+  ok(h.some((e) => e.kind === 'alt' && e.design.milky === rc.design.milky && !e.quick && e.Ulen >= 0.8), `지난 후보 표에 정밀 값 대안으로: ${h.map((e) => `${e.label}(${e.kind})`).join(', ')}`);
+  const far = { milkyRows: async (d, ms) => rowsOf(ms), verify: async (d) => ({ stats: st(0.5, 0.9), eff: 1 }), progress() {}, cancelled: () => false };
+  const r2 = await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 1, count: 5, pitch: 0, shape: null }, milkyMax: 5 }, far);
+  ok(!r2.steps.some((x) => x.stage === 'milkyRecheck'), '목표에서 먼 미달(3%p 넘게)은 재확인 안 함');
+}
 done();

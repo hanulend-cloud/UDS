@@ -488,6 +488,13 @@ export function quickMargin(s, obs) {
   const up = (se) => (s.quick && se > 0 ? CHANCE_Z * se : 0);
   return Math.min(s.Ulen + up(s.seLen) - obs.targetLen, s.Uwid == null || obs.targetWid == null ? Infinity : s.Uwid + up(s.seWid) - obs.targetWid);
 }
+// 최종 판정이 목표 근처일 때 다시 잴 Milky(2026-11-21 사용자 1번) — 최종 Milky 탐색 행(같은 배치: ledsRef = 위치 단계 전 기준 Milky 는 다른 배치라 뺌) 중
+// 지금(m)보다 높고 빠른 검토로 통과한 믿는 행의 최고(여유 최대 = 상세 검토 ★). 같으면 낮은 Milky(효율). 없으면 null
+export function milkyRecheckPick(steps, m) {
+  let b = null;
+  for (const st of steps ?? []) if (st.stage === 'milky' && st.phase !== 'ledsRef') for (const r of st.rows ?? []) if (r.trusted && r.margin >= 0 && r.milky > m + 1e-9 && (!b || r.margin > b.margin || (r.margin === b.margin && r.milky < b.milky))) b = r;
+  return b ? b.milky : null;
+}
 export async function runAutoDesign(cfg, io) {
   const { obs } = cfg, stages = cfg.partial ? {} : cfg.stages, steps = [], sCap = Math.min(cfg.milkyMax ?? MILKY_OPT_MAX, MILKY_OPT_MAX), mCap = sCap;   // partial = 중지 때 받은 안 — 항목은 다시 안 돌리고 최종 판정만(2026-11-12)
   let d = { ...cfg.current }, feasible = true, reason = '', hint = null, peek = null, shapeNote = null, ledAlts = null, ledMore = null, ledLimit = null, ledRows = 1, lateralLayout = null, ledTwoRow = null;
@@ -871,6 +878,20 @@ export async function runAutoDesign(cfg, io) {
   if (ledLimit && quickMargin(verified.stats, obs) < 0 && mgFix(verified.stats) >= 0) reason = `길이 목표는 LED ${totalLeds(d)}개로 통과, 폭은 미달 — ${uText(verified.stats)} · 한계: 폭 방향 확산 부족(LED 개수로는 안 오름) — Milky·형상으로 보완`;
   verified = await judge(d, verified);
   if (stop()) return halt();
+  // 최종 판정이 목표 근처(3%p 안 미달)면 상세 검토 ★ Milky 를 같은 규칙으로 정밀 재확인 — 통과하면 지난 후보 표 대안(최종안은 그대로, 2026-11-21 사용자 1번)
+  let recheck = null;
+  if (stages.milky && quickMargin(verified.stats, obs) < 0 && nearTarget(verified.stats, obs)) {
+    const m2 = milkyRecheckPick(steps, d.milky ?? 0);
+    if (m2 != null) {
+      io.progress?.('verify', 0.8, `최종 판정 목표 근처 — 상세 검토 최고안 Milky ${m2} 정밀 재확인(몇 분 걸림)`);
+      const e = { ...d, milky: m2 }, v0 = await io.verify(e, cfg.screenGrid ? { estimate: true } : {});
+      if (stop()) return halt();
+      const v2 = await judge(e, v0);
+      if (stop()) return halt();
+      recheck = { stage: 'milkyRecheck', design: e, verified: v2, from: d.milky ?? null };
+      steps.push(recheck);
+    }
+  }
   currentVerified = await judgeCurrent(currentVerified);   // 같은 격자·노이즈로 비교
   if (stop()) return halt();
   // 노이즈 방어(①②③ 공통): 검증값이 현재안보다 SCORE_EPS 이상 낫지 않으면 현재안 유지. 둘 다 통과면 총 LED 수(rows·count) 감소도 이득
@@ -900,5 +921,6 @@ export async function runAutoDesign(cfg, io) {
       reason = uRe.test(reason) ? reason.replace(uRe, vt) : `${reason} — ${vt}`;
     }
   }
+  if (recheck) { const ok2 = quickMargin(recheck.verified.stats, obs) >= 0; reason = `${reason ? `${reason} · ` : ''}Milky ${recheck.design.milky} 정밀 재확인: ${uText(recheck.verified.stats)} — ${ok2 ? '통과 · 지난 후보 표에서 [적용]' : '이것도 목표 미달'}`; }
   return { feasible, best: d, steps, reason, verified, current: currentVerified, cancelled: false, hint, peek, milkyLowered: lowered, shapeNote, twoRow: twoRowFor(d, verified) };
 }
