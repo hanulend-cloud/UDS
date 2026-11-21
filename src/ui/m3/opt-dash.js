@@ -62,7 +62,7 @@ export function failRun(S, text, now) { closePhase(S, now); S.stopped = true; S.
 export function histAfterRestore(hist, designChanged) { if (designChanged) for (const x of hist ?? []) x.applied = false; }
 export function stopTiles(S) { for (const t of Object.values(S?.tiles ?? {})) if (t.status === 'run' || t.status === 'wait') t.status = 'stop'; }
 // 항목 카드 한 줄 설명 — 무엇을 어디까지 바꾸는지(2026-11-12 평가)
-const FB_DESC = { position: 'LED 개수·간격·폭 위치·높이를 바꿈 — 부품과 겹치는 안은 뺌', shape: '광경로 위 부품의 입광면 모양을 바꿈 — 최소 살두께는 지킴', milky: '확산도(Milky)를 0~5 안에서 찾음 — 5 초과는 투과율이 크게 떨어져 적용 안 함' };
+export const FB_DESC = { position: 'LED 개수·간격·폭 위치·높이를 바꿈 — 부품과 겹치는 안은 뺌', shape: '광경로 위 부품의 입광면 모양을 바꿈 — 최소 살두께는 지킴', milky: '확산도(Milky)를 0~10 안에서 찾음 — 10 = 빛 50% 가림(최대) · 5 = 25% 가림' };   // 눈금 A(2026-11-20)
 export function factorBoardHtml(S, nw = {}, cfg = null, res = null) {
   const tl = S?.tgLen ?? nw.tgLen, tw = S?.tgWid ?? nw.tgWid;
   const row = (k, name, nowTxt) => {
@@ -255,20 +255,30 @@ export function optMatrixHtml(S) {
   const stF = S.final ? '완료' : S.stopped ? '중지' : '대기';
   return `<div class="om-mx" title="항목 줄 = 가장 좋았던 후보 하나의 값(적은 광선으로 빠르게 비교해 낮게 나옴) · 최종 판정 = 고른 안을 많은 광선으로 다시 잰 확정값"><table class="om-mx-t"><tr><th>항목</th><th>상태</th><th>시험 후보</th><th>길이</th><th>폭</th><th>최고안</th></tr>${rows.join('')}${row('최종 판정', stF, '–', S.final, 'om-mx-f')}</table></div>`;
 }
-// 항목 상세 표(순수, 2026-11-17 사용자) — 한 줄 = 같이 시험한 후보(묶음 bi) · 오른쪽 = 그 줄 결과(최고 후보). 후보가 많으면 좋은 순 몇 개 + 외 N개
+// 후보 이름 → [항목, 치수](순수, 2026-11-21) — 끝의 숫자(+단위)가 치수. 여러 치수가 섞인 이름(형상 '두께 … · 포켓 …')·숫자 없는 이름은 null
+export function splitLabel(label) {
+  const m = /^(.*\S)\s+([+\-−±]?\d+(?:\.\d+)?(?:\s*(?:mm|°|%))?)$/.exec(String(label ?? ''));
+  return m && !/·/.test(label) ? [m[1], m[2]] : null;
+}
+// 항목 상세 표(순수, 2026-11-21 사용자: 표로 — 검토한 항목·치수 확인) — 후보 한 줄씩: 묶음 # · 항목 · 치수 · 길이 · 폭 (· 효율).
+// 묶음(같이 시험한 후보 bi) 안은 좋은 순, 묶음 최고 = 굵게, 단계 최고 = ★. 묶음이 크면 좋은 순 maxShow 줄 + 외 N개
 export function itemTableHtml(t, tl, tw, maxShow = 5) {
   const ev = (t?.evals ?? []).filter((e) => e.ok !== false && Number.isFinite(e.Ulen));
   if (!ev.length) return '';
   const groups = new Map(); for (const e of ev) { const g = e.bi ?? 0; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(e); }
   const best = stageBest(t, tl, tw), cls = (v, tg) => (Number.isFinite(v) && Number.isFinite(tg) ? (v + 1e-9 >= tg ? 'od-ok' : 'od-bad') : '');
-  const uv = (e) => `${e.est ? '≈' : ''}${fmtJudge(e.Ulen)}/${fmtJudge(e.Uwid)}`;
-  const rows = [...groups.values()].map((g, n) => {
-    const sorted = [...g].sort((a, b) => scoreOf(b, tl, tw) - scoreOf(a, tl, tw)), top = sorted[0], star = top === best || (best && top.label === best.label && top.Ulen === best.Ulen);
-    const cells = sorted.slice(0, maxShow).map((e) => `<span class="fb-c${e === top ? ' fb-c-top' : ''}" title="${esc(`${e.label} — 길이 ${fmtJudge(e.Ulen)} · 폭 ${fmtJudge(e.Uwid)}${e.est ? ' (배치 추정값)' : ''}`)}">${esc(e.label)} <i>${uv(e)}</i></span>`).join('');
-    const more = sorted.length > maxShow ? `<span class="fb-more mut">외 ${sorted.length - maxShow}개</span>` : '';
-    return `<tr class="fb-tr${star ? ' fb-tr-best' : ''}"><td class="fb-n">${n + 1}</td><td class="fb-cs">${cells}${more}</td><td class="fb-res">${star ? '★ ' : ''}${esc(top.label)} <b class="${cls(top.Ulen, tl)}">${top.est ? '≈' : ''}${fmtJudge(top.Ulen)}</b>/<b class="${cls(top.Uwid, tw)}">${fmtJudge(top.Uwid)}</b></td></tr>`;
+  const hasEff = ev.some((e) => Number.isFinite(e.eff)), nCol = hasEff ? 6 : 5;
+  const val = (e, v, tg) => (Number.isFinite(v) ? (e.est ? `<span class="mut" title="배치 추정값 — 실제 계산 아님">≈${fmtJudge(v)}</span>` : `<b class="${cls(v, tg)}">${fmtJudge(v)}</b>`) : '<span class="mut">–</span>');
+  const rows = [...groups.values()].flatMap((g, n) => {
+    const sorted = [...g].sort((a, b) => scoreOf(b, tl, tw) - scoreOf(a, tl, tw)), shown = sorted.slice(0, maxShow), more = sorted.length - shown.length;
+    const out = shown.map((e, j) => {
+      const star = e === best, sp = splitLabel(e.label), nm = sp ? `<td>${esc(sp[0])}</td><td>${esc(sp[1])}</td>` : `<td colspan="2">${esc(e.label)}</td>`;
+      return `<tr class="fb-tr${j === 0 ? ' fb-tr-top fb-tr-g' : ''}${star ? ' fb-tr-best' : ''}">${j === 0 ? `<td class="fb-n" rowspan="${shown.length + (more > 0 ? 1 : 0)}">${n + 1}</td>` : ''}${nm.replace('<td', `<td title="${esc(e.label)}"`)}<td class="fb-v">${star ? '★ ' : ''}${val(e, e.Ulen, tl)}</td><td class="fb-v">${val(e, e.Uwid, tw)}</td>${hasEff ? `<td class="fb-v">${Number.isFinite(e.eff) ? `${(e.eff * 100).toFixed(1)}%` : '–'}</td>` : ''}</tr>`;
+    });
+    if (more > 0) out.push(`<tr class="fb-more-r"><td colspan="${nCol - 1}" class="mut">외 ${more}개(더 낮음)</td></tr>`);
+    return out;
   });
-  return `<table class="fb-tbl"><tr><th>#</th><th>같이 시험한 후보 <span class="mut">(길이/폭)</span></th><th>결과</th></tr>${rows.join('')}</table>`;
+  return `<table class="fb-tbl"><tr><th>#</th><th>항목</th><th>치수</th><th>길이</th><th>폭</th>${hasEff ? '<th>효율</th>' : ''}</tr>${rows.join('')}</table>`;
 }
 // 단계 최고 후보 — 실제 계산값이 있으면 그것 중 최고(배치 추정은 빼고)
 function stageBest(t, tl, tw) {

@@ -1052,7 +1052,7 @@ done();
   const tiles = Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', evals: [] }]));
   const h = factorBoardHtml({ tgLen: 0.8, tgWid: 0.8, tiles }, { on: {} }, (k) => ({ on: true, box: `<input type="checkbox" data-ad="${k}">`, opt: '', why: '' }));
   const d = [...h.matchAll(/class="fb-i" title="([^"]*)"/g)].map((x) => x[1]);   // 설명 = ⓘ 에 마우스(2026-11-12)
-  console.log(d.length === 3 && /LED/.test(d.join()) && /입광면/.test(d.join()) && /0~5/.test(d.join()) ? `PASS 항목 카드 설명 3개` : (process.exitCode = 1, `FAIL 항목 카드 설명: ${d.join(' | ')}`));
+  console.log(d.length === 3 && /LED/.test(d.join()) && /입광면/.test(d.join()) && /0~10/.test(d.join()) ? `PASS 항목 카드 설명 3개` : (process.exitCode = 1, `FAIL 항목 카드 설명: ${d.join(' | ')}`));
 }
 { // 중지하면 돌던 항목 = '중지됨'(2026-11-12 평가: 중지 뒤에도 '진행 90.0%' 가 남음)
   const { stopTiles, factorBoardHtml, STAGES } = await import('../src/ui/m3/opt-dash.js');
@@ -1326,11 +1326,18 @@ done();
   pushEvals(S, 'milky', [{ label: 'Milky 1.00', Ulen: 0.5, Uwid: 0.3 }, { label: 'Milky 2.00', Ulen: 0.6, Uwid: 0.35 }]);
   pushEvals(S, 'milky', [{ label: 'Milky 2.50', Ulen: 0.65, Uwid: 0.4 }]);
   c(tiles.milky.evals.map((e) => e.bi).join() === '1,1,2', `같이 받은 후보 = 같은 묶음 번호: ${tiles.milky.evals.map((e) => e.bi)}`);
+  // 2026-11-21 사용자: 상세 검토 = 표(후보 한 줄씩 · 항목 · 치수 · 길이 · 폭) — 묶음 번호는 묶음 첫 줄에만, 묶음 최고는 굵게
   const h = itemTableHtml(tiles.milky, 0.8, 0.8), rows = [...h.matchAll(/<tr class="fb-tr[^"]*">([\s\S]*?)<\/tr>/g)].map((m) => m[1]);
-  c(rows.length === 2 && /Milky 1\.00/.test(rows[0]) && /Milky 2\.00/.test(rows[0]) && !/Milky 2\.50/.test(rows[0]), `한 줄 = 같이 시험한 후보: ${rows.length}줄`);
-  c(/<td class="fb-res">[\s\S]*Milky 2\.00[\s\S]*60\.0%/.test(rows[0]) && /<td class="fb-res">[\s\S]*Milky 2\.50/.test(rows[1]), '줄 오른쪽 = 그 줄의 결과(최고 후보 값)');
-  const many = { evals: Array.from({ length: 40 }, (_, i) => ({ label: `후보 ${i}`, Ulen: i / 100, Uwid: i / 100, bi: 1 })) }, hm = itemTableHtml(many, 0.8, 0.8);
-  c((hm.match(/class="fb-c[ "]/g) ?? []).length <= 6 && /외 \d+개/.test(hm) && /후보 39/.test(hm), '후보가 많은 줄 = 좋은 순 몇 개 + 외 N개');
+  c(/<th>항목<\/th><th>치수<\/th><th>길이<\/th><th>폭<\/th>/.test(h) && rows.length === 3, `표 머리 항목·치수·길이·폭 · 후보마다 한 줄: ${rows.length}줄`);
+  c(/rowspan="2"[^>]*>1</.test(rows[0]) && /<td[^>]*>Milky<\/td><td>2\.00<\/td>/.test(rows[0]) && /Milky<\/td><td>1\.00/.test(rows[1]) && !/rowspan/.test(rows[1]) && /rowspan="1"[^>]*>2</.test(rows[2]), '묶음 번호 = 첫 줄에만(rowspan) · 묶음 안은 좋은 순');
+  c(/fb-tr-top/.test(h.match(/<tr class="fb-tr[^"]*">[\s\S]*?Milky<\/td><td>2\.00/)[0]) && /★/.test(rows[2]) && !/★/.test(rows[0]), '묶음 최고 = 굵게(fb-tr-top) · 전체 최고 = ★');
+  c(/60\.0%/.test(rows[0]) && /35\.0%/.test(rows[0]), '길이·폭 값 칸');
+  const many = { evals: Array.from({ length: 40 }, (_, i) => ({ label: `후보 ${i}`, Ulen: i / 100, Uwid: i / 100, bi: 1, eff: 0.5 })) }, hm = itemTableHtml(many, 0.8, 0.8);
+  c((hm.match(/<tr class="fb-tr[ "]/g) ?? []).length === 5 && /외 35개/.test(hm) && /후보<\/td><td>39/.test(hm) && /<th>효율<\/th>/.test(hm) && /50\.0%/.test(hm), '후보가 많은 묶음 = 좋은 순 5줄 + 외 N개 · 효율 있으면 효율 칸');
+  const { splitLabel } = await import('../src/ui/m3/opt-dash.js');
+  const sp = (x) => JSON.stringify(splitLabel(x));
+  c(sp('폭 위치 -1 mm') === '["폭 위치","-1 mm"]' && sp('높이 +0.48 mm') === '["높이","+0.48 mm"]' && sp('Milky 0.75') === '["Milky","0.75"]' && sp('54개 같은 피치 4.2 mm') === '["54개 같은 피치","4.2 mm"]' && splitLabel('두께 +0.20 · 포켓 0.30 R 2.0 mm') === null && splitLabel('변경 없음') === null, `후보 이름 → 항목·치수: ${sp('폭 위치 -1 mm')}`);
+  c(/colspan="2"[^>]*>두께 \+0\.20 · 포켓/.test(itemTableHtml({ evals: [{ label: '두께 +0.20 · 포켓 0.30 R 2.0 mm', Ulen: 0.5, Uwid: 0.5 }] }, 0.8, 0.8)), '여러 치수가 섞인 이름(형상)은 항목·치수 두 칸에 걸쳐 그대로');
   const fb = factorBoardHtml(S, { on: {} }, (k) => ({ on: k === 'milky', box: '', opt: '' }));
   c(/<details class="fb-det" data-keep="det-milky"[\s\S]*fb-tr/.test(fb) && !/data-keep="det-shape"/.test(fb), '시험한 항목 상자 아래 = 펼치는 상세 표(시험 안 한 항목은 없음)');
   const { renderAutoPanel, resultViewHtml } = await import('../src/ui/m3/autodesign-panel.js');
@@ -1366,7 +1373,8 @@ done();
   const okS = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
   const last = (sel) => { let r = ''; for (const blk of css.split('}')) { const i = blk.indexOf('{'); if (i > 0 && blk.slice(0, i).split(',').some((s) => s.trim().replace(/\s+/g, ' ') === sel)) r = blk.slice(i + 1); } return r; };
   okS(/repeat\(3,/.test(last('.m3-mon .fb-cards')), `기구 최적화 창 설계 인자 = 가로 3칸: ${last('.m3-mon .fb-cards')}`);
-  okS(/grid/.test(last('.m3-mon .fb-tbl tr')) && /grid-row:\s*1/.test(last('.m3-mon .fb-tbl .fb-res')) && /grid-row:\s*2/.test(last('.m3-mon .fb-tbl .fb-cs')), '좁은 칸: 결과 줄 위, 후보 줄 아래');
+  okS(!/grid/.test(last('.m3-mon .fb-tbl tr')) && !/display:\s*block/.test(last('.m3-mon .fb-tbl, .m3-mon .fb-tbl tbody')), '좁은 칸에서도 상세 검토 = 표(2026-11-21 사용자)');
+  { const { FB_DESC } = await import('../src/ui/m3/opt-dash.js'); okS(/0~10/.test(FB_DESC.milky) && /10 = 빛 50% 가림/.test(FB_DESC.milky) && !/0~5/.test(FB_DESC.milky), `Milky 설명 = 눈금 A(0~10): ${FB_DESC.milky}`); }
 }
 // 큰 창 그림 크기(2026-11-18 사용자 스크린숏: 2D·1D 가 세로로 크게 늘어나 보임) — 칩에서 펼쳐지는 동안(transform scale) 잰 크기가 아니라 실제 칸 크기로
 {

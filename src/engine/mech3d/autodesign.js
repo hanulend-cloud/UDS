@@ -447,8 +447,7 @@ function ledAlternatives(r, two) {
   return (r.tried ?? []).filter((e) => !same(e) && tot(e) >= T0 && !seen.has(key(e)) && seen.add(key(e)))
     .sort((a, b) => tot(a) - tot(b) || mg(b) - mg(a));   // tot ≥ T0 이므로 총수 오름 = 같은 총수 먼저
 }
-// 최적화 Milky 상한 = 5(2026-11-05, 사용자 확정) — 높은 Milky 는 광자당 매우 느리고 노이즈가 커서 다른 인자를 그 위에서 최적화하지 않는다. 지금 Milky 가 더 높아도 5 로 낮춰서 — spec §2.1a
-// 5 초과는 '이 정도 차폐력이면 균일도가 어디까지 오르나' 안내용 참고 계산만(MILKY_PEEK, 추천·판정·Milky 표에 안 들어감)
+// 최적화 Milky 상한 = 10(눈금 A, 2026-11-20 — 이전 눈금의 상한 5 와 같은 50% 가림). 지금 Milky 가 더 높아도 상한으로 낮춰서 — spec §2.1a
 export const MILKY_OPT_MAX = 10, MILKY_PEEK = [];   // 눈금 A(2026-11-20): 10 = 50% 가림 = 이전 상한 5 와 같은 차폐 · 그 위는 나타낼 수 없어 참고 계산 없음
 // 후보 지도 길이 방향 3칸 평균(제자리, 칸 ≥ 40 일 때만) — 후보당 광자가 적어 칸마다 노이즈가 큼(노이즈를 불균일로 착각하면 개수가 늘어남). 유효 칸만
 const two0 = (B) => typeof B.cand?.[0] === 'object';
