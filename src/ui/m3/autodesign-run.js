@@ -9,7 +9,9 @@ const MIN_CHUNK = 1000;
 export const resumable = (from, sig, screen) => (from?.raw && from.sig === sig && !!from.screen === !!screen ? from.raw : null);
 // 응답 시간 제한(progressive.js 와 같음): 장면 60초 · 청크 30초. cancel() = 기다리던 send 도 바로 '중지' 로 끝냄
 // 한 Worker 루프가 실패하면 같은 호출의 다른 루프도 새 청크를 보내지 않고 첫 오류를 다시 던짐
-export function createAdRunner({ ports, now: now0 = () => globalThis.performance?.now?.() ?? Date.now(), sceneTimeoutMs = 60000, chunkTimeoutMs = 30000, timers = globalThis }) {
+// 늦은 Worker(2026-11-22 사용자: 'Worker 응답 없음 (chunk 90초)' 로 최적화가 97% 에서 실패 — 멈추면 안 됨): 청크 제한 시간을 넘긴 포트는
+// 늦은 답(과 그사이 보낸 장면)이 올 때까지만 빼고, 그 묶음은 다른 포트가 다시 계산(같은 시드). 모든 포트가 늦을 때만 실패. onSlow({ gpu, ms }) = 오류 기록용 알림
+export function createAdRunner({ ports, now: now0 = () => globalThis.performance?.now?.() ?? Date.now(), sceneTimeoutMs = 60000, chunkTimeoutMs = 30000, timers = globalThis, onSlow = null }) {
   let stopped = false, seed = 7001, onStop = null;
   // 일시정지 = 새 청크를 보내지 않음(보낸 청크는 받음). 시계는 멈춘 시간을 뺌 — 시간 한도가 있는 단계의 결과가 쉬었다고 달라지지 않게
   let gate = null, release = null, pausedMs = 0, pausedAt = 0;
@@ -26,16 +28,48 @@ export function createAdRunner({ ports, now: now0 = () => globalThis.performance
   const guard = (ctl, fn) => async (p) => { try { await fn(p); } catch (e) { ctl.err ??= e; throw e; } };
   // 장면 제한 시간 = 기본 + 삼각형 100만 개마다 60초(큰 도면은 처음 만들 때 느린 PC 에서 60초를 넘을 수 있음, 2026-11-14)
   const sceneMs = (job) => { let n = 0; for (const q of job.scene?.mechParts ?? []) n += (q.triangles?.length ?? 0) / 3; return sceneTimeoutMs + Math.ceil(n / 1e6) * 60000; };
+  // late = 늦은 포트 → 그 포트에 걸린 응답들. 모두 오면(성공·실패 무관) 다시 씀
+  const late = new Map();
+  const holdLate = (p, pr) => { const all = Promise.allSettled([late.get(p), pr]); late.set(p, all); all.then(() => { if (late.get(p) === all) late.delete(p); }); };
+  const usable = (p) => !p.off?.() && !late.has(p);
   async function prepare(job) {
     check();
     const ctl = { err: null };
-    await Promise.all(ports.map(guard(ctl, (p) => withTimeout(p.send({ type: 'scene', sceneKey: job.sceneKey, ...job.scene }), 'scene', sceneMs(job)))));
+    // 늦은 포트에도 장면은 보내 둠(답을 기다리지 않음) — 늦은 답 뒤에 장면까지 받으면 다시 씀
+    await Promise.all(ports.map(guard(ctl, (p) => { const pr = p.send({ type: 'scene', sceneKey: job.sceneKey, ...job.scene }); if (late.has(p)) { holdLate(p, pr); return null; } return withTimeout(pr, 'scene', sceneMs(job)); })));
   }
   const send = async (job, msg) => {
     if (gate) await Promise.race([gate, stopP]);
-    const r = await withTimeout(msg.p.send({ type: 'chunk', sceneKey: job.sceneKey, seed: msg.seed ?? seed++, ...msg.body }), 'chunk', chunkTimeoutMs);
+    const pr = msg.p.send({ type: 'chunk', sceneKey: job.sceneKey, seed: msg.seed ?? seed++, ...msg.body });
+    let id;
+    const to = new Promise((_, rej) => { id = timers.setTimeout(() => rej(Object.assign(new Error(`Worker 응답 없음 (chunk ${chunkTimeoutMs / 1000}초)`), { slow: true })), chunkTimeoutMs); });
+    let r;
+    try { r = await Promise.race([pr, to, stopP]); } catch (e) {
+      if (e.slow) { holdLate(msg.p, pr); try { onSlow?.({ gpu: !!msg.p.gpu, ms: chunkTimeoutMs, N: msg.body?.N }); } catch { /* 기록 실패가 계산을 막지 않게 */ } }
+      throw e;
+    } finally { timers.clearTimeout(id); }
     if (r.stale) throw new Error('장면이 바뀜 — 다시 실행하세요');
     return r;
+  };
+  // 포트들이 일감을 나눠 계산 — take(p) → 일감 | null(지금 없음), run(p, 일감), back(일감) = 늦어서 못 한 일감을 되돌림(다른 포트가 다시).
+  // 일감이 없어도 다른 포트의 청크가 진행 중이면 기다렸다 다시 봄(그 청크가 늦어 되돌아올 수 있음). 쓸 포트가 하나도 없으면 그 오류로 실패
+  const drive = (ctl, take, run, back) => {
+    let inflight = 0; const waiters = [];
+    const ping = () => { while (waiters.length) waiters.shift()(); };
+    return Promise.all(ports.map(guard(ctl, async (p) => {
+      for (;;) {
+        check(ctl);
+        if (!usable(p)) return;
+        const job = take(p);
+        if (job == null) { if (inflight === 0) return; await new Promise((res) => waiters.push(res)); continue; }
+        inflight++;
+        try { await run(p, job); } catch (e) {
+          if (!e.slow) throw e;
+          back(job);
+          if (!ports.some(usable)) throw e;
+        } finally { inflight--; ping(); }
+      }
+    })));
   };
   // chunkN 기본 = Worker 마다 청크 2개쯤(후보당 광자가 적어도 모든 Worker 가 일하게)
   // crn(같은 난수 비교, 형상 후보용) = 시드 기준 — 청크 i 의 시드 crn+i · 크기 chunkN · 포트(쓰는 포트 i % 수) · 배치 i % batches 를 고정해
@@ -73,19 +107,22 @@ export function createAdRunner({ ports, now: now0 = () => globalThis.performance
     tAsk = t0;
     // 시간 제한이면 첫 청크 = minN(없으면 N/10) 을 Worker 마다 2개로 — 그 뒤 잰 속도로 조절
     const size0 = timed ? Math.min(chunkN, firstN > 0 ? Math.max(MIN_CHUNK, Math.round(firstN)) : Math.max(MIN_CHUNK, Math.ceil(Math.max(minN, N / 10) / (2 * ports.length)))) : chunkN;
-    const ctl = { err: null };
-    await Promise.all(ports.map(guard(ctl, async (p) => {
-      let size = size0;
-      while (more() && !p.off?.()) {
-        check(ctl);
-        const m = Math.min(size, N - issued);
-        let b = 0; for (let i = 1; i < batches; i++) if (bIss[i] < bIss[b]) b = i;   // 보낸 광자가 가장 적은 배치(고정 청크면 k % batches 와 같음)
-        issued += m; bIss[b] += m; k++;
+    const ctl = { err: null }, sizes = new Map();   // 포트별 다음 청크 크기
+    await drive(ctl, (p) => {
+      if (!more()) return null;
+      const m = Math.min(sizes.get(p) ?? size0, N - issued);
+      let b = 0; for (let i = 1; i < batches; i++) if (bIss[i] < bIss[b]) b = i;   // 보낸 광자가 가장 적은 배치(고정 청크면 k % batches 와 같음)
+      issued += m; bIss[b] += m; k++;
+      return { m, b };
+    }, async (p, { m, b }) => {
+        let size = sizes.get(p) ?? size0;
         const t = now(), r = await send(job, { p, body: { N: m, ...(timed ? { cpuMax: MIN_CHUNK } : {}), ...(rw ? { rw } : {}) } });   // CPU 한도 = 최소 묶음(2026-11-21): GPU 가 꺼지면 어떤 크기든 돌려받아 CPU 속도로 다시 잼 — 예전 한도 chunkN(20만~100만)은 높은 Milky CPU 에서 100초를 넘겨 'Worker 응답 없음 (chunk 90초)'
         // GPU 가 이 묶음 중에 멈춰 꺼짐 — Worker 가 큰 GPU 묶음을 CPU 로 통째 돌리지 않고 돌려보냄(돌리면 'Worker 응답 없음 (chunk 90초)', 2026-11-18 다른 PC).
         // 이 묶음은 세지 않고 CPU 크기로 이어 감(화면 계산 progressive 와 같은 규칙)
-        if (r.gpuRetry) { issued -= m; bIss[b] -= m; k--; size = Math.min(size, MIN_CHUNK); continue; }
-        if (timed) { const ms = r.ms > 0 ? r.ms : now() - t; if (ms > 0) size = Math.max(MIN_CHUNK, Math.min(chunkN * (r.gpu ? 8 : 1), Math.round((m / ms) * chunkMs * (r.gpu ? 4 : 1)))); }   // GPU 포트는 큰 청크가 빠름 — 묶음마다 고정 비용(실측 ~0.7초: 1000개 1.0초 · 4000개 1.9초)이 있어 목표 시간을 4배로(2026-11-15)
+        if (r.gpuRetry) { issued -= m; bIss[b] -= m; k--; sizes.set(p, Math.min(size, MIN_CHUNK)); return; }
+        // GPU 포트는 큰 청크가 빠름 — 묶음마다 고정 비용(실측 ~0.7초: 1000개 1.0초 · 4000개 1.9초)이 있어 목표 시간을 4배로(2026-11-15).
+        // 한 번에 두 배까지만 키움(2026-11-22) — 운 좋게 빨리 끝난 묶음으로 잰 속도로 갑자기 크게 잡으면 다음 묶음이 제한 시간을 넘김(progressive 와 같은 규칙)
+        if (timed) { const ms = r.ms > 0 ? r.ms : now() - t; if (ms > 0) { size = Math.max(MIN_CHUNK, Math.min(chunkN * (r.gpu ? 8 : 1), 2 * Math.max(size, m), Math.round((m / ms) * chunkMs * (r.gpu ? 4 : 1)))); sizes.set(p, size); } }
         bDone[b] += m;
         onProgress?.(Math.min(1, Math.max(issued / N, timed ? (now() - t0) / maxMs : 0)));   // 광선 수와 시간 한도 중 먼저 닿는 쪽
         const f = m / chunkN;   // 청크 결과 = 광속 1회분(광자 수 무관) → 광자 수 가중으로 더함(크기가 다른 청크·GPU 가 섞여도 배치 평균이 바름). 같은 크기면 f = 1
@@ -101,30 +138,27 @@ export function createAdRunner({ ports, now: now0 = () => globalThis.performance
         }
         if (rw) { for (let i = 0; i < RB[b].length; i++) RB[b][i] += r.rw.acc[i] * f; for (let j = 0; j < sf.length; j++) { sf[j] += r.rw.sf[j]; sf2[j] += r.rw.sf2[j]; } n += r.rw.n; }
         ask();
-      }
-    })));
+    }, ({ m, b }) => { issued -= m; bIss[b] -= m; k--; });   // 늦어서 못 받은 묶음 = 세지 않음(다른 포트가 다시)
     // 배치 무게가 다르면(청크 수·크기 차) 평균 광자 수로 정규화 — 합은 그대로(효율 = Σ/방출), 빈 배치는 뺌
     const keep = [...bDone.keys()].filter((b) => bDone[b] > 0), ref = issued / keep.length;
     const norm = (A) => keep.map((b) => { if (bDone[b] !== ref) { const s = ref / bDone[b]; for (let i = 0; i < A[b].length; i++) A[b][i] *= s; } return A[b]; });
     return { batches: norm(B), rwBatches: RB ? norm(RB) : null, ledger, ess: rw ? essRatio(sf, sf2, n) : null, photons: issued, ms: now() - t0, kept: K ? { ...K, batches: K.batches.filter((q) => q.photons > 0) } : null };
   }
   async function traceCrn(job, { N, chunkN, batches, rw, crn }) {
-    const nCell = job.scene.G.ns * job.scene.G.nw, act = ports.filter((p) => !p.off?.()), P = act.length ? act : ports, nC = Math.ceil(N / chunkN);
+    const nCell = job.scene.G.ns * job.scene.G.nw, nC = Math.ceil(N / chunkN);
     const B = Array.from({ length: batches }, () => new Float64Array(nCell)), RB = rw ? Array.from({ length: batches }, () => new Float64Array(rw.milkies.length * nCell)) : null;
     const ledger = { emitted: 0, escaped: 0, absSurf: 0, absVol: 0, lost: 0, rrLoss: 0, rrGain: 0 }, sf = rw ? new Float64Array(rw.milkies.length) : null, sf2 = rw ? new Float64Array(rw.milkies.length) : null;
     const bDone = new Float64Array(batches), t0 = now(), ctl = { err: null };
     let n = 0;
-    await Promise.all(P.map(guard(ctl, async (p) => {
-      const k = P.indexOf(p);
-      for (let i = k; i < nC; i += P.length) {
-        check(ctl);
+    // 묶음 i 의 시드·크기·배치는 고정이고 어느 포트가 계산해도 같음 → 순서대로 나눠 가짐(늦은 포트의 묶음은 되돌려 다른 포트가 같은 시드로)
+    const q = Array.from({ length: nC }, (_, i) => i);
+    await drive(ctl, () => (q.length ? q.shift() : null), async (p, i) => {
         const m = Math.min(chunkN, N - i * chunkN), b = i % batches, r = await send(job, { p, seed: crn + i, body: { N: m, ...(rw ? { rw } : {}) } }), f = m / chunkN;
         bDone[b] += m;
         for (let c = 0; c < nCell; c++) B[b][c] += r.acc[c] * f;
         for (const key in ledger) ledger[key] += r.ledger[key] * f;
         if (rw) { for (let c = 0; c < RB[b].length; c++) RB[b][c] += r.rw.acc[c] * f; for (let j = 0; j < sf.length; j++) { sf[j] += r.rw.sf[j]; sf2[j] += r.rw.sf2[j]; } n += r.rw.n; }
-      }
-    })));
+    }, (i) => q.unshift(i));
     const keep = [...bDone.keys()].filter((b) => bDone[b] > 0), ref = N / keep.length;
     const norm = (A) => keep.map((b) => { if (bDone[b] !== ref) { const s = ref / bDone[b]; for (let i = 0; i < A[b].length; i++) A[b][i] *= s; } return A[b]; });
     return { batches: norm(B), rwBatches: RB ? norm(RB) : null, ledger, ess: rw ? essRatio(sf, sf2, n) : null, photons: N, ms: now() - t0 };
@@ -134,23 +168,19 @@ export function createAdRunner({ ports, now: now0 = () => globalThis.performance
   async function traceEach(job, emitterSets, { N = 20000, maxMs = Infinity, minN = 3000, rw = null, onProgress = null } = {}) {
     await prepare(job);
     const n = emitterSets.length, maps = new Array(n), t0 = now(), ctl = { err: null };
-    let next = 0, fin = 0, done = 0;
+    let next = 0, fin = 0, done = 0; const again = [];   // again = 늦은 포트에서 되돌아온 후보
     const size = (left) => {
       const ms = now() - t0;
       if (!Number.isFinite(maxMs) || done <= 0 || ms <= 0) return N;
       return Math.max(Math.min(N, minN), Math.min(N, Math.floor((done / ms) * Math.max(0, maxMs - ms) / left)));
     };
-    await Promise.all(ports.map(guard(ctl, async (p) => {
-      while (next < n && !p.off?.()) {
-        check(ctl);
-        const k = next++, m = size(n - k);
+    await drive(ctl, () => { if (again.length) return again.shift(); if (next >= n) return null; const k = next++; return { k, m: size(n - k) }; }, async (p, { k, m }) => {
         const r = await send(job, { p, body: { N: m, emitters: emitterSets[k], ...(rw ? { rw } : {}) } });
         const src = rw ? r.rw.acc : r.acc, e = r.ledger.emitted > 0 ? r.ledger.emitted : m, mp = new Float32Array(src.length);
         for (let i = 0; i < src.length; i++) mp[i] = src[i] / e;
         maps[k] = mp; done += m; fin++;
         onProgress?.(fin, n);
-      }
-    })));
+    }, (x) => again.push(x));
     return { maps, emitted: 1 };
   }
   return { trace, traceEach, now, cancel() { if (!stopped) { stopped = true; onStop(); } }, get stopped() { return stopped; }, get paused() { return !!gate; },

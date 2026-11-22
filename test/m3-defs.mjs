@@ -11,9 +11,12 @@ const old = {
   observe: { faces: [], dir: null, cone: 30, edgeExcl: 0.5, targetLen: 0.7, targetWid: 0.6 },
 };
 migrateMech3d(old);
-ok(old.light.spec.fluxLm === 0 && old.observe.targetNoise === 0.01 && old.observe.targetLum === null && old.observe.targetLen === 0.7 && old.observe.cone === 30 && old.checks.minWall === 0.8,
+ok(old.light.spec.fluxLm === 0 && old.observe.targetNoise === 0.02 && old.observe.targetLum === null && old.observe.targetLen === 0.7 && old.observe.cone === 30 && old.checks.minWall === 0.8,
   'P3 저장값 보정: 새 필드만 채우고 기존 값 유지');
-{ const k = { light: old.light, observe: { faces: [], targetNoise: 0.01, noiseRev: 1 } }; migrateMech3d(k); ok(k.observe.targetNoise === 0.01, '기본 오차가 바뀌어도 저장된 1% 프로젝트는 그대로'); }
+// 저장된 프로젝트도 2% 로(2026-11-22 사용자: 모두 2%) — 2% 보다 낮은 값(예전 기본 1%·1.5% 등)만 한 번 올림, 높게 고른 값은 그대로, 올린 뒤(noiseRev 2) 다시 고른 값은 그대로
+{ const m2 = (o) => { const k = { light: old.light, observe: o }; migrateMech3d(k); return [k.observe.targetNoise, k.observe.noiseRev]; };
+  const a = m2({ faces: [], targetNoise: 0.015, noiseRev: 1 }), b = m2({ faces: [], targetNoise: 0.01, noiseRev: 1 }), c = m2({ faces: [], targetNoise: 0.03, noiseRev: 1 }), d = m2({ faces: [], targetNoise: 0.01, noiseRev: 2 });
+  ok(a[0] === 0.02 && a[1] === 2 && b[0] === 0.02 && c[0] === 0.03 && d[0] === 0.01, `저장된 1.5%·1% → 2%, 3% 그대로, 바꾼 뒤 고른 1% 그대로 (${a} · ${b} · ${c} · ${d})`); }
 { const k = { light: old.light, observe: { faces: [], cone: 90 } }; migrateMech3d(k); ok(k.observe.cone === 90, '기본 각도가 바뀌어도 저장된 ±90° 프로젝트는 그대로'); }
 {   // 보정 방어: spec 없음, 잘못된 광속
   const a = { light: { kind: 'none', solder: '백색' }, observe: {} }; migrateMech3d(a);
@@ -47,7 +50,7 @@ ok(old.light.spec.fluxLm === 0 && old.observe.targetNoise === 0.01 && old.observ
   ok(k.finishCatalog.length === 1, '소재표 배열 유지(이관은 mount)'); }
 { // 오차 목표 이전: 예전 기본 2%·없음 → 1%, 사용자가 고른 값(3%)·이미 옮긴 2% 는 그대로
   const m = (o) => { const x = { light: {}, observe: o }; migrateMech3d(x); return x.observe.targetNoise; };
-  ok(m({ targetNoise: 0.02 }) === 0.01 && m({}) === 0.01 && m({ targetNoise: 0.03 }) === 0.03 && m({ targetNoise: 0.02, noiseRev: 1 }) === 0.02, '오차 목표 1% 이전(예전 기본값만)');
+  ok(m({ targetNoise: 0.02 }) === 0.02 && m({}) === 0.02 && m({ targetNoise: 0.03 }) === 0.03 && m({ targetNoise: 0.02, noiseRev: 1 }) === 0.02, '예전 프로젝트 = 2%(1% 이전 단계를 거쳐도 마지막에 2%)');
 }
 { // LED STEP 편집·자유 배치(virtual.positions)는 다시 불러와도 유지 — 전에는 { count: 1 } 로 바뀌어 LED 1개만 남음(2026-10-30)
   const pos = [{ s: 6.5, w: -2.8, dz: 0 }, { s: 6.5, w: 2.8, dz: 0 }, { s: 38.75, w: -2.8 }];

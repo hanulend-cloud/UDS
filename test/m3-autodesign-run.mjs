@@ -22,6 +22,29 @@ const fakePorts = (log, delay = 0) => Array.from({ length: 3 }, (_, w) => ({ sen
   ok(r.photons === 60000, '시간 제한 없음 = N 전부');
   R.cancel(); let thrown = ''; try { await R.trace(job, { N: 1000 }); } catch (e) { thrown = e.message; }
   ok(/중지/.test(thrown), 'cancel 뒤 호출 = 중지 오류'); }
+{ // 늦은 Worker 하나 때문에 최적화 전체가 멈추지 않음(2026-11-22 사용자: 'Worker 응답 없음 (chunk 90초)' 로 97% 에서 실패) —
+  // 제한 시간을 넘긴 포트만 빼고(늦은 답이 올 때까지) 그 묶음은 다른 포트가 다시 계산. 모든 포트가 늦을 때만 실패. 늦은 포트는 onSlow 로 알림
+  const mk = (stuckAt, log, hang = 400) => Array.from({ length: 2 }, (_, w) => { let n = 0; return { gpu: w === 1, send: async (m) => {
+    if (m.type === 'scene') return { sceneKey: m.sceneKey, ready: true };
+    n++; log.push(`${w}:${m.N}:${m.seed}`);
+    if (w === 1 && n === stuckAt) await new Promise((res) => setTimeout(res, hang));   // 포트 1 의 이 묶음만 제한 시간(50ms)을 넘김
+    const acc = Float64Array.from({ length: nCell }, (_, i) => 1 + ((m.seed * 7 + i) % 5) / 10);
+    return { sceneKey: m.sceneKey, acc, cnt: new Uint32Array(nCell), ledger: { emitted: m.N, escaped: 0, absSurf: 0, absVol: 0, lost: 0, rrLoss: 0, rrGain: 0 }, leak: {}, escObs: 0, ms: 1 };
+  } }; });
+  const job = { sceneKey: 'sl', scene: { G: { ns: 2, nw: 2 } } }, slow = [];
+  const R = createAdRunner({ ports: mk(2, []), chunkTimeoutMs: 50, onSlow: (x) => slow.push(x) });
+  const r = await R.trace(job, { N: 40000, chunkN: 5000, batches: 4 });
+  ok(r.photons === 40000 && r.batches.length === 4 && slow.length === 1 && slow[0].gpu === true, `늦은 포트만 빼고 N 전부 계산 (광자 ${r.photons} · 알림 ${JSON.stringify(slow)})`);
+  // 같은 난수 비교(crn): 늦은 포트가 있어도 묶음 시드·크기·배치가 같아 결과가 같음
+  const A = createAdRunner({ ports: mk(0, []), chunkTimeoutMs: 50 }), B = createAdRunner({ ports: mk(2, []), chunkTimeoutMs: 50 });
+  const a = await A.trace(job, { N: 30000, chunkN: 5000, batches: 3, crn: 500 }), b = await B.trace(job, { N: 30000, chunkN: 5000, batches: 3, crn: 500 });
+  ok(JSON.stringify(a.batches.map((x) => [...x])) === JSON.stringify(b.batches.map((x) => [...x])), 'crn: 늦은 포트가 있어도 결과 같음');
+  const C = createAdRunner({ ports: mk(1, []), chunkTimeoutMs: 50 }), e = await C.traceEach(job, [0, 1, 2, 3].map((x) => [{ pos: [x, 0, 0] }]), { N: 2000 });
+  ok(e.maps.every((m) => m instanceof Float32Array), 'traceEach: 늦은 포트의 후보도 다른 포트가 계산');
+  const D = createAdRunner({ ports: [mk(1, [])[1]], chunkTimeoutMs: 50 }); let msg = '';
+  try { await D.trace(job, { N: 10000, chunkN: 5000 }); } catch (x) { msg = x.message; }
+  ok(/Worker 응답 없음/.test(msg), `모든 포트가 늦으면 그때만 실패 (${msg})`);
+  await new Promise((res) => setTimeout(res, 500)); }
 { // traceEach 시간 예산(spec §2.2c): 가짜 시계 1 광자/ms · 포트 1개 — 후보마다 광자 = min(N, 남은 예산/남은 후보, ≥ minN), 지도는 후보 자신의 방출로 정규화
   let t = 0; const Ns = [], prog = [];
   const port = { send: async (m) => { if (m.type === 'scene') return { sceneKey: m.sceneKey, ready: true };

@@ -1209,7 +1209,7 @@ async function adRun(opt = {}) {
   // 후보 설계의 대칭(빠른 검토 합치기) — 형상 칸 변형(kF·kL·kW)이 든 설계는 좌우가 다를 수 있어 합치지 않음
   const symFor = (d, Md, g = G) => (symOn() && !(d?.shape && (d.shape.kF || d.shape.kL || d.shape.kW)) ? jobSym(g, line, L.currentEmitters(Md, line)) : null);
   { const i0 = symOn() ? symInfo(G, jobSym(G, line, L.currentEmitters(M0, line))) : null, t = symNote(i0); A.optDash?.setSym(t && !i0.off ? `${t}(빠른 검토)` : t); }   // 진행 줄 안내 — 최종 판정은 전체 영역
-  const R = (st.runner = createAdRunner({ ports: A.pool.ports(), chunkTimeoutMs: 90000 }));   // 높은 Milky 청크는 30 초를 넘기기도 함
+  const R = (st.runner = createAdRunner({ ports: A.pool.ports(), chunkTimeoutMs: 90000, onSlow: (x) => reportError('기구 최적화', slowPortText({ ...x, last: false }, 0, x.ms)) }));   // 늦은 Worker 는 빼고 계속(2026-11-22) — 기록만   // 높은 Milky 청크는 30 초를 넘기기도 함
   // 같은 Worker 를 쓰므로 점진 계산은 멈춤 — 대기(디바운스) 중이면 장면을 곧 보내므로 취소. 사용자 일시정지 여부는 기억(끝나고 그대로)
   const snap0 = A.prog.snapshot(), ps = snap0.state, currentVerified = reusableCurrent(snap0, G), curS = lowQ ? null : reusableCurrent(snap0, Gs), currentScreen = curS ? { ...curS, sharp: true } : null;   // 수렴한 점진 결과 = 현재안(verify 생략)
   st.userPaused = ps === 'paused'; st.deferred = ['paused', 'running', 'pending', 'starting'].includes(ps);

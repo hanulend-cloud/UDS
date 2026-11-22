@@ -13,7 +13,7 @@ export function defaultLight() {
   };
 }
 export function defaultObserve() {
-  return { faces: [], dir: null, cone: 30, cell: null, cellS: null, cellW: null, quality: 'low', winS: null, edgeExcl: 0.5, targetLen: 0.8, targetWid: 0.8, targetLum: null, targetNoise: 0.02, noiseRev: 1 };   // 오차 목표 2%(2026-11-22 사용자: 2% 로 판정 — 고화질·Milky 7.65 에서 1.5% 가 약 2시간이라 너무 오래 걸림). 이전 1.5%(2026-11-11). 저장된 프로젝트 값은 그대로
+  return { faces: [], dir: null, cone: 30, cell: null, cellS: null, cellW: null, quality: 'low', winS: null, edgeExcl: 0.5, targetLen: 0.8, targetWid: 0.8, targetLum: null, targetNoise: 0.02, noiseRev: 2 };   // 오차 목표 2%(2026-11-22 사용자: 2% 로 판정 — 고화질·Milky 7.65 에서 1.5% 가 약 2시간이라 너무 오래 걸림). 이전 1.5%(2026-11-11). 저장된 프로젝트도 2% 로(noiseRev 2, migrateMech3d)
 }
 // 설계 점검 기준(spec 2026-10-15 §5): 최소 살두께 mm, 최소 도달률(0~1), 새는 빛 한도(0~1)
 export function defaultChecks() {
@@ -34,7 +34,9 @@ export function migrateMech3d(m) {
   if (m.clearRev !== 1) { for (const p of m.parts ?? []) { const q = p.material; if (q?.kind === 'clear' && q.T === 1 && q.tRef === 2 && q.matId == null && !Number.isFinite(q.n)) q.T = (CLEAR_BASE.find((e) => e.id === q.resin) ?? CLEAR_BASE[0]).T; } m.clearRev = 1; }
   m.groups ??= [];   // 부품 그룹 [{ id, name, parts }] (피처 트리, 2026-10-30)
   // 계산 오차 목표 기본 2% → 1%(2026-10-29: 1D 튐·2D 얼룩) — 예전 기본값(2%·없음)만 1% 로, 사용자가 고른 값은 그대로
-  if (m.observe.noiseRev !== 1) { if (m.observe.targetNoise == null || m.observe.targetNoise === 0.02) m.observe.targetNoise = 0.01; m.observe.noiseRev = 1; }
+  if (m.observe.noiseRev == null) { if (m.observe.targetNoise == null || m.observe.targetNoise === 0.02) m.observe.targetNoise = 0.01; m.observe.noiseRev = 1; }
+  // 저장된 프로젝트도 2% 로(2026-11-22 사용자: 모두 2%) — 2% 보다 낮은 값(예전 기본 1%·1.5% 등)만 한 번 올림. 높게 고른 값은 그대로, 올린 뒤 다시 고른 값은 그대로
+  if (m.observe.noiseRev === 1) { if (!(m.observe.targetNoise >= 0.02)) m.observe.targetNoise = 0.02; m.observe.noiseRev = 2; }
   m.checks = { ...defaultChecks(), ...(m.checks ?? {}) };
   // 열 배치(spec P4 §2.2b): rows 1|2(그 밖 = 1), rowGap 유한 ≥ 0(그 밖 = 0). 라인 반폭 제한은 배치 때
   const rowsOf = (o) => { const g = Number(o?.rowGap); return { rows: o?.rows === 2 ? 2 : 1, rowGap: Number.isFinite(g) && g > 0 ? g : 0 }; };
