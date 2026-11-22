@@ -1644,3 +1644,59 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .m3-diffmodel h4{margin:10px 0 2px;font-size:12px}
 .dm-tag{border-radius:8px;padding:0 7px;font-size:11px;white-space:nowrap}
 .dm-t-a{background:rgba(128,128,128,.18)}.dm-t-f{background:rgba(60,154,95,.2);color:#3c9a5f}.dm-t-b{background:rgba(208,138,30,.2);color:#c07a10}.dm-t-r{background:rgba(220,60,60,.18);color:#d04040}
+
+/* 오른쪽 보드 = 한 장의 '시뮬레이션 결과'(2026-11-22 사용자) — 위 1/4: 제목·진행 · 판정·모드 · 길이/폭 카드 · 계산 추이 | 광경로,
+   가운데 2/4 = 2D, 아래 1/4 = 길이 1D | 폭 1D(좌우). 글씨는 작게, 길이/폭 카드는 판정 색 바탕으로 */
+.m3-dash { display: flex; flex-direction: column; gap: 4px; min-height: 0; overflow: auto; padding: 4px 8px 6px; background: var(--m3-simbg); border-bottom: 1px solid var(--m3-line); }
+.m3-dash > .m3-simcard { flex: none; padding: 0; border: 0; background: none; overflow: visible; }
+.m3-dash > .m3-simcard .od-simh { margin-bottom: 0; font-size: 13px; }
+.m3-dash > .m3-simcard .od-cardbar { margin: 1px 0 0; }
+.m3-reshead { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 6px; align-items: center; }
+.m3-reshead > .m3-mode { grid-column: 1; grid-row: 1; height: 22px; font-size: 11px; padding: 0 6px; }
+.m3-reshead > .m3-res-h { grid-column: 2; grid-row: 1; padding: 0; border-left: 0; font-size: 12px; gap: 5px; }
+.m3-reshead > .m3-msg, .m3-reshead > .m3-sum { grid-column: 1 / -1; }
+.m3-reshead .m3-verdict { margin-left: 0; padding: 1px 8px; font-size: 11.5px; }
+.m3-reshead .m3-next { min-height: 22px; padding: 0 8px; font-size: 11.5px; }
+.m3-dash { gap: 3px; }
+/* 카드 = 길이 | 폭 | (광량 / 광효율 위아래) — 이름·값 한 줄, 목표 줄 한 줄(… 줄임 · 마우스 = 전체) */
+.m3-reshead .m3-sum { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1fr); gap: 4px; }
+.m3-reshead .m3-sum > div { padding: 2px 7px; }
+.m3-reshead .m3-sum-u { grid-row: span 2; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; column-gap: 6px; }
+.m3-reshead .m3-sum-u > .l, .m3-reshead .m3-sum-u > .v { grid-row: 1; }
+.m3-reshead .m3-sum-u > .v { text-align: right; }
+.m3-reshead .m3-sum-u > .m3-gauge, .m3-reshead .m3-sum-u > .s { grid-column: 1 / -1; }
+.m3-reshead .m3-sum .l { font-size: 11px; font-weight: 600; white-space: nowrap; }
+.m3-reshead .m3-sum-u .v { font-size: 19px; line-height: 1.15; }
+.m3-reshead .m3-sum .s { font-size: 10.5px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m3-reshead .m3-sum .m3-gauge { margin: 1px 0; }
+.m3-reshead .m3-sum-c { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: 0 6px; }
+.m3-reshead .m3-sum-c > .l, .m3-reshead .m3-sum-c > .v { grid-row: 1; }
+.m3-reshead .m3-sum-c > .v { font-size: 13px; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m3-reshead .m3-sum-c > .s, .m3-reshead .m3-sum-c > .m3-gauge { grid-column: 1 / -1; }
+.m3-reshead .m3-sum-c > .s:empty { display: none; }
+.m3-reshead .m3-sum-c > .s.m3-unit { display: none; }
+.m3-reshead .m3-sum-u { grid-row: span 3; }   /* 셋째 칸 = 광량 / 광효율 / 새는 빛·선택 영역 */
+.m3-reshead .m3-sum-x { grid-column: 3; }
+.m3-reshead .m3-sum { gap: 3px 4px; }
+.m3-reshead .m3-sum > .m3-sum-c { padding: 0 7px; }
+.m3-dash { padding: 3px 8px 4px; }
+.m3-reshead .m3-sum-x .m3-leak { margin-top: 0; padding: 0; font-size: 11px; }
+.m3-sum-u:has(> .v.ok) { background: color-mix(in srgb, var(--m3-ok) 13%, var(--m3-panel, #fff)); border-color: color-mix(in srgb, var(--m3-ok) 50%, transparent); }
+.m3-sum-u:has(> .v.bad) { background: color-mix(in srgb, var(--m3-bad) 12%, var(--m3-panel, #fff)); border-color: color-mix(in srgb, var(--m3-bad) 50%, transparent); }
+.m3-sum-u:has(> .v.near), .m3-sum-u:has(> .v.busy) { background: color-mix(in srgb, var(--m3-warn) 13%, var(--m3-panel, #fff)); border-color: color-mix(in srgb, var(--m3-warn) 50%, transparent); }
+.m3-sum-u:has(> .v.ok) .l { color: var(--m3-ok); } .m3-sum-u:has(> .v.bad) .l { color: var(--m3-bad); } .m3-sum-u:has(> .v.near) .l, .m3-sum-u:has(> .v.busy) .l { color: var(--m3-warn); }
+.m3-sum .v.near, .m3-sum .v.busy { color: var(--m3-warn); }
+.m3-simplots { flex: 1 1 auto; min-height: 48px; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 6px; }
+.m3-simplots > div { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; padding: 2px 6px; border: 1px solid var(--m3-line); border-radius: 6px; background: var(--m3-panel); }
+.m3-simplots .od-dt { flex: none; font-size: 11px; font-weight: 600; color: var(--m3-mut); }
+.m3-simplots .od-simplot { flex: 1 1 0; min-height: 40px; }
+.m3-simplots .od-simplot .od-sim { width: auto; height: auto; margin: 0; display: block; }
+.m3-simplots .od-paths { margin: 1px 0 0; font-size: 11px; }
+.m3-simplots .od-path { line-height: 1.45; }
+.m3-right > .m3-dash + .m3-psplit.col { margin: -6px 0; }
+.m3-res > .m3-blkrow { display: flex; min-height: 0; }
+.m3-blkrow > .m3-blk { flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: 5px 7px; }
+.m3-blkrow > .m3-blk > .m3-gw { flex: 1 1 0; min-height: 0; display: flex; }
+.m3-blkrow > .m3-psplit.row { margin: 0 -9px; }
+.m3-blkrow .m3-t { flex-wrap: wrap; row-gap: 0; }
+@media (max-width: 1024px) { .m3-right > .m3-dash { flex: none !important; } .m3-blkrow > .m3-psplit { display: none; } .m3-res > .m3-blkrow { flex-direction: column; gap: 6px; } }

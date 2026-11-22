@@ -473,7 +473,8 @@ export function simCardText(state, pct, reason = '', stopped = false, busy = fal
 // 오른쪽 맨 위 카드(항상 보임) — onCtl(k) = 실행·일시정지·중지. 광경로 목록은 접는 칸
 // bar = 아래 상태줄 칸(2026-11-12 화면 다시 그리기 6단계): 있으면 실행·일시정지·중지 · 진행률 · 광선 수 · 상태 글을 그 줄에 그리고,
 //       카드에는 제목과 접는 칸(계산 오차·균일도 추이 / 광경로)만 남김. 접는 칸 열림은 보는 사람별로 기억(uds.m3.simPlots)
-export function createSimDash(el, { onCtl = null, bar = null } = {}) {
+// plots = 계산 추이 | 광경로를 늘 보이게 그릴 칸(2026-11-22 사용자 — 오른쪽 보드). 있으면 카드에서 그 두 접는 칸을 뺌
+export function createSimDash(el, { onCtl = null, bar = null, plots = null } = {}) {
   let H = [], tgt = 0.02, raf = 0, state = '', obs = null, P = [], names = [], reason = '', stopped = false, err = '';
   // names = 부품 이름, nMech = 기구 부품 수(LED STEP 부품 번호는 그 뒤 — 경로에서 뺌)
   let busy = false;   // 기구 최적화 중(점진 계산 일시정지)
@@ -497,18 +498,22 @@ export function createSimDash(el, { onCtl = null, bar = null } = {}) {
   function draw() { if (raf) return; raf = setTimeout(() => { raf = 0; render(); }, 40); }   // setTimeout: 화면이 숨겨져도(다른 탭) 갱신 — rAF 는 멈춤
   function render() {
     const last = H[H.length - 1], pct = state === 'done' ? 100 : Number.isFinite(prog) ? prog : last ? simPct(last.noise, tgt) : 0, pctT = fmtProg(pct);
-    const plot = el.querySelector('.od-simplot'), svg = simPlotSvg(H, tgt, obs, plot?.clientWidth || 300, plot?.clientHeight || 70);
+    const Q = (s) => el.querySelector(s) ?? plots?.querySelector(s);   // 카드 또는 보드 아래 칸
+    const plot = Q('.od-simplot'), svg = simPlotSvg(H, tgt, obs, plot?.clientWidth || 300, plot?.clientHeight || 70);
     const row = simCaption(H, tgt, obs, state);
     const sTxt = [simStateText(state, reason, stopped, busy, err), symNote(sym)].filter(Boolean).join(' · '), cTxt = [simCardText(state, pct, reason, stopped, busy, err), symNote(sym)].filter(Boolean).join(' · ');
     // 틀은 한 번만 만들고 칸마다 바뀐 것만 고침 — 계산 중 갱신이 잦아도 단추 클릭·접는 칸이 끊기지 않게
     if (bar && !el.querySelector('.od-simh')) {   // 상태줄 모드: 카드 = 제목 + 접는 칸
       let open = false; try { open = localStorage.getItem('uds.m3.simPlots') === '1'; } catch {}
-      el.innerHTML = `<div class="od-h od-simh"><i class="m3-fl" data-s="step">4</i>광분포 시뮬레이션<span class="m3-ad-sp"></span><span class="mut od-simst" data-s="st"></span></div>
-        <div class="od-bar od-cardbar off" data-s="cbar" title="계산 오차가 목표에 닿으면 100%"><i></i></div>
+      el.innerHTML = `<div class="od-h od-simh"><i class="m3-fl" data-s="step">4</i>${plots ? '시뮬레이션 결과' : '광분포 시뮬레이션'}<span class="m3-ad-sp"></span><span class="mut od-simst" data-s="st"></span></div>
+        <div class="od-bar od-cardbar off" data-s="cbar" title="계산 오차가 목표에 닿으면 100%"><i></i></div>${plots ? `
+        <details class="od-diag" data-s="diag" hidden><summary data-s="diagh"></summary><div data-s="diagb"></div></details>` : `
         <details class="od-more od-plots"${open ? ' open' : ''}><summary title="계산 오차(목표 점선까지 내려가면 계산 끝) · 길이·폭 균일도가 광선 수에 따라 어떻게 변했는지">계산 추이</summary><div class="od-simbox"><div class="od-simplot" data-s="svg"></div></div></details>
         <details class="od-diag" data-s="diag" hidden><summary data-s="diagh"></summary><div data-s="diagb"></div></details>
-        <details class="od-more"><summary><span data-s="sum">광경로</span></summary><div data-s="paths"></div></details>`;
-      el.querySelector('.od-plots').addEventListener('toggle', (e) => { try { localStorage.setItem('uds.m3.simPlots', e.target.open ? '1' : '0'); } catch {} draw(); window.dispatchEvent(new Event('resize')); });
+        <details class="od-more"><summary><span data-s="sum">광경로</span></summary><div data-s="paths"></div></details>`}`;
+      // 보드: 계산 추이 | 광경로 — 늘 보임(접는 칸 아님)
+      if (plots) plots.innerHTML = `<div class="od-trend" title="계산 오차(목표 점선까지 내려가면 계산 끝) · 길이·폭 균일도가 광선 수에 따라 어떻게 변했는지"><div class="od-dt">계산 추이</div><div class="od-simplot" data-s="svg"></div></div><div class="od-pathbox"><div class="od-dt">광경로</div><div data-s="paths"><span class="mut">계산 전</span></div></div>`;
+      else el.querySelector('.od-plots').addEventListener('toggle', (e) => { try { localStorage.setItem('uds.m3.simPlots', e.target.open ? '1' : '0'); } catch {} draw(); window.dispatchEvent(new Event('resize')); });
     }
     if (bar && !bar.querySelector('[data-b="pct"]')) {
       bar.innerHTML = `<span class="m3-ctl" data-sim-ctl></span><b data-b="pct"></b><span class="od-bar m3-run-bar" title="계산 오차가 목표에 닿으면 100%"><i data-b="bar"></i></span><span class="m3-run-row" data-b="row"></span><span class="m3-run-st" data-b="st"></span>`;
@@ -519,7 +524,7 @@ export function createSimDash(el, { onCtl = null, bar = null } = {}) {
         <div class="od-simbox"><div class="od-simplot" data-s="svg"></div></div><details class="od-diag" data-s="diag" hidden><summary data-s="diagh"></summary><div data-s="diagb"></div></details>
         <details class="od-more"><summary><span data-s="sum">광경로</span></summary><div data-s="paths"></div></details>`;
     }
-    const set = (k, html) => { const n = el.querySelector(`[data-s="${k}"]`); if (n && n.innerHTML !== html) n.innerHTML = html; };
+    const set = (k, html) => { const n = Q(`[data-s="${k}"]`); if (n && n.innerHTML !== html) n.innerHTML = html; };
     set('st', esc(bar ? cTxt : sTxt));   // 메인 화면 카드 = 진행 % 포함(아래 진행 줄은 숨김, 2026-11-17)
     { const n = el.querySelector('[data-s="st"]'); if (n) n.title = n.textContent; }
     { const cb = el.querySelector('[data-s="cbar"]'); if (cb) { cb.classList.toggle('off', !(state === 'running' || state === 'paused') || busy); cb.firstElementChild.style.width = `${pctT}%`; } }   // 좁은 칸에서 … 로 잘려도 전체 문구를 볼 수 있게
@@ -541,7 +546,7 @@ export function createSimDash(el, { onCtl = null, bar = null } = {}) {
     set('paths', P.length ? `<div class="od-paths">${P.map((p) => `<div class="od-path" title="${esc(pathText(p, names))}"><span class="od-pbar"><i style="width:${(p.share * 100).toFixed(0)}%"></i></span><b>${(p.share * 100).toFixed(0)}%</b> ${esc(pathText(p, names))}</div>`).join('')}</div>` : '');
   }
   render();
-  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => draw()).observe(el);   // 칸 크기가 바뀌면 그래프를 그 크기로
+  if (typeof ResizeObserver !== 'undefined') { const ro = new ResizeObserver(() => draw()); ro.observe(el); if (plots) ro.observe(plots); }   // 칸 크기가 바뀌면 그래프를 그 크기로
   // 창 크기가 바뀌면 끝난 계산도 그 크기로 다시 그림
   const miniRO = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => draw()) : null;
   return { sample, paths: () => P, attach: (node) => { miniRO?.disconnect(); mini = node; if (node) miniRO?.observe(node); draw(); } };

@@ -633,7 +633,8 @@ export const mapMenuItems = (hasPin, onCell) => [
 ];
 // 1D 우클릭 메뉴 항목(순수)
 export const plotMenuItems = (title) => [{ k: 'csv', label: `${title} 데이터 CSV 저장` }, { k: 'png', label: '그래프 이미지 저장 (PNG)' }, { k: 'copy', label: '그래프 이미지 복사' }];
-export function createResultsPanel(el, { anchor = () => null, onPreview = null, onOpt = null, onQuality = null, fileName = () => 'uds', onLeak = null, onBig = null, onCalc = null, calcBusy = () => false, onNote = null } = {}) {
+// head = 판정·모드 띠·균일도 카드를 그릴 칸(2026-11-22 사용자 — 오른쪽 위 보드). 없으면 예전처럼 el 한 칸에 모두
+export function createResultsPanel(el, { head = null, anchor = () => null, onPreview = null, onOpt = null, onQuality = null, fileName = () => 'uds', onLeak = null, onBig = null, onCalc = null, calcBusy = () => false, onNote = null } = {}) {
   let effT = { key: null, t0: null };
   let optFrac = null, vCls = '';   // 기구 최적화 진행률(null = 안 돎) · 지금 종합 판정
   function syncNext() {   // 판정 옆 '다음 할 일' 단추
@@ -643,8 +644,8 @@ export function createResultsPanel(el, { anchor = () => null, onPreview = null, 
   }
   let region = null, regKey = null;   // 선택 영역 { s0, s1, w0, w1 } mm(세션 동안만, 관측면이 바뀌면 지움, 2026-11-12)   // 계산 부담 배지의 경과 시간 기준
   const gaugeHtml = (k) => `<div class="m3-gauge" data-r="${k}"><div class="f"></div><div class="tg"></div></div>`;
-  el.innerHTML = `
-    <div class="m3-res-h">시뮬레이션 결과 <span class="m3-verdict" data-r="verdict" aria-live="polite"></span><button type="button" class="m3-next" data-r="next" hidden></button></div>
+  const topHtml = `
+    <div class="m3-res-h">${head ? '' : '시뮬레이션 결과 '}<span class="m3-verdict" data-r="verdict" aria-live="polite"></span><button type="button" class="m3-next" data-r="next" hidden></button></div>
     <div class="m3-msg" data-r="msg" hidden></div>
     <div class="m3-mode idle" data-r="mode"><b data-r="model">계산 전</b><span class="m3-mode-t" data-r="modet"></span><span class="m3-effload" data-r="effl" hidden></span><button type="button" class="m3-pvbtn" data-r="pv" hidden></button></div>
     <div class="m3-sum">
@@ -653,14 +654,18 @@ export function createResultsPanel(el, { anchor = () => null, onPreview = null, 
       <div class="m3-sum-c"><div class="l">평균 광량</div><div class="v" data-r="avg" title="cd/m² 값은 보는 각도 설정과 상관없이 정면 ±10° 안의 평균 휘도">–</div><div class="s" data-r="avgs" title="최대 대비 % — LED 광속(lm)을 넣으면 cd/m² 로 표시"></div><div class="s m3-need" data-r="need"></div>${gaugeHtml('avgg')}</div>
       <div class="m3-sum-c"><div class="l">광 효율</div><div class="v sm" data-r="eff">–</div><div class="s">관측면 원뿔 안 / LED 총 방출</div></div>
       <div class="m3-sum-x"><div class="m3-regl" data-r="reg" hidden title="큰 창(⤢)에서 고른 영역 — 길이 / 폭 균일도"></div><button type="button" class="m3-leak" data-r="leak" hidden title="누르면 3D 에서 가장 많이 새는 면을 강조"></button></div>
-    </div>
+    </div>`;
+  // 그림: 2D(위) · 길이 1D | 폭 1D(아래 좌우 나란히, 2026-11-22 사용자)
+  const blkHtml = `
     <div class="m3-blk"><div class="m3-t"><b class="m3-tt">2D 광량 <i class="m3-info" data-r="mapsub" tabindex="0">ⓘ</i></b><span><label class="m3-map-eq" title="가로세로를 같은 축척으로 — 끄면 좁은 폭을 늘려 보여 줌"><input type="checkbox" data-r="mapEq"> 실제 비율</label><span class="m3-orient" data-orient-box><button type="button" data-orient="rot" title="2D 를 시계 방향으로 90° 돌림 — 링·실제 비율 그림이 돌아감(펼친 그림·1D 는 길이·폭 방향만 따라감)" aria-label="2D 돌리기">⟳</button><button type="button" data-orient="h" title="2D 좌우 뒤집기 — 1D·CSV 도 화면 방향대로" aria-label="2D 좌우 뒤집기">⇋</button><button type="button" data-orient="v" title="2D 상하 뒤집기 — 1D·CSV 도 화면 방향대로" aria-label="2D 상하 뒤집기">⇅</button><button type="button" data-orient="reset" title="돌리기·뒤집기 원래대로" aria-label="2D 방향 원래대로" disabled>↺</button></span> <select data-r="quality" title="2D 분포·1D 프로파일 칸 크기(정사각) — 저 1.5 mm(빠름) · 중 1.0 mm(광선 ≈2배) · 고 0.5 mm(광선 ≈4배) · 짧거나 좁은 면은 그 방향만 더 잘게" aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>  <button type="button" class="m3-zoom" data-zoom="map" title="큰 창으로 보기" aria-label="2D 광량 분포 확대">⤢</button></span></div>
       <div class="m3-gw"><canvas class="m3-g" data-r="map" width="600" height="200"></canvas></div></div>
-    <div class="m3-blk"><div class="m3-t"><b class="m3-tt">길이 1D <i class="m3-info" data-r="psub" tabindex="0">ⓘ</i> <span data-r="uprof"></span></b><span><button type="button" class="m3-zoom" data-zoom="prof" title="큰 창으로 보기" aria-label="길이 프로파일 확대">⤢</button></span></div>
+    <div class="m3-blkrow"><div class="m3-blk"><div class="m3-t"><b class="m3-tt">길이 1D <i class="m3-info" data-r="psub" tabindex="0">ⓘ</i> <span data-r="uprof"></span></b><span><button type="button" class="m3-zoom" data-zoom="prof" title="큰 창으로 보기" aria-label="길이 프로파일 확대">⤢</button></span></div>
       <div class="m3-gw"><canvas class="m3-g" data-r="prof" width="600" height="150"></canvas></div></div>
     <div class="m3-blk"><div class="m3-t"><b class="m3-tt">폭 1D <i class="m3-info" data-r="wsub" tabindex="0">ⓘ</i> <span data-r="uwprof"></span></b><span><button type="button" class="m3-zoom" data-zoom="wprof" title="큰 창으로 보기" aria-label="폭 프로파일 확대">⤢</button></span></div>
-      <div class="m3-gw"><canvas class="m3-g" data-r="wprof" width="600" height="120"></canvas></div></div>`;
-  const q = (k) => el.querySelector(`[data-r="${k}"]`);
+      <div class="m3-gw"><canvas class="m3-g" data-r="wprof" width="600" height="120"></canvas></div></div></div>`;
+  el.innerHTML = head ? blkHtml : topHtml + blkHtml;
+  if (head) head.innerHTML = topHtml;
+  const q = (k) => el.querySelector(`[data-r="${k}"]`) ?? head?.querySelector(`[data-r="${k}"]`);
   let mapEq = false; try { mapEq = localStorage.getItem('uds.m3.mapEq') === '1'; } catch {}   // 메인 2D 실제 비율 — 이 브라우저에 기억
   const RATIO = { map: 2.6, prof: 2.6, wprof: 3.2 };   // 눈금·색 막대·읽기가 들어가도록 높게
   wireHover(q('prof')); wireHover(q('wprof')); wireMapHover(q('map'));
@@ -922,8 +927,10 @@ export function createResultsPanel(el, { anchor = () => null, onPreview = null, 
   };
   // onclick 대입(addEventListener 아님) — 패널을 다시 만들면(새 도면·프로젝트) 앞 패널의 처리를 대체. 쌓이면 큰 창이 2개 열리고 아래 창은 이전 계산 데이터였음
   el.onclick = (e) => { const b = e.target.closest('[data-zoom]'); if (b) { openBig(); return; } const n = e.target.closest('[data-r="next"]'); if (n) { if (n.dataset.k === 'big') openBig(); else onOpt?.(); } };
-  // 메인 결과 칸 높이 조절(2D · 길이 1D · 폭 1D 사이 끌기 막대) — 전체 높이는 그대로, 비율만(보는 사람별)
-  mountSplit([...el.querySelectorAll(':scope > .m3-blk')], { key: 'uds.m3.resSplit', dir: 'col', min: 110, onChange: () => { if (last) update(last); } });
+  if (head) head.onclick = el.onclick;   // 보드 칸의 [다음 할 일] 단추
+  // 메인 결과 칸 크기 조절(보는 사람별) — 2D ↕ 1D 줄(처음 2 : 1 = 오른쪽 창의 2/4 : 1/4, 2026-11-22 사용자) · 길이 1D ↔ 폭 1D
+  mountSplit([q('map').closest('.m3-blk'), el.querySelector('.m3-blkrow')], { key: 'uds.m3.resSplit2', dir: 'col', min: 110, init: [2, 1], onChange: () => { if (last) update(last); } });
+  mountSplit([...el.querySelectorAll('.m3-blkrow > .m3-blk')], { key: 'uds.m3.resSplitH', dir: 'row', min: 120, onChange: () => { if (last) update(last); } });
   let last = null;
   const fill = (g, pct, ok, tgPct) => {
     const f = g.querySelector('.f'), w = `${Math.max(0, Math.min(100, pct)).toFixed(0)}%`;
@@ -998,6 +1005,7 @@ export function createResultsPanel(el, { anchor = () => null, onPreview = null, 
     { const V = overallVerdict(st, observe); q('verdict').textContent = V.text; q('verdict').className = `m3-verdict ${V.cls}`; vCls = V.cls; syncNext(); }   // 요약 카드 종합 판정(길이·폭 judgeText 그대로)
     const lc = lumCard(st, snap.photometry, observe.targetLum);
     q('avg').textContent = lc.value; q('avgs').textContent = lc.sub; q('avg').className = `v ${lc.pass == null ? '' : lc.pass ? 'ok' : 'bad'}`;
+    q('avgs').classList.toggle('m3-unit', lc.ratio == null); q('avg').title = `cd/m² 값은 보는 각도 설정과 상관없이 정면 ±10° 안의 평균 휘도${lc.ratio == null ? ` · ${lc.sub}` : ''}`;   // 보드에서는 목표 없는 보조 줄(최대 대비)을 숨기고 툴팁으로(2026-11-22)
     { const n = requiredFlux(snap.photometry, observe.targetLum); q('need').textContent = needShort(n); q('need').title = n ? `${needText(n)} — 정면 ±10° 기준: 목표 휘도 × 관측면적 × π × sin²10° ÷ ±10° 안 광 효율` : ''; }
     q('avgg').hidden = lc.ratio == null;
     if (lc.ratio != null) fill(q('avgg'), lc.ratio * 50, lc.pass, 50);   // 목표 = 가운데, 목표의 2배 = 가득

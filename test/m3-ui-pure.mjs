@@ -1529,7 +1529,7 @@ done();
   const id = modeBand(null, 'auto', { quality: 'low' }, 0);
   say(id.cls === 'idle' && !!id.label, `계산 전 띠 (${id.label})`);
   const { readFileSync } = await import('node:fs'), rp = readFileSync(new URL('../src/ui/m3/results-panel.js', import.meta.url), 'utf8');
-  const html = rp.slice(rp.indexOf('el.innerHTML = `'), rp.indexOf('const q = (k) =>'));
+  const html = rp.slice(rp.indexOf('const topHtml = `'), rp.indexOf('const q = (k) =>'));
   say(html.indexOf('data-r="mode"') > 0 && html.indexOf('data-r="mode"') < html.indexOf('class="m3-sum"'), '띠는 결과 카드 위');
   const eff = html.slice(html.indexOf('광 효율'), html.indexOf('m3-sum-x'));
   say(!/data-r="effl"|data-r="pv"/.test(eff), '광 효율 카드에는 바뀌는 글·단추 없음(높이 고정)');
@@ -1551,4 +1551,25 @@ done();
   const css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
   say(/\.od-diag > summary\s*\{[^}]*white-space:\s*nowrap[^}]*text-overflow:\s*ellipsis/.test(css), '진단 요약 = 한 줄(… 줄임)');
   say(/\.od-cardbar\.off\s*\{[^}]*visibility:\s*hidden/.test(css) && /cb\.classList\.toggle\('off'/.test(od), '진행 막대: 숨겨도 자리 차지(시작·끝에 높이 안 바뀜)');
+}
+
+// 오른쪽 결과 창 = 한 장의 '시뮬레이션 결과'(2026-11-22 사용자) — 위 1/4 보드(제목·진행 · 판정·모드 · 길이/폭 균일도 카드 · 계산 추이 | 광경로),
+// 가운데 2/4 = 2D 광량, 아래 1/4 = 길이 1D | 폭 1D 좌우 나란히. 판정 숫자·규칙은 그대로, 배치만
+{
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const { readFileSync } = await import('node:fs'), rd = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
+  const ix = rd('../index.html'), app = rd('../src/ui/m3/app.js'), rp = rd('../src/ui/m3/results-panel.js'), od = rd('../src/ui/m3/opt-dash.js'), css = rd('../styles.css');
+  say(/<div class="m3-right"><div id="m3-dash" class="m3-dash"><div id="m3-simdash"[^>]*><\/div><div id="m3-reshead"[^>]*><\/div><div id="m3-simplots"[^>]*><\/div><\/div><div id="m3-res"/.test(ix), '오른쪽: 보드(진행 · 판정·카드 · 추이|광경로) 다음 결과 그림');
+  say(/createResultsPanel\(\$\('#m3-res'\), \{ head: \$\('#m3-reshead'\)/.test(app), '결과 패널: 판정·모드·카드는 보드 칸에');
+  say(/createSimDash\(\$\('#m3-simdash'\), \{[^}]*plots: \$\('#m3-simplots'\)/.test(app), '진행 카드: 계산 추이·광경로는 보드 아래 칸에');
+  say(/mountSplit\(\[\$\('#m3-dash'\), \$\('#m3-res'\)\], \{ key: 'uds\.m3\.dashSplit', dir: 'col', min: 80, init: \[1, 3\]/.test(app), '보드 : 그림 = 1 : 3(처음 비율, 새 열쇠라 예전 저장 비율 안 씀)');
+  say(/class="m3-blkrow"/.test(rp) && /mountSplit\(\[q\('map'\)\.closest\('\.m3-blk'\), el\.querySelector\('\.m3-blkrow'\)\], \{ key: 'uds\.m3\.resSplit2', dir: 'col', min: 110, init: \[2, 1\]/.test(rp), '2D : 1D 줄 = 2 : 1');
+  say(/mountSplit\(\[\.\.\.el\.querySelectorAll\('\.m3-blkrow > \.m3-blk'\)\], \{ key: 'uds\.m3\.resSplitH', dir: 'row'/.test(rp), '길이 1D | 폭 1D 좌우 나란히(폭 끌어 조절)');
+  say(/if \(head\) head\.innerHTML = topHtml/.test(rp) && /el\.innerHTML = head \? blkHtml : topHtml \+ blkHtml/.test(rp), '판정·모드·카드 = head 칸(없으면 예전처럼 한 칸)');
+  say(/head\.onclick = el\.onclick/.test(rp), '보드 칸의 [다음 할 일] 단추도 동작');
+  say(/data-s="step">4<\/i>\$\{plots \? '시뮬레이션 결과' : '광분포 시뮬레이션'\}<span class="m3-ad-sp">/.test(od), '보드 제목 = 시뮬레이션 결과(보드 칸이 있을 때)');
+  const pl = od.slice(od.indexOf('plots.innerHTML'), od.indexOf('plots.innerHTML') + 600);
+  say(pl.length > 100 && /계산 추이/.test(pl) && /광경로/.test(pl) && /od-simplot/.test(pl) && !/<details/.test(pl), '계산 추이·광경로 = 늘 보임(접는 칸 아님)');
+  say(/q\('avgs'\)\.classList\.toggle\('m3-unit', lc\.ratio == null\)/.test(rp) && /\.m3-reshead \.m3-sum-c > \.s\.m3-unit\s*\{\s*display:\s*none/.test(css), '보드: 광량 보조 줄은 밝기 목표가 있을 때만("최대 대비" 는 툴팁)');
+  say(/\.m3-sum-u:has\(> \.v\.ok\)\s*\{[^}]*background/.test(css) && /\.m3-sum-u:has\(> \.v\.bad\)\s*\{[^}]*background/.test(css) && /\.m3-sum-u:has\(> \.v\.near\)/.test(css), '길이/폭 카드 바탕색 = 판정 색(합격·미달·근처)');
 }
