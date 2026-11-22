@@ -11,7 +11,7 @@ export const resumable = (from, sig, screen) => (from?.raw && from.sig === sig &
 // 한 Worker 루프가 실패하면 같은 호출의 다른 루프도 새 청크를 보내지 않고 첫 오류를 다시 던짐
 // 늦은 Worker(2026-11-22 사용자: 'Worker 응답 없음 (chunk 90초)' 로 최적화가 97% 에서 실패 — 멈추면 안 됨): 청크 제한 시간을 넘긴 포트는
 // 늦은 답(과 그사이 보낸 장면)이 올 때까지만 빼고, 그 묶음은 다른 포트가 다시 계산(같은 시드). 모든 포트가 늦을 때만 실패. onSlow({ gpu, ms }) = 오류 기록용 알림
-export function createAdRunner({ ports, now: now0 = () => globalThis.performance?.now?.() ?? Date.now(), sceneTimeoutMs = 60000, chunkTimeoutMs = 30000, timers = globalThis, onSlow = null }) {
+export function createAdRunner({ ports, now: now0 = () => globalThis.performance?.now?.() ?? Date.now(), sceneTimeoutMs = 60000, chunkTimeoutMs = 30000, deadMs = chunkTimeoutMs * 5, timers = globalThis, onSlow = null }) {
   let stopped = false, seed = 7001, onStop = null;
   // 일시정지 = 새 청크를 보내지 않음(보낸 청크는 받음). 시계는 멈춘 시간을 뺌 — 시간 한도가 있는 단계의 결과가 쉬었다고 달라지지 않게
   let gate = null, release = null, pausedMs = 0, pausedAt = 0;
@@ -53,21 +53,29 @@ export function createAdRunner({ ports, now: now0 = () => globalThis.performance
   };
   // 포트들이 일감을 나눠 계산 — take(p) → 일감 | null(지금 없음), run(p, 일감), back(일감) = 늦어서 못 한 일감을 되돌림(다른 포트가 다시).
   // 일감이 없어도 다른 포트의 청크가 진행 중이면 기다렸다 다시 봄(그 청크가 늦어 되돌아올 수 있음). 쓸 포트가 하나도 없으면 그 오류로 실패
+  // 늦은 포트(2026-11-22 최종안 정밀 재계산 실패 — 모든 Worker 가 같이 늦음: 화면 멈춤·PC 과부하)는 버리지 않고 늦은 답을 deadMs 까지 기다렸다가 다시 씀.
+  // 그동안 다른 포트가 일을 다 끝내면 기다림을 그만둠. 답이 deadMs 안에 안 오는 포트만 이번 호출에서 빠지고, 그런 포트만 남으면 그때 실패
   const drive = (ctl, take, run, back) => {
-    let inflight = 0; const waiters = [];
+    let inflight = 0, finished = false, alive = ports.length, lastErr = null, gone = false; const waiters = [];
     const ping = () => { while (waiters.length) waiters.shift()(); };
+    let finish; const doneP = new Promise((res) => { finish = () => { finished = true; res('done'); ping(); }; });
+    const waitLate = (p) => { let id; const dl = new Promise((res) => { id = timers.setTimeout(() => res('dead'), deadMs); }); return Promise.race([late.get(p)?.then(() => 'back'), dl, doneP, stopP]).finally(() => timers.clearTimeout(id)); };
     return Promise.all(ports.map(guard(ctl, async (p) => {
-      for (;;) {
-        check(ctl);
-        if (!usable(p)) return;
-        const job = take(p);
-        if (job == null) { if (inflight === 0) return; await new Promise((res) => waiters.push(res)); continue; }
-        inflight++;
-        try { await run(p, job); } catch (e) {
-          if (!e.slow) throw e;
-          back(job);
-          if (!ports.some(usable)) throw e;
-        } finally { inflight--; ping(); }
+      try {
+        for (;;) {
+          check(ctl);
+          if (finished || p.off?.()) return;
+          if (late.has(p)) { if (await waitLate(p) === 'dead') { gone = true; return; } continue; }
+          const job = take(p);
+          if (job == null) { if (inflight === 0) { finish(); return; } await new Promise((res) => waiters.push(res)); continue; }
+          inflight++;
+          try { await run(p, job); } catch (e) {
+            if (!e.slow) throw e;
+            lastErr = e; back(job);
+          } finally { inflight--; ping(); }
+        }
+      } finally {
+        if (--alive === 0 && !finished && !ctl.err && !stopped && gone) throw lastErr ?? new Error(`Worker 응답 없음 (chunk ${chunkTimeoutMs / 1000}초)`);   // 남은 포트가 모두 답 없이 빠짐
       }
     })));
   };

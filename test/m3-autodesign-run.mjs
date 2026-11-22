@@ -41,9 +41,24 @@ const fakePorts = (log, delay = 0) => Array.from({ length: 3 }, (_, w) => ({ sen
   ok(JSON.stringify(a.batches.map((x) => [...x])) === JSON.stringify(b.batches.map((x) => [...x])), 'crn: 늦은 포트가 있어도 결과 같음');
   const C = createAdRunner({ ports: mk(1, []), chunkTimeoutMs: 50 }), e = await C.traceEach(job, [0, 1, 2, 3].map((x) => [{ pos: [x, 0, 0] }]), { N: 2000 });
   ok(e.maps.every((m) => m instanceof Float32Array), 'traceEach: 늦은 포트의 후보도 다른 포트가 계산');
-  const D = createAdRunner({ ports: [mk(1, [])[1]], chunkTimeoutMs: 50 }); let msg = '';
-  try { await D.trace(job, { N: 10000, chunkN: 5000 }); } catch (x) { msg = x.message; }
-  ok(/Worker 응답 없음/.test(msg), `모든 포트가 늦으면 그때만 실패 (${msg})`);
+  // 모든 포트가 한꺼번에 늦음(2026-11-22 사용자: 최종안 정밀 재계산에서 'Worker 응답 없음 (chunk 90초)' — 화면 멈춤·PC 과부하로 모든 Worker 가 같이 늦음):
+  // 실패하지 않고 늦은 답을 기다렸다가(deadMs 까지) 그 포트로 이어서 계산
+  const D = createAdRunner({ ports: [mk(1, [])[1]], chunkTimeoutMs: 50, deadMs: 2000 }); let msg = '', rD = null;
+  try { rD = await D.trace(job, { N: 10000, chunkN: 5000 }); } catch (x) { msg = x.message; }
+  ok(rD?.photons === 10000, `포트 하나뿐이고 늦어도 늦은 답을 기다려 끝까지 계산 (${msg || rD?.photons})`);
+  const both = Array.from({ length: 2 }, (_, w) => { let n = 0; return { gpu: w === 1, send: async (m) => {
+    if (m.type === 'scene') return { sceneKey: m.sceneKey, ready: true };
+    if (++n === 1) await new Promise((res) => setTimeout(res, 300));   // 두 포트의 첫 묶음이 같이 늦음(화면 멈춤)
+    return { sceneKey: m.sceneKey, acc: new Float64Array(nCell).fill(1), cnt: new Uint32Array(nCell), ledger: { emitted: m.N, escaped: 0, absSurf: 0, absVol: 0, lost: 0, rrLoss: 0, rrGain: 0 }, leak: {}, escObs: 0, ms: 1 };
+  } }; });
+  const E = createAdRunner({ ports: both, chunkTimeoutMs: 50, deadMs: 2000 }); let rE = null; msg = '';
+  try { rE = await E.trace(job, { N: 20000, chunkN: 5000, batches: 4 }); } catch (x) { msg = x.message; }
+  ok(rE?.photons === 20000, `모든 포트가 같이 늦어도 기다렸다 이어서 끝까지 (${msg || rE?.photons})`);
+  // 답이 끝내 안 오는 포트(죽은 Worker)만 남으면 deadMs 뒤 실패 — 영원히 기다리지 않음
+  const dead = [{ send: async (m) => (m.type === 'scene' ? { sceneKey: m.sceneKey, ready: true } : new Promise(() => {})) }];
+  const F = createAdRunner({ ports: dead, chunkTimeoutMs: 50, deadMs: 200 }); msg = ''; const tF = Date.now();
+  try { await F.trace(job, { N: 10000, chunkN: 5000 }); } catch (x) { msg = x.message; }
+  ok(/Worker 응답 없음/.test(msg) && Date.now() - tF < 1500, `답이 끝내 없는 Worker 만 남으면 그때 실패 (${msg} · ${Date.now() - tF}ms)`);
   await new Promise((res) => setTimeout(res, 500)); }
 { // traceEach 시간 예산(spec §2.2c): 가짜 시계 1 광자/ms · 포트 1개 — 후보마다 광자 = min(N, 남은 예산/남은 후보, ≥ minN), 지도는 후보 자신의 방출로 정규화
   let t = 0; const Ns = [], prog = [];
