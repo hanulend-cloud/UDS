@@ -26,7 +26,7 @@ export function flowState(calc, stats, M, ad = {}) {
     : done && J === 'preview' ? { text: `미리보기 · ${res}`, cls: '', done: false }   // 광효율 1% 미만 자동 미리보기 = 판정 안 함(2026-11-18)
     : done && has ? { text: `${res} ${pass ? '목표 통과' : J === 'near' ? '목표 근처' : '목표 미달'}`, cls: pass ? 'ok' : J === 'near' ? 'near' : 'bad', done: true }
     : { text: '–', cls: '', done: false };
-  const opt = ad.running ? { text: '진행 중', cls: 'run', done: false }
+  const opt = ad.running ? { text: Number.isFinite(ad.frac) ? `진행 중 ${fmtProg(ad.frac * 100)}%` : '진행 중', cls: 'run', done: false }   // 진행률 %(2026-11-22 사용자 — 창의 진행률과 같은 값)
     : ad.result ? { text: '결과 확인 · 적용', cls: 'run', done: false }
     : J === 'preview' ? { text: '정밀 계산 뒤', cls: '', done: false }
     : !sim.done ? { text: '시뮬레이션 뒤', cls: '', done: false }

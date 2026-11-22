@@ -2124,7 +2124,7 @@ function cmdHandlers() {
     // 흐름 4·5단계 단추 — 해당 칸을 보여 주고 잠깐 강조(모니터가 열려 있으면 그 안에서)
     onSim: () => A.results.toggleBig(),
     onOpt: () => { if (!monitor) return; if (monitor.isOpen()) monitor.close(); else { monitor.open(); monitor.expand(); } },   // ⑤ 단추 = 내용이 보이게(지난번 접어 둔 상태로 열지 않음)   // ⑤ 기구 최적화 창 열고 닫기(기본 화면에는 최적화 칸 없음)
-    adFlow: () => ({ running: !!A?.ad?.running, result: !!A?.ad?.result, applied: !!A?.ad?.undo }),   // undo 가 있으면 적용한 상태(되돌리면 없어짐)
+    adFlow: () => ({ running: !!A?.ad?.running, frac: A?.ad?.running?.frac, result: !!A?.ad?.result, applied: !!A?.ad?.undo }),   // undo 가 있으면 적용한 상태(되돌리면 없어짐)
   };
 }
 

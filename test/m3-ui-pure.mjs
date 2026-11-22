@@ -692,6 +692,8 @@ done();
     console.log('PASS ① 배치 추정값 = 실제값이 있으면 실제값, 없으면 ≈ 추정 표시'); }
   const tp = topPaths({ ':0>1': 3, ':1': 1 }, 2, 3, [0]);
   if (tp.length !== 1 || tp[0].parts.join() !== '1' || tp[0].share !== 1) throw new Error(`빛 계산 제외 부품은 광경로에서 뺌: ${JSON.stringify(tp)}`); }
+{ const { flowState } = await import('../src/ui/m3/command-bar.js'); const st2 = { Ulen: 0.58, Uwid: 0.64 }, M2 = { observe: { targetLen: 0.8, targetWid: 0.8 } };
+  console.log(flowState({ state: 'done' }, st2, M2, { running: true, frac: 0.324 }).opt.text === '진행 중 32.4%' && flowState({ state: 'done' }, st2, M2, { running: true, frac: 0.999 }).opt.text === '진행 중 99.9%' ? 'PASS' : 'FAIL', '⑤ 칩 = 최적화 진행률 %(2026-11-22 사용자)'); }
 { const { flowState } = await import('../src/ui/m3/command-bar.js'); const t = flowState({ state: 'done' }, { Ulen: 0.795, Uwid: 0.83 }, { observe: { targetLen: 0.8, targetWid: 0.8 } }).sim.text;
   if (t !== '79.5% / 83.0% 목표 미달') throw new Error(`미달 표시 = 내림(결과 창과 같게): ${t}`);
   const t2 = flowState({ state: 'done' }, { Ulen: 0.596, Uwid: 0.107 }, { observe: { targetLen: 0.8, targetWid: 0.8 } }).sim.text;
@@ -1201,7 +1203,8 @@ done();
   okI(/\.m3-mon\.min \.m3-tx, \.m3-big-in\.min \.m3-tx \{[^}]*display: none/.test(css), '접으면 글씨 숨김');
   okI(/<span class="m3-tx-s">최적화<\/span>/.test(mon) && /<span class="m3-tx-s">광분포<\/span>/.test(rp) && /\.m3-tx-s \{[^}]*display: none/.test(css) && /\.m3-mon\.min \.m3-tx-s, \.m3-big-in\.min \.m3-tx-s \{[^}]*display: inline/.test(css), '접으면 짧은 창 이름(최적화·광분포)은 남김(2026-11-13 사용자)');
   okI(/m3-fl" data-mon-step>5<\/i><span class="m3-tx">기구 최적화<\/span>/.test(mon) && /m3-fl" data-big-step>4<\/i><span class="m3-tx">광분포 시뮬레이션<\/span>/.test(rp), '창 제목 글씨도 접으면 숨김(번호 아이콘은 남음)');
-  okI([mon, rp].every((x) => /iconLabel\(b, on \? '⤡' : '⤢'/.test(x) && /iconLabel\(b, v \? '▾' : '▴'/.test(x)) && !/>✕ 닫기</.test(mon + rp), '전체화면·접기·닫기 단추 = iconLabel');
+  okI([mon, rp].every((x) => /iconLabel\(b, on \? '⤡' : '⤢'/.test(x)) && !/>✕ 닫기</.test(mon + rp), '전체화면·닫기 단추 = iconLabel');
+  okI(!/data-mon-min|data-big-min/.test(mon + rp) && !/'펼치기' : '접기'/.test(mon + rp), '접기 단추 없음(2026-11-22 사용자: 상단 칩에 같은 정보 — 공간만 차지)');
   okI(/width = st\.min \? 'max-content'/.test(mon) && /width: m \? 'max-content'/.test(rp), '접은 창 폭 = 내용만큼');
   const box = { _h: '', set innerHTML(v) { this._h = v; this.btn = {}; for (const k of ['run', 'pause', 'stop']) this.btn[k] = { innerHTML: '', title: '', attrs: {}, setAttribute(a, x) { this.attrs[a] = x; } }; }, get innerHTML() { return this._h; }, querySelector(q) { const m = q.match(/data-ctl="(\w+)"/); return m ? this.btn?.[m[1]] : (this.btn ? {} : null); } };
   setCtl(box, { run: true, runLabel: '▶ 최적화 시작' }, () => {});
