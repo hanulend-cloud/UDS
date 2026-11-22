@@ -1559,7 +1559,14 @@ done();
   const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
   const { readFileSync } = await import('node:fs'), rd = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
   const ix = rd('../index.html'), app = rd('../src/ui/m3/app.js'), rp = rd('../src/ui/m3/results-panel.js'), od = rd('../src/ui/m3/opt-dash.js'), css = rd('../styles.css');
-  say(/<div class="m3-right"><div id="m3-dash" class="m3-dash"><div id="m3-simdash"[^>]*><\/div><div id="m3-reshead"[^>]*><\/div><div id="m3-simplots"[^>]*><\/div><\/div><div id="m3-res"/.test(ix), '오른쪽: 보드(진행 · 판정·카드 · 추이|광경로) 다음 결과 그림');
+  say(/<div class="m3-right"><div id="m3-dash" class="m3-dash"><div id="m3-simdash"[^>]*><\/div><div id="m3-reshead"[^>]*><\/div><div id="m3-simplots"[^>]*><\/div><\/div><div id="m3-res"/.test(ix), '오른쪽: 보드(진행 · 판정·카드 · 추이) 다음 결과 그림');
+  // 새는 빛·광경로 = 화면 맨 아래 줄 한 줄로(2026-11-22 사용자: 더 심플하게)
+  say(/<div class="m3-foot"><div id="m3-run"[^>]*><\/div><div id="m3-insight" class="m3-insight"><span id="m3-leakslot"><\/span><span id="m3-pathslot"><\/span><\/div><div id="m3-status"/.test(ix), '맨 아래 줄: 실행 | 새는 빛 · 광경로 | 점검');
+  say(/createResultsPanel\(\$\('#m3-res'\), \{[^}]*foot: \$\('#m3-leakslot'\)/.test(app) && /createSimDash\(\$\('#m3-simdash'\), \{[^}]*pathsEl: \$\('#m3-pathslot'\)/.test(app), '새는 빛·광경로를 맨 아래 칸에 그림');
+  const pl2 = od.slice(od.indexOf('plots.innerHTML'), od.indexOf('plots.innerHTML') + 600);
+  say(/계산 추이/.test(pl2) && /pathsEl \?/.test(pl2), '광경로 칸이 아래로 가면 보드에는 계산 추이만(넓게)');
+  say(/if \(foot\)/.test(rp) && /class="m3-leak" data-r="leak"/.test(rp), '새는 빛 단추(누르면 3D 강조)는 그대로, 자리만 아래로');
+  say(/class="m3-fpaths"/.test(od) && /\.m3-insight\s*\{/.test(css), '광경로 = 한 줄(비중 · 경로), 전체는 툴팁');
   say(/createResultsPanel\(\$\('#m3-res'\), \{ head: \$\('#m3-reshead'\)/.test(app), '결과 패널: 판정·모드·카드는 보드 칸에');
   say(/createSimDash\(\$\('#m3-simdash'\), \{[^}]*plots: \$\('#m3-simplots'\)/.test(app), '진행 카드: 계산 추이·광경로는 보드 아래 칸에');
   say(/mountSplit\(\[\$\('#m3-dash'\), \$\('#m3-res'\)\], \{ key: 'uds\.m3\.dashSplit', dir: 'col', min: 80, init: \[1, 3\]/.test(app), '보드 : 그림 = 1 : 3(처음 비율, 새 열쇠라 예전 저장 비율 안 씀)');

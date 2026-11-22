@@ -474,7 +474,7 @@ export function simCardText(state, pct, reason = '', stopped = false, busy = fal
 // bar = 아래 상태줄 칸(2026-11-12 화면 다시 그리기 6단계): 있으면 실행·일시정지·중지 · 진행률 · 광선 수 · 상태 글을 그 줄에 그리고,
 //       카드에는 제목과 접는 칸(계산 오차·균일도 추이 / 광경로)만 남김. 접는 칸 열림은 보는 사람별로 기억(uds.m3.simPlots)
 // plots = 계산 추이 | 광경로를 늘 보이게 그릴 칸(2026-11-22 사용자 — 오른쪽 보드). 있으면 카드에서 그 두 접는 칸을 뺌
-export function createSimDash(el, { onCtl = null, bar = null, plots = null } = {}) {
+export function createSimDash(el, { onCtl = null, bar = null, plots = null, pathsEl = null } = {}) {   // pathsEl = 광경로 한 줄을 그릴 칸(화면 맨 아래 줄, 2026-11-22 사용자) — 있으면 보드에는 계산 추이만
   let H = [], tgt = 0.02, raf = 0, state = '', obs = null, P = [], names = [], reason = '', stopped = false, err = '';
   // names = 부품 이름, nMech = 기구 부품 수(LED STEP 부품 번호는 그 뒤 — 경로에서 뺌)
   let busy = false;   // 기구 최적화 중(점진 계산 일시정지)
@@ -498,7 +498,7 @@ export function createSimDash(el, { onCtl = null, bar = null, plots = null } = {
   function draw() { if (raf) return; raf = setTimeout(() => { raf = 0; render(); }, 40); }   // setTimeout: 화면이 숨겨져도(다른 탭) 갱신 — rAF 는 멈춤
   function render() {
     const last = H[H.length - 1], pct = state === 'done' ? 100 : Number.isFinite(prog) ? prog : last ? simPct(last.noise, tgt) : 0, pctT = fmtProg(pct);
-    const Q = (s) => el.querySelector(s) ?? plots?.querySelector(s);   // 카드 또는 보드 아래 칸
+    const Q = (s) => el.querySelector(s) ?? plots?.querySelector(s) ?? pathsEl?.querySelector(s);   // 카드 또는 보드 아래 칸
     const plot = Q('.od-simplot'), svg = simPlotSvg(H, tgt, obs, plot?.clientWidth || 300, plot?.clientHeight || 70);
     const row = simCaption(H, tgt, obs, state);
     const sTxt = [simStateText(state, reason, stopped, busy, err), symNote(sym)].filter(Boolean).join(' · '), cTxt = [simCardText(state, pct, reason, stopped, busy, err), symNote(sym)].filter(Boolean).join(' · ');
@@ -512,7 +512,8 @@ export function createSimDash(el, { onCtl = null, bar = null, plots = null } = {
         <details class="od-diag" data-s="diag" hidden><summary data-s="diagh"></summary><div data-s="diagb"></div></details>
         <details class="od-more"><summary><span data-s="sum">광경로</span></summary><div data-s="paths"></div></details>`}`;
       // 보드: 계산 추이 | 광경로 — 늘 보임(접는 칸 아님)
-      if (plots) plots.innerHTML = `<div class="od-trend" title="계산 오차(목표 점선까지 내려가면 계산 끝) · 길이·폭 균일도가 광선 수에 따라 어떻게 변했는지"><div class="od-dt">계산 추이</div><div class="od-simplot" data-s="svg"></div></div><div class="od-pathbox"><div class="od-dt">광경로</div><div data-s="paths"><span class="mut">계산 전</span></div></div>`;
+      if (plots) plots.innerHTML = `<div class="od-trend" title="계산 오차(목표 점선까지 내려가면 계산 끝) · 길이·폭 균일도가 광선 수에 따라 어떻게 변했는지"><div class="od-dt">계산 추이</div><div class="od-simplot" data-s="svg"></div></div>${pathsEl ? '' : '<div class="od-pathbox"><div class="od-dt">광경로</div><div data-s="paths"><span class="mut">계산 전</span></div></div>'}`;
+      if (pathsEl) pathsEl.innerHTML = '<span class="m3-fpaths" data-s="fpaths"></span>';
       else el.querySelector('.od-plots').addEventListener('toggle', (e) => { try { localStorage.setItem('uds.m3.simPlots', e.target.open ? '1' : '0'); } catch {} draw(); window.dispatchEvent(new Event('resize')); });
     }
     if (bar && !bar.querySelector('[data-b="pct"]')) {
@@ -543,6 +544,7 @@ export function createSimDash(el, { onCtl = null, bar = null, plots = null } = {
     }
     // 접힌 줄에는 주 광경로 한 줄 요약, 펼치면 광경로 목록
     set('sum', P.length ? `광경로 <span class="mut">${(P[0].share * 100).toFixed(0)}% ${esc(pathText(P[0], names))}</span>` : '광경로');
+    { const n = Q('[data-s="fpaths"]'); if (n) { const pt = (p) => `${(p.share * 100).toFixed(0)}% ${pathText(p, names)}`, html = P.length ? `<b>광경로</b> ${P.map((p, i) => i ? `<span class="mut">${esc(pt(p))}</span>` : esc(pt(p))).join(' · ')}` : ''; if (n.innerHTML !== html) n.innerHTML = html; n.title = P.length ? `빛이 관측면까지 가는 주 경로(비중 큰 순)\n${P.map(pt).join('\n')}` : ''; n.hidden = !P.length; } }   // 맨 아래 줄: 한 줄(1위 진하게)
     set('paths', P.length ? `<div class="od-paths">${P.map((p) => `<div class="od-path" title="${esc(pathText(p, names))}"><span class="od-pbar"><i style="width:${(p.share * 100).toFixed(0)}%"></i></span><b>${(p.share * 100).toFixed(0)}%</b> ${esc(pathText(p, names))}</div>`).join('')}</div>` : '');
   }
   render();

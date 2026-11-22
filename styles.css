@@ -1700,3 +1700,12 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .m3-blkrow > .m3-psplit.row { margin: 0 -9px; }
 .m3-blkrow .m3-t { flex-wrap: wrap; row-gap: 0; }
 @media (max-width: 1024px) { .m3-right > .m3-dash { flex: none !important; } .m3-blkrow > .m3-psplit { display: none; } .m3-res > .m3-blkrow { flex-direction: column; gap: 6px; } }
+
+/* 새는 빛 · 광경로 = 화면 맨 아래 줄 한 줄(2026-11-22 사용자: 더 심플하게) — 보드에는 계산 추이만 넓게 */
+.m3-insight { display: flex; align-items: center; gap: 14px; padding: 0 12px; min-width: 0; flex: 0 1 auto; font-size: 11.5px; border-right: 1px solid var(--m3-line); }
+.m3-insight:not(:has(:not([hidden]):not(:empty))) { display: none; }
+.m3-insight > span { min-width: 0; display: flex; }
+.m3-insight .m3-leak { margin: 0; padding: 0; font-size: 11.5px; white-space: nowrap; }
+.m3-fpaths { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46vw; display: block; }
+.m3-fpaths > b { color: var(--m3-mut); font-weight: 600; margin-right: 4px; }
+.m3-simplots:not(:has(.od-pathbox)) { grid-template-columns: minmax(0, 1fr); }

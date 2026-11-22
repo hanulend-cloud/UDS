@@ -634,7 +634,7 @@ export const mapMenuItems = (hasPin, onCell) => [
 // 1D 우클릭 메뉴 항목(순수)
 export const plotMenuItems = (title) => [{ k: 'csv', label: `${title} 데이터 CSV 저장` }, { k: 'png', label: '그래프 이미지 저장 (PNG)' }, { k: 'copy', label: '그래프 이미지 복사' }];
 // head = 판정·모드 띠·균일도 카드를 그릴 칸(2026-11-22 사용자 — 오른쪽 위 보드). 없으면 예전처럼 el 한 칸에 모두
-export function createResultsPanel(el, { head = null, anchor = () => null, onPreview = null, onOpt = null, onQuality = null, fileName = () => 'uds', onLeak = null, onBig = null, onCalc = null, calcBusy = () => false, onNote = null } = {}) {
+export function createResultsPanel(el, { head = null, foot = null, anchor = () => null, onPreview = null, onOpt = null, onQuality = null, fileName = () => 'uds', onLeak = null, onBig = null, onCalc = null, calcBusy = () => false, onNote = null } = {}) {
   let effT = { key: null, t0: null };
   let optFrac = null, vCls = '';   // 기구 최적화 진행률(null = 안 돎) · 지금 종합 판정
   function syncNext() {   // 판정 옆 '다음 할 일' 단추
@@ -644,6 +644,7 @@ export function createResultsPanel(el, { head = null, anchor = () => null, onPre
   }
   let region = null, regKey = null;   // 선택 영역 { s0, s1, w0, w1 } mm(세션 동안만, 관측면이 바뀌면 지움, 2026-11-12)   // 계산 부담 배지의 경과 시간 기준
   const gaugeHtml = (k) => `<div class="m3-gauge" data-r="${k}"><div class="f"></div><div class="tg"></div></div>`;
+  const leakBtn = `<button type="button" class="m3-leak" data-r="leak" hidden title="누르면 3D 에서 가장 많이 새는 면을 강조"></button>`, leakHtml = foot ? '' : leakBtn;   // if (foot) 새는 빛은 맨 아래 줄로
   const topHtml = `
     <div class="m3-res-h">${head ? '' : '시뮬레이션 결과 '}<span class="m3-verdict" data-r="verdict" aria-live="polite"></span><button type="button" class="m3-next" data-r="next" hidden></button></div>
     <div class="m3-msg" data-r="msg" hidden></div>
@@ -653,7 +654,7 @@ export function createResultsPanel(el, { head = null, anchor = () => null, onPre
       <div class="m3-sum-u"><div class="l">폭 균일도</div><div class="v" data-r="uw">–</div>${gaugeHtml('uwg')}<div class="s" data-r="uwj"></div></div>
       <div class="m3-sum-c"><div class="l">평균 광량</div><div class="v" data-r="avg" title="cd/m² 값은 보는 각도 설정과 상관없이 정면 ±10° 안의 평균 휘도">–</div><div class="s" data-r="avgs" title="최대 대비 % — LED 광속(lm)을 넣으면 cd/m² 로 표시"></div><div class="s m3-need" data-r="need"></div>${gaugeHtml('avgg')}</div>
       <div class="m3-sum-c"><div class="l">광 효율</div><div class="v sm" data-r="eff">–</div><div class="s">관측면 원뿔 안 / LED 총 방출</div></div>
-      <div class="m3-sum-x"><div class="m3-regl" data-r="reg" hidden title="큰 창(⤢)에서 고른 영역 — 길이 / 폭 균일도"></div><button type="button" class="m3-leak" data-r="leak" hidden title="누르면 3D 에서 가장 많이 새는 면을 강조"></button></div>
+      <div class="m3-sum-x"><div class="m3-regl" data-r="reg" hidden title="큰 창(⤢)에서 고른 영역 — 길이 / 폭 균일도"></div>${leakHtml}</div>
     </div>`;
   // 그림: 2D(위) · 길이 1D | 폭 1D(아래 좌우 나란히, 2026-11-22 사용자)
   const blkHtml = `
@@ -665,7 +666,8 @@ export function createResultsPanel(el, { head = null, anchor = () => null, onPre
       <div class="m3-gw"><canvas class="m3-g" data-r="wprof" width="600" height="120"></canvas></div></div></div>`;
   el.innerHTML = head ? blkHtml : topHtml + blkHtml;
   if (head) head.innerHTML = topHtml;
-  const q = (k) => el.querySelector(`[data-r="${k}"]`) ?? head?.querySelector(`[data-r="${k}"]`);
+  if (foot) foot.innerHTML = leakBtn;   // 새는 빛 = 화면 맨 아래 줄(2026-11-22 사용자)
+  const q = (k) => el.querySelector(`[data-r="${k}"]`) ?? head?.querySelector(`[data-r="${k}"]`) ?? foot?.querySelector(`[data-r="${k}"]`);
   let mapEq = false; try { mapEq = localStorage.getItem('uds.m3.mapEq') === '1'; } catch {}   // 메인 2D 실제 비율 — 이 브라우저에 기억
   const RATIO = { map: 2.6, prof: 2.6, wprof: 3.2 };   // 눈금·색 막대·읽기가 들어가도록 높게
   wireHover(q('prof')); wireHover(q('wprof')); wireMapHover(q('map'));
