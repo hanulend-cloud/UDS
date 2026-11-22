@@ -89,6 +89,19 @@ const same = (a, b) => a.length === b.length && a.every((v, k) => v === b[k]);
   const small = (await host.handle({ type: 'chunk', sceneKey: 'g1', seed: 1, N: 2000, cpuMax: 50000 })).reply;
   ok(small.acc?.length > 0 && !small.gpuRetry, 'GPU 실패 + 작은 청크 → 그대로 CPU 로 계산');
 }
+{   // 청크 사이에 GPU 장치를 잃음(lost = true, 2026-11-22 'Worker 응답 없음 (chunk 90초)') — GPU 크기 청크를 CPU 로 통째 돌리지 않고 gpuRetry, GPU 끔
+  const host = makeChunkHost({ getTable: () => table, getDb: () => null });
+  let failed = 0; host.setGpu({ lost: true, trace: () => Promise.reject(new Error('안 불려야 함')) }, () => failed++);
+  host.handle({ type: 'scene', sceneKey: 'g2', mechParts: [fx.plate], mspec: fx.mspec, ledParts: null, lineData: lightData(fx.line), G: fx.G, obs: fx.obs, emitters: fx.emitters });
+  const big = (await host.handle({ type: 'chunk', sceneKey: 'g2', seed: 1, N: 200000, cpuMax: 1000 })).reply;
+  ok(big.gpuRetry === true && !big.acc && failed === 1 && host.gpu === null, `GPU 잃음 + cpuMax 초과 청크 → gpuRetry, GPU 끔 (retry=${big.gpuRetry}, failed=${failed})`);
+  const small = (await host.handle({ type: 'chunk', sceneKey: 'g2', seed: 1, N: 800, cpuMax: 1000 })).reply;
+  ok(small.acc?.length > 0 && !small.gpuRetry, 'GPU 꺼진 뒤 작은 청크 → CPU 로 계산');
+  const host2 = makeChunkHost({ getTable: () => table, getDb: () => null });
+  host2.handle({ type: 'scene', sceneKey: 'g3', mechParts: [fx.plate], mspec: fx.mspec, ledParts: null, lineData: lightData(fx.line), G: fx.G, obs: fx.obs, emitters: fx.emitters });
+  const cpu = (await host2.handle({ type: 'chunk', sceneKey: 'g3', seed: 1, N: 3000, cpuMax: 1000 })).reply;
+  ok(cpu.acc?.length > 0 && !cpu.gpuRetry, 'GPU 없는 Worker 는 cpuMax 와 상관없이 CPU 로 계산(gpuRetry 반복 없음)');
+}
 {   // GPU 자동 복구(2026-11-12) — GPU 가 멈춰 꺼지면 잠시 뒤 새로 만들어 다시 씀(최대 max 번). 복구되면 onBack 알림
   const host = makeChunkHost({ getTable: () => table, getDb: () => null });
   const timers = []; const T = { setTimeout: (f, ms) => timers.push({ f, ms }) };

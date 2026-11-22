@@ -58,7 +58,12 @@ export function makeChunkHost({ getTable, getDb = () => null }) {
           rw = { part: m.rw.part, C: rwCoeffs(S.optics[m.rw.part], grid) };
         }
         const args = { S, line, obs, G, emitters, ledSpec, N: m.N, seed: m.seed, rw };
-        if (gpu && !gpu.lost && !obsVirtual(S, obs)) {
+        // 청크 사이에 GPU 장치를 잃음(device.lost, 2026-11-22 'Worker 응답 없음 (chunk 90초)') — 이 청크는 GPU 크기라 CPU 로 통째 돌리면 제한 시간을 넘김 → 위와 같은 규칙
+        if (gpu?.lost) {
+          gpu = null; gpuFail('GPU 장치를 잃음'); scheduleRecover();
+          if (m.cpuMax > 0 && m.N > m.cpuMax) return { reply: { sceneKey: m.sceneKey, gpuRetry: true }, transfer: [] };
+        }
+        if (gpu && !obsVirtual(S, obs)) {
           // GPU 가 청크 중에 멈추면 GPU 를 끄고 CPU 로 — 단 cpuMax(점진 계산이 줌)보다 큰 GPU 몫 청크는 CPU 로 통째 돌리면 청크 제한 시간을 넘기므로
           // gpuRetry 로 돌려보내 호출 쪽이 CPU 크기로 다시 보내게 함(2026-11-12, 'Worker 응답 없음' 원인)
           return runChunkGpu(gpu, args).then((r) => pack(m, r), (e) => {
