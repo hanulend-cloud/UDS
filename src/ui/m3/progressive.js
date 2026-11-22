@@ -76,7 +76,9 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
   const cap = () => job?.maxPhotons ?? o.maxPhotons;   // 계산 한도 — 작업(화질)별, 없으면 기본
   let gen = 0, state = 'idle', reason = null, error = null, job = null, pendingJob = null, debounce = null, ticker = null;
   let paths = {}, bins, binIssued, ledger, leak, nextChunk, issued, retry, doneChunks, photons, ignored, snap, early, nMin, nMax, seeded = false;   // seeded = 최종 판정 값을 넘겨받음 → 대칭 합치기 안 함(판정은 전체 영역)
-  let tightMs = 0, lastTick = null;   // 노이즈 목표를 조인(목표 경계) 뒤 계산 중이던 시간 — 일시정지 시간은 안 셈
+  let tightMs = 0, lastTick = null;   // 기본 노이즈에 닿은 뒤 조인 목표(목표 경계)로 더 계산한 시간 — 일시정지 시간은 안 셈
+  let cNoise = null;   // 확정 계산(2026-11-22 사용자: 탐색 2% · 확정 1.5%) — 이번 계산만 쓰는 기본 노이즈(새 계산이면 지움)
+  const base = () => cNoise ?? o.targetNoise;
   let pendingSeed = null, wantPaused = false, disposed = false;   // wantPaused: 대기·시작 중 일시정지 요청 → 시작될 때 적용
   const busy = ports.map(() => 0);   // 포트별로 돌고 있는 펌프의 세대(0 = 쉼)
   const dead = ports.map(() => 0);   // 포트별로 늦어서 뺀 세대 — 그 계산 동안만 뺌(다음 계산에서는 다시 씀)
@@ -85,7 +87,7 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
   const now = () => (typeof timers.now === 'function' ? timers.now() : globalThis.performance?.now?.() ?? Date.now());
   resetAcc();
 
-  function resetAcc() { prog = null; bins = Array.from({ length: o.bins }, () => null); binIssued = new Float64Array(o.bins); ledger = ledger0(); leak = {}; paths = {}; nextChunk = 0; issued = 0; retry = []; nMin = Infinity; nMax = 0; doneChunks = 0; photons = 0; ignored = 0; snap = null; early = false; seeded = false; tightMs = 0; lastTick = null; }
+  function resetAcc() { prog = null; bins = Array.from({ length: o.bins }, () => null); binIssued = new Float64Array(o.bins); ledger = ledger0(); leak = {}; paths = {}; nextChunk = 0; issued = 0; retry = []; nMin = Infinity; nMax = 0; doneChunks = 0; photons = 0; ignored = 0; snap = null; early = false; seeded = false; tightMs = 0; lastTick = null; cNoise = null; }
   function stopTick() { if (ticker != null) { timers.clearInterval(ticker); ticker = null; } }
   function startTick() { stopTick(); ticker = timers.setInterval(onTick, o.tickMs); }
   const emit = () => { if (!disposed) onUpdate(snapshot()); };
@@ -238,7 +240,7 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
     for (const B of filled) for (let k = 0; k < sum.length; k++) sum[k] += B.acc[k];
     return { stats, sum, photometry: photometry(job.G, sum, ledger, { fluxLm: job.fluxLm ?? 0, nLeds: job.nLeds ?? 0 }) };
   }
-  const goal = () => (job?.preview ? PREVIEW.noise : job?.obs ? judgeNoise(snap?.stats, job.obs, o.targetNoise) : o.targetNoise);   // 미리보기 = 2% 고정(판정용으로 조이지 않음)   // 목표 바로 아래면 더 낮은 노이즈까지
+  const goal = () => (job?.preview ? PREVIEW.noise : job?.obs ? judgeNoise(snap?.stats, job.obs, base()) : base());   // 미리보기 = 2% 고정(판정용으로 조이지 않음)   // 목표 바로 아래면 더 낮은 노이즈까지
   function onTick() {
     if (!job) return;
     snap = compute();
@@ -249,7 +251,8 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
     // 고화질에서 80% 가 판정 오차 안이면 끝나지 않았음(8시간+). 일시정지 사이는 lastTick 을 지워 안 셈
     if (state === 'running') {
       const t = now();
-      if (goal() < o.targetNoise) { if (lastTick != null) tightMs += t - lastTick; lastTick = t; } else lastTick = null;
+      // 기본 노이즈에 닿은 뒤부터 셈(2026-11-22) — 조인 순간부터 세면 목표 근처 설계가 기본 노이즈에도 못 닿고 멈출 수 있었음
+      if (goal() < base() && rn != null && rn <= base()) { if (lastTick != null) tightMs += t - lastTick; lastTick = t; } else lastTick = null;
       if (tightMs >= o.judgeMs) { finish('judgeLimit'); return; }
     }
     if (state === 'running') pumpAll(gen);   // 쉬던 포트가 깨어났으면(GPU 꺼짐 → CPU 포트) 그 포트도 돌림(2026-11-12)
@@ -283,6 +286,13 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
     }
     emit();
   }
+  // 확정 계산 — 지금 결과에 이어서, 이번 계산만 기본 노이즈를 noise 로(설정 값은 그대로). 끝났거나(수렴·목표 경계) 계산 중일 때
+  function confirm(noise) {
+    if (!job || !(noise > 0)) return;
+    cNoise = noise; tightMs = 0; lastTick = null;
+    if (state === 'done' && reason !== 'adopted' && photons < cap()) { prog = null; state = 'running'; reason = null; startTick(); emit(); pumpAll(gen); return; }
+    emit();
+  }
   function cancel() {
     gen++; stopTick();
     if (debounce != null) { timers.clearTimeout(debounce); debounce = null; }
@@ -297,8 +307,8 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
       state, stopped, reason, error, photons, progress: state === 'done' ? 100 : prog?.pct ?? 0, chunks: doneChunks, ignored, sceneKey: job?.sceneKey ?? null,
       stats: snap?.stats ?? null, sum: snap?.sum ?? null, photometry: snap?.photometry ?? null,
       ledger: { ...ledger }, leak: { ...leak }, paths: { ...paths }, bins: bins.map((b) => b && { acc: b.acc, n: b.n, photons: b.photons }),
-      G: job?.G ?? null, obs: job?.obs ?? null, targetNoise: goal(), preview: !!job?.preview,
+      G: job?.G ?? null, obs: job?.obs ?? null, targetNoise: goal(), baseNoise: base(), preview: !!job?.preview,
     };
   }
-  return { restart, pause, stop, resume, cancel, dispose, setJudge, snapshot };
+  return { restart, pause, stop, resume, confirm, cancel, dispose, setJudge, snapshot };
 }
