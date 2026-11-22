@@ -629,7 +629,13 @@ done();
 { const { etaText } = await import('../src/ui/m3/opt-dash.js');
   const H = [{ ph: 1e6, t: 0, noise: 0.1 }, { ph: 2e6, t: 5000, noise: 0.07 }, { ph: 3e6, t: 10000, noise: 0.0577 }];
   const e = etaText(H, 0.02);
-  console.log(e.includes('필요 광선 ≈ 2,497만') && e.includes('남은 ≈ 2분') && etaText([{ ph: 1, t: 0, noise: 0.01 }], 0.02) === '' ? 'PASS 남은 계산 예상(필요 광선·시간)' : (process.exitCode = 1, `FAIL 남은 계산 예상: ${e}`)); }
+  console.log(e.includes('필요 광선 ≈ 2,497만') && e.includes('남은 ≈ 2분') && etaText([{ ph: 1, t: 0, noise: 0.01 }], 0.02) === '' ? 'PASS 남은 계산 예상(필요 광선·시간)' : (process.exitCode = 1, `FAIL 남은 계산 예상: ${e}`));
+  // 목표 경계 한도가 남은 시간보다 짧으면 한도까지만(2026-11-22 — 5시간으로 보였던 것)
+  const c = etaText(H, 0.02, 30000);
+  console.log(c.includes('남은 ≈ 30초') ? 'PASS 남은 시간 = 한도 시간까지만' : (process.exitCode = 1, `FAIL 남은 시간 한도: ${c}`));
+  // 총 광선도 한도 기준(2026-11-22 사용자: 99.4% 인데 3,104만 / 총 5,839만) — 속도 20만/초 × 30초 = 지금 300만 + 600만
+  const { simCaption } = await import('../src/ui/m3/opt-dash.js'), cap = simCaption(H, 0.02, null, 'running', 30000);
+  console.log(cap.startsWith('광선 300만 / 총 900만') ? 'PASS 총 광선 = 한도 시간까지 갈 광선' : (process.exitCode = 1, `FAIL 총 광선 한도: ${cap}`)); }
 { const { mapLayout } = await import('../src/ui/m3/results-panel.js');
   const G = { w0: -2.75, nw: 8, cell: 0.6875, L: 440, ns: 110 }, a = mapLayout(G, 600, 180, 1), b = mapLayout({ w0: -12, nw: 8, cell: 3, L: 116, ns: 100 }, 600, 180, 1);
   const [x, y] = a.xy(250, 1), back = a.at(x, y);
@@ -1390,7 +1396,10 @@ done();
   const okS = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
   const { uniTagHtml } = await import('../src/ui/m3/results-panel.js');
   const a = uniTagHtml('길이', { Ulen: 0.7416, seLen: 0.004, relNoise: 0.01 }, 0.8), b = uniTagHtml('폭', { Uwid: 0.853, seWid: 0.004, relNoise: 0.01 }, 0.8);
-  okS(/길이 균일도/.test(a) && /74\.1%/.test(a) && /class="m3-uni bad"/.test(a) && /85\.3%/.test(b) && /m3-uni ok/.test(b) && /목표 80%/.test(a), `제목 옆 균일도: ${a} | ${b}`);
+  { const vis = (h) => h.replace(/title="[^"]*"/g, '').replace(/<[^>]+>/g, '').trim();   // 보이는 글 = 숫자 + 목표('길이/폭 균일도' 글씨 뺌, 2026-11-22 사용자)
+    okS(vis(a) === '74.1% 목표 80%' && /class="m3-uni bad"/.test(a) && vis(b) === '85.3% 목표 80%' && /m3-uni ok/.test(b) && /title="길이 균일도 · 목표 80%"/.test(a), `제목 옆 균일도: ${vis(a)} | ${vis(b)}`); }
+  { const { readFileSync } = await import('node:fs'), rp = readFileSync(new URL('../src/ui/m3/results-panel.js', import.meta.url), 'utf8');
+    okS(!/이 그림만<\/button>/.test(rp) && !/'⤢ 이 그림만'/.test(rp) && /data-big-one="\$\{k\}" title="이 그림만 화면 가득" aria-label="이 그림만 화면 가득">⤢<\/button>/.test(rp), '큰 창 [⤢] 단추 = 아이콘만(설명은 툴팁)'); }
   okS(/m3-uni near/.test(uniTagHtml('길이', { Ulen: 0.803, seLen: 0.01, relNoise: 0.01 }, 0.8)) && uniTagHtml('길이', { Ulen: 0.7, seLen: 0.05, relNoise: 0.08 }, 0.8) === '' && uniTagHtml('폭', { Uwid: null }, 0.8) === '' && uniTagHtml('길이', null, 0.8) === '', '근처 = near · 계산 초반(노이즈 5% 넘음)·값 없음 = 표시 안 함');
   const { simCardText } = await import('../src/ui/m3/opt-dash.js');
   okS(simCardText('running', 29.74) === '계산 중 29.7%' && simCardText('done', 100, 'converged') === '계산 완료 — 노이즈 충분히 작음' && simCardText('running', 50, '', false, true) === '기구 최적화 중 — 일시정지(끝나면 이어서)' && simCardText('paused', 40) === '일시정지 40.0%', `④ 상태 글에 진행 %: ${simCardText('running', 29.74)}`);

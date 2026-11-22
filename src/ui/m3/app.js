@@ -531,7 +531,7 @@ function onCalc(snap) {
   restoreAdFromFile();
   if (previewCheck(snap)) return;   // 미리보기 켜기·끄기 = 새로 계산(이 결과는 버림)
   A.results.update({ snap, calcMode: A.calcMode ?? 'auto', observe: M.observe, message: guidance(snap), shape: shapeFor(S.line, snap?.G), leds: ledSW(M, S.line), ledsOrig: (() => { const c = ledChangeNow(M, S.line); return c?.changed ? c.orig : []; })(), leak: leakText(A.checks.leak, M.parts.map((p) => p.name)) });
-  A.simDash?.sample(snap, snap.targetNoise ?? M.observe.targetNoise ?? 0.01, M.observe, M.parts.map((p) => p.name), M.parts.length, !!adState().running, M.parts.flatMap((p, i) => (isUntraced(p) ? [i] : [])));
+  A.simDash?.sample(snap, snap.etaNoise ?? snap.targetNoise ?? M.observe.targetNoise ?? 0.01, M.observe, M.parts.map((p) => p.name), M.parts.length, !!adState().running, M.parts.flatMap((p, i) => (isUntraced(p) ? [i] : [])));
   drawLightPaths();
   adDetectPath();
   monitorSummary();

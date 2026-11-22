@@ -388,12 +388,19 @@ export const pathText = (p, names) => `LED → ${p.parts.map((q) => names[q] ?? 
 export function simPct(relNoise, target) { return Number.isFinite(relNoise) && relNoise > 0 ? Math.max(0, Math.min(100, (target / relNoise) ** 2 * 100)) : 0; }
 // 남은 계산 예상(순수) — 오차는 광선 수의 제곱근에 반비례 → 필요 광선 = 지금 × (오차/목표)². 속도 = 최근 10초 광선 증가
 const human = (n) => (n >= 1e8 ? `${(n / 1e8).toFixed(1)}억` : n >= 1e4 ? `${Math.round(n / 1e4).toLocaleString()}만` : String(Math.round(n)));
-export function etaText(H, tgt) {
+// 남은 계산(순수) — { need: 멈출 때까지 갈 총광선, sec } | null. capMs(목표 경계 남은 한도)가 더 짧으면 그 시간 × 속도까지만(총광선도 같이, 2026-11-22)
+function etaCore(H, tgt, capMs = null) {
   const last = H[H.length - 1];
-  if (!last || !(last.noise > tgt) || H.length < 3) return '';
-  const need = last.ph * (last.noise / tgt) ** 2, ref = H.find((p) => last.t - p.t <= 10000) ?? H[0], rate = (last.ph - ref.ph) / Math.max(1e-3, (last.t - ref.t) / 1000);
-  if (!(rate > 0)) return '';
-  const sec = (need - last.ph) / rate, tm = sec < 90 ? `${Math.max(1, Math.round(sec))}초` : sec < 5400 ? `${Math.round(sec / 60)}분` : `${(sec / 3600).toFixed(1)}시간`;
+  if (!last || !(last.noise > tgt) || H.length < 3) return null;
+  const ref = H.find((p) => last.t - p.t <= 10000) ?? H[0], rate = (last.ph - ref.ph) / Math.max(1e-3, (last.t - ref.t) / 1000);
+  if (!(rate > 0)) return null;
+  const sec = Math.min((last.ph * (last.noise / tgt) ** 2 - last.ph) / rate, capMs > 0 ? capMs / 1000 : Infinity);
+  return { need: last.ph + rate * sec, sec };
+}
+export function etaText(H, tgt, capMs = null) {   // capMs = 남은 한도 시간(목표 경계 — 그 안에 멈춤)
+  const e = etaCore(H, tgt, capMs);
+  if (!e) return '';
+  const { need, sec } = e, tm = sec < 90 ? `${Math.max(1, Math.round(sec))}초` : sec < 5400 ? `${Math.round(sec / 60)}분` : `${(sec / 3600).toFixed(1)}시간`;
   return ` · 필요 광선 ≈ ${human(need)} · 남은 ≈ ${tm}`;
 }
 // 빛 도달 진단(순수) — 관측면으로 나온 빛이 아주 적으면(< 1%) 빛이 실제로 어디로 갔는지 알려 줌: 많이 나간 곳(부품·면) · 흡수.
@@ -453,9 +460,10 @@ export function simPlotSvg(H, tgt, obs, w, h) {
     <div><div class="od-simt" title="균일도 — 목표 점선 위면 통과, 세로 막대 = 불확실 범위">${cw >= 190 ? '<b>균일도</b> ' : ''}<i class="od-k od-d1"></i>길이 ${fmtJudge(last.Ulen)}${mk(last.Ulen, tl, last.seLen, last.noise)} <i class="od-k od-d2"></i>폭 ${fmtJudge(last.Uwid)}${mk(last.Uwid, tw, last.seWid, last.noise)}</div>${svgB}</div></div>`;
 }
 // 그래프 위 설명 한 줄(순수) — 광선 수 / 총광선 · 남은 시간
-export function simCaption(H, tgt, obs, state) {
+export function simCaption(H, tgt, obs, state, capMs = null) {
   const last = H[H.length - 1]; if (!last) return '광선 수 0';
-  return `광선 ${human(last.ph)} / 총 ${human(state === 'done' ? last.ph : simTotal(last, tgt))}${state === 'running' ? etaText(H, tgt).replace(/ · 필요 광선 ≈ [^·]*/, '') : ''}`;
+  const e = state === 'running' ? etaCore(H, tgt, capMs) : null, tot = state === 'done' ? last.ph : e ? Math.max(last.ph, e.need) : simTotal(last, tgt);   // 총광선 = 남은 시간과 같은 기준(한도면 한도까지)
+  return `광선 ${human(last.ph)} / 총 ${human(tot)}${state === 'running' ? etaText(H, tgt, capMs).replace(/ · 필요 광선 ≈ [^·]*· /, ' · ') : ''}`;
 }
 // 시뮬레이션 상태 글(순수) — 카드·아래 상태줄 공용
 // 대칭 영역 검토 문구(2026-11-17) — sym = symStats 결과의 sym
@@ -481,9 +489,9 @@ export function createSimDash(el, { onCtl = null, bar = null, plots = null, path
   let diag = null, lastPh = 0;   // 빛 도달 진단(관측면 도달 < 1%) · 앞 갱신의 광선 수(줄면 새 계산)
   let mini = null;   // 광분포 시뮬레이션 창 안의 진행 현황 칸
   let sym = null;   // 대칭 합치기 상태(symStats)
-  let prog;   // 점진 계산의 표시 진행률(되돌아가지 않음)
+  let prog, capMs = null;   // 점진 계산의 표시 진행률(되돌아가지 않음) · 목표 경계 남은 한도 시간
   function sample(snap, targetNoise, observe, nm = names, nMech = nm.length, adBusy = false, skip = []) {
-    prog = snap?.progress; busy = adBusy; tgt = targetNoise ?? tgt; obs = observe ?? obs; state = snap?.state ?? ''; reason = snap?.reason ?? ''; err = snap?.error ?? ''; stopped = !!snap?.stopped; names = nm; P = topPaths(snap?.paths, nMech, 3, skip);
+    prog = snap?.progress; capMs = snap?.tightLeftMs ?? null; busy = adBusy; tgt = targetNoise ?? tgt; obs = observe ?? obs; state = snap?.state ?? ''; reason = snap?.reason ?? ''; err = snap?.error ?? ''; stopped = !!snap?.stopped; names = nm; P = topPaths(snap?.paths, nMech, 3, skip);
     const ph = snap?.photons ?? 0, st = snap?.stats; sym = st?.sym ?? null;
     { const d = ph >= 50000 ? reachDiag(snap?.ledger, snap?.leak, nm) : null;   // 한 계산 안에서는 한 번 나오면 유지(1% 근처에서 나왔다 숨었다 하며 카드 높이가 바뀌던 것, 2026-11-19)
       if (d) diag = d;
@@ -500,7 +508,7 @@ export function createSimDash(el, { onCtl = null, bar = null, plots = null, path
     const last = H[H.length - 1], pct = state === 'done' ? 100 : Number.isFinite(prog) ? prog : last ? simPct(last.noise, tgt) : 0, pctT = fmtProg(pct);
     const Q = (s) => el.querySelector(s) ?? plots?.querySelector(s) ?? pathsEl?.querySelector(s);   // 카드 또는 보드 아래 칸
     const plot = Q('.od-simplot'), svg = simPlotSvg(H, tgt, obs, plot?.clientWidth || 300, plot?.clientHeight || 70);
-    const row = simCaption(H, tgt, obs, state);
+    const row = simCaption(H, tgt, obs, state, capMs);
     const sTxt = [simStateText(state, reason, stopped, busy, err), symNote(sym)].filter(Boolean).join(' · '), cTxt = [simCardText(state, pct, reason, stopped, busy, err), symNote(sym)].filter(Boolean).join(' · ');
     // 틀은 한 번만 만들고 칸마다 바뀐 것만 고침 — 계산 중 갱신이 잦아도 단추 클릭·접는 칸이 끊기지 않게
     if (bar && !el.querySelector('.od-simh')) {   // 상태줄 모드: 카드 = 제목 + 접는 칸

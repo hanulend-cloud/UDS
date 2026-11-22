@@ -7,6 +7,7 @@
 import { judgeNoise, LUM_CONE, JUDGE_MS } from '../../engine/mech3d/tally.js';
 import { symStats, symMapAll } from '../../engine/mech3d/symmetry.js';
 
+export const MAIN_TIGHT = 0.01;   // 메인 계산 목표 경계 조임 하한(2026-11-22 사용자)
 export const PROG_DEFAULTS = { chunkN: 25000, fixedChunk: false, minChunk: 1000, maxChunk: 50000, chunkMs: 500, bins: 10, targetNoise: 0.02, maxPhotons: 1e8, debounceMs: 500, tickMs: 1000, seedBase: 1, maxIgnored: 16, sceneTimeoutMs: 60000, chunkTimeoutMs: 30000, judgeMs: JUDGE_MS };
 export const chunkSeed = (seedBase, c) => seedBase * 7919 + c;
 const ledger0 = () => ({ lumEsc: 0, emitted: 0, escaped: 0, absSurf: 0, absVol: 0, lost: 0, rrLoss: 0, rrGain: 0 });
@@ -251,12 +252,16 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
     for (const B of filled) for (let k = 0; k < sum.length; k++) sum[k] += B.acc[k];
     return { stats, sum, photometry: photometry(job.G, sum, ledger, { fluxLm: job.fluxLm ?? 0, nLeds: job.nLeds ?? 0 }) };
   }
-  const goal = () => (job?.preview ? PREVIEW.noise : job?.obs ? judgeNoise(snap?.stats, job.obs, base()) : base());   // 미리보기 = 2% 고정(판정용으로 조이지 않음)   // 목표 바로 아래면 더 낮은 노이즈까지
+  // 메인 계산은 조여도 MAIN_TIGHT(1%)까지(2026-11-22 사용자 — 고화질에서 0.5% 는 몇 시간). 설정한 노이즈가 더 낮으면 그 값. 최적화 판정(JUDGE_NOISE 0.5%)은 그대로
+  const goal = () => (job?.preview ? PREVIEW.noise : job?.obs ? Math.min(base(), Math.max(MAIN_TIGHT, judgeNoise(snap?.stats, job.obs, base()))) : base());
+  // 표시 기준(진행률·남은 시간) = 실제로 멈추는 규칙: 기본 노이즈에 닿기 전에는 기본 노이즈, 닿은 뒤에는 조인 목표(최대 judgeMs) — 전에는 처음부터 조인 목표로 재서 5시간처럼 보였음
+  const tightOn = () => goal() < base() && snap?.stats?.relNoise != null && snap.stats.relNoise <= base();
+  const showGoal = () => (goal() < base() && !tightOn() ? base() : goal());   // 미리보기 = 2% 고정(판정용으로 조이지 않음)   // 목표 바로 아래면 더 낮은 노이즈까지
   function onTick() {
     if (!job) return;
     snap = compute();
     const rn = snap.stats?.relNoise;
-    if (state === 'running') prog = nextProgress(prog, photons, rn, goal());
+    if (state === 'running') { prog = nextProgress(prog, photons, rn, showGoal()); if (prog && tightOn()) prog = { ...prog, pct: Math.min(99.9, Math.max(prog.pct, prog.base + ((100 - prog.base) * tightMs) / o.judgeMs)) }; }   // 한도 시간 쪽으로도 오름
     if (state === 'running' && doneChunks >= o.bins && rn != null && rn <= goal()) { finish('converged'); return; }
     // 목표 경계 한도(2026-11-22 사용자) — 노이즈 목표를 조인 뒤(목표 바로 아래·겨우 통과) 계산 중 시간이 judgeMs(5분, 최적화와 같음)를 넘으면 멈춤.
     // 고화질에서 80% 가 판정 오차 안이면 끝나지 않았음(8시간+). 일시정지 사이는 lastTick 을 지워 안 셈
@@ -311,7 +316,7 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
       state, stopped, reason, error, photons, progress: state === 'done' ? 100 : prog?.pct ?? 0, chunks: doneChunks, ignored, sceneKey: job?.sceneKey ?? null,
       stats: snap?.stats ?? null, sum: snap?.sum ?? null, photometry: snap?.photometry ?? null,
       ledger: { ...ledger }, leak: { ...leak }, paths: { ...paths }, bins: bins.map((b) => b && { acc: b.acc, n: b.n, photons: b.photons }),
-      G: job?.G ?? null, obs: job?.obs ?? null, targetNoise: goal(), preview: !!job?.preview,
+      G: job?.G ?? null, obs: job?.obs ?? null, targetNoise: goal(), etaNoise: showGoal(), tightLeftMs: state === 'running' && tightOn() ? Math.max(0, o.judgeMs - tightMs) : null, preview: !!job?.preview,
     };
   }
   return { restart, pause, stop, resume, cancel, exportSeed, dispose, setJudge, snapshot };

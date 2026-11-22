@@ -128,9 +128,13 @@ const frac = (x) => x - Math.floor(x);   // 시드별 유사 난수(평균이 1/
   const P = createProgressive({ ports: [p], timers: T, opts: OPT });
   P.restart(job(1)); await T.advance(120000);
   const a = P.snapshot();
-  ok(a.state === 'running' && a.targetNoise === 0.005 && a.stats.relNoise > 0.005, `목표 바로 아래 → 노이즈 목표 0.5% 로 조임, 계속 계산 (Ulen ${a.stats?.Ulen?.toFixed(3)} · 노이즈 ${(a.stats?.relNoise * 100).toFixed(2)}%)`);
+  ok(a.state === 'running' && a.targetNoise === 0.01 && a.stats.relNoise > 0.01, `목표 바로 아래 → 노이즈 목표 1% 로 조임(메인 계산은 1% 까지, 2026-11-22 사용자), 계속 계산 (Ulen ${a.stats?.Ulen?.toFixed(3)} · 노이즈 ${(a.stats?.relNoise * 100).toFixed(2)}%)`);
   P.pause(); await T.advance(600000); P.resume();
+  // 진행률·남은 시간 = 실제로 멈추는 규칙 기준(2026-11-22 사용자: 5시간으로 보이며 안 맞음) — 기본 노이즈(2%)에 닿기 전엔 2% 기준, 닿은 뒤엔 조인 목표 + 남은 한도 시간
+  ok(a.etaNoise === (a.stats.relNoise > 0.02 ? 0.02 : 0.01) && (a.stats.relNoise > 0.02 ? a.tightLeftMs == null : a.tightLeftMs > 0 && a.tightLeftMs <= 300000), `표시 기준 노이즈 ${a.etaNoise} · 남은 한도 ${a.tightLeftMs} (노이즈 ${(a.stats.relNoise * 100).toFixed(2)}%)`);
   ok(P.snapshot().state === 'running', '일시정지 시간은 한도에 안 셈');
+  { let s = P.snapshot(), k = 0; while (s.state === 'running' && !(s.stats.relNoise <= 0.02) && k++ < 200) { await T.advance(5000); s = P.snapshot(); }
+    ok(s.state === 'running' && s.etaNoise === 0.01 && s.tightLeftMs > 0 && s.tightLeftMs <= 300000, `2% 에 닿은 뒤: 표시 기준 1% · 남은 한도 ${Math.round((s.tightLeftMs ?? 0) / 1000)}초`); }
   await T.advance(900000);
   const b = P.snapshot();
   ok(b.state === 'done' && b.reason === 'judgeLimit' && b.stats.relNoise > 0.015 && b.stats.relNoise <= 0.02, `2% 에 닿은 뒤 5분 → 멈춤(목표 경계): ${b.state}/${b.reason}`);
@@ -365,7 +369,7 @@ const perPhoton = (s) => Array.from(s.sum, (v) => v / (s.photons / 25000));   //
   const s0 = P.snapshot(), tg = s0.stats.Ulen + 0.01;
   ok(s0.state === 'done' && s0.stats.relNoise < 0.02 && s0.stats.relNoise >= 0.005, `겨우 통과(${(s0.stats.Ulen * 100).toFixed(1)}% ± ${(s0.stats.seLen * 100).toFixed(1)}%p): 2% 에서 멈추지 않고 오차 ±1.0%p 쪽으로 더 계산, 0.5% 아래로는 안 감 (2026-11-17, ${(s0.stats.relNoise * 100).toFixed(2)}%)`);
   P.setJudge({ obs: { ...obs, targetLen: tg } });
-  ok(P.snapshot().state === 'running' && P.snapshot().targetNoise === 0.005, '목표를 바로 위로 올리면 0.5% 까지 계산 재개');
+  ok(P.snapshot().state === 'running' && P.snapshot().targetNoise === 0.01, '목표를 바로 위로 올리면 1% 까지 계산 재개');
   P.cancel();
   const T2 = fakeTimers(), Q = createProgressive({ ports: [port(T2)], timers: T2, opts: { ...OPT, targetNoise: 0.02 } });
   Q.restart({ ...job(2), obs: { ...obs, targetLen: 1.02 } }); await T2.advance(5000);
