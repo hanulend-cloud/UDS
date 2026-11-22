@@ -343,6 +343,21 @@ export function caseHintText(r) {
 }
 // 지난 최적화 후보(2026-11-07) — 한 번 실행에서 정밀 재계산 값이 있는 후보: 최종안(겹치지 않을 때) + 최종 판정에서 재확인한 대안(겹침 제외).
 // 엔트리 = { key, label, Ulen, Uwid, eff, leds, design, r(그 실행의 결과 — 적용할 때 바탕), at, kind }. 현재안 유지 실행은 새 후보 없음
+// 최적화 최종 결과를 .uds 에(2026-11-22 사용자) — 적용 전 = 결과 카드(최종 판정 seed 포함), 적용 뒤 = 적용 요약 + 되돌리기 + 고정. 실행 중·되돌린 뒤 = 없음
+// 실행 환경(ctx: 도면 메쉬·라인 함수)·미리보기 메쉬는 빼고 저장 — 열 때 지금 설계로 다시 만들어 붙임(app.js). enc/dec = seed 글 바꾸기(progressive seedToJson/seedFromJson)
+const plain = ({ ctx, preview, ...x }) => x;
+export function adToFile(st, enc) {
+  if (!st || st.running) return null;
+  if (st.result) return { kind: 'result', data: { ...plain(st.result), seed: st.result.seed ? enc(st.result.seed) : null } };
+  if (st.undo && st.applied) return { kind: 'applied', data: { applied: plain(st.applied), undo: st.undo, locked: st.locked ?? {} } };
+  return null;
+}
+export function adFromFile(f, dec) {
+  if (!f?.data) return null;
+  if (f.kind === 'result') { const sd = f.data.seed ? dec(f.data.seed) : null; if (sd) delete sd.origin; return { result: { ...f.data, seed: sd } }; }   // 적용하면 최적화 최종 판정 값으로(파일 결과 표시 아님)
+  if (f.kind === 'applied') return { applied: f.data.applied, undo: f.data.undo, locked: f.data.locked ?? {} };
+  return null;
+}
 export function histFromRun(res, r, at, labelOf) {
   if (!res || res.cancelled || !r || res.unchanged) return [];
   const out = [], seen = new Set();

@@ -896,6 +896,19 @@ done();
   okU(treeCtxItems(M1, { node: 'part:1', multi: [] }, 'part:1').some((x) => x.k === 'untrace' && x.ids.join() === '1'), '트리 부품 우클릭');
   okU(treeCtxItems(M1, { node: 'group:g', multi: [] }, 'group:g').find((x) => x.k === 'untrace').ids.join() === '0,1', '트리 그룹 우클릭 = 그룹 전체');
   okU(viewCtxItems({ part: 0, untrace: untraceItem(M1, [0]) }).map((x) => x.k).join() === 'hide,only,untrace', '3D 부품 우클릭'); }
+{ // 최적화 최종 결과를 .uds 에(2026-11-22 사용자) — 적용 전 = 결과 카드(+최종 판정 seed), 적용 뒤 = 적용 요약 + 되돌리기 + 고정. 실행 환경(ctx)·미리보기 메쉬는 빼고 열 때 다시 만듦
+  const { adToFile, adFromFile } = await import('../src/ui/m3/autodesign-panel.js');
+  const enc = (sd) => ({ ...sd, enc: true }), dec = (j) => ({ ...j, origin: 'file' });
+  const r = { design: { milky: 7.65, positions: [{ s: 1, w: 0 }] }, best: { Ulen: 0.81 }, feasible: true, ctx: { M0: {}, line: { f: () => 1 } }, preview: { parts: [1] }, seed: { photons: 9 }, effects: { milky: 0.1 } };
+  const f1 = JSON.parse(JSON.stringify(adToFile({ result: r, running: null }, enc)));
+  ok(f1.kind === 'result' && f1.data.design.milky === 7.65 && !('ctx' in f1.data) && !('preview' in f1.data) && f1.data.seed.enc, '적용 전: 결과 카드 저장(ctx·미리보기 빼고 · seed 는 글로)');
+  const b1 = adFromFile(f1, dec);
+  ok(b1.result.design.positions[0].s === 1 && b1.result.seed.photons === 9 && !b1.result.seed.origin && b1.result.ctx === undefined, '되살림: seed 는 최적화 판정 값으로(파일 표시 아님) · ctx 는 부르는 쪽이 붙임');
+  const ap = { ...r, seed: null, at: '10:00 적용' }, undo = { milky: [1, { kind: 'milky', milky: 5 }] };
+  const f2 = JSON.parse(JSON.stringify(adToFile({ result: null, applied: ap, undo, locked: { milky: { at: 1 } } }, enc)));
+  const b2 = adFromFile(f2, dec);
+  ok(f2.kind === 'applied' && !('ctx' in f2.data.applied) && b2.applied.at === '10:00 적용' && b2.undo.milky[1].milky === 5 && b2.locked.milky.at === 1, '적용 뒤: 적용 요약 · 되돌리기 · 고정 저장');
+  ok(adToFile({ result: r, running: { frac: 0.5 } }, enc) === null && adToFile({ result: null, applied: ap, undo: null }, enc) === null && adToFile(null, enc) === null && adFromFile(null, dec) === null, '실행 중 · 되돌린 뒤 · 없음 = 저장 안 함'); }
 { // 지난 최적화 후보(2026-11-07): 실행마다 정밀값이 있는 후보(최종안 + 재확인 대안, 겹침 제외)를 모아 균일도 순 표 · 고르면 적용
   const { histFromRun, mergeHist } = await import('../src/ui/m3/autodesign-panel.js');
   const { histTableHtml } = await import('../src/ui/m3/opt-dash.js');

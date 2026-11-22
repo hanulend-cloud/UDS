@@ -40,7 +40,7 @@ import { positionsFromLayout, addPosition, alignPositions } from '../../engine/m
 import { createResultsPanel } from './results-panel.js';
 import { renderStatusBar, leakText } from './status-bar.js';
 import { createAdRunner, resumable } from './autodesign-run.js';
-import { renderAutoPanel, seedFits, milkyTable, stageAvailability, clampCap, overallFrac, etaText, reusableCurrent, defaultHousingPart, applyDz, applyFinish, capDefault, nextFinish, finishText, shapeText, tileConfigHtml, AD_ITEMS, resultStageFlags, histFromRun, mergeHist, stageEffects, factorResult } from './autodesign-panel.js';
+import { renderAutoPanel, seedFits, milkyTable, stageAvailability, clampCap, overallFrac, etaText, reusableCurrent, defaultHousingPart, applyDz, applyFinish, capDefault, nextFinish, finishText, shapeText, tileConfigHtml, AD_ITEMS, resultStageFlags, histFromRun, mergeHist, stageEffects, factorResult, adToFile, adFromFile } from './autodesign-panel.js';
 import { ledHeightRange, heightCandidates, catalogOf, finishCandidatesFor, setReflMaterial, partFinishEdit } from '../../engine/mech3d/housing-led.js';
 import { migrateFinishCatalog, reflectPatch, copyAsUser, entryFromForm, addSamples, parsePercents, uniqueReflId } from '../../model/reflect-db.js';
 import { intersectRay } from '../../engine/mech3d/bvh.js';
@@ -285,7 +285,7 @@ function onChange(tag) {
   if (ad && PHYSICS.has(tag)) {
     if (ad.caseSel) { ad.caseSel = null; ad.casePv = null; A.meshShown = null; }   // 형상 후보 미리보기는 지금 조건으로 만든 것
     if (ad.running && ad.runner && !ad.runner.stopped) { ad.runner.cancel(); A.store.session.status = '편집으로 기구 최적화를 중지함'; }
-    else if (ad.result) { ad.result = null; A.meshShown = null; A.store.session.status = '값이 바뀌어 기구 최적화 결과를 지움'; }
+    else if (ad.result && !(ad.result.fileKey && ad.result.fileKey === physicsKey(M))) { ad.result = null; A.meshShown = null; A.store.session.status = '값이 바뀌어 기구 최적화 결과를 지움'; }   // 파일에서 되살린 결과는 설계가 실제로 바뀔 때만(열 때 같은 값으로 다시 맞추는 갱신은 그대로)
   }
   if (tag === 'light') { const t = dropStaleAdjust(M.light); if (t) A.store.session.status = t; }   // 배치가 바뀌어 무효가 된 LED 개별 조정(spec §4a)
   if (tag === 'observe' || tag === 'material') refreshLine();   // material: 부품 크기·위치가 바뀌면 라인도 다시(키가 같으면 건너뜀)
@@ -482,15 +482,34 @@ function guidance(snap) {
 // 결과를 .uds 에(2026-11-22 사용자) — 연 파일의 결과(fileRes)는 설계 열쇠(physicsKey)가 같을 때만 그 계산으로 받음(다시 계산 안 함).
 // 끝난 계산은 A.simSave 로 남겨 저장할 때 넣음(설계가 바뀌었으면 안 넣음). resultsStamp = 결과가 바뀌면 바뀌는 값(자동 저장·번호 저장의 '바뀜')
 let fileRes = null;
-export function setFileResults(r) { fileRes = r ?? null; }
+export function setFileResults(r) { fileRes = r ?? null; if (A) A.adFileDone = false; }
 const fileSimSeed = () => { const f = fileRes?.sim; return f && A && f.key === physicsKey(A.store.mspec) ? seedFromJson(f.seed) : null; };
 export function resultsForFile() {
   if (!A) return fileRes;
   const key = physicsKey(A.store.mspec);
   const sim = A.simSave?.key === key ? { key, seed: seedToJson(A.simSave.seed) } : fileRes?.sim?.key === key ? fileRes.sim : null;
-  return sim ? { v: 1, sim } : null;
+  const adNow = A.adFileDone || !fileRes?.ad ? adToFile(A.ad, seedToJson) : null, ad = adNow ? { key, ...adNow } : !A.adFileDone && fileRes?.ad?.key === key ? fileRes.ad : null;   // 아직 안 되살린 파일 결과는 그대로
+  return sim || ad ? { v: 1, ...(sim ? { sim } : {}), ...(ad ? { ad } : {}) } : null;
 }
-export const resultsStamp = () => (A?.simSave ? `${A.simSave.key.length}:${A.simSave.seed.photons}:${A.simSave.seed.reason}` : '');
+// 파일에 저장된 최적화 결과 되살리기 — 라인이 잡히고 정밀 메시가 된 뒤 한 번. 설계가 같을 때만. 적용 전 결과는 실행 환경(ctx)을 지금 설계로 다시 만듦(adRun 과 같은 격자)
+function adCtxNow() {
+  const M0 = adClone(A.store.mspec), line = A.store.session.line, rt = getMech3d();
+  const lowQ = (M0.observe.quality ?? 'low') === 'low', obs = tallyObs({ ...M0.observe, quality: 'low' }, M0.observe.dir ?? line.frame.d, line), G = lowQ ? geometry(tallyObs(M0.observe, M0.observe.dir ?? line.frame.d, line)) : tallyGeometry(line, obs);
+  return { M0, line, G, obs, rt, mp: adMilkyPart(M0, adAvail(M0)) };
+}
+function restoreAdFromFile() {
+  if (A.adFileDone || !fileRes?.ad || !A.store.session.line || refining || !getMech3d()) return;
+  A.adFileDone = true;
+  if (fileRes.ad.key !== physicsKey(A.store.mspec)) return;
+  const b = adFromFile(fileRes.ad, seedFromJson); if (!b) return;
+  const st = adState();
+  if (b.result) { st.milkyPart = adMilkyPart(A.store.mspec, adAvail(A.store.mspec)); st.result = { ...b.result, ctx: adCtxNow(), fileKey: fileRes.ad.key }; }
+  else { st.applied = b.applied; st.undo = b.undo; st.locked = b.locked; }
+  setStatus(b.result ? '파일에 저장된 기구 최적화 결과를 불러옴(적용 전)' : '파일에 저장된 기구 최적화 적용 결과를 불러옴');
+  renderAuto();
+}
+export const adStamp = () => { const st = A?.ad; return st?.result ? `r${st.result.best?.Ulen ?? ''}:${st.result.best?.Uwid ?? ''}` : st?.undo && st.applied ? `a${st.applied.at ?? ''}` : ''; };
+export const resultsStamp = () => `${A?.simSave ? `${A.simSave.key.length}:${A.simSave.seed.photons}:${A.simSave.seed.reason}` : ''}|${adStamp()}`;
 function keepSimResult(snap) {
   if (snap.state !== 'done' || snap.preview || !A.prog?.exportSeed) return;
   const key = physicsKey(A.store.mspec);
@@ -509,6 +528,7 @@ function onCalc(snap) {
   if (T.start && snap.stats?.relNoise != null && snap.stats.relNoise <= 0.05 && T.noise5 == null) T.noise5 = (now - T.start) / 1000;
   updateLeakCheck(snap);
   keepSimResult(snap);
+  restoreAdFromFile();
   if (previewCheck(snap)) return;   // 미리보기 켜기·끄기 = 새로 계산(이 결과는 버림)
   A.results.update({ snap, calcMode: A.calcMode ?? 'auto', observe: M.observe, message: guidance(snap), shape: shapeFor(S.line, snap?.G), leds: ledSW(M, S.line), ledsOrig: (() => { const c = ledChangeNow(M, S.line); return c?.changed ? c.orig : []; })(), leak: leakText(A.checks.leak, M.parts.map((p) => p.name)) });
   A.simDash?.sample(snap, snap.targetNoise ?? M.observe.targetNoise ?? 0.01, M.observe, M.parts.map((p) => p.name), M.parts.length, !!adState().running, M.parts.flatMap((p, i) => (isUntraced(p) ? [i] : [])));
@@ -1386,6 +1406,7 @@ async function adRun(opt = {}) {
     st.hist = mergeHist(st.hist, histFromRun(res, { ...st.result }, `${tm.getHours()}:${String(tm.getMinutes()).padStart(2, '0')}`, verifyLabel)); }   // 지난 후보 표
   if (st.deferred) { st.deferred = false; restartCalc(); if (st.userPaused) A.prog.pause(); else A.prog.resume(); }
   A.meshShown = null; renderView(); renderAuto();
+  if (res && !res.cancelled && !R.stopped && st.result) A.ctx.persist?.();   // 최적화 결과도 파일에(2026-11-22)
   if (res && !res.cancelled && !R.stopped && st.result) A.optDash?.finish(!!res.feasible, res.feasible ? '' : res.reason ?? '', st.result?.best?.eff, res.verified?.stats ?? null);
   return res && !res.cancelled && !R.stopped && st.result ? { feasible: !!res.feasible, stages: st.result.stages } : null;
 }
@@ -1452,7 +1473,7 @@ function adFactorResult(k) {
   const x = st.result ?? (st.undo ? st.applied : null);
   return x ? factorResult(x, x.effects ?? null, st.locked ?? {}, k) : null;
 }
-function adCancel() { const st = adState(); st.result = null; st.view = 'set'; A.meshShown = null; renderView(); renderAuto(); }
+function adCancel() { const st = adState(); st.result = null; st.view = 'set'; A.meshShown = null; renderView(); renderAuto(); A.ctx.persist?.(); }
 // 적용 = 바뀐 항목만 씀(① Milky 값이 다르면 · ② 를 돌렸고 개수·피치가 다르면(LED STEP = step.virtual) · ③ 형상). 되돌리기용으로 그 항목의 전체 복사본을 남김
 function adApply() {
   const st = adState(), r = st.result, d = r?.design;
