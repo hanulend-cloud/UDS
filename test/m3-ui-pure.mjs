@@ -4,7 +4,7 @@ import { treeNodes as treeNodes0, partBadge, renderFeatureTree as renderFeatureT
 const lightOpen = (S = {}) => ({ ...S, fold: { light: false, ...(S.fold ?? {}) } });
 const treeNodes = (M, S, ...r) => treeNodes0(M, lightOpen(S), ...r), treeHtml = (M, S, ...r) => treeHtml0(M, lightOpen(S), ...r);
 const renderFeatureTree = (el, M, S, ...r) => renderFeatureTree0(el, M, lightOpen(S), ...r);
-import { judgeText, lumCard, needText, fmtU, buildLut, NO_DATA_RGB, DEFAULT_GUIDE } from '../src/ui/m3/results-panel.js';
+import { judgeText, lumCard, needText, fmtU, buildLut, NO_DATA_RGB, DEFAULT_GUIDE, smoothMap } from '../src/ui/m3/results-panel.js';
 import { checkLabels, statusWord, statusIcon, checkAria, isActivateKey, esc as escS } from '../src/ui/m3/status-bar.js';
 import { ramp, NO_DATA } from '../src/ui/m3/colormap.js';
 import { defaultLight, defaultObserve, defaultChecks } from '../src/engine/mech3d/defs.js';
@@ -1588,4 +1588,25 @@ done();
   say(pl.length > 100 && /계산 추이/.test(pl) && /광경로/.test(pl) && /od-simplot/.test(pl) && !/<details/.test(pl), '계산 추이·광경로 = 늘 보임(접는 칸 아님)');
   say(/q\('avgs'\)\.classList\.toggle\('m3-unit', lc\.ratio == null\)/.test(rp) && /\.m3-reshead \.m3-sum-c > \.s\.m3-unit\s*\{\s*display:\s*none/.test(css), '보드: 광량 보조 줄은 밝기 목표가 있을 때만("최대 대비" 는 툴팁)');
   say(/\.m3-sum-u:has\(> \.v\.ok\)\s*\{[^}]*background/.test(css) && /\.m3-sum-u:has\(> \.v\.bad\)\s*\{[^}]*background/.test(css) && /\.m3-sum-u:has\(> \.v\.near\)/.test(css), '길이/폭 카드 바탕색 = 판정 색(합격·미달·근처)');
+}
+
+// 2D 분포 표시 다듬기(2026-11-22 사용자: 고화질인데 분포가 얼룩져 보임 — 표시만, 판정은 그대로): 1D 와 같은 SG 다듬기를 길이(s)·폭(w) 방향으로.
+// 원자료는 그대로 두고 새 배열 · 관측면 밖 칸은 건드리지 않음 · LED 물결 높이는 5% 넘게 깎지 않음 · 칸이 적으면(< 40) 그 방향은 그대로
+{
+  const ns = 200, nw = 8, G = { ns, nw, ds: 0.5, valid: new Uint8Array(ns * nw).fill(1) };
+  G.valid[5 * nw + 3] = 0;
+  let sd = 1; const rnd = () => { sd = (sd * 16807) % 2147483647; return sd / 2147483647; };
+  const pitch = 20, leds = Array.from({ length: 10 }, (_, i) => (i + 0.5) * pitch * G.ds);   // LED 간격 = 20칸
+  const clean = (i) => 1 + 0.1 * Math.cos((2 * Math.PI * (i + 0.5 - pitch / 2)) / pitch);
+  const map = new Float64Array(ns * nw); for (let i = 0; i < ns; i++) for (let j = 0; j < nw; j++) map[i * nw + j] = clean(i) * (1 + 0.04 * (rnd() - 0.5) * 2);
+  const raw = Float64Array.from(map), out = smoothMap(G, map, leds);
+  ok(out !== map && map.every((v, k) => v === raw[k]), '원자료(판정 값)는 그대로 · 새 배열');
+  ok(out[5 * nw + 3] === map[5 * nw + 3], '관측면 밖 칸 = 그대로');
+  let e0 = 0, e1 = 0, n = 0; for (let i = 20; i < ns - 20; i++) for (let j = 0; j < nw; j++) { const k = i * nw + j; if (!G.valid[k]) continue; e0 += (map[k] - clean(i)) ** 2; e1 += (out[k] - clean(i)) ** 2; n++; }
+  ok(e1 < e0 * 0.5, `노이즈 절반 넘게 줄어듦 (RMS ${Math.sqrt(e0 / n).toFixed(4)} → ${Math.sqrt(e1 / n).toFixed(4)})`);
+  const amp = (a) => { let lo = Infinity, hi = -Infinity; for (let i = 40; i < 60; i++) { let v = 0; for (let j = 0; j < nw; j++) v += a[i * nw + j]; v /= nw; lo = Math.min(lo, v); hi = Math.max(hi, v); } return hi - lo; };
+  const cm = new Float64Array(ns * nw); for (let i = 0; i < ns; i++) for (let j = 0; j < nw; j++) cm[i * nw + j] = clean(i);
+  ok(amp(smoothMap({ ...G, valid: new Uint8Array(ns * nw).fill(1) }, cm, leds)) >= 0.95 * amp(cm) - 1e-9, 'LED 물결 높이 95% 이상 유지');
+  const small = { ns: 30, nw: 8, ds: 1, valid: new Uint8Array(240).fill(1) }, m2 = Float64Array.from({ length: 240 }, () => rnd());
+  ok(smoothMap(small, m2, []).every((v, k) => v === m2[k]), '칸이 적은 방향(< 40)은 다듬지 않음');
 }

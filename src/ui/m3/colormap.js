@@ -1,11 +1,24 @@
 // 관측면 색지도 — spec 2026-10-15 m3-cad-ui §2: 관측면 메쉬 정점 → (s,w) → 집계 지도 칸 값 → 색. 순수 함수(Node 시험).
 // STEP 관측면은 삼각형이 커서(평면 = 2개) 정점 색으로는 분포가 안 보인다 → 집계 칸 크기까지 세분한 덧그림 메쉬를 만든다.
-const STOPS = [[0x20, 0x30, 0x6e], [0x2a, 0x7b, 0xd5], [0x3f, 0xc1, 0x7a], [0xf2, 0xd3, 0x3c], [0xe0, 0x53, 0x2a]];
+// 색 표(2026-11-22 사용자: 광분포를 classic 색 배치로도) — [위치 0~1, [r,g,b]] 꼭짓점. 기본 = 시안(m3-ui-mockup) 색 막대, 클래식 = 남색→파랑→하늘→노랑→빨강→진빨강
+const even = (cs) => cs.map((c, i) => [i / (cs.length - 1), c]);
+export const PALETTES = {
+  default: even([[0x20, 0x30, 0x6e], [0x2a, 0x7b, 0xd5], [0x3f, 0xc1, 0x7a], [0xf2, 0xd3, 0x3c], [0xe0, 0x53, 0x2a]]),
+  classic: [[0, [0, 0, 128]], [0.125, [0, 0, 255]], [0.375, [0, 255, 255]], [0.625, [255, 255, 0]], [0.875, [255, 0, 0]], [1, [128, 0, 0]]],
+};
+let PAL = 'default';
+export const setPalette = (name) => { PAL = Object.hasOwn(PALETTES, name) ? name : 'default'; };
+export const paletteName = () => PAL;
+const hex = (c) => '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('');
+// 3D 범례 막대용 CSS 그라데이션(꼭짓점 위치 그대로)
+export const paletteCss = () => `linear-gradient(90deg, ${PALETTES[PAL].map(([p, c], i, a) => (i === 0 || i === a.length - 1 ? hex(c) : `${hex(c)} ${+(p * 100).toFixed(1)}%`)).join(', ')})`;
 export const NO_DATA = [0.42, 0.45, 0.5];
-// t(0~1) → [r,g,b](0~1) — 시안(m3-ui-mockup) 색 막대
+// t(0~1) → [r,g,b](0~1) — 지금 고른 색 표
 export function ramp(t) {
-  t = Math.max(0, Math.min(0.9999, t)) * 4;
-  const i = Math.floor(t), f = t - i, a = STOPS[i], b = STOPS[i + 1];
+  const S = PALETTES[PAL];
+  t = Math.max(0, Math.min(1, t));
+  let i = 0; while (i < S.length - 2 && t > S[i + 1][0]) i++;
+  const [p0, a] = S[i], [p1, b] = S[i + 1], f = (t - p0) / (p1 - p0);
   return [0, 1, 2].map((k) => (a[k] + f * (b[k] - a[k])) / 255);
 }
 // Canvas 2D 는 ramp 의 값을 sRGB 로 바로 표시하지만 Three.js 정점색은 선형 RGB 를 받는다.

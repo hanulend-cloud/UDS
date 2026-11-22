@@ -1,7 +1,7 @@
 // 관측면 색지도: node test/m3-colormap.mjs
 import { recognizeLine } from '../src/engine/mech3d/line.js';
 import { tallyGeometry } from '../src/engine/mech3d/tally.js';
-import { ramp, NO_DATA, srgbColorsToLinear, extractFaces, subdivide, cellIndex, vertexCells, cellColors, buildObsOverlay, mapMinCell, mapMaxCell, obsPoint, startSection } from '../src/ui/m3/colormap.js';
+import { setPalette, paletteName, paletteCss, PALETTES, ramp, NO_DATA, srgbColorsToLinear, extractFaces, subdivide, cellIndex, vertexCells, cellColors, buildObsOverlay, mapMinCell, mapMaxCell, obsPoint, startSection } from '../src/ui/m3/colormap.js';
 import { topFaceMesh, rectTris, annulusTris, boxMesh, ok, done } from './mech3d-util.mjs';
 
 const top = topFaceMesh(rectTris(0, 0, 100, 6), 2), faces = [{ part: 0, face: 1 }];
@@ -78,5 +78,16 @@ ok(ramp(0).every((v, k) => Math.abs(v - [0x20, 0x30, 0x6e][k] / 255) < 1e-12) &&
   const pa = (s) => { const [x, y] = lr.fromSW(s, 0); return Math.atan2(y, x); }, ar = sec?.arrow, Lr = Gr.L;
   ok(ar && dA(angOf(ar[1]), pa(10)) < dA(angOf(ar[1]), pa(Lr - 10)), '화살표 = s 가 늘어나는 쪽');
   ok(startSection(ov, { ...Gr, closed: false }) === null, '열린 선(직선) = 없음');
+}
+// 색 표 선택(2026-11-22 사용자: 광분포를 classic 색 배치로) — 기본 = 지금 색, 클래식 = 남색→파랑→하늘→노랑→빨강→진빨강. 바꿔도 값은 그대로(색만)
+{
+  ok(paletteName() === 'default' && JSON.stringify(ramp(0).map((v) => Math.round(v * 255))) === '[32,48,110]', '처음 = 기본 색 표(지금과 같음)');
+  setPalette('classic');
+  const c = (t) => ramp(t).map((v) => Math.round(v * 255));
+  ok(paletteName() === 'classic' && JSON.stringify(c(0)) === '[0,0,128]' && JSON.stringify(c(1)) === '[128,0,0]', `클래식: 0 = 남색 · 1 = 진빨강 (${c(0)} · ${c(1)})`);
+  ok(JSON.stringify(c(0.375)) === '[0,255,255]' && JSON.stringify(c(0.625)) === '[255,255,0]', `클래식: 하늘(0.375) · 노랑(0.625) (${c(0.375)} · ${c(0.625)})`);
+  ok(/^linear-gradient\(90deg, #000080/.test(paletteCss()) && /#800000\)$/.test(paletteCss()), `3D 범례 막대 = 같은 색 (${paletteCss()})`);
+  setPalette('nope'); ok(paletteName() === 'default', '모르는 이름 = 기본');
+  ok(Object.keys(PALETTES).join() === 'default,classic', '색 표 = 기본 · 클래식');
 }
 done();

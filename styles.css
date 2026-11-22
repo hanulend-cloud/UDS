@@ -1153,6 +1153,7 @@ input.m3-pending { outline: 2px solid #f79009; outline-offset: -1px; background:
 .sc-rec { color: #3a7bd5; }
 
 .m3-map-eq { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; white-space: nowrap; }
+select[data-r="pal"], select[data-big-pal] { margin-left: 8px; }   /* 색 표 선택(2026-11-22) — "실제 비율" 글자와 띄움 */
 
 /* 시작 화면 — 기존 파일 / 예제 두 갈래(2026-11-05) */
 .m3-start-two { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 8px; }

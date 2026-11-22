@@ -22,7 +22,7 @@ import { createStore, PHYSICS, GEOM_CHECK, PERSIST_TAGS, physicsKey } from './st
 import { createProgressive, photonCap, fmtProg, interactOverlap, slowPortText, previewWanted, seedToJson, seedFromJson } from './progressive.js';
 import { createPool } from './pool.js';
 import * as L from './leds.js';
-import { buildObsOverlay, cellColors, extractFaces, mapMinCell, mapMaxCell, obsPoint, startSection } from './colormap.js';
+import { buildObsOverlay, cellColors, extractFaces, mapMinCell, mapMaxCell, obsPoint, startSection, paletteCss } from './colormap.js';
 import { mountCommandBar, obsCmd } from './command-bar.js';
 import { renderFeatureTree, toggleVisibility, viewKeep, togglePcb, makeGroup, ungroup, groupMembers, rangeSelect, obsFacesAfterClick, removeFromGroups, viewCtxItems, showCtxMenu, toggleLed, ledFoldDefault, untraceItem } from './feature-tree.js';
 import { mountSplitter, mountDockSplitter, mountFacSplitter } from './splitter.js';
@@ -240,7 +240,8 @@ export async function mount(ctx) {
   }
   const a = A = { ctx, store, pool, view: null, meshShown: null, lineKey: '', Gc: null, obsShown: null, checks: {}, markKey: '', timing: { start: 0, first: null, noise5: null } };
   a.prog = createProgressive({ ports: pool.ports(), onUpdate: onCalc, onSlow: (x) => reportError('계산', slowPortText(x, interactOverlap(interactIv, x.t0, x.t1), x.t1 - x.t0)), opts: { targetNoise: ctx.mspec.observe.targetNoise ?? 0.01 } });
-  a.results = createResultsPanel($('#m3-res'), { head: $('#m3-reshead'), foot: $('#m3-leakslot'), onPreview: (k) => setCalcMode(k), onOpt: () => { if (monitor) { monitor.open(); monitor.expand(); } }, onNote: (t) => setStatus(t), onCalc: (k) => calcCtl(k), calcBusy: () => !!A?.ad?.running, onLeak: () => A.store.update('session', (_, s) => { s.focusCheck = s.focusCheck === 'leak' ? null : 'leak'; }), onBig: (node) => { A?.simDash?.attach(node); winOpenChip('sim', !!node); }, anchor: () => document.querySelector('#m3-cmd [data-c="sim"]'), fileName: () => String(A?.store?.mspec?.name ?? 'uds').replace(/\.(stp|step)$/i, ''), onQuality: (v) => A.store.update('observe', (m) => { m.observe.quality = v; }) });
+  a.results = createResultsPanel($('#m3-res'), { head: $('#m3-reshead'), foot: $('#m3-leakslot'), onPreview: (k) => setCalcMode(k), onOpt: () => { if (monitor) { monitor.open(); monitor.expand(); } }, onNote: (t) => setStatus(t), onCalc: (k) => calcCtl(k), calcBusy: () => !!A?.ad?.running, onLeak: () => A.store.update('session', (_, s) => { s.focusCheck = s.focusCheck === 'leak' ? null : 'leak'; }), onBig: (node) => { A?.simDash?.attach(node); winOpenChip('sim', !!node); }, anchor: () => document.querySelector('#m3-cmd [data-c="sim"]'), fileName: () => String(A?.store?.mspec?.name ?? 'uds').replace(/\.(stp|step)$/i, ''), onQuality: (v) => A.store.update('observe', (m) => { m.observe.quality = v; }), onPalette: () => { syncLegend(); if (A?.prog) paintObs(A.prog.snapshot()); } });
+  syncLegend();   // 기억한 색 표로 3D 범례
   // 균일도 그래프 칸 = 창 왼쪽 아래(실행·결과 밑, 2026-11-05)
   let chartEl = $('#m3-odchart'); if (!chartEl) { chartEl = document.createElement('div'); chartEl.id = 'm3-odchart'; $('#m3-factor')?.appendChild(chartEl); }
   a.optDash = createOptDash($('#m3-optdash'), { history: () => { const st = A?.ad; return st ? { list: st.hist ?? [], tgLen: A.store.mspec.observe.targetLen, tgWid: A.store.mspec.observe.targetWid, busy: !!st.running } : null; }, onPick: (i) => adPickHist(i), onPartial: () => adRunPartial(), onSet: () => { if (A) { adState().view = 'set'; renderAuto(); } }, chart: chartEl, result: (k) => adFactorResult(k), config: (k) => (A?.tileState ? tileConfigHtml(k, A.tileState) : { on: false, html: '' }), onSel: (k, v) => adSel(k, v), onUnlock: (k) => adUnlock(k), board: $('#m3-factor'), now: () => (A ? factorNow() : {}) }); a.simDash = createSimDash($('#m3-simdash'), { onCtl: (k) => calcCtl(k), bar: $('#m3-run'), plots: $('#m3-simplots'), pathsEl: $('#m3-pathslot') });
@@ -543,6 +544,8 @@ function onCalc(snap) {
   renderStatus();
 }
 // 관측면 색지도: 격자가 바뀌면 덧그림 메쉬를 다시 만들고, 갱신마다 색만 바꾼다
+// 3D 범례 막대 = 2D 와 같은 색 표(2026-11-22)
+function syncLegend() { const b = document.querySelector('#m3-legend .bar'); if (b) b.style.background = paletteCss(); }
 function paintObs(snap) {
   const v = A.view, Gc = A.Gc, st = snap.stats;
   if (!v) return;
