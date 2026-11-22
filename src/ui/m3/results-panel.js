@@ -59,14 +59,8 @@ export function previewBtn(snap, mode) {
 }
 // 결과 위 모드 띠(순수, 2026-11-19 사용자: 미리보기·정밀 구분이 헷갈림) — { cls: 'pv'|'precise'|'idle', label, text, title, btn(previewBtn), load(effLoad) }
 // 띠는 늘 한 줄(높이 고정) — 바뀌는 글·단추가 광 효율 카드 줄 수를 바꿔 아래 그래프가 위아래로 움직이던 것을 여기로 모음
-// [1.5% 로 확정](2026-11-22 사용자: 탐색 2% · 확정 1.5%) — 끝났고 '≈ 목표 근처'이고 기본 노이즈가 확정 노이즈보다 클 때. 누르면 이번 계산만 1.5% 로 이어서(설정 값은 그대로)
-export const CONFIRM_NOISE = 0.015;
-export function confirmBtn(snap, observe) {
-  if (snap?.preview || snap?.state !== 'done' || !(snap.baseNoise > CONFIRM_NOISE + 1e-9) || overallVerdict(snap.stats, observe).cls !== 'near') return null;
-  return { k: 'confirm', label: `${CONFIRM_NOISE * 100}%로 확정`, title: `목표와의 차이가 판정 오차 안이라 통과·미달을 가를 수 없음 — 누르면 지금 결과에 이어서 노이즈 ${CONFIRM_NOISE * 100}% 까지 계산해 다시 판정(시간이 더 걸림, 기본 ${+(snap.baseNoise * 100).toFixed(2)}% 대비 약 ${((snap.baseNoise / CONFIRM_NOISE) ** 2).toFixed(1)}배). 설정한 오차 목표는 그대로` };
-}
 export function modeBand(snap, mode, observe, elapsedSec = 0) {
-  const eff = snap?.photometry?.eff, btn = previewBtn(snap, mode) ?? confirmBtn(snap, observe), load = effLoad(eff, snap, elapsedSec);
+  const eff = snap?.photometry?.eff, btn = previewBtn(snap, mode), load = effLoad(eff, snap, elapsedSec);
   if (!snap?.stats) return { cls: 'idle', label: '계산 전', text: '', title: '', btn: null, load: null };
   const pc = (v) => `${+(v * 100).toFixed(2)}%`;
   if (snap.preview) {

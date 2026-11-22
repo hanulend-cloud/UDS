@@ -134,16 +134,6 @@ const frac = (x) => x - Math.floor(x);   // 시드별 유사 난수(평균이 1/
   await T.advance(900000);
   const b = P.snapshot();
   ok(b.state === 'done' && b.reason === 'judgeLimit' && b.stats.relNoise > 0.015 && b.stats.relNoise <= 0.02, `2% 에 닿은 뒤 5분 → 멈춤(목표 경계): ${b.state}/${b.reason}`);
-  // 확정 계산(2026-11-22 사용자: 탐색 2% · 확정 1.5%) — 이번 계산만 기본 노이즈를 1.5% 로: 이어서 계산, 1.5% 에 닿은 뒤 5분 한도. 설정은 안 바꿈
-  ok(b.baseNoise === 0.02, `기본 노이즈 ${b.baseNoise}`);
-  P.confirm(0.015);
-  const c = P.snapshot();
-  ok(c.state === 'running' && c.baseNoise === 0.015, `확정 계산 시작: ${c.state} · 기본 ${c.baseNoise}`);
-  await T.advance(3600000);
-  const d = P.snapshot();
-  ok(d.state === 'done' && d.reason === 'judgeLimit' && d.stats.relNoise <= 0.015 && d.photons > b.photons, `확정: 1.5% 에 닿은 뒤 5분 → 멈춤 (노이즈 ${(d.stats.relNoise * 100).toFixed(2)}%)`);
-  P.restart(job(2)); await T.advance(1000);
-  ok(P.snapshot().baseNoise === 0.02, '새 계산은 다시 기본 2%');
   P.cancel();
 }
 {   // 5분은 기본 노이즈에 닿은 뒤부터 셈 — 목표 근처라도 기본(1%)보다 노이즈가 크면 계속 계산(전에는 조인 순간부터 세어 1% 에도 못 닿고 멈출 수 있었음)

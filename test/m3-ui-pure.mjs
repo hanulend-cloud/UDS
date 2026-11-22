@@ -1509,11 +1509,6 @@ done();
   say(pr.cls === 'precise' && /정밀 계산/.test(pr.label) && /판정/.test(pr.text) && /고화질 0\.5 mm/.test(pr.text) && /1%/.test(pr.text) && !pr.btn, `정밀 띠: 판정 · 화질 · 노이즈 목표 (${pr.label} ${pr.text})`);
   const pl = modeBand({ preview: false, state: 'running', stats: { relNoise: 0.02 }, photometry: { eff: 0.006 }, targetNoise: 0.01 }, 'precise', { quality: 'low' }, 10);
   say(pl.cls === 'precise' && pl.btn?.k === 'auto', '정밀 + 광효율 1% 미만 = [미리보기로]');
-  // [1.5% 로 확정](2026-11-22 사용자: 탐색 2% · 확정 1.5%) — 끝났고 '≈ 목표 근처'이고 기본 노이즈가 1.5% 보다 클 때만
-  { const O = { quality: 'high', targetLen: 0.8, targetWid: 0.8 }, st = { Ulen: 0.801, seLen: 0.008, Uwid: 0.85, seWid: 0.004, relNoise: 0.019 }, S = (x) => ({ preview: false, state: 'done', stats: st, photometry: { eff: 0.2 }, targetNoise: 0.005, baseNoise: 0.02, ...x });
-    const c = modeBand(S({}), 'auto', O, 0);
-    say(c.btn?.k === 'confirm' && /1\.5%/.test(c.btn.label) && /확정/.test(c.btn.label), `근처 + 기본 2% → [${c.btn?.label}]`);
-    say(!modeBand(S({ baseNoise: 0.015 }), 'auto', O, 0).btn && !modeBand(S({ state: 'running' }), 'auto', O, 0).btn && !modeBand(S({ stats: { ...st, Ulen: 0.9 } }), 'auto', O, 0).btn, '기본 1.5% 이하 · 계산 중 · 통과 → 단추 없음'); }
   const id = modeBand(null, 'auto', { quality: 'low' }, 0);
   say(id.cls === 'idle' && !!id.label, `계산 전 띠 (${id.label})`);
   const { readFileSync } = await import('node:fs'), rp = readFileSync(new URL('../src/ui/m3/results-panel.js', import.meta.url), 'utf8');

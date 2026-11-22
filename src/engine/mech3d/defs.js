@@ -13,7 +13,7 @@ export function defaultLight() {
   };
 }
 export function defaultObserve() {
-  return { faces: [], dir: null, cone: 30, cell: null, cellS: null, cellW: null, quality: 'low', winS: null, edgeExcl: 0.5, targetLen: 0.8, targetWid: 0.8, targetLum: null, targetNoise: 0.02, noiseRev: 1 };   // 오차 목표 2%(2026-11-22 사용자: 탐색 2% · 결과가 '근처'면 [1.5% 로 확정] 한 번 — 고화질·Milky 7.65 에서 1.5% 가 약 2시간). 이전 1.5%(2026-11-11). 저장된 프로젝트 값은 그대로
+  return { faces: [], dir: null, cone: 30, cell: null, cellS: null, cellW: null, quality: 'low', winS: null, edgeExcl: 0.5, targetLen: 0.8, targetWid: 0.8, targetLum: null, targetNoise: 0.02, noiseRev: 1 };   // 오차 목표 2%(2026-11-22 사용자: 2% 로 판정 — 고화질·Milky 7.65 에서 1.5% 가 약 2시간이라 너무 오래 걸림). 이전 1.5%(2026-11-11). 저장된 프로젝트 값은 그대로
 }
 // 설계 점검 기준(spec 2026-10-15 §5): 최소 살두께 mm, 최소 도달률(0~1), 새는 빛 한도(0~1)
 export function defaultChecks() {
