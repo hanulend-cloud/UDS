@@ -390,6 +390,26 @@ const perPhoton = (s) => Array.from(s.sum, (v) => v / (s.photons / 25000));   //
   const ss = P.snapshot();
   ok(ss.reason === 'adopted' && Math.abs(ss.stats.Ulen - sWant.Ulen) < 1e-9 && Math.abs(ss.stats.Uwid - sWant.Uwid) < 1e-9 && !ss.stats.sym, `대칭 도면 인계 값 = 판정 값(합치지 않음): ${ss.stats?.Ulen?.toFixed(4)} / ${sWant.Ulen.toFixed(4)}`);
   P.dispose(); }
+{ // 결과 파일 저장(2026-11-22 사용자) — 끝난 계산을 내보내 .uds 에 넣고, 열면 청크 없이 같은 판정·지도. 대칭 합치기 계산이면 합친 그대로
+  const { seedToJson, seedFromJson } = await import('../src/ui/m3/progressive.js');
+  for (const sym of [null, { len: true, wid: true, rot: 0, why: [] }]) {
+    const T = fakeTimers(), a = delayedPort(T), P = createProgressive({ ports: [a], timers: T, opts: { ...OPT, fixedChunk: false } });
+    const G2 = { ...G, validAll: new Uint8Array(8).fill(1), areaAll: new Float64Array(8).fill(1) };
+    const jb = (k) => ({ ...job(k), G: G2, sym });
+    ok(P.exportSeed() === null, '계산 전 = 내보낼 것 없음');
+    P.restart(jb(30)); await T.advance(4000); await settle();
+    const s0 = P.snapshot();
+    const ex = P.exportSeed(), js = JSON.parse(JSON.stringify(seedToJson(ex)));
+    ok(s0.state === 'done' && ex && ex.nCell === 8 && typeof js.batches[0].acc === 'string', `끝난 계산 내보내기 (${s0.reason} · 광자 ${s0.photons}) · 글로 바꿈`);
+    const b = fakeTimers(), q = delayedPort(b), Q = createProgressive({ ports: [q], timers: b, opts: { ...OPT, fixedChunk: false } });
+    Q.restart(jb(31), () => seedFromJson(js)); await b.advance(500); await settle();
+    const s1 = Q.snapshot(), d = (x, y) => Math.abs(x - y) < 1e-5;
+    ok(s1.state === 'done' && s1.reason === 'restored' && chunks(q).length === 0 && s1.photons === s0.photons && d(s1.stats.Ulen, s0.stats.Ulen) && d(s1.stats.Uwid, s0.stats.Uwid) && d(s1.stats.relNoise, s0.stats.relNoise) && !!s1.stats.sym === !!s0.stats.sym,
+      `${sym ? '대칭' : '일반'}: 연 결과 = 저장한 결과 (길이 ${s1.stats?.Ulen?.toFixed(4)} / ${s0.stats.Ulen.toFixed(4)} · 청크 ${chunks(q).length})`);
+    ok([...s1.stats.mapAll].every((v, k) => d(v, s0.stats.mapAll[k])) && d(s1.photometry.eff, s0.photometry.eff), '2D 지도 · 광 효율도 같음');
+    P.dispose(); Q.dispose();
+  }
+}
 { // 중지 = 결과는 남고 이어서 못 함 · 다음 실행은 처음부터 계산(일시정지처럼 멈춰 있지 않음)
   const T = fakeTimers(), a = delayedPort(T), P = createProgressive({ ports: [a], timers: T, opts: OPT });
   P.restart(job(21)); await T.advance(1200); await settle();

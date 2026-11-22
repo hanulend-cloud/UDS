@@ -69,6 +69,11 @@ export function slowPortText({ gpu, N, ms, last }, interactMs, spanMs) {
   const it = interactMs > 0 ? `그동안 3D 화면 조작 ${(interactMs / 1000).toFixed(1)}초(${Math.round((interactMs / Math.max(1, spanMs)) * 100)}%)` : '3D 화면 조작 없음';
   return `계산 Worker 늦어 뺌 — ${gpu ? 'GPU' : 'CPU'} Worker · 청크 ${(N / 1e4).toFixed(1)}만 광선 · ${Math.round(ms / 1000)}초 안에 답 없음 · ${it}${last ? ' · 남은 Worker 없음 → 계산 실패' : ''}`;
 }
+// 결과 파일 저장(2026-11-22 사용자) — exportSeed() 값을 .uds 에 넣을 글로(배열 = Float32 base64, 크기 절반 · 판정 값 차이 < 1e-5) · 되돌리기
+const b64 = (a) => { const u = new Uint8Array(new Float32Array(a).buffer); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
+const unb64 = (t) => { const s = atob(t), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return Float64Array.from(new Float32Array(u.buffer)); };
+export const seedToJson = (sd) => sd && { ...sd, batches: sd.batches.map((b) => ({ n: b.n, photons: b.photons, acc: b64(b.acc), accAll: b64(b.accAll), cnt: b64(b.cnt) })) };
+export const seedFromJson = (j) => (j?.batches?.length ? { ...j, origin: 'file', batches: j.batches.map((b) => ({ n: b.n, photons: b.photons, acc: unb64(b.acc), accAll: unb64(b.accAll), cnt: unb64(b.cnt) })) } : null);
 // onSlow({ k, gpu, N, ms, t0, t1, last }) = 청크 제한 시간에 걸려 이번 계산에서 뺀 포트(last = 남은 포트 없음 → 곧 실패)
 export function createProgressive({ ports, timers = globalThis, onUpdate = () => {}, onSlow = null, opts = {} }) {
   let prog = null;   // 표시 진행률(nextProgress)
@@ -132,7 +137,7 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
       if (g !== gen || state === 'error') return;
       ready[k] = g;
       if (state === 'starting') {
-        if (seed) { loadSeed(seed); finish('adopted'); return; }
+        if (seed) { loadSeed(seed); finish(seed.origin === 'file' ? 'restored' : 'adopted'); return; }   // restored = 파일에 저장된 결과
         if (wantPaused) { wantPaused = false; state = 'paused'; emit(); return; }
         state = 'running'; startTick(); emit();
       }
@@ -221,7 +226,14 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
     for (const key in ledger) ledger[key] = (seed.ledger[key] ?? 0) / c0;
     for (const key in seed.leak ?? {}) leak[key] = seed.leak[key] / c0;
     for (const key in seed.paths ?? {}) paths[key] = seed.paths[key] / c0;
-    photons = issued = seed.photons; nMin = 1; nMax = 2; seeded = true;
+    photons = issued = seed.photons; nMin = 1; nMax = 2; seeded = !seed.fold;   // fold = 저장한 계산이 대칭 합치기였음(파일 저장 결과) → 그대로 합침
+  }
+  // 끝난 계산 내보내기(파일 저장용) — loadSeed 와 같은 꼴(합 × 기준 광자 수). 미리보기·계산 중·배치 2개 미만 = null
+  function exportSeed() {
+    const filled = bins.filter(Boolean);
+    if (state !== 'done' || !job || job.preview || filled.length < 2) return null;
+    const c0 = o.chunkN, x = (a) => Float64Array.from(a, (v) => v * c0), obj = (r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, v * c0]));
+    return { nCell: job.G.ns * job.G.nw, batches: filled.map((B) => ({ acc: x(B.acc), accAll: x(B.accAll), cnt: Float64Array.from(B.cnt), n: B.n, photons: B.photons })), ledger: obj(ledger), leak: obj(leak), paths: obj(paths), photons, fold: !seeded, reason };
   }
   function compute() {
     const filled = bins.filter(Boolean);
@@ -302,5 +314,5 @@ export function createProgressive({ ports, timers = globalThis, onUpdate = () =>
       G: job?.G ?? null, obs: job?.obs ?? null, targetNoise: goal(), preview: !!job?.preview,
     };
   }
-  return { restart, pause, stop, resume, cancel, dispose, setJudge, snapshot };
+  return { restart, pause, stop, resume, cancel, exportSeed, dispose, setJudge, snapshot };
 }

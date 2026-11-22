@@ -40,7 +40,7 @@ let pins = () => new Set();
 export const setStepSourcePins = (spec) => { pins = () => new Set(pickSources(spec()).files.map((f) => `${f.role}:${f.name}`)); };
 // .uds 로 묶기(2026-11-13: STEP 도면은 반드시 함께) — 원본이 없으면 덮어쓸 .uds(prev) 안의 같은 도면을 되살리고,
 // 그래도 없으면 fallback(화면 형상으로 STEP 만들기), 그것도 안 되면 저장하지 않음(오류.missingStep = 빠진 이름) — 도면 없는 .uds 로 덮어써 도면을 잃지 않게
-export async function bundleProject(spec, text, prev = null, have = mem, keep = keepStepSource, fallback = null) {
+export async function bundleProject(spec, text, prev = null, have = mem, keep = keepStepSource, fallback = null, results = null) {
   let P = pickSources(spec, have);
   if (P.lack.length && prev && await isBundle(prev).catch(() => false)) {
     try {
@@ -51,7 +51,7 @@ export async function bundleProject(spec, text, prev = null, have = mem, keep = 
   }
   if (P.lack.length && fallback) { await fallback(P.lack); P = pickSources(spec, have); }   // 화면에 보이는 형상 → STEP(묻지 않음)
   if (P.lack.length) { const e = new Error(`STEP 도면 원본 없음: ${P.missing.join(', ')}`); e.missingStep = P.missing; e.lack = P.lack; throw e; }
-  return packBundle(text, P.files);
+  return packBundle(text, P.files, results);
 }
 export const sourcesKey = (spec) => pickSources(spec).files.map((f) => `${f.role}:${f.name}:${f.size}:${f.lastModified}`).join('|');
 

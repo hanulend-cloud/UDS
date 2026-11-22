@@ -239,12 +239,12 @@ function resetAll() { projFile?.clear(); spec = structuredClone(DEFAULT_SPEC); m
 
 async function newProject() {
   if (!confirm('지금 프로젝트를 닫고 빈 화면에서 새로 시작할까요?\n(파일로 저장하지 않은 작업은 사라집니다 — 먼저 [파일 › 다른 이름으로 저장] 권장)')) return;
-  projFile?.clear(); m3app.unmount(); spec.mech3d = null; spec.mech3dPending = null; spec.mode = 'mech3d'; persist(); applyMode(); $('#m3-start-msg').textContent = '';   // 예제를 자동으로 열지 않음 — 시작 화면에서 고름(2026-11-05)
+  projFile?.clear(); m3app.setFileResults(null); m3app.unmount(); spec.mech3d = null; spec.mech3dPending = null; spec.mode = 'mech3d'; persist(); applyMode(); $('#m3-start-msg').textContent = '';   // 예제를 자동으로 열지 않음 — 시작 화면에서 고름(2026-11-05)
 }
 // 시작 화면의 [새 프로젝트] — 도면 없는 작업 화면. 첫 Import 가 도면을 엶
 function openBlankProject() {
   if (spec.mech3dPending && !confirm('보관 중인 3D 설정이 있습니다. 버리고 새 프로젝트를 시작할까요?')) return;
-  projFile?.clear(); m3app.unmount();
+  projFile?.clear(); m3app.setFileResults(null); m3app.unmount();
   spec.mech3d = setBlankMech3d().spec; spec.mech3dPending = null; spec.mode = 'mech3d';
   persist(); applyMode(); $('#m3-start-msg').textContent = '';
 }
@@ -262,7 +262,7 @@ ${fetchFailText(e, 'examples/index.json')}`); return; }
   catch (e) { alert(`예제를 열 수 없습니다. 지금 프로젝트는 그대로 둡니다.
 ${fetchFailText(e, ex.project)}`); return; }
   try { if (ex.theme && !localStorage.getItem('uds.m3.theme')) localStorage.setItem('uds.m3.theme', ex.theme); } catch {}
-  projFile?.clear(); m3app.unmount(); spec.mech3d = null; spec.mech3dPending = null; spec.mode = 'mech3d'; persist(); applyMode();
+  projFile?.clear(); m3app.setFileResults(null); m3app.unmount(); spec.mech3d = null; spec.mech3dPending = null; spec.mode = 'mech3d'; persist(); applyMode();
   openProjectFile(file).catch((e) => { $('#m3-start-msg').textContent = `예제 열기 실패: ${e.message ?? e}`; });
 }
 // 예제 고르기 창 → 고른 항목 | null(닫음)
@@ -975,7 +975,7 @@ function importJson(e) {   // 파일 API 가 없는 브라우저 — 이름만 �
 // STEP 도면은 반드시 함께(2026-11-13) — 원본이 없으면 덮어쓸 .uds 안의 도면을 되살리고, 그래도 없으면 저장하지 않음(머리 [STEP 원본 지정])
 async function packProject(text, name, prev = null) {
   if (!/\.uds$/i.test(name)) return text;
-  return bundleProject(spec, text, prev, undefined, undefined, stepFromScreen);
+  return bundleProject(spec, text, prev, undefined, undefined, stepFromScreen, m3app.resultsForFile());   // 시뮬레이션 결과도 함께(2026-11-22 사용자)
 }
 // STEP 원본이 없으면 화면에 보이는 형상(불러온 그대로의 부품 메쉬)을 STEP 으로 만들어 보관 — 묻지 않음(2026-11-13 사용자 결정).
 // 부품 수정(크기·위치·형상)은 프로젝트 설정에 있어 열 때 다시 반영되므로 원본 메쉬(raw)로 만든다. 삼각형 근사라 원본보다 거침
@@ -1012,8 +1012,10 @@ function pickMissingStep() {
   inp.click();
 }
 async function openProjectFile(f) {
+  m3app.setFileResults(null);
   if (!(await isBundle(f))) { applyProjectText(await f.text()); return; }
   const U = await unpackBundle(f);
+  m3app.setFileResults(U.results);   // 저장된 결과 — 설계가 같으면 계산 없이 그대로(app.js fileSimSeed)
   stepReading = bundleReading(U.files);   // 설정(보관 띠)을 넣기 전에 '읽는 중' — 아래 STEP 저장(수 초)동안 '찾을 수 없음' 띠가 뜨던 문제(2026-11-17)
   applyProjectText(U.text);
   for (const s of U.files) await keepStepSource(s.role, s.file, s.gz);
@@ -1045,7 +1047,7 @@ function renderProjFile(st) {
 }
 function setupProjectFile() {
   const mechName = () => String(spec?.mech3d?.name ?? spec?.mech3dPending?.name ?? 'uds-project').replace(/\.(stp|step)$/i, '');
-  projFile = createProjectFile({ getText: () => JSON.stringify(spec, null, 2), onOpen: (f) => openProjectFile(f), read: (f) => f, pack: packProject, extra: () => sourcesKey(spec), onState: renderProjFile, suggest: () => `${mechName()}.uds`, download: downloadJson });
+  projFile = createProjectFile({ getText: () => JSON.stringify(spec, null, 2), onOpen: (f) => openProjectFile(f), read: (f) => f, pack: packProject, extra: () => `${sourcesKey(spec)}|${m3app.resultsStamp()}`, onState: renderProjFile, suggest: () => `${mechName()}.uds`, download: downloadJson });
   onStepSourcesChange(() => projFile?.touched());   // STEP 원본 압축이 끝나면 통합 파일에도
   window.addEventListener('keydown', (e) => {   // 어느 칸에 있어도(브라우저의 페이지 저장 대신)
     if (!(e.ctrlKey || e.metaKey) || e.code !== 'KeyS') return;

@@ -18,8 +18,8 @@ import { tallyGeometry, tallyStats, autoCells, autoWidthCell, edgeOf, quickErr, 
 import { isUntraced, tracedParts } from '../../engine/mech3d/scene3d.js';
 import { bounds } from '../../engine/mech3d/mesh.js';
 import { runGeomChecks, checkInterference, boxTravel, checkLeak } from '../../engine/mech3d/checks.js';
-import { createStore, PHYSICS, GEOM_CHECK, PERSIST_TAGS } from './store.js';
-import { createProgressive, photonCap, fmtProg, interactOverlap, slowPortText, previewWanted } from './progressive.js';
+import { createStore, PHYSICS, GEOM_CHECK, PERSIST_TAGS, physicsKey } from './store.js';
+import { createProgressive, photonCap, fmtProg, interactOverlap, slowPortText, previewWanted, seedToJson, seedFromJson } from './progressive.js';
 import { createPool } from './pool.js';
 import * as L from './leds.js';
 import { buildObsOverlay, cellColors, extractFaces, mapMinCell, mapMaxCell, obsPoint, startSection } from './colormap.js';
@@ -466,8 +466,8 @@ function restartCalc() {
   if (refining) { A.store.session.status = '정밀 메시를 만드는 중 — 끝나면 계산을 시작합니다'; return; }
   if (A.ad?.running) { A.ad.deferred = true; return; }
   if (A.adSeedSealed) { A.adSeed = null; A.adSeedSealed = false; }   // 적용 뒤에 또 바뀜 = 그 판정 값은 이제 맞지 않음
-  A.pvHold = !!A.adSeed;   // 기구 최적화 최종 판정을 이어받는 계산 = 정밀 그대로(미리보기로 바꾸지 않음)
-  A.timing = { start: 0, first: null, noise5: null }; A.prog.restart(makeJob, () => { const s = A.adSeed; A.adSeed = null; A.adSeedSealed = false; return s; });
+  A.pvHold = !!A.adSeed || !!fileSimSeed();   // 기구 최적화 최종 판정·파일에 저장된 결과를 이어받는 계산 = 정밀 그대로(미리보기로 바꾸지 않음)
+  A.timing = { start: 0, first: null, noise5: null }; A.prog.restart(makeJob, () => { const s = A.adSeed; A.adSeed = null; A.adSeedSealed = false; return s ?? fileSimSeed(); });
 }
 function guidance(snap) {
   const M = A.store.mspec, S = A.store.session;
@@ -479,6 +479,26 @@ function guidance(snap) {
   if (snap.stats.empty) return '판정할 유효 셀이 없음 — 관측면이 너무 좁거나 가장자리 제외가 큼';
   return '';
 }
+// 결과를 .uds 에(2026-11-22 사용자) — 연 파일의 결과(fileRes)는 설계 열쇠(physicsKey)가 같을 때만 그 계산으로 받음(다시 계산 안 함).
+// 끝난 계산은 A.simSave 로 남겨 저장할 때 넣음(설계가 바뀌었으면 안 넣음). resultsStamp = 결과가 바뀌면 바뀌는 값(자동 저장·번호 저장의 '바뀜')
+let fileRes = null;
+export function setFileResults(r) { fileRes = r ?? null; }
+const fileSimSeed = () => { const f = fileRes?.sim; return f && A && f.key === physicsKey(A.store.mspec) ? seedFromJson(f.seed) : null; };
+export function resultsForFile() {
+  if (!A) return fileRes;
+  const key = physicsKey(A.store.mspec);
+  const sim = A.simSave?.key === key ? { key, seed: seedToJson(A.simSave.seed) } : fileRes?.sim?.key === key ? fileRes.sim : null;
+  return sim ? { v: 1, sim } : null;
+}
+export const resultsStamp = () => (A?.simSave ? `${A.simSave.key.length}:${A.simSave.seed.photons}:${A.simSave.seed.reason}` : '');
+function keepSimResult(snap) {
+  if (snap.state !== 'done' || snap.preview || !A.prog?.exportSeed) return;
+  const key = physicsKey(A.store.mspec);
+  if (A.simSave?.key === key && A.simSave.seed.photons === snap.photons) return;
+  const seed = A.prog.exportSeed(); if (!seed) return;
+  A.simSave = { key, seed };
+  A.ctx.persist?.();   // 파일 자동 저장(골라 둔 파일이 있으면)
+}
 function onCalc(snap) {
   if (!A) return;
   const S = A.store.session, M = A.store.mspec, T = A.timing, now = performance.now();
@@ -488,6 +508,7 @@ function onCalc(snap) {
   if (T.start && snap.stats && T.first == null) T.first = (now - T.start) / 1000;
   if (T.start && snap.stats?.relNoise != null && snap.stats.relNoise <= 0.05 && T.noise5 == null) T.noise5 = (now - T.start) / 1000;
   updateLeakCheck(snap);
+  keepSimResult(snap);
   if (previewCheck(snap)) return;   // 미리보기 켜기·끄기 = 새로 계산(이 결과는 버림)
   A.results.update({ snap, calcMode: A.calcMode ?? 'auto', observe: M.observe, message: guidance(snap), shape: shapeFor(S.line, snap?.G), leds: ledSW(M, S.line), ledsOrig: (() => { const c = ledChangeNow(M, S.line); return c?.changed ? c.orig : []; })(), leak: leakText(A.checks.leak, M.parts.map((p) => p.name)) });
   A.simDash?.sample(snap, snap.targetNoise ?? M.observe.targetNoise ?? 0.01, M.observe, M.parts.map((p) => p.name), M.parts.length, !!adState().running, M.parts.flatMap((p, i) => (isUntraced(p) ? [i] : [])));

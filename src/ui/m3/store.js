@@ -6,6 +6,12 @@ export const PHYSICS = new Set(['material', 'light', 'observe', 'contacts']);   
 export const GEOM_CHECK = new Set(['material', 'light', 'observe', 'target']);       // 기하 점검 다시(target = 점검 기준값)
 export const PERSIST_TAGS = new Set(['material', 'light', 'observe', 'target', 'contacts', 'meta']);
 
+// 계산에 쓰이는 설계 값만의 열쇠(2026-11-22 사용자: 결과를 .uds 에 저장) — 이름·그룹·숨김(보기 상태)은 뺌. 열 때 이것이 같아야 저장된 결과를 씀
+export function physicsKey(M) {
+  if (!M) return '';
+  const { name, viewState, groups, parts, ...rest } = M;
+  return JSON.stringify({ ...rest, parts: (parts ?? []).map(({ name: _n, ...p }) => p) });
+}
 export function initialSession() {
   return {
     node: null,          // 피처 트리 선택 노드 id ('parts' | 'part:i' | 'light' | 'leds' | 'obs' | 'contacts')

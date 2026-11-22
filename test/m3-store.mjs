@@ -1,5 +1,5 @@
 // CAD UI 상태 저장소: node test/m3-store.mjs
-import { createStore, TAGS, PHYSICS, GEOM_CHECK } from '../src/ui/m3/store.js';
+import { createStore, TAGS, PHYSICS, GEOM_CHECK, physicsKey } from '../src/ui/m3/store.js';
 import { fakeTimers } from './m3-timers.mjs';
 import { ok, done } from './mech3d-util.mjs';
 
@@ -63,4 +63,9 @@ st.dispose(); await T.advance(1000); ok(saved === 3, 'dispose → 남은 저장 
   ok(M.viewState?.hidden.join() === '0', '되돌리기로 칸이 지워져도 다시 맞춤');
   a.dispose();
 }
+// 저장된 결과가 이 설계 것인지(2026-11-22 사용자: 결과를 .uds 에) — 이름·그룹·숨김(보기)은 빼고 소재·광원·관측면·부품 형상만
+{ const M = { name: 'a', parts: [{ name: 'p1', material: { kind: 'milky', milky: 7.65 }, shapeMod: null }], light: { kind: 'step' }, observe: { quality: 'high', targetNoise: 0.02 }, contacts: [], viewState: { hidden: [0] }, groups: [{ id: 'g' }] };
+  const k = physicsKey(M), C = (f) => { const x = JSON.parse(JSON.stringify(M)); f(x); return physicsKey(x); };
+  ok(C((x) => { x.name = 'b'; x.parts[0].name = 'q'; x.viewState = null; x.groups = []; }) === k, '이름·숨김·그룹만 바뀜 = 같은 설계');
+  ok(C((x) => { x.parts[0].material.milky = 7.7; }) !== k && C((x) => { x.observe.quality = 'low'; }) !== k && C((x) => { x.light.kind = 'manual'; }) !== k && C((x) => { x.parts[0].shapeMod = { dt: 1 }; }) !== k, 'Milky·화질·광원·형상이 바뀌면 다른 설계'); }
 done();

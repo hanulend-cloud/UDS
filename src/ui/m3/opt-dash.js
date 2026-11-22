@@ -463,7 +463,7 @@ export const symNote = (sym) => (!sym ? '' : sym.off ? '대칭 아님 — 전체
 export function simStateText(state, reason = '', stopped = false, busy = false, error = '') {
   if (busy) return '기구 최적화 중 — 일시정지(끝나면 이어서)';
   if (state === 'error') return `계산 실패 — ${error ? `${error} · ` : ''}▶ 로 다시 계산`;   // 전에는 'error' 영어 그대로(2026-11-17)
-  return { running: '계산 중', paused: stopped ? '중지됨' : '일시정지', done: reason === 'adopted' ? '계산 완료 — 기구 최적화 최종 판정 값' : reason === 'converged' ? '계산 완료 — 노이즈 충분히 작음' : reason === 'judgeLimit' ? '계산 멈춤 — 판정 경계에서 5분 더 계산함(노이즈 0.5% 못 닿음)' : '계산 한도 도달 — 노이즈가 아직 큼', pending: '대기', starting: '장면 준비', idle: '계산 전' }[state] ?? state ?? '';
+  return { running: '계산 중', paused: stopped ? '중지됨' : '일시정지', done: reason === 'adopted' ? '계산 완료 — 기구 최적화 최종 판정 값' : reason === 'restored' ? '계산 완료 — 파일에 저장된 결과' : reason === 'converged' ? '계산 완료 — 노이즈 충분히 작음' : reason === 'judgeLimit' ? '계산 멈춤 — 판정 경계에서 5분 더 계산함(노이즈 0.5% 못 닿음)' : '계산 한도 도달 — 노이즈가 아직 큼', pending: '대기', starting: '장면 준비', idle: '계산 전' }[state] ?? state ?? '';
 }
 // 메인 화면 ④ 카드 상태 글(순수, 2026-11-17 사용자: 진행 % 가 안 보임 — 아래 진행 줄은 2026-11-13 숨김) — 계산 중·일시정지면 진행 % 를 붙임
 export function simCardText(state, pct, reason = '', stopped = false, busy = false, error = '') {
@@ -528,7 +528,7 @@ export function createSimDash(el, { onCtl = null, bar = null } = {}) {
     if (bar) {
       const B = (k) => bar.querySelector(`[data-b="${k}"]`), bt = (k, t) => { const n = B(k); if (n && n.textContent !== t) n.textContent = t; };
       bt('pct', `${pctT}%`); B('bar').style.width = `${pctT}%`; bt('row', row); bt('st', sTxt);
-      const sn = B('st'); sn.title = sTxt; sn.className = `m3-run-st ${state === 'done' ? (reason === 'converged' || reason === 'adopted' ? 'ok' : 'warn') : state === 'error' ? 'bad' : ''}`;
+      const sn = B('st'); sn.title = sTxt; sn.className = `m3-run-st ${state === 'done' ? (reason === 'converged' || reason === 'adopted' || reason === 'restored' ? 'ok' : 'warn') : state === 'error' ? 'bad' : ''}`;
     } else { set('pct', `${pctT}%`); el.querySelector('[data-s="bar"]').style.width = `${pctT}%`; set('row', row); }
     const dg = el.querySelector('[data-s="diag"]'); if (dg) { dg.hidden = !diag; set('diagh', diag?.head ?? ''); set('diagb', diag?.body ?? ''); }   // 머리·내용 따로 — 펼침 상태 유지
     set('svg', svg);

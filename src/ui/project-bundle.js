@@ -8,8 +8,8 @@ export const gzipBlob = (blob) => pipe(blob, new CompressionStream('gzip'));
 const gunzip = (blob) => pipe(blob, new DecompressionStream('gzip'));
 
 // files = [{ role: 'mech'|'led', name, size, lastModified, gz: Blob }] — 반환 Blob
-export async function packBundle(text, files = []) {
-  const head = { v: 1, project: text, files: files.map((f) => ({ role: f.role, name: f.name, size: f.size ?? 0, lastModified: f.lastModified ?? 0, gz: f.gz.size })) };
+export async function packBundle(text, files = [], results = null) {   // results = 시뮬레이션·최적화 결과(2026-11-22, 머리에 — 옛 프로그램은 모르는 칸이라 무시)
+  const head = { v: 1, project: text, ...(results ? { results } : {}), files: files.map((f) => ({ role: f.role, name: f.name, size: f.size ?? 0, lastModified: f.lastModified ?? 0, gz: f.gz.size })) };
   const hz = new Uint8Array(await (await gzipBlob(new Blob([enc.encode(JSON.stringify(head))]))).arrayBuffer());
   const len = new Uint8Array(4); new DataView(len.buffer).setUint32(0, hz.length, true);
   return new Blob([enc.encode(MAGIC), len, hz, ...files.map((f) => f.gz)], { type: 'application/octet-stream' });
@@ -28,5 +28,5 @@ export async function unpackBundle(blob) {
     const gz = blob.slice(at, at + f.gz); at += f.gz;
     files.push({ role: f.role, name: f.name, size: f.size, lastModified: f.lastModified, gz, file: new File([await gunzip(gz)], f.name, { lastModified: f.lastModified ?? Date.now() }) });
   }
-  return { text: head.project, files };
+  return { text: head.project, files, results: head.results ?? null };
 }

@@ -13,6 +13,10 @@ ok(!(await isBundle(new Blob([text]))), '옛 JSON = 통합 파일 아님');
 const U = await unpackBundle(B);
 ok(U.text === text, '프로젝트 JSON 그대로');
 ok(U.files.length === 2 && U.files[0].role === 'mech' && U.files[1].role === 'led', '도면 순서·역할');
+// 결과 칸(2026-11-22 사용자) — 시뮬레이션·최적화 결과를 머리에. 없으면 null · 옛 파일도 null
+{ const R = { v: 1, sim: { key: 'k', seed: { photons: 5 } } }, B2 = await packBundle(text, [mech], R), U2 = await unpackBundle(B2);
+  ok(U2.results?.sim?.key === 'k' && U2.results.sim.seed.photons === 5 && U2.text === text && U2.files.length === 1, '결과 칸 저장 · 읽기');
+  ok(U.results === null, '결과 없는 파일 = null'); }
 ok(await U.files[0].file.text() === step && U.files[0].file.name === '기구.stp' && U.files[0].file.lastModified === 123, '기구 STEP 원본 복원(이름·시각)');
 ok(await U.files[1].file.text() === 'LED;\n', 'LED STEP 원본 복원');
 ok(U.files[0].gz.size === mech.gz.size, '압축본도 넘겨줌(다시 저장할 때 재압축 없음)');
