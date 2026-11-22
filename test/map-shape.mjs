@@ -60,9 +60,22 @@ for (const mode of ['ring', 'real']) {
   for (let i = 0; i < G.ns; i += 5) for (let j = 0; j < G.nw; j++) {
     const k = i * G.nw + j, Q = Ly.quad(i, j), q = [Math.floor(Q.reduce((s, p) => s + p[0], 0) / 4), Math.floor(Q.reduce((s, p) => s + p[1], 0) / 4)];   // 칸 가운데 화소
     const p = (q[1] * img.width + q[0]) * 4, l = Math.max(0, Math.min(255, Math.round((map[k] / 37) * 255))) * 3;
-    n++; if (img.data[p] === LUT[l] && img.data[p + 1] === LUT[l + 1] && img.data[p + 2] === LUT[l + 2] && img.data[p + 3] === 255) good++;
+    const near = (a) => Math.abs(img.data[p] - LUT[a]) + Math.abs(img.data[p + 1] - LUT[a + 1]) + Math.abs(img.data[p + 2] - LUT[a + 2]);
+    let best = Infinity; for (let dl = -12; dl <= 12; dl++) { const a = Math.max(0, Math.min(255, l / 3 + dl)) * 3; best = Math.min(best, near(a)); }   // 칸 사이 보간(2026-11-22) — 화소 가운데가 칸 가운데에서 반 화소 비켜 있고 이 시험 지도는 이웃 칸 값이 크게 뛰어 ±12단계(이웃 칸 색과는 수십 단계 차이)
+    n++; if (best === 0 && img.data[p + 3] === 255) good++;
   }
-  ok(n > 50 && good === n, `링 그림: 칸 가운데 화소 = 그 칸 색 (${good}/${n})`);
+  ok(n > 50 && good === n, `링 그림: 칸 가운데 화소 = 그 칸 색(±12단계) (${good}/${n})`);
+  // 부드럽게(2026-11-22 사용자: 시뮬레이션 결과가 화소처럼 보임) — 칸 경계 화소 = 두 칸 가운데 값의 중간 색(칸 계단 없음). 판정 값은 그대로
+  const radial = Float64Array.from(valid, (_, k) => 1 + (k % G.nw)), v2 = { G: { ...G, valid }, map: radial, shape: sh };
+  const cv2 = { width: 600, height: 400, getContext: () => ctx }; img = null; drawMap(cv2, v2, 1);
+  let mid = 0, m = 0;
+  for (let i = 0; i < G.ns; i += 6) for (let j = 1; j < G.nw - 2; j++) {
+    const [px, py] = cv2._mapv.ly.toPx((i + 0.5) * G.ds, G.w0 + (j + 1) * G.cell), p = (Math.floor(py) * img.width + Math.floor(px)) * 4;
+    const lo = Math.round(((j + 1) / G.nw) * 255), hi = Math.round(((j + 2) / G.nw) * 255);
+    let bi = -1, bd = Infinity; for (let a = 0; a < 256; a++) { const d = Math.abs(img.data[p] - LUT[3 * a]) + Math.abs(img.data[p + 1] - LUT[3 * a + 1]) + Math.abs(img.data[p + 2] - LUT[3 * a + 2]); if (d < bd) { bd = d; bi = a; } }
+    m++; if (bi > lo + 3 && bi < hi - 3) mid++;
+  }
+  ok(m > 20 && mid === m, `링 그림: 칸 경계 = 두 칸 사이 중간 색, 계단 없음 (${mid}/${m})`);
   img = null; map[0] = 99; drawMap(cv, v, 1);
   ok(!!img && cv._pix?.built === 1, '링 그림: 값만 바뀌면 화소 표를 다시 만들지 않음');
 }

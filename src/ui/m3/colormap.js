@@ -1,13 +1,17 @@
 // 관측면 색지도 — spec 2026-10-15 m3-cad-ui §2: 관측면 메쉬 정점 → (s,w) → 집계 지도 칸 값 → 색. 순수 함수(Node 시험).
 // STEP 관측면은 삼각형이 커서(평면 = 2개) 정점 색으로는 분포가 안 보인다 → 집계 칸 크기까지 세분한 덧그림 메쉬를 만든다.
-// 색 표(2026-11-22 사용자: 광분포를 classic 색 배치로도) — [위치 0~1, [r,g,b]] 꼭짓점. 기본 = 시안(m3-ui-mockup) 색 막대, 클래식 = 남색→파랑→하늘→노랑→빨강→진빨강
+// 색 표(2026-11-22 사용자) — [위치 0~1, [r,g,b]] 꼭짓점. 기본 = Classic(남색→파랑→하늘→노랑→빨강→진빨강) · Turbo · Viridis · 회색조. 예전 기본(시안 색 막대)은 사용자 요청으로 뺌
 const even = (cs) => cs.map((c, i) => [i / (cs.length - 1), c]);
+const hx = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 export const PALETTES = {
-  default: even([[0x20, 0x30, 0x6e], [0x2a, 0x7b, 0xd5], [0x3f, 0xc1, 0x7a], [0xf2, 0xd3, 0x3c], [0xe0, 0x53, 0x2a]]),
   classic: [[0, [0, 0, 128]], [0.125, [0, 0, 255]], [0.375, [0, 255, 255]], [0.625, [255, 255, 0]], [0.875, [255, 0, 0]], [1, [128, 0, 0]]],
+  turbo: even(['#30123b', '#4662d7', '#36aaf9', '#1ae4b6', '#72fe5e', '#c8ef34', '#faba39', '#f66b19', '#ca2a04', '#7a0403'].map(hx)),
+  viridis: even(['#440154', '#482878', '#3e4989', '#31688e', '#26828e', '#1f9e89', '#35b779', '#6ece58', '#b5de2b', '#fde725'].map(hx)),
+  gray: even([[0, 0, 0], [255, 255, 255]]),
 };
-let PAL = 'default';
-export const setPalette = (name) => { PAL = Object.hasOwn(PALETTES, name) ? name : 'default'; };
+export const PALETTE_LABELS = { classic: 'Classic', turbo: 'Turbo', viridis: 'Viridis', gray: '회색조' };
+let PAL = 'classic';
+export const setPalette = (name) => { PAL = Object.hasOwn(PALETTES, name) ? name : 'classic'; };
 export const paletteName = () => PAL;
 const hex = (c) => '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('');
 // 3D 범례 막대용 CSS 그라데이션(꼭짓점 위치 그대로)

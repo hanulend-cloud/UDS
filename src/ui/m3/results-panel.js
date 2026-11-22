@@ -9,7 +9,7 @@ import { showCtxMenu } from './feature-tree.js';
 // ① 2D 광량 분포(관측면 펼침 s×w) + 평균 광량(목표 대비)·광 효율 ② 길이 1D 프로파일(목표선) + 길이 균일도 ③ 폭 1D 프로파일(최저 창) + 폭 균일도.
 // update({ snap(progressive snapshot), observe(spec.mech3d.observe), message(안내 | ''), leds?: [{s, w}](LED 위치 — 프로파일 아래 표시) })
 import { windowProfile, uVerdict, uBand, fmtJudge, fmtTg } from '../../engine/mech3d/tally.js';
-import { ramp, NO_DATA, setPalette, paletteName } from './colormap.js';
+import { ramp, NO_DATA, setPalette, paletteName, PALETTE_LABELS } from './colormap.js';
 import { fullView, zoomAt, panBy, snapRect } from './map-zoom.js';
 import { regionStats } from '../../engine/mech3d/tally.js';
 
@@ -152,8 +152,8 @@ export function ledGapCells(leds, dx) {
 
 // 256단계 색 표(RGB, 0~255) — colormap.js 의 ramp 에서 한 번만 만든다
 let LUT = null;
-// 색 표 선택 상자(메인 2D·큰 창 같은 모양) — 기본 · Classic
-const PAL_SELECT = (attr) => `<select ${attr} title="색 표 — 기본 · Classic(남색→파랑→하늘→노랑→빨강→진빨강). 색만 바뀌고 값·판정은 그대로" aria-label="색 표"><option value="default">기본</option><option value="classic">Classic</option></select>`;
+// 색 표 선택 상자(메인 2D·큰 창 같은 모양) — Classic(기본) · Turbo · Viridis · 회색조
+const PAL_SELECT = (attr) => `<select ${attr} title="색 표 — Classic(기본) · Turbo · Viridis · 회색조. 색만 바뀌고 값·판정은 그대로" aria-label="색 표">${Object.entries(PALETTE_LABELS).map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select>`;
 export function buildLut() {
   const t = new Uint8Array(256 * 3);
   for (let i = 0; i < 256; i++) { const c = ramp(i / 255); t[3 * i] = Math.round(c[0] * 255); t[3 * i + 1] = Math.round(c[1] * 255); t[3 * i + 2] = Math.round(c[2] * 255); }
@@ -461,7 +461,7 @@ function startMark(x, Ly, G, rows, dpr) {
 }
 // 화소(가운데) → 칸 번호(없으면 −1). 칸마다 자기 상자 안 화소만 검사(볼록 사각형 안 = 네 변 같은 쪽)
 function pixCells(Ly, G, rows, W, H) {
-  const idx = new Int32Array(W * H).fill(-1);
+  const idx = new Int32Array(W * H).fill(-1), fu = new Float32Array(W * H), fv = new Float32Array(W * H);
   for (let i = 0; i < G.ns; i++) for (let j = rows[0]; j <= rows[1]; j++) {
     const q = Ly.quad(i, j), k = i * G.nw + j;
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
@@ -470,10 +470,34 @@ function pixCells(Ly, G, rows, W, H) {
     for (let py = ay; py <= by; py++) for (let px = ax; px <= bx; px++) {
       const cx = px + 0.5, cy = py + 0.5; let pos = 0, neg = 0;
       for (let a = 0; a < 4; a++) { const [ux, uy] = q[a], [vx, vy] = q[(a + 1) & 3], c = (vx - ux) * (cy - uy) - (vy - uy) * (cx - ux); if (c > 0) pos++; else if (c < 0) neg++; }
-      if (!(pos && neg)) idx[py * W + px] = k;
+      if (pos && neg) continue;
+      const p = py * W + px; idx[p] = k;
+      // 칸 안 위치(u, v) — 이중 선형 역변환(뉴턴 4회). 칸 사이 보간용(2026-11-22)
+      let u = 0.5, vv = 0.5;
+      for (let it = 0; it < 4; it++) {
+        const a = q[0], b = q[1], c = q[2], d = q[3];
+        const fx = a[0] * (1 - u) * (1 - vv) + b[0] * u * (1 - vv) + c[0] * u * vv + d[0] * (1 - u) * vv - cx, fy = a[1] * (1 - u) * (1 - vv) + b[1] * u * (1 - vv) + c[1] * u * vv + d[1] * (1 - u) * vv - cy;
+        const xu = (b[0] - a[0]) * (1 - vv) + (c[0] - d[0]) * vv, yu = (b[1] - a[1]) * (1 - vv) + (c[1] - d[1]) * vv, xv = (d[0] - a[0]) * (1 - u) + (c[0] - b[0]) * u, yv = (d[1] - a[1]) * (1 - u) + (c[1] - b[1]) * u, det = xu * yv - xv * yu;
+        if (!det) break;
+        u -= (fx * yv - fy * xv) / det; vv -= (fy * xu - fx * yu) / det;
+      }
+      fu[p] = Math.max(0, Math.min(1, u)); fv[p] = Math.max(0, Math.min(1, vv));
     }
   }
-  return idx;
+  return { idx, fu, fv };
+}
+// 화소 값 = 이웃 네 칸 가운데 값의 이중 선형 보간(2026-11-22 사용자: 시뮬레이션 결과가 화소처럼 보임) — 칸 가운데 = 그 칸 값 그대로.
+// 링은 s 이음매 너머로 이어 붙이고, 관측면 밖 칸은 빼고 남은 칸끼리 다시 나눔. 판정·최저점·마우스 값은 원자료(map) 그대로 — 표시 전용
+function pixValue(G, dm, rows, k, u, v) {
+  const fs = Math.floor(k / G.nw) + u - 0.5, fw = (k % G.nw) + v - 0.5, i0 = Math.floor(fs), j0 = Math.floor(fw), a = fs - i0, b = fw - j0;
+  let sum = 0, wt = 0;
+  for (let di = 0; di < 2; di++) for (let dj = 0; dj < 2; dj++) {
+    let i = i0 + di; const j = Math.max(rows[0], Math.min(rows[1], j0 + dj));
+    if (G.closed) i = ((i % G.ns) + G.ns) % G.ns; else i = Math.max(0, Math.min(G.ns - 1, i));
+    const kk = i * G.nw + j, w = (di ? a : 1 - a) * (dj ? b : 1 - b);
+    if (w > 0 && G.valid[kk]) { sum += w * dm[kk]; wt += w; }
+  }
+  return wt > 0 ? sum / wt : dm[k];
 }
 function drawShapeMap(cv, v, dpr, hover, mode) {
   const { G, map } = v, x = cv.getContext('2d'), W = cv.width, H = cv.height, VG = mapViewG(G), rows = [VG.jA ?? 0, VG.jB ?? G.nw - 1];
@@ -487,13 +511,13 @@ function drawShapeMap(cv, v, dpr, hover, mode) {
   // 고화질 링(6.8만 칸)에서 1초 넘게 화면을 잡아 '화면이 9초 동안 멈춤'. 이제 갱신 = 화소에 칸 색만 채움
   let T = cv._pix;
   if (!T || T.G !== G || T.shape !== v.shape || T.W !== W || T.H !== H || T.mode !== mode || T.r0 !== rows[0] || T.r1 !== rows[1] || T.box !== JSON.stringify(box)) {
-    T = cv._pix = { G, shape: v.shape, W, H, mode, r0: rows[0], r1: rows[1], box: JSON.stringify(box), idx: pixCells(Ly, G, rows, W, H), built: (T?.built ?? 0) + 1 };
+    T = cv._pix = { G, shape: v.shape, W, H, mode, r0: rows[0], r1: rows[1], box: JSON.stringify(box), ...pixCells(Ly, G, rows, W, H), built: (T?.built ?? 0) + 1 };
   }
   if (mx > 0) {
     const img = x.createImageData(W, H), d = img.data, idx = T.idx, col = new Int16Array(map.length).fill(-1);
     const dm = v.draw ?? map;   // 색 = 다듬은 지도 · 최저점·최대 = 원자료
     for (let k = 0; k < map.length; k++) if (G.valid[k]) { col[k] = lutIndex(dm[k] / mx) * 3; if (kMin < 0 || map[k] < map[kMin]) kMin = k; }
-    for (let p = 0, q = 0; p < idx.length; p++, q += 4) { const k = idx[p]; if (k < 0) continue; const l = col[k]; if (l < 0) continue; d[q] = LUT[l]; d[q + 1] = LUT[l + 1]; d[q + 2] = LUT[l + 2]; d[q + 3] = 255; }
+    for (let p = 0, q = 0; p < idx.length; p++, q += 4) { const k = idx[p]; if (k < 0 || col[k] < 0) continue; const l = lutIndex(pixValue(G, dm, rows, k, T.fu[p], T.fv[p]) / mx) * 3; d[q] = LUT[l]; d[q + 1] = LUT[l + 1]; d[q + 2] = LUT[l + 2]; d[q + 3] = 255; }   // 칸 사이 보간(2026-11-22)
     x.putImageData(img, 0, 0);
   }
   if (G.closed) startMark(x, Ly, G, rows, dpr);   // 링 시작점 s = 0 — 3D 의 흰 점선과 같은 자리(2026-11-18)
@@ -686,7 +710,7 @@ export function createResultsPanel(el, { onPalette = null, head = null, foot = n
   if (head) head.innerHTML = topHtml;
   if (foot) foot.innerHTML = leakBtn;   // 새는 빛 = 화면 맨 아래 줄(2026-11-22 사용자)
   const q = (k) => el.querySelector(`[data-r="${k}"]`) ?? head?.querySelector(`[data-r="${k}"]`) ?? foot?.querySelector(`[data-r="${k}"]`);
-  try { setPalette(localStorage.getItem('uds.m3.palette') ?? 'default'); } catch {}   // 색 표(2026-11-22) — 이 브라우저에 기억
+  try { setPalette(localStorage.getItem('uds.m3.palette') ?? 'classic'); } catch {}   // 색 표(2026-11-22) — 이 브라우저에 기억
   let mapEq = false; try { mapEq = localStorage.getItem('uds.m3.mapEq') === '1'; } catch {}   // 메인 2D 실제 비율 — 이 브라우저에 기억
   const RATIO = { map: 2.6, prof: 2.6, wprof: 3.2 };   // 눈금·색 막대·읽기가 들어가도록 높게
   wireHover(q('prof')); wireHover(q('wprof')); wireMapHover(q('map'));

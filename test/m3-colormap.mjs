@@ -21,7 +21,7 @@ const maxEdge = (m) => {
   return e;
 };
 
-ok(ramp(0).every((v, k) => Math.abs(v - [0x20, 0x30, 0x6e][k] / 255) < 1e-12) && ramp(2).every((v, k) => Math.abs(v - [0xe0, 0x53, 0x2a][k] / 255) < 0.01), 'ramp: 0 = 남색, 1 이상 = 주황(시안 색 막대)');
+ok(ramp(0).every((v, k) => Math.abs(v - [0, 0, 128][k] / 255) < 1e-12) && ramp(2).every((v, k) => Math.abs(v - [128, 0, 0][k] / 255) < 1e-12), 'ramp: 기본 = Classic · 0 = 남색, 1 이상 = 진빨강');
 { const f = extractFaces(boxMesh(0, 0, 0, 10, 10, 10), new Set([1]));
   ok(f.triangles.length === 6 && f.positions.length === 12 && [0, 1, 2, 3].every((v) => f.positions[3 * v + 2] === 10), 'extractFaces: +z 면 = 삼각형 2개·정점 4개'); }
 { const c = srgbColorsToLinear(Float32Array.from([0, 0.04045, 0.5, 1]));
@@ -79,15 +79,19 @@ ok(ramp(0).every((v, k) => Math.abs(v - [0x20, 0x30, 0x6e][k] / 255) < 1e-12) &&
   ok(ar && dA(angOf(ar[1]), pa(10)) < dA(angOf(ar[1]), pa(Lr - 10)), '화살표 = s 가 늘어나는 쪽');
   ok(startSection(ov, { ...Gr, closed: false }) === null, '열린 선(직선) = 없음');
 }
-// 색 표 선택(2026-11-22 사용자: 광분포를 classic 색 배치로) — 기본 = 지금 색, 클래식 = 남색→파랑→하늘→노랑→빨강→진빨강. 바꿔도 값은 그대로(색만)
+// 색 표 선택(2026-11-22 사용자: 기본 = Classic, Turbo · Viridis · 회색조 추가 · 예전 기본 색은 뺌) — 바꿔도 값은 그대로(색만)
 {
-  ok(paletteName() === 'default' && JSON.stringify(ramp(0).map((v) => Math.round(v * 255))) === '[32,48,110]', '처음 = 기본 색 표(지금과 같음)');
-  setPalette('classic');
   const c = (t) => ramp(t).map((v) => Math.round(v * 255));
-  ok(paletteName() === 'classic' && JSON.stringify(c(0)) === '[0,0,128]' && JSON.stringify(c(1)) === '[128,0,0]', `클래식: 0 = 남색 · 1 = 진빨강 (${c(0)} · ${c(1)})`);
-  ok(JSON.stringify(c(0.375)) === '[0,255,255]' && JSON.stringify(c(0.625)) === '[255,255,0]', `클래식: 하늘(0.375) · 노랑(0.625) (${c(0.375)} · ${c(0.625)})`);
+  ok(paletteName() === 'classic' && JSON.stringify(c(0)) === '[0,0,128]' && JSON.stringify(c(1)) === '[128,0,0]', `처음 = Classic: 0 = 남색 · 1 = 진빨강 (${c(0)} · ${c(1)})`);
+  ok(JSON.stringify(c(0.375)) === '[0,255,255]' && JSON.stringify(c(0.625)) === '[255,255,0]', `Classic: 하늘(0.375) · 노랑(0.625) (${c(0.375)} · ${c(0.625)})`);
   ok(/^linear-gradient\(90deg, #000080/.test(paletteCss()) && /#800000\)$/.test(paletteCss()), `3D 범례 막대 = 같은 색 (${paletteCss()})`);
-  setPalette('nope'); ok(paletteName() === 'default', '모르는 이름 = 기본');
-  ok(Object.keys(PALETTES).join() === 'default,classic', '색 표 = 기본 · 클래식');
+  ok(Object.keys(PALETTES).join() === 'classic,turbo,viridis,gray', '색 표 = Classic · Turbo · Viridis · 회색조');
+  setPalette('turbo'); ok(paletteName() === 'turbo' && JSON.stringify(c(0)) === '[48,18,59]' && JSON.stringify(c(1)) === '[122,4,3]', `Turbo: 0 = 짙은 보라 · 1 = 짙은 빨강 (${c(0)} · ${c(1)})`);
+  setPalette('viridis'); ok(JSON.stringify(c(0)) === '[68,1,84]' && JSON.stringify(c(1)) === '[253,231,37]', `Viridis: 0 = 보라 · 1 = 노랑 (${c(0)} · ${c(1)})`);
+  setPalette('gray'); ok(JSON.stringify(c(0)) === '[0,0,0]' && JSON.stringify(c(0.5)) === '[128,128,128]' && JSON.stringify(c(1)) === '[255,255,255]', `회색조: 검정 → 흰색 (${c(0.5)})`);
+  const lum = (t) => { const [r, g, b] = c(t); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  for (const n of ['viridis', 'gray']) { setPalette(n); let up = true; for (let i = 1; i <= 50; i++) if (lum(i / 50) < lum((i - 1) / 50) - 0.5) up = false; ok(up, `${n}: 밝을수록 밝은 색(밝기 한 방향)`); }
+  setPalette('default'); ok(paletteName() === 'classic', '예전 기본(default)·모르는 이름 = Classic');
+  setPalette('classic');
 }
 done();
