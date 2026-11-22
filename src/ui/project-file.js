@@ -8,6 +8,11 @@ const SAVE_TYPES = [UDS], OPEN_TYPES = [UDS, { description: 'UDS 프로젝트 (�
 const isUds = (n) => /\.uds$/i.test(n ?? '');
 const asUds = (n) => (isUds(n) ? n : `${String(n).replace(/\.json$/i, '')}.uds`);
 const isAbort = (e) => e?.name === 'AbortError';
+// 번호 이름(2026-11-22 사용자) — ring.uds → ring_1.uds → ring_2.uds. 끝의 _숫자(1~3자리)만 번호로 봄(ring_2026 같은 날짜는 그대로 두고 _1 을 붙임)
+export function nextVersionName(n) {
+  const b = String(n ?? 'uds-project').replace(/\.(uds|json)$/i, ''), m = b.match(/^(.*)_(\d{1,3})$/);
+  return m ? `${m[1]}_${+m[2] + 1}.uds` : `${b}_1.uds`;
+}
 
 function handleDb() {
   const open = () => new Promise((res, rej) => { const q = indexedDB.open('uds-project-file', 1); q.onupgradeneeded = () => q.result.createObjectStore('h'); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
@@ -21,6 +26,8 @@ export function createProjectFile({ getText, onOpen, onState = () => {}, suggest
   const db = store ?? (typeof indexedDB !== 'undefined' ? handleDb() : null);
   const S = { name: null, hasFile: false, perm: 'none', saving: false, savedAt: null, browserAt: null, err: '', missing: [] };
   let handle = null, lastText = null, t = null, again = false;
+  let verBase = null;   // 지금 파일(버전)을 만들거나 연 때의 내용 — [저장] 때 이것과 다르면 다음 번호 파일로(2026-11-22 사용자)
+  const keyNow = () => `${getText()}\u0000${extra()}`;
   const emit = () => onState({ ...S });
   const keep = (fn) => { try { fn()?.catch?.(() => {}); } catch { /* 핸들 보관 실패 = 다음 실행에서 다시 고르면 됨 */ } };
   const setHandle = (h) => { handle = h; S.hasFile = !!h; S.name = h?.name ?? null; S.savedAt = null; S.err = ''; keep(() => (h ? db?.put(h) : db?.del())); };
@@ -58,23 +65,33 @@ export function createProjectFile({ getText, onOpen, onState = () => {}, suggest
     },
     async saveAs() {
       if (!win.showSaveFilePicker) {   // 파일 API 없음 = 다운로드
-        const nm = (ask ?? ((d) => win.prompt?.('저장할 파일 이름', d)))(asUds(S.name ?? suggest()));
+        const changed = S.name != null && verBase != null && keyNow() !== verBase;   // 지난 다운로드 뒤 바뀜 = 다음 번호 이름 제안
+        const nm = (ask ?? ((d) => win.prompt?.('저장할 파일 이름', d)))(changed ? nextVersionName(S.name) : asUds(S.name ?? suggest()));
         if (!nm) return false;
         const name = asUds(nm);
         let body; try { body = await pack(getText(), name, null); } catch (e) { S.err = e?.message ?? String(e); S.missing = e?.missingStep ?? []; emit(); return false; }
         download?.(body, name);
-        S.name = name; S.savedAt = Date.now(); S.err = ''; S.missing = []; emit();
+        S.name = name; S.savedAt = Date.now(); S.err = ''; S.missing = []; verBase = keyNow(); emit();
         return true;
       }
       let h;
       try { h = await win.showSaveFilePicker({ suggestedName: asUds(S.name ?? suggest()), types: SAVE_TYPES }); } catch (e) { if (isAbort(e)) return false; S.err = e?.message ?? String(e); emit(); return false; }
       setHandle(h); S.perm = 'granted'; lastText = null;
-      return write();
+      const r = await write(); if (r) verBase = lastText;
+      return r;
     },
-    async save() {
+    async save({ version = true } = {}) {   // version: false = 번호 없이 지금 파일에(도면 다시 지정 뒤 등)
       if (t != null) { timers.clearTimeout(t); t = null; }
       if (!handle) return api.saveAs();
       if (S.perm !== 'granted') S.perm = await askWrite(handle);
+      // 번호 저장 — 이 파일을 만든(연) 뒤 바뀐 게 있으면 지금 파일에 마지막으로 쓰고(그 시점 내용으로 남김) 다음 번호 이름 저장 창(같은 폴더). 취소 = 지금 파일에 저장
+      if (version && S.perm === 'granted' && verBase != null && keyNow() !== verBase && win.showSaveFilePicker) {
+        await write();
+        let h = null;
+        try { h = await win.showSaveFilePicker({ suggestedName: nextVersionName(S.name), types: SAVE_TYPES, startIn: handle }); } catch (e) { if (!isAbort(e)) { S.err = e?.message ?? String(e); emit(); return false; } }
+        if (h) { setHandle(h); S.perm = 'granted'; lastText = null; const r = await write(); if (r) verBase = lastText; return r; }
+        return !S.err;
+      }
       emit();
       lastText = S.perm === 'granted' && S.err ? null : lastText;
       return write();
@@ -87,7 +104,7 @@ export function createProjectFile({ getText, onOpen, onState = () => {}, suggest
       await onOpen(await read(await h.getFile()), h.name);
       if (t != null) { timers.clearTimeout(t); t = null; }
       if (!isUds(h.name)) { api.opened(h.name); return true; }   // 옛 .json = 열기만 — 저장하면 같은 이름 .uds 로
-      setHandle(h); lastText = `${getText()}\u0000${extra()}`;
+      setHandle(h); lastText = keyNow(); verBase = lastText;
       S.perm = await askWrite(h);
       emit();
       return true;
@@ -97,7 +114,7 @@ export function createProjectFile({ getText, onOpen, onState = () => {}, suggest
       let h = null;
       try { h = (await db?.get()) ?? null; } catch { h = null; }
       if (!h || !isUds(h.name)) { if (h) keep(() => db?.del()); emit(); return; }   // 지난 .json 파일에는 이어 쓰지 않음
-      handle = h; S.hasFile = true; S.name = h.name;
+      handle = h; S.hasFile = true; S.name = h.name; verBase = keyNow();   // 새로고침 뒤 = 지금 내용을 이 버전의 기준으로
       try { S.perm = (await h.queryPermission({ mode: 'readwrite' })) === 'granted' ? 'granted' : 'prompt'; } catch { S.perm = 'prompt'; }
       emit();
     },
@@ -108,7 +125,7 @@ export function createProjectFile({ getText, onOpen, onState = () => {}, suggest
       return write();
     },
     // 파일 입력으로 연 경우 — 이름만(쓸 수 없음)
-    opened(name) { if (t != null) { timers.clearTimeout(t); t = null; } setHandle(null); S.perm = 'none'; S.name = name; lastText = null; emit(); },
+    opened(name) { if (t != null) { timers.clearTimeout(t); t = null; } setHandle(null); S.perm = 'none'; S.name = name; lastText = null; verBase = name ? keyNow() : null; emit(); },
     clear() { api.opened(null); },
   };
   return api;

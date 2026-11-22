@@ -999,7 +999,7 @@ async function stepFromScreen(lack) {
 setStepSourcePins(() => spec);
 // [STEP 원본 지정] — 빠진 도면과 같은 이름의 STEP 을 골라 보관 → 바로 다시 저장
 function pickMissingStep() {
-  const lack = pickSources(spec).lack; if (!lack.length) { projFile.save(); return; }
+  const lack = pickSources(spec).lack; if (!lack.length) { projFile.save({ version: false }); return; }
   const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.stp,.step'; inp.multiple = true;
   inp.onchange = async () => {
     const got = [...inp.files], wrong = [];
@@ -1007,7 +1007,7 @@ function pickMissingStep() {
     const still = pickSources(spec).missing;
     if (wrong.length || still.length) alert(`${wrong.length ? `이름이 다른 파일은 넣지 않음: ${wrong.join(', ')}
 ` : ''}${still.length ? `아직 필요한 STEP: ${still.join(', ')} (같은 이름의 파일)` : ''}`);
-    projFile.save();
+    projFile.save({ version: false });
   };
   inp.click();
 }

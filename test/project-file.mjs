@@ -14,7 +14,19 @@ const memStore = () => { let v = null; return { get: async () => v, put: async (
   ok(await P.saveAs() && H.text === 'v1' && P.state().name === '내 도면.uds' && P.state().savedAt, '다른 이름으로 저장 = 파일에 씀 · 이름');
   text = 'v2'; P.touched(); ok(H.text === 'v1', '바로 쓰지 않음(디바운스)'); await tm.run(); ok(H.text === 'v2' && H.writes === 2, '실시간 저장');
   P.touched(); await tm.run(); ok(H.writes === 2, '내용 같으면 쓰기 생략');
-  text = 'v3'; await P.save(); ok(H.text === 'v3', 'Ctrl+S = 바로 그 파일에');
+  // 번호 저장(2026-11-22 사용자) — 이 파일을 만든 뒤 바뀐 게 있으면 [저장] = 다음 번호 이름 저장 창(같은 폴더에서 열림). 그 뒤 자동 저장은 새 파일로, 이전 파일은 그 시점 내용 그대로
+  { let asked = null; const H1 = fakeHandle('내 도면_1.uds'); win.showSaveFilePicker = async (o) => { asked = o; return H1; };
+    text = 'v3'; await P.save();
+    ok(asked?.suggestedName === '내 도면_1.uds' && asked.startIn === H && H1.text === 'v3' && P.state().name === '내 도면_1.uds', `바뀐 뒤 [저장] = 다음 번호 저장 창(${asked?.suggestedName}) · 같은 폴더 · 새 파일에 씀`);
+    ok(H.text === 'v3', '이전 파일은 [저장] 누른 시점 내용');
+    asked = null; await P.save(); ok(asked === null && H1.writes === 1, '바뀐 것 없음 = 새 파일 안 만듦');
+    text = 'v3b'; P.touched(); await tm.run(); ok(H1.text === 'v3b' && H.text === 'v3', '그 뒤 자동 저장은 새 번호 파일에만');
+    win.showSaveFilePicker = async () => { const e = new Error('x'); e.name = 'AbortError'; throw e; };
+    text = 'v3c'; ok(await P.save() && H1.text === 'v3c' && P.state().name === '내 도면_1.uds', '번호 저장 창 취소 = 지금 파일에 저장');
+    asked = null; win.showSaveFilePicker = async (o) => { asked = o; return fakeHandle('x.uds'); }; text = 'v3d'; await P.save({ version: false }); ok(asked === null && H1.text === 'v3d', '번호 없이 저장(도면 다시 지정 뒤 등) = 지금 파일에');
+    win.showSaveFilePicker = async () => H; }
+  // 이후 시험은 원래 파일 H 로 — 다시 연결
+  await P.saveAs(); text = 'v3'; await P.save(); ok(H.text === 'v3', 'Ctrl+S = 그 파일에(다시 고른 직후 바뀐 것 없음 → 바로 씀)');
   // 새로고침 뒤 이어 쓰기
   const P2 = createProjectFile({ getText: () => text, win, timers: tm, store: db }); await P2.restore();
   ok(P2.state().name === '내 도면.uds' && P2.state().perm === 'granted', '새로고침: 파일·권한 이어 받음');
@@ -36,6 +48,12 @@ const memStore = () => { let v = null; return { get: async () => v, put: async (
   ok(await P.open() === false, '파일 API 없음 = 열기는 호출자가');
   ok(await P.saveAs() && dl[1] === '내 파일.uds' && P.state().name === '내 파일.uds' && !P.state().hasFile, '파일 API 없음 = 다운로드 · 이름');
   P.opened('x.json'); ok(P.state().name === 'x.json', '파일 입력으로 연 이름'); }
+{ const { nextVersionName } = await import('../src/ui/project-file.js');
+  ok(nextVersionName('ring.uds') === 'ring_1.uds' && nextVersionName('ring_1.uds') === 'ring_2.uds' && nextVersionName('ring_9.uds') === 'ring_10.uds' && nextVersionName('monitor-ring-72led.uds') === 'monitor-ring-72led_1.uds', '번호 이름: ring → ring_1 → ring_2 … ring_10');
+  ok(nextVersionName('ring_2026.uds') === 'ring_2026_1.uds' && nextVersionName('a.json') === 'a_1.uds', '4자리 이상 숫자(날짜 등)는 번호로 안 봄 · .json → .uds'); }
+{ let dl = [], t = 'a', asked = []; const P = createProjectFile({ getText: () => t, win: {}, timers: timers(), store: memStore(), download: (b, n) => { dl.push(n); }, ask: (d) => { asked.push(d); return d; } });
+  await P.saveAs(); await P.save(); t = 'b'; await P.save();
+  ok(asked.join() === 'uds-project.uds,uds-project.uds,uds-project_1.uds' && dl.join() === 'uds-project.uds,uds-project.uds,uds-project_1.uds', `다운로드 저장도 바뀐 뒤엔 다음 번호 이름 제안 (${asked.join(' · ')})`); }
 { const clk = () => '12:00:00';
   ok(projectFileLabel({ name: null, hasFile: false, browserAt: 1 }, clk).status === '파일로 저장 안 됨 — 창을 닫으면 사라짐' && projectFileLabel({ name: null, hasFile: false }, clk).name === '이름 없는 프로젝트', '파일 없음 표시');
   ok(projectFileLabel({ name: 'a', hasFile: true, perm: 'granted', savedAt: 1 }, clk).status === '자동 저장됨 12:00:00', '자동 저장 시각'); }
