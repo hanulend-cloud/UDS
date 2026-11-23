@@ -1659,3 +1659,19 @@ done();
   const r = lumCard(st, { ...ph, lum: 1234.4 }, 1000);
   say(r.value === '1234 cd/m²' && r.pass === true && !r.assumed, '실제 광속이면 판정 그대로');
 }
+{ // 광량 단위 전환(2026-11-24 사용자): 2D 눈금·상단 칸을 100% 기준(최대 = 100%) ↔ 휘도(cd/m²)로
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const R = await import('../src/ui/m3/results-panel.js');
+  const st = { profile: Float64Array.from([1, 0.5]) }, ph = { eff: 0.2, lum: 1234.4, effLum: 0.1, area: 1000, nLeds: 10 };
+  const p = R.lumCard(st, ph, 1000, 'pct', 0.1437), p0 = R.lumCard(st, ph, 1000, 'pct');
+  say(p.value === '14%' && p.pass === null && p.sub === '평균 / 가장 밝은 칸' && !p.assumed, `100% 기준 = 2D 와 같은 기준(가장 밝은 칸 = 100%)의 평균 (${p.value} · ${p.sub})`);
+  say(p0.value === '75%', `2D 값이 없으면 길이 프로파일 평균/최대 (${p0.value})`);
+  say(R.mapMeanFrac?.({ valid: [1, 1, 0], area: [1, 3, 5] }, [2, 1, 50], 2) === 0.625, '2D 면적 평균 / 최대');
+  say(R.lumCard(st, ph, 1000, 'lum').value === '1234 cd/m²' && R.lumCard(st, ph, 1000).value === '1234 cd/m²', '휘도 기준(기본)은 그대로 cd/m²');
+  say(typeof R.mapLumMax === 'function' && R.mapLumMax({ valid: [1, 1, 0], area: [1, 3, 5] }, [2, 1, 50], 2, 100) === 160, '2D 최대 칸 휘도 = 평균 휘도 × 최대 / 면적 평균');
+  say(R.mapLumMax?.({ valid: [1], area: [1] }, [1], 1, null) === null && R.mapLumMax?.({ valid: [0], area: [1] }, [1], 1, 100) === null, '휘도·유효 칸 없으면 null');
+  say(R.barLabels?.('pct', 999)?.join() === '0%,20%,40%,60%,80%,100%', '100% 기준 눈금');
+  say(R.barLabels?.('lum', 1000)?.join() === '0,200,400,600,800,1000' && R.barLabels?.('lum', 32984)?.at(-1) === '3.2만', `휘도 눈금 (${R.barLabels?.('lum', 32984)?.join()})`);
+  say(R.barLabels?.('lum', null)?.join() === '0%,20%,40%,60%,80%,100%', '휘도를 모르면 % 눈금');
+  say(R.levelText?.(0.873, 'pct', 1000) === '87.3%' && R.levelText?.(0.5, 'lum', 1000) === '500 cd/m²' && R.levelText?.(0.5, 'lum', null) === '50.0%', '마우스 값 글');
+}

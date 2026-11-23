@@ -94,7 +94,21 @@ export function regionTableHtml(st, rs, O) {
 export const ASSUMED_FLUX = 1;
 export const ASSUMED_TIP = `LED 광속을 넣지 않아 LED 1개 = ${ASSUMED_FLUX} lm 으로 가정한 휘도(정면 ±10° 평균) — 휘도는 광속에 비례하므로 실제 광속이 20 lm 이면 이 값의 20배. LED 데이터시트의 광속(lm)을 넣으면 정확한 휘도와 밝기 목표 판정이 나옴 · 클릭 = 광속 입력`;
 export const fmtLum = (v) => (v >= 1e4 ? `${(Math.floor(v / 1e3) / 10).toFixed(1)}만` : String(Math.floor(v + 1e-9)));   // 휘도 짧은 표기(1만 이상 = 3.2만)
-export function lumCard(st, ph, targetLum) {
+// 광량 단위(2026-11-24 사용자) — 'lum' = 휘도 cd/m²(기본) · 'pct' = 100% 기준(최대 = 100%). 2D 눈금·마우스 값·상단 칸이 함께 바뀜
+export const BAR_STEPS = [0, 20, 40, 60, 80, 100];
+// 2D 최대 칸의 휘도 — 평균 휘도 × 최대 / (판정 칸 면적 가중 평균). 지도 값과 휘도는 같은 ±10° 집계라 판정 각도가 10° 면 그대로
+// 판정 칸 면적 가중 평균 ÷ 최대(2D 와 같은 기준, 0~1) — 없으면 null
+export function mapMeanFrac(G, map, mx) {
+  if (!(mx > 0)) return null;
+  let a = 0, s = 0; for (let k = 0; k < map.length; k++) if (G.valid[k] && Number.isFinite(map[k])) { a += G.area[k]; s += map[k] * G.area[k]; }
+  return a > 0 && s > 0 ? s / a / mx : null;
+}
+export function mapLumMax(G, map, mx, avgLum) { const f = avgLum > 0 ? mapMeanFrac(G, map, mx) : null; return f > 0 ? avgLum / f : null; }
+export const barLabels = (unit, lumMax) => BAR_STEPS.map((p) => (unit === 'lum' && lumMax > 0 ? fmtLum((lumMax * p) / 100) : `${p}%`));
+export const levelText = (frac, unit, lumMax) => (unit === 'lum' && lumMax > 0 ? `${fmtLum(frac * lumMax)} cd/m²` : `${(frac * 100).toFixed(1)}%`);
+export function lumCard(st, ph, targetLum, unit = 'lum', meanFrac = null) {
+  if (unit === 'pct' && meanFrac > 0) return { value: `${(meanFrac * 100).toFixed(0)}%`, sub: '평균 / 가장 밝은 칸', ratio: null, pass: null };   // 2D 눈금과 같은 기준
+  if (unit === 'pct') { const p = Array.from(st?.profile ?? []).filter(Number.isFinite), mx = finiteMax(p); return !p.length || !(mx > 0) ? { value: '–', sub: '평균 / 최대', ratio: null, pass: null } : { value: `${((p.reduce((a, b) => a + b, 0) / p.length / mx) * 100).toFixed(0)}%`, sub: '평균 / 최대', ratio: null, pass: null }; }
   if (ph?.lum != null && Number.isFinite(ph.lum)) {
     const ratio = targetLum > 0 ? ph.lum / targetLum : null, li = Math.floor(ph.lum + 1e-9), ti = Math.floor(targetLum + 1e-9), pass = ratio == null ? null : li >= ti;
     return { value: `${fmtLum(ph.lum)} cd/m²`, sub: ratio == null ? '목표 없음' : `목표 ${ti} cd/m² · ${pass ? '합격' : `미달 −${Math.max(1, ti - li)}`}`, ratio, pass };
@@ -157,6 +171,8 @@ export function ledGapCells(leds, dx) {
 
 // 256단계 색 표(RGB, 0~255) — colormap.js 의 ramp 에서 한 번만 만든다
 let LUT = null;
+let LUM_UNIT = 'lum';   // 광량 단위(2026-11-24) — 'lum' 휘도 · 'pct' 100% 기준. 이 브라우저에 기억(uds.m3.lumUnit)
+try { if (localStorage.getItem('uds.m3.lumUnit') === 'pct') LUM_UNIT = 'pct'; } catch {}
 // 색 표 선택 상자(메인 2D·큰 창 같은 모양) — Classic(기본) · Turbo · Viridis · 회색조
 const PAL_SELECT = (attr) => `<select ${attr} title="색 표 — Classic(기본) · Turbo · Viridis · 회색조. 색만 바뀌고 값·판정은 그대로" aria-label="색 표">${Object.entries(PALETTE_LABELS).map(([k, t]) => `<option value="${k}">${t}</option>`).join('')}</select>`;
 export function buildLut() {
@@ -439,12 +455,13 @@ export function mapViewG(G) {
 }
 function mapBox(cv, G, dpr, equal) { return mapLayout(mapViewG(G), cv.width, cv.height, dpr, equal, cv._view ?? null, cv._mapv?.v?.rev ?? null); }   // rev = 돌리기·뒤집기에 따른 길이·폭 방향(2026-11-19)   // cv._view = 큰 창 확대 범위(mm)
 // 색 막대(0~100%) — 펼친 띠·모양 그림 공용
-function colorBar(x, W, H, dpr) {
+function colorBar(x, W, H, dpr, v = null) {   // v.lumMax 가 있고 단위가 휘도면 cd/m² 눈금
   const cTop = MAP_PAD.t * dpr, PH = H - (MAP_PAD.t + MAP_PAD.b) * dpr, bx = W - (MAP_PAD.r - 12) * dpr, bw = 11 * dpr;
   for (let i = 0; i < PH; i++) { const l = lutIndex(1 - i / PH) * 3; x.fillStyle = `rgb(${LUT[l]},${LUT[l + 1]},${LUT[l + 2]})`; x.fillRect(bx, cTop + i, bw, 1.5); }
   x.strokeStyle = 'rgba(128,140,160,.7)'; x.strokeRect(bx, cTop, bw, PH);
   x.fillStyle = '#8a93a6'; x.textAlign = 'left'; x.textBaseline = 'middle';
-  for (let p = 0; p <= 100; p += 20) x.fillText(`${p}%`, bx + bw + 4 * dpr, cTop + (1 - p / 100) * PH);
+  const lab = barLabels(LUM_UNIT, v?.lumMax); BAR_STEPS.forEach((p, n) => x.fillText(lab[n], bx + bw + 4 * dpr, cTop + (1 - p / 100) * PH));
+  if (LUM_UNIT === 'lum' && v?.lumMax > 0) { x.textAlign = 'left'; x.textBaseline = 'top'; x.fillText(`${v.lumAssumed ? '≈' : ''}cd/m²`, bx - 2 * dpr, cTop + PH + 5 * dpr); }   // 단위(가정 휘도면 ≈)
 }
 // 모양대로 그리기(2026-11-06): mode 'ring' = 링(두께 확대) · 'real' = 관측면 실제 모양(실제 비율). 칸 값은 그대로 — map-shape.js
 // 선택 영역 테두리 점(순수, 2026-11-13) — 링·실제 모양 그림은 s·w 가 곧은 선이 아니므로 위(큰 w)·아래 변을 n 칸으로 나눠 따라감. toPx(s, w) → [px, py]
@@ -526,7 +543,7 @@ function drawShapeMap(cv, v, dpr, hover, mode) {
     x.putImageData(img, 0, 0);
   }
   if (G.closed) startMark(x, Ly, G, rows, dpr);   // 링 시작점 s = 0 — 3D 의 흰 점선과 같은 자리(2026-11-18)
-  colorBar(x, W, H, dpr);
+  colorBar(x, W, H, dpr, v);
   x.font = `${10.5 * dpr}px sans-serif`; x.fillStyle = '#8a93a6'; x.textAlign = 'right'; x.textBaseline = 'bottom';
   x.fillText(mode === 'ring' ? '링 · 두께 확대 — [실제 비율] = 실제 모양' : `실제 모양 · 가로 ${Ly.info.mm[0].toFixed(1)} × 세로 ${Ly.info.mm[1].toFixed(1)} mm`, box.x + box.w, H - 3 * dpr);
   // 링 시작점(흰 점 · s 0) 표시 뺌(2026-11-17 사용자) — 최저·최고점이 2D·3D 에 같이 찍혀 위치를 맞출 수 있음
@@ -539,7 +556,7 @@ function drawShapeMap(cv, v, dpr, hover, mode) {
     x.setLineDash(R === cv._drag ? [5 * dpr, 4 * dpr] : []); x.strokeStyle = 'rgba(10,14,22,.85)'; x.lineWidth = 3.5 * dpr; x.stroke(); x.strokeStyle = PIN_COLOR; x.lineWidth = 1.6 * dpr; x.stroke(); x.setLineDash([]);
   }
   if (hover && mx > 0) {
-    const [i, j] = hover, k = i * G.nw + j, [cs, cw] = mapCellSW(G, i, j), val = G.valid[k] ? `${((map[k] / mx) * 100).toFixed(1)}%` : '관측면 밖', q = Ly.quad(i, j);
+    const [i, j] = hover, k = i * G.nw + j, [cs, cw] = mapCellSW(G, i, j), val = G.valid[k] ? levelText(map[k] / mx, LUM_UNIT, v.lumMax) : '관측면 밖', q = Ly.quad(i, j);
     x.beginPath(); x.moveTo(q[0][0], q[0][1]); for (let a = 1; a < 4; a++) x.lineTo(q[a][0], q[a][1]); x.closePath(); x.strokeStyle = '#ffffff'; x.lineWidth = 1.5 * dpr; x.stroke();
     const lbl = `s ${cs.toFixed(1)} · w ${cw.toFixed(1)} mm · ${val}`, tw = x.measureText(lbl).width;
     x.fillStyle = 'rgba(20,26,38,.88)'; x.fillRect(box.x, box.y, tw + 8 * dpr, 16 * dpr);
@@ -593,7 +610,7 @@ export function drawMap(cv, v, dpr = 1, hover = null, equal = false) {
   for (let w = Math.ceil(w0 / ws - 1e-9) * ws; w <= w1 + 1e-9; w += ws) { x.beginPath(); x.moveTo(ox - 3 * dpr, WY(w)); x.lineTo(ox, WY(w)); x.stroke(); x.fillText(`${+w.toFixed(1)}`, ox - 5 * dpr, WY(w)); }
   x.save(); x.translate(10 * dpr, oy + rowH / 2); x.rotate(-Math.PI / 2); x.textAlign = 'center'; x.fillText('w (mm)', 0, 0); x.restore();
   // 색 막대(0~100%) + 최저 위치
-  colorBar(x, W, H, dpr);
+  colorBar(x, W, H, dpr, v);
   x.save(); x.beginPath(); x.rect(ox, oy, PW, rowH); x.clip();   // 확대 때 상자 밖으로 나간 표시는 자름
   if (v.showMax && mx > 0) { const kM = mapMaxIdx(G, map, mx); if (kM >= 0) { const [cs, cw] = mapCellSW(G, Math.floor(kM / G.nw), kM % G.nw), [px, py] = xy(cs, cw); maxRing(x, px, py, minDotR(PW, rowH, dpr), dpr); } }   // 최고점 = 빨간 고리(2026-11-17)
   if (kMin >= 0) {   // 최저 위치 = 빨간 점만(글씨는 작은 그림을 가림, 2026-11-04) · 크기는 그림에 맞춤
@@ -619,7 +636,7 @@ export function drawMap(cv, v, dpr = 1, hover = null, equal = false) {
   x.restore();
   // 마우스 위치 읽기(칸 [i, j]) — 그 줄 안에서 십자선
   if (hover && mx > 0) {
-    const [i, j] = hover, k = i * G.nw + j, [cs, cw] = mapCellSW(G, i, j), val = G.valid[k] ? `${((map[k] / mx) * 100).toFixed(1)}%` : '관측면 밖';
+    const [i, j] = hover, k = i * G.nw + j, [cs, cw] = mapCellSW(G, i, j), val = G.valid[k] ? levelText(map[k] / mx, LUM_UNIT, v.lumMax) : '관측면 밖';
     const [px, py] = xy(cs, cw), ry = oy + Math.max(0, Math.min(K - 1, Math.floor(cs / segL - 1e-9))) * pitch;
     x.strokeStyle = 'rgba(255,255,255,.75)'; x.lineWidth = dpr; x.setLineDash([3 * dpr, 3 * dpr]);
     x.beginPath(); x.moveTo(px, ry); x.lineTo(px, ry + rowH); x.moveTo(ox, py); x.lineTo(ox + PW, py); x.stroke(); x.setLineDash([]);
@@ -699,13 +716,13 @@ export function createResultsPanel(el, { onPalette = null, head = null, foot = n
     <div class="m3-sum">
       <div class="m3-sum-u"><div class="l" data-short="길이">길이 균일도</div><div class="v" data-r="ul">–</div>${gaugeHtml('ulg')}<div class="s" data-r="ulj"></div></div>
       <div class="m3-sum-u"><div class="l" data-short="폭">폭 균일도</div><div class="v" data-r="uw">–</div>${gaugeHtml('uwg')}<div class="s" data-r="uwj"></div></div>
-      <div class="m3-sum-c"><div class="l" data-short="광량">평균 광량</div><div class="v" data-r="avg" title="cd/m² 값은 보는 각도 설정과 상관없이 정면 ±10° 안의 평균 휘도">–</div><div class="s" data-r="avgs" title="최대 대비 % — LED 광속(lm)을 넣으면 cd/m² 로 표시"></div><div class="s m3-need" data-r="need"></div>${gaugeHtml('avgg')}</div>
+      <div class="m3-sum-c"><div class="l" data-r="avgl" data-short="휘도">평균 휘도</div><div class="v" data-r="avg" title="cd/m² 값은 보는 각도 설정과 상관없이 정면 ±10° 안의 평균 휘도">–</div><div class="s" data-r="avgs" title="최대 대비 % — LED 광속(lm)을 넣으면 cd/m² 로 표시"></div><div class="s m3-need" data-r="need"></div>${gaugeHtml('avgg')}</div>
       <div class="m3-sum-c"><div class="l" data-short="효율">광 효율</div><div class="v sm" data-r="eff">–</div><div class="s">관측면 원뿔 안 / LED 총 방출</div></div>
       <div class="m3-sum-x"><div class="m3-regl" data-r="reg" hidden title="큰 창(⤢)에서 고른 영역 — 길이 / 폭 균일도"></div>${leakHtml}</div>
     </div>`;
   // 그림: 2D(위) · 길이 1D | 폭 1D(아래 좌우 나란히, 2026-11-22 사용자)
   const blkHtml = `
-    <div class="m3-blk"><div class="m3-t"><b class="m3-tt">2D 광량 <i class="m3-info" data-r="mapsub" tabindex="0">ⓘ</i></b><span><label class="m3-map-eq" title="가로세로를 같은 축척으로 — 끄면 좁은 폭을 늘려 보여 줌"><input type="checkbox" data-r="mapEq"> 실제 비율</label>${PAL_SELECT('data-r="pal"')}<span class="m3-orient" data-orient-box><button type="button" data-orient="rot" title="2D 를 시계 방향으로 90° 돌림 — 링·실제 비율 그림이 돌아감(펼친 그림·1D 는 길이·폭 방향만 따라감)" aria-label="2D 돌리기">⟳</button><button type="button" data-orient="h" title="2D 좌우 뒤집기 — 1D·CSV 도 화면 방향대로" aria-label="2D 좌우 뒤집기">⇋</button><button type="button" data-orient="v" title="2D 상하 뒤집기 — 1D·CSV 도 화면 방향대로" aria-label="2D 상하 뒤집기">⇅</button><button type="button" data-orient="reset" title="돌리기·뒤집기 원래대로" aria-label="2D 방향 원래대로" disabled>↺</button></span> <select data-r="quality" title="2D 분포·1D 프로파일 칸 크기(정사각) — 저 1.5 mm(빠름) · 중 1.0 mm(광선 ≈2배) · 고 0.5 mm(광선 ≈4배) · 짧거나 좁은 면은 그 방향만 더 잘게" aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>  <button type="button" class="m3-zoom" data-zoom="map" title="큰 창으로 보기" aria-label="2D 광량 분포 확대">⤢</button></span></div>
+    <div class="m3-blk"><div class="m3-t"><b class="m3-tt">2D 광량 <i class="m3-info" data-r="mapsub" tabindex="0">ⓘ</i></b><span><label class="m3-map-eq" title="가로세로를 같은 축척으로 — 끄면 좁은 폭을 늘려 보여 줌"><input type="checkbox" data-r="mapEq"> 실제 비율</label>${PAL_SELECT('data-r="pal"')}<select data-r="unit" title="2D 눈금·마우스 값·상단 칸 단위 — 휘도 cd/m²(정면 ±10° · 광속을 안 넣으면 1 lm 가정 ≈) · 100% 기준(가장 밝은 칸 = 100%). 색·판정은 그대로" aria-label="광량 단위"><option value="lum">cd/m²</option><option value="pct">100%</option></select><span class="m3-orient" data-orient-box><button type="button" data-orient="rot" title="2D 를 시계 방향으로 90° 돌림 — 링·실제 비율 그림이 돌아감(펼친 그림·1D 는 길이·폭 방향만 따라감)" aria-label="2D 돌리기">⟳</button><button type="button" data-orient="h" title="2D 좌우 뒤집기 — 1D·CSV 도 화면 방향대로" aria-label="2D 좌우 뒤집기">⇋</button><button type="button" data-orient="v" title="2D 상하 뒤집기 — 1D·CSV 도 화면 방향대로" aria-label="2D 상하 뒤집기">⇅</button><button type="button" data-orient="reset" title="돌리기·뒤집기 원래대로" aria-label="2D 방향 원래대로" disabled>↺</button></span> <select data-r="quality" title="2D 분포·1D 프로파일 칸 크기(정사각) — 저 1.5 mm(빠름) · 중 1.0 mm(광선 ≈2배) · 고 0.5 mm(광선 ≈4배) · 짧거나 좁은 면은 그 방향만 더 잘게" aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>  <button type="button" class="m3-zoom" data-zoom="map" title="큰 창으로 보기" aria-label="2D 광량 분포 확대">⤢</button></span></div>
       <div class="m3-gw"><canvas class="m3-g" data-r="map" width="600" height="200"></canvas></div></div>
     <div class="m3-blkrow"><div class="m3-blk"><div class="m3-t"><b class="m3-tt">길이 1D <i class="m3-info" data-r="psub" tabindex="0">ⓘ</i> <span data-r="uprof"></span></b><span><button type="button" class="m3-zoom" data-zoom="prof" title="큰 창으로 보기" aria-label="길이 프로파일 확대">⤢</button></span></div>
       <div class="m3-gw"><canvas class="m3-g" data-r="prof" width="600" height="150"></canvas></div></div>
@@ -803,6 +820,8 @@ ${ASSUMED_TIP}` : ''); if (c.title !== t) c.title = t; } };   // 상단 띠 칸�
   // 색 표 바꾸기 — 메인·큰 창 선택 상자를 같이 맞추고 2D·3D 를 다시 칠함(값·판정은 그대로)
   const applyPal = (name) => { setPalette(name); try { localStorage.setItem('uds.m3.palette', paletteName()); } catch {} LUT = null; q('pal').value = paletteName(); const b = big?.el.querySelector('[data-big-pal]'); if (b) b.value = paletteName(); paint('map', q('map')); paintBig(); onPalette?.(); };
   q('pal').onchange = (e) => applyPal(e.target.value);
+  q('unit').value = LUM_UNIT;
+  q('unit').onchange = (e) => { LUM_UNIT = e.target.value === 'pct' ? 'pct' : 'lum'; try { localStorage.setItem('uds.m3.lumUnit', LUM_UNIT); } catch {} if (last) update(last); else { paint('map', q('map')); paintBig(); } };
   q('mapEq').onchange = (e) => { mapEq = e.target.checked; try { localStorage.setItem('uds.m3.mapEq', mapEq ? '1' : '0'); } catch {} paint('map', q('map')); };
   const paintBig = () => {
     if (!big) return;
@@ -1039,6 +1058,8 @@ ${ASSUMED_TIP}` : ''); if (c.title !== t) c.title = t; } };   // 상단 띠 칸�
     { const k = JSON.stringify([observe?.faces ?? null, observe?.dir ?? null]); if (k !== oKey) { if (oKey != null && !orientIsId(orient)) { orient = ORIENT0; syncOrient(); } oKey = k; } }
     const rev = orientRev(args.shape ?? null, orient);   // 펼친 2D·1D·CSV 가 따라갈 길이·폭 방향
     VIEW.map = { G: FG, map: mapF, draw: smoothMap(FG, mapF, leds.map((p) => p.s)), leds, pin, smooth: true, shape: orientedShape(args.shape ?? null), rev, showMax: showMax(st) };
+    { const ph = snap.photometry, real = ph?.lum != null && Number.isFinite(ph.lum), avg = real ? ph.lum : lumFor(ph, ASSUMED_FLUX); let mx = 0; for (let k = 0; k < mapF.length; k++) if (FG.valid[k] && mapF[k] > mx) mx = mapF[k];
+      VIEW.map.meanFrac = mapMeanFrac(G, st.map, mx); VIEW.map.lumMax = avg > 0 && VIEW.map.meanFrac > 0 ? avg / VIEW.map.meanFrac : null; VIEW.map.lumAssumed = !real; }   // 2D 휘도 눈금(2026-11-24) — 최대 칸 휘도
     { const k = JSON.stringify([observe?.faces ?? null, observe?.dir ?? null]); if (k !== regKey) { if (regKey != null) { region = null; if (big) big.cvs.map._view = null; } regKey = k; } }
     showRegion(snap, observe);
     VIEW.prof = plotView([{ ys: Array.from(st.profile, (v) => v / pm), color: '#1f6fd1', name: '폭 평균', band: st.relNoise ?? 0 }, ...(pp ? [{ ys: Array.from(pp.along), color: PIN_COLOR, name: `지정 점 w=${pin.w.toFixed(1)}` }] : [])], observe.targetLen, { x0: 0, x1: G.L, xl: 's (mm)', leds: leds.map((p) => p.s), ledsOrig: (args.ledsOrig ?? []).map((p) => p.s), rev: rev.s });
@@ -1062,7 +1083,7 @@ ${ASSUMED_TIP}` : ''); if (c.title !== t) c.title = t; } };   // 상단 띠 칸�
       q('wsub').title = `최저 창 s = ${st.sWorst.toFixed(1)} mm${pp ? ` · 지정 점 s = ${pin.s.toFixed(1)} mm(주황, ${rad} 방향)` : ''}`;
     }
     { const V = overallVerdict(st, observe); q('verdict').textContent = V.text; q('verdict').className = `m3-verdict ${V.cls}`; vCls = V.cls; syncNext(); }   // 요약 카드 종합 판정(길이·폭 judgeText 그대로)
-    const lc = lumCard(st, snap.photometry, observe.targetLum);
+    const lc = lumCard(st, snap.photometry, observe.targetLum, LUM_UNIT, VIEW.map?.meanFrac); { const t = LUM_UNIT === 'pct' ? '광량' : '휘도'; q('avgl').dataset.short = t; q('avgl').textContent = `평균 ${t}`; }
     q('avg').innerHTML = lc.value.replace(/ cd\/m²$/, '<small class="u"> cd/m²</small>'); q('avgs').textContent = lc.sub; q('avg').className = `v ${lc.pass == null ? '' : lc.pass ? 'ok' : 'bad'}${lc.assumed ? ' assumed' : ''}`;
     q('avgs').classList.toggle('m3-unit', lc.ratio == null); q('avg').title = lc.tip ?? `cd/m² 값은 보는 각도 설정과 상관없이 정면 ±10° 안의 평균 휘도${lc.ratio == null ? ` · ${lc.sub}` : ''}`;   // 보드에서는 목표 없는 보조 줄(최대 대비)을 숨기고 툴팁으로(2026-11-22)
     { const n = requiredFlux(snap.photometry, observe.targetLum); q('need').textContent = needShort(n); q('need').title = n ? `${needText(n)} — 정면 ±10° 기준: 목표 휘도 × 관측면적 × π × sin²10° ÷ ±10° 안 광 효율` : ''; }
