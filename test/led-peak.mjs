@@ -75,4 +75,25 @@ function check(name, meshes, edges, emitters, labels, lineOk) {
   const em = xs.map((x, k) => ({ pos: [x, ys[k], 0.5], axis: [0, 0, 1], xAxis: [1, 0, 0] }));
   check('직선 띠', [boxMesh(0, 0, 4, 100, 8, 2), boxMesh(-5, -5, -1, 110, 18, 1)], [2, 3, 4, 5], em, xs.map((x, k) => `x${x}, y${ys[k]}`), (l) => l.kind === 'line' && Math.abs(l.length - 100) < 0.6);
 }
+{ // 두 줄 일관성(2026-11-23): 4.2 mm 간격 두 줄은 빛이 겹쳐 최고점이 줄 사이로 1.2–1.7 mm 끌림(물리) — 최고점 대신
+  // "두 줄 함께 계산한 지도 = 한 줄씩 계산해 더한 지도"(빛의 선형성)를 확인. LED 수에 따라 광량·경로가 달라지면 깨짐
+  const meshes = [boxMesh(0, 0, 4, 100, 8, 2), boxMesh(-5, -5, -1, 110, 18, 1)], name = '두 줄';
+  setMech3dMesh(name, meshes);
+  const S = buildTraceScene(getMech3d(), { name, parts: [diffuser([2, 3, 4, 5]), pcbPart], contacts: [] }, { table });
+  const faces = [{ part: 0, face: 1 }], line = recognizeLine(meshes, faces, [0, 0, 1]);
+  const obs = { faces, dir: [0, 0, 1], cone: 90, edgeExcl: 0.5, targetLen: 0.8, targetWid: 0.8, cellS: 0.5, cellW: 0.5 }, G = tallyGeometry(line, obs);
+  const em = (pts) => pts.map(([x, y]) => ({ pos: [x, y, 0.5], axis: [0, 0, 1], xAxis: [1, 0, 0] }));
+  const A = em(Array.from({ length: 12 }, (_, k) => [4 + k * 7.8, 1.9])), B = em(Array.from({ length: 13 }, (_, k) => [7.5 + k * 7.07, 6.1]));
+  const N = Number(process.env.PEAK_N ?? 500000), map = (e, n, seed) => { const r = runJob({ S, line, obs, G, emitters: e, ledSpec: { model: 'lambertian', beam: 120 }, N: n, seed, batches: 10 }); ok(r.ledger.lost === 0, `${name}: 잃은 광선 없음(LED ${e.length}개)`); return tallyStats(G, r.accs, obs, r.cnts).map; };
+  const t0 = Date.now(), mA = map(A, N, 7), mB = map(B, N, 9), mAB = map([...A, ...B], 2 * N, 11), sum = mA.map((v, k) => v + mB[k]);
+  const tot = (m) => m.reduce((a, v, k) => a + (G.valid[k] ? v : 0), 0), ratio = tot(mAB) / tot(sum);
+  // 폭 방향 단면(길이 전체 합)·길이 방향 단면(2 mm 묶음, 폭 전체 합) — 칸 하나보다 노이즈가 작아 비교 가능
+  const prof = (m, byW) => { const out = new Map(); for (let i = 0; i < G.ns; i++) for (let j = 0; j < G.nw; j++) { const k = i * G.nw + j; if (!G.valid[k]) continue; const b = byW ? j : Math.floor((i * G.ds) / 2); out.set(b, (out.get(b) ?? 0) + m[k]); } return out; };
+  const worst = (byW) => { const p = prof(mAB, byW), q = prof(sum, byW), mean = [...q.values()].reduce((a, v) => a + v, 0) / q.size; return Math.max(...[...q.keys()].map((b) => Math.abs(p.get(b) - q.get(b)) / mean)); };
+  const dw = worst(true), ds = worst(false);
+  console.log(`  계산 ${((Date.now() - t0) / 1000).toFixed(1)}s, 두 줄/합 광량 ${ratio.toFixed(4)}, 폭 단면 최대 차 ${(100 * dw).toFixed(2)}%, 길이 단면 최대 차 ${(100 * ds).toFixed(2)}%`);
+  ok(Math.abs(ratio - 1) <= 0.01, `${name}: 함께 계산한 광량 = 한 줄씩 더한 광량(±1%): ${ratio.toFixed(4)}`);
+  ok(dw <= 0.03, `${name}: 폭 방향 단면이 한 줄씩 더한 것과 같음(평균의 3% 안): 최대 ${(100 * dw).toFixed(2)}%`);
+  ok(ds <= 0.06, `${name}: 길이 방향 단면(2 mm 묶음)이 한 줄씩 더한 것과 같음(평균의 6% 안): 최대 ${(100 * ds).toFixed(2)}%`);
+}
 done();
