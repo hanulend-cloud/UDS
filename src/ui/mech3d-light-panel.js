@@ -112,7 +112,7 @@ export function stepLayoutRowHtml(st, line = null, n = null) {
     <div class="m3-row"><button type="button" data-lp-edit="add"${dis}>+ LED 추가</button> <button type="button" data-lp-edit="align"${dis}>같은 간격으로</button>${v ? ' <button type="button" data-lp-edit="orig">STEP 원래대로</button>' : ''}</div>
     <div class="m3-row mut">${why || '추가 = 가장 넓은 빈자리에 · 삭제 = 목록의 ✕ · 옮기기 = 목록에서 LED 선택'}</div>`;
 }
-// LED 노드 본문(순수 HTML): 인식 상태 · (LED STEP) 배치 · 배광 · 지향각 · 발광면 크기 · 광속(lm/개, 0 = 상대값) · PCB 색
+// LED 노드 본문(순수 HTML): 인식 상태 · (LED STEP) 배치 · 배광 · 지향각 · 발광면 크기 · 광속(lm/개, 0 = 1 lm 가정) · PCB 색
 // adv = LED 속성 창의 '배치·인식 (고급)' 구역 — 배치·배광·광속은 창 위쪽에 있으므로 뺀다
 // 2026-11-18 사용자: 도면에서 자동으로 잡힌 발광면 크기(기준 LED) 표시 + [이 크기로] — 입력칸은 사용자가 정한 값 그대로(바로 바꾸지 않음)
 const ledAutoSize = (L) => { const st = L.kind === 'step' ? L.step : null, em = st?.emitters ?? [], e = em.find((x) => x.part === st?.ref?.part && x.size) ?? em.find((x) => x.size); return e ? e.size.map((v) => +v.toFixed(2)) : null; };
@@ -274,7 +274,7 @@ export function renderLedProps(el, m, ui, h) {
 // LED 광속 옆 예상 휘도(2026-11-11) — 입력한 lm 과 지금 설계의 광 효율로(계산 다시 안 함). 목표가 있으면 비교
 export function ledLumHtml(spec, ph, targetLum) {
   const f = spec?.fluxLm ?? 0;
-  if (!(f > 0)) return '<span class="mut">0 = 상대값(%)</span>';
+  if (!(f > 0)) return '<span class="mut" title="휘도는 광속에 비례 — 1 lm 가정 휘도 × 실제 광속 = 실제 휘도. 데이터시트 광속(lm)을 넣으면 정확한 휘도와 밝기 목표 판정">0 = 1 lm 가정(휘도는 광속에 비례 · 판정 안 함)</span>';
   const v = lumFor(ph, f);
   if (v == null) return '<span class="mut">예상 휘도 — 시뮬레이션 계산 뒤 표시</span>';
   const li = Math.floor(v + 1e-9), ti = targetLum > 0 ? Math.floor(targetLum + 1e-9) : null;

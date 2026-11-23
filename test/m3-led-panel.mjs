@@ -56,7 +56,7 @@ const ui = (o = {}) => ({ line, ledList: list, ledGap: 6.25, ...o });
   ok(h.includes('넓게 120°') && !h.includes('램버시안') && !h.includes('가우시안'), '기본 탭: 쉬운 말 · 모델 이름 숨김');
   ok(/data-lp-spec="sizeX"/.test(h) && !/data-lp-mauto/.test(h) && !/data-lp-spec="fluxLm"/.test(h) && !h.includes('m3-ledlist') && !/data-lp-dist/.test(h), '기본 탭 = 지향각·퍼짐 · 발광면 크기 · 자동 선택');
   setLpTab('leds', 'detail'); h = ledPanelHtml(man, ui());
-  ok(/data-lp-spec="fluxLm"/.test(h) && h.includes('lm/개') && h.includes('0 = 상대값'), '밝기');
+  ok(/data-lp-spec="fluxLm"/.test(h) && h.includes('lm/개') && h.includes('0 = 1 lm 가정'), '밝기');
   ok(/value="6.3" data-lp-dist/.test(h) && !/data-lp-dist[^>]*disabled/.test(h), '커버까지 거리 — LED 를 안 골라도 보임');
   ok(/data-lp-man="count"/.test(h) && /data-lp-man="pitch"/.test(h) && /data-lp-man="rows"/.test(h), '직접 배치: 개수·피치·열');
   ok((h.match(/<tr class="[^"]*" data-lp-ledsel="\d"/g) ?? []).length === 3 && h.includes('35.0 mm'), 'LED 목록: 줄마다 번호·위치');

@@ -1741,3 +1741,9 @@ main:has(#mech3d-wrap:not([hidden])) { padding: 4px; gap: 4px; }
 #mech3d-wrap .m3-kpi .m3-sum-u:has(> .v.ok) { background: #00a862; border-color: #00a862; }
 #mech3d-wrap .m3-kpi .m3-sum-u:has(> .v.near), #mech3d-wrap .m3-kpi .m3-sum-u:has(> .v.busy) { background: #e08600; border-color: #e08600; }
 #mech3d-wrap .m3-kpi .m3-sum-u:has(> .v.bad) :is(.l, .v), #mech3d-wrap .m3-kpi .m3-sum-u:has(> .v.ok) :is(.l, .v), #mech3d-wrap .m3-kpi .m3-sum-u:has(> .v.near) :is(.l, .v), #mech3d-wrap .m3-kpi .m3-sum-u:has(> .v.busy) :is(.l, .v) { color: #fff; }
+/* 가정 휘도(광속 미입력, 2026-11-23) — 회색·기울임 + 클릭하면 LED 광속 입력 */
+.m3-sum .v.assumed { opacity: .7; font-style: italic; }
+.m3-sum-c:has(> .v.assumed) { cursor: pointer; }
+#mech3d-wrap .m3-kpi .m3-sum-c:has(> .v.assumed) { border-style: dashed; }
+@media (max-width: 1440px) { #mech3d-wrap .m3-kpi .m3-sum > div { padding: 3px 6px; gap: 4px; } #mech3d-wrap .m3-kpi .m3-sum .v { font-size: 15px; } }   /* 좁은 화면: 휘도(≈3.3만 cd/m²)가 들어가도 한 줄 */
+.m3-sum .v small.u { font-size: 10.5px; font-weight: 600; }

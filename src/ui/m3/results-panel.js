@@ -1,5 +1,5 @@
 import { shapeLayout, orientStep, orientShape, orientRev, orientIsId, ORIENT0 } from './map-shape.js';
-import { requiredFlux, fmtProg, needText, needShort, PREVIEW } from './progressive.js';
+import { requiredFlux, fmtProg, needText, needShort, PREVIEW, lumFor } from './progressive.js';
 import { mountSplit, mountHeightHandle } from './pane-split.js';
 import { clampRect, fitRect, winTop, dragBy, raiseWin, mountResizers, COLLAPSED_W, maxRect, DEF_RECT, flyWin, collapsedRect } from './monitor.js';
 import { simPct } from './opt-dash.js';
@@ -90,11 +90,16 @@ export function regionTableHtml(st, rs, O) {
     + it('길이', rs.Ulen, O.targetLen, '영역 안 길이 방향 균일도(목표 대비 색)') + it('폭', rs.Uwid, O.targetWid, '영역 안 폭 방향 균일도(목표 대비 색)')
     + it('면적', rs.Uarea, null, '영역 안 모든 칸의 가장 어두운 칸 ÷ 가장 밝은 칸 — 칸 하나하나라 노이즈 영향이 큼');
 }
+// 광속 가정(2026-11-23 사용자 3안 1단계 · 기본 1 lm) — LED 광속을 안 넣으면 1 lm/개로(휘도는 광속에 비례 → 실제 광속 배로 읽으면 됨) 휘도를 '≈' 회색 표시 · 판정 안 함. 2단계 = LED 부품 DB 의 데이터시트 광속
+export const ASSUMED_FLUX = 1;
+export const ASSUMED_TIP = `LED 광속을 넣지 않아 LED 1개 = ${ASSUMED_FLUX} lm 으로 가정한 휘도(정면 ±10° 평균) — 휘도는 광속에 비례하므로 실제 광속이 20 lm 이면 이 값의 20배. LED 데이터시트의 광속(lm)을 넣으면 정확한 휘도와 밝기 목표 판정이 나옴 · 클릭 = 광속 입력`;
+export const fmtLum = (v) => (v >= 1e4 ? `${(Math.floor(v / 1e3) / 10).toFixed(1)}만` : String(Math.floor(v + 1e-9)));   // 휘도 짧은 표기(1만 이상 = 3.2만)
 export function lumCard(st, ph, targetLum) {
   if (ph?.lum != null && Number.isFinite(ph.lum)) {
     const ratio = targetLum > 0 ? ph.lum / targetLum : null, li = Math.floor(ph.lum + 1e-9), ti = Math.floor(targetLum + 1e-9), pass = ratio == null ? null : li >= ti;
-    return { value: `${li} cd/m²`, sub: ratio == null ? '목표 없음' : `목표 ${ti} cd/m² · ${pass ? '합격' : `미달 −${Math.max(1, ti - li)}`}`, ratio, pass };
+    return { value: `${fmtLum(ph.lum)} cd/m²`, sub: ratio == null ? '목표 없음' : `목표 ${ti} cd/m² · ${pass ? '합격' : `미달 −${Math.max(1, ti - li)}`}`, ratio, pass };
   }
+  { const v = lumFor(ph, ASSUMED_FLUX); if (v != null && Number.isFinite(v)) return { value: `≈${fmtLum(v)} cd/m²`, sub: `광속 가정 ${ASSUMED_FLUX} lm/개${targetLum > 0 ? ' · 판정 안 함' : ''}`, ratio: null, pass: null, assumed: true, tip: ASSUMED_TIP }; }   // 광속 미입력 = 가정 휘도(판정 안 함)
   const p = Array.from(st?.profile ?? []).filter(Number.isFinite), mx = finiteMax(p), mean = p.reduce((a, b) => a + b, 0) / p.length;
   if (!p.length || !(mx > 0)) return { value: '–', sub: '최대 대비', ratio: null, pass: null };
   return { value: `${((mean / mx) * 100).toFixed(0)}%`, sub: '최대 대비', ratio: null, pass: null };
@@ -676,7 +681,7 @@ export const mapMenuItems = (hasPin, onCell) => [
 // 1D 우클릭 메뉴 항목(순수)
 export const plotMenuItems = (title) => [{ k: 'csv', label: `${title} 데이터 CSV 저장` }, { k: 'png', label: '그래프 이미지 저장 (PNG)' }, { k: 'copy', label: '그래프 이미지 복사' }];
 // head = 판정·모드 띠·균일도 카드를 그릴 칸(2026-11-22 사용자 — 오른쪽 위 보드). 없으면 예전처럼 el 한 칸에 모두
-export function createResultsPanel(el, { onPalette = null, head = null, foot = null, anchor = () => null, onPreview = null, onOpt = null, onQuality = null, fileName = () => 'uds', onLeak = null, onBig = null, onCalc = null, calcBusy = () => false, onNote = null, kpi = null } = {}) {   // kpi = 상단 띠의 균일도·광량·광효율 칸(2026-11-23 사용자 — 늘 보이게)
+export function createResultsPanel(el, { onPalette = null, head = null, foot = null, anchor = () => null, onPreview = null, onOpt = null, onQuality = null, fileName = () => 'uds', onLeak = null, onBig = null, onCalc = null, calcBusy = () => false, onNote = null, kpi = null, onFlux = null } = {}) {   // kpi = 상단 띠의 균일도·광량·광효율 칸(2026-11-23 사용자 — 늘 보이게)
   let effT = { key: null, t0: null };
   let optFrac = null, vCls = '';   // 기구 최적화 진행률(null = 안 돎) · 지금 종합 판정
   function syncNext() {   // 판정 옆 '다음 할 일' 단추
@@ -711,7 +716,9 @@ export function createResultsPanel(el, { onPalette = null, head = null, foot = n
   if (kpi) { const s = (head ?? el).querySelector('.m3-sum'); if (s) { s.classList.add('m3-kpi-sum'); kpi.appendChild(s); } }   // 결과 카드를 상단 띠로 옮김 — 갱신 로직은 그대로
   if (foot) foot.innerHTML = leakBtn;   // 새는 빛 = 화면 맨 아래 줄(2026-11-22 사용자)
   const q = (k) => el.querySelector(`[data-r="${k}"]`) ?? head?.querySelector(`[data-r="${k}"]`) ?? foot?.querySelector(`[data-r="${k}"]`) ?? kpi?.querySelector(`[data-r="${k}"]`);
-  const kpiTip = () => { if (kpi) for (const c of kpi.querySelectorAll('.m3-sum-u, .m3-sum-c')) { const t = [...c.querySelectorAll('.l, .v, .s')].map((n) => n.textContent.trim()).filter(Boolean).join(' · '); if (c.title !== t) c.title = t; } };   // 상단 띠 칸은 한 줄 — 목표·미달 %p·보조 줄은 툴팁으로
+  { const c = q('avg')?.closest('.m3-sum-c'); c?.addEventListener('click', () => { if (q('avg').classList.contains('assumed')) onFlux?.(); }); }   // 가정 휘도 칸 클릭 = LED 광속 입력으로(2026-11-23)
+  const kpiTip = () => { if (kpi) for (const c of kpi.querySelectorAll('.m3-sum-u, .m3-sum-c')) { const t = [...c.querySelectorAll('.l, .v, .s')].map((n) => n.textContent.trim()).filter(Boolean).join(' · ') + (c.querySelector('.v.assumed') ? `
+${ASSUMED_TIP}` : ''); if (c.title !== t) c.title = t; } };   // 상단 띠 칸은 한 줄 — 목표·미달 %p·보조 줄은 툴팁으로
   try { setPalette(localStorage.getItem('uds.m3.palette') ?? 'classic'); } catch {}   // 색 표(2026-11-22) — 이 브라우저에 기억
   let mapEq = false; try { mapEq = localStorage.getItem('uds.m3.mapEq') === '1'; } catch {}   // 메인 2D 실제 비율 — 이 브라우저에 기억
   const RATIO = { map: 2.6, prof: 2.6, wprof: 3.2 };   // 눈금·색 막대·읽기가 들어가도록 높게
@@ -1056,8 +1063,8 @@ export function createResultsPanel(el, { onPalette = null, head = null, foot = n
     }
     { const V = overallVerdict(st, observe); q('verdict').textContent = V.text; q('verdict').className = `m3-verdict ${V.cls}`; vCls = V.cls; syncNext(); }   // 요약 카드 종합 판정(길이·폭 judgeText 그대로)
     const lc = lumCard(st, snap.photometry, observe.targetLum);
-    q('avg').textContent = lc.value; q('avgs').textContent = lc.sub; q('avg').className = `v ${lc.pass == null ? '' : lc.pass ? 'ok' : 'bad'}`;
-    q('avgs').classList.toggle('m3-unit', lc.ratio == null); q('avg').title = `cd/m² 값은 보는 각도 설정과 상관없이 정면 ±10° 안의 평균 휘도${lc.ratio == null ? ` · ${lc.sub}` : ''}`;   // 보드에서는 목표 없는 보조 줄(최대 대비)을 숨기고 툴팁으로(2026-11-22)
+    q('avg').innerHTML = lc.value.replace(/ cd\/m²$/, '<small class="u"> cd/m²</small>'); q('avgs').textContent = lc.sub; q('avg').className = `v ${lc.pass == null ? '' : lc.pass ? 'ok' : 'bad'}${lc.assumed ? ' assumed' : ''}`;
+    q('avgs').classList.toggle('m3-unit', lc.ratio == null); q('avg').title = lc.tip ?? `cd/m² 값은 보는 각도 설정과 상관없이 정면 ±10° 안의 평균 휘도${lc.ratio == null ? ` · ${lc.sub}` : ''}`;   // 보드에서는 목표 없는 보조 줄(최대 대비)을 숨기고 툴팁으로(2026-11-22)
     { const n = requiredFlux(snap.photometry, observe.targetLum); q('need').textContent = needShort(n); q('need').title = n ? `${needText(n)} — 정면 ±10° 기준: 목표 휘도 × 관측면적 × π × sin²10° ÷ ±10° 안 광 효율` : ''; }
     q('avgg').hidden = lc.ratio == null;
     if (lc.ratio != null) fill(q('avgg'), lc.ratio * 50, lc.pass, 50);   // 목표 = 가운데, 목표의 2배 = 가득

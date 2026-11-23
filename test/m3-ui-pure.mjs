@@ -95,7 +95,7 @@ ok(needText({ total: 123.2, perLed: 0.5 }) === '필요 광속 LED당 0.50 lm · 
   ok(Math.abs(lumFor(ph, n.perLed) - 1000) < 1e-6 && lumFor(ph, 0) === null && lumFor(null, 5) === null, `예상 휘도 = 필요 광속의 역 (${lumFor(ph, n.perLed)})`);
   const a = ledLumHtml({ fluxLm: 2 * n.perLed }, ph, 1000), b = ledLumHtml({ fluxLm: 0.5 * n.perLed }, ph, 1000);
   ok(/예상 휘도 <b>2000 cd\/m²<\/b>/.test(a) && /목표 1000/.test(a) && /class="ok"/.test(a) && /class="bad"/.test(b), `예상 휘도 · 목표 비교: ${a} / ${b}`);
-  ok(/상대값/.test(ledLumHtml({ fluxLm: 0 }, ph, 1000)) && /계산 뒤/.test(ledLumHtml({ fluxLm: 3 }, null, null)) && !/목표/.test(ledLumHtml({ fluxLm: 3 }, ph, null)), '광속 0 = 상대값 · 계산 전 = 안내 · 목표 없으면 비교 없음'); }
+  ok(/1 lm 가정/.test(ledLumHtml({ fluxLm: 0 }, ph, 1000)) && /비례/.test(ledLumHtml({ fluxLm: 0 }, ph, 1000)) && /계산 뒤/.test(ledLumHtml({ fluxLm: 3 }, null, null)) && !/목표/.test(ledLumHtml({ fluxLm: 3 }, ph, null)), '광속 0 = 상대값 · 계산 전 = 안내 · 목표 없으면 비교 없음'); }
 { const css = (await import('fs')).readFileSync('styles.css', 'utf8');
   ok(/\.m3-res \.m3-m \.s\.m3-need\s*\{[^}]*display:\s*block/.test(css), '넓은 화면에서도 결과 카드의 필요 광속 줄은 보임'); }
 { const { leakText } = await import('../src/ui/m3/status-bar.js');
@@ -1646,4 +1646,16 @@ done();
   const M = { observe: { targetLen: 0.8, targetWid: 0.8, targetNoise: 0.01 } };
   const bad = flowState({ state: 'done' }, { Ulen: 0.58, Uwid: 0.64 }, M).opt, ok = flowState({ state: 'done' }, { Ulen: 0.85, Uwid: 0.9 }, M).opt;
   say(bad.chip === '필요' && bad.text === '필요 — 목표 미달' && ok.chip === '불필요' && flowState({ state: 'done' }, { Ulen: 0.58, Uwid: 0.64 }, M, { running: true, frac: 0.3 }).opt.chip === '진행 중 30.0%', `⑤ 칩 짧게 (${bad.chip} | ${ok.chip})`);
+}
+{ // 광속 가정 휘도(2026-11-23 사용자 3안 — 1단계): LED 광속을 안 넣었으면 20 lm/개 가정으로 휘도 표시 · 회색 · 판정 안 함 · 실제 광속 넣으면 그대로
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const { lumCard, ASSUMED_FLUX } = await import('../src/ui/m3/results-panel.js'), { lumFor } = await import('../src/ui/m3/progressive.js');
+  const st = { profile: Float64Array.from([1, 0.5]) }, ph = { eff: 0.2, lum: null, effLum: 0.1, area: 1000, nLeds: 10 };
+  const { fmtLum } = await import('../src/ui/m3/results-panel.js');
+  say(fmtLum(999.7) === '999' && fmtLum(32984) === '3.2만' && fmtLum(211125) === '21.1만', `휘도 짧은 표기 (${fmtLum(32984)})`);
+  const want = fmtLum(lumFor(ph, 1)), a = lumCard(st, ph, null), b = lumCard(st, ph, 500);
+  say(ASSUMED_FLUX === 1 && a.value === `≈${want} cd/m²` && a.assumed === true && a.pass === null && a.sub === '광속 가정 1 lm/개' && /비례/.test(a.tip) && /데이터시트/.test(a.tip), `가정 휘도 (${a.value} · ${a.sub})`);
+  say(b.pass === null && b.assumed && /판정 안 함/.test(b.sub), `목표가 있어도 가정이면 판정 안 함 (${b.sub})`);
+  const r = lumCard(st, { ...ph, lum: 1234.4 }, 1000);
+  say(r.value === '1234 cd/m²' && r.pass === true && !r.assumed, '실제 광속이면 판정 그대로');
 }
