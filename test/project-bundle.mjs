@@ -134,4 +134,14 @@ process.exitCode = fail ? 1 : 0;
   const { readFileSync } = await import('node:fs'), m = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
   const a = m.indexOf('const handle = async (m0)'), h = m.slice(a, m.indexOf('w.onerror', a)) /* 처리 본체 — 2026-11-19 함께 쓰는 Worker 감싸기로 이름 바뀜 */, cut = h.slice(h.indexOf('w.terminate();'), h.indexOf('if (m.data.error)'));
   ok(!/if \(stepReading\) \{ stepReading = null/.test(cut) && (h.match(/doneReading\(\)/g) ?? []).length >= 5 && h.indexOf('doneReading()', h.indexOf('spec.mech3d = ms;')) > 0, '변환 끝 ≠ 복원 끝: 실패·취소·다음 파일·추가·복원 끝에서만 읽는 중을 풂'); }
+// 연 .uds 에 다시 저장(2026-11-23 다른 PC: "could not be read … after a reference to a file was acquired" 3번) —
+// 통합 파일에서 꺼낸 STEP gz 는 그 파일의 조각(디스크 참조)이라, 같은 파일을 덮어쓴 뒤 다음 저장에서 읽기 실패. 보관할 때 메모리로 복사해야 함
+{ const { keepStepSource, pickSources } = await import('../src/ui/step-sources.js');
+  const real = await gzipBlob(new Blob(['MECH;'])), buf = await real.arrayBuffer(); let stale = false;
+  const onDisk = { size: real.size, type: '', arrayBuffer: async () => { if (stale) throw new Error('NotReadableError'); return buf; }, slice: (...a) => real.slice(...a), stream: () => real.stream() };
+  await keepStepSource('mech', new File(['MECH;'], 'stale.stp', { lastModified: 7 }), onDisk);
+  stale = true;   // 같은 .uds 를 덮어씀 → 옛 조각은 더 못 읽음
+  const f = pickSources({ mech3d: { name: 'stale.stp', parts: [1], light: { kind: 'none' } } }).files[0];
+  let got = null; try { got = new Uint8Array(await f.gz.arrayBuffer()); } catch (e) { got = e; }
+  ok(got instanceof Uint8Array && got.length === buf.byteLength, `보관한 STEP 은 연 파일을 덮어써도 읽힘(메모리 복사): ${got instanceof Uint8Array ? got.length + ' B' : got?.message}`); }
 process.exitCode = fail ? 1 : 0;

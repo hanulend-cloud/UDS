@@ -59,7 +59,9 @@ export const sourcesKey = (spec) => pickSources(spec).files.map((f) => `${f.role
 export async function keepStepSource(role, file, gz = null) {
   const old = mem.get(`${role}:${file.name}`);
   if (old && old.size === file.size && old.lastModified === (file.lastModified ?? 0)) return;   // 같은 파일(통합 파일에서 연 뒤 다시 읽는 경우 등)
-  const v = { role, name: file.name, size: file.size, lastModified: file.lastModified ?? 0, gz: gz ?? await gzipBlob(file) }, key = `${role}:${file.name}`;
+  // 통합 파일에서 꺼낸 gz = 그 파일의 조각(디스크 참조) — 같은 .uds 를 덮어쓰면 다음 저장에서 못 읽음(NotReadableError, 2026-11-23) → 메모리로 복사
+  const mz = gz ? new Blob([await gz.arrayBuffer()], { type: gz.type ?? '' }) : await gzipBlob(file);
+  const v = { role, name: file.name, size: file.size, lastModified: file.lastModified ?? 0, gz: mz }, key = `${role}:${file.name}`;
   mem.delete(key); mem.set(key, v);
   for (const k of dropKeys([...mem.keys()], pins())) mem.delete(k);   // 지금 쓰는 도면은 안 버림
   onChange();
