@@ -21,7 +21,7 @@ const finiteMax = (a) => { let m = -Infinity; for (const v of a) if (Number.isFi
 // 판정도 표시된(내림) 값끼리 비교한다 — 화면에 0.80 / 목표 0.80 인데 "미달"이 뜨는 일이 없게
 export function judgeText(v, tg, se = null, relNoise = null, preview = false) {
   if (!Number.isFinite(v)) return { cls: '', text: `목표 ${fmtTg(Math.floor(tg * 100 + 1e-9) / 100)}` };
-  if (preview) return { cls: 'preview', text: `목표 ${fmtTg(Math.floor(tg * 100 + 1e-9) / 100)} · 미리보기 — 판정 아님` };   // 광효율 1% 미만 자동 미리보기(2026-11-18)
+  if (preview) return { cls: 'preview', text: `목표 ${fmtTg(Math.floor(tg * 100 + 1e-9) / 100)} · Quick — 판정 아님` };   // 광효율 1% 미만 자동 미리보기(2026-11-18)
   if (relNoise > 0.05) return { cls: 'busy', text: `목표 ${fmtTg(Math.floor(tg * 100 + 1e-9) / 100)} · 노이즈 큼 — 판정 보류(계산 중)` };   // 계산 초반(광선 수천 개) 값은 크게 흔들림 — 빨간 미달로 보이지 않게(2026-11-07)
   if (uVerdict(v, tg, se, relNoise) === 'near') return { cls: 'near', text: `목표 ${fmtTg(Math.floor(tg * 100 + 1e-9) / 100)} · 근처 (오차 ±${(uBand(v, se, relNoise) * 100).toFixed(1)}%p)` };
   const ok = Math.floor(v * 100 + 1e-9) >= Math.floor(tg * 100 + 1e-9), gap = Math.max(1, Math.floor(tg * 100 + 1e-9) * 10 - fl1000(v));   // 판정 규칙은 그대로(1% 단위 내림 비교) · 미달 폭은 0.1%p
@@ -31,14 +31,14 @@ export { needText } from './progressive.js';
 // 판정 배지 옆 '다음 할 일' 단추(순수, 2026-11-12) — 판정을 본 그 자리에서 다음 단계로: 미달·근처 = ⑤ 기구 최적화 창, 통과 = 큰 창
 export function nextAction(cls, optFrac = null) {
   if ((cls === 'bad' || cls === 'near') && Number.isFinite(optFrac)) return { k: 'opt', label: `최적화 진행 중 ${fmtProg(Math.max(0, Math.min(1, optFrac)) * 100)}%`, title: '⑤ 기구 최적화 창 보기 — 진행 중' };   // 돌고 있으면 진행률(2026-11-12 평가)
-  if (cls === 'bad' || cls === 'near') return { k: 'opt', label: '기구 최적화로 개선 →', title: '⑤ 기구 최적화 창 열기 — Milky·LED 위치·형상 후보를 찾아 최종 판정' };
+  if (cls === 'bad' || cls === 'near') return { k: 'opt', label: '최적화로 개선 →', title: '⑤ 기구 최적화 창 열기 — Milky·LED 위치·형상 후보를 찾아 최종 판정' };
   if (cls === 'ok') return { k: 'big', label: '⤢ 크게 보기', title: '④ 광분포 시뮬레이션 창 열기 — 2D·1D 를 크게, 영역 선택' };
   return null;
 }
 // 결과 요약 카드 종합 판정 배지(순수, 2026-11-12) — 길이·폭 judgeText 를 그대로 묶음(판정 규칙·숫자 안 바뀜). 폭 판정 불가면 길이로만
 export function overallVerdict(st, O) {
   if (!st || st.empty || !O) return { cls: '', text: '' };
-  if (st.preview) return { cls: 'preview', text: '미리보기 — 판정 아님' };
+  if (st.preview) return { cls: 'preview', text: 'Quick — 판정 아님' };
   const J = [judgeText(st.Ulen, O.targetLen, st.seLen, st.relNoise), ...(Number.isFinite(st.Uwid) ? [judgeText(st.Uwid, O.targetWid, st.seWid, st.relNoise)] : [])].map((j) => j.cls);
   if (J.includes('busy')) return { cls: 'busy', text: '… 판정 보류(계산 중)' };
   if (J.includes('bad')) return { cls: 'bad', text: '✕ 목표 미달' };
@@ -53,8 +53,8 @@ export const EFF_HEAVY = 0.05, EFF_VERY = 0.01;
 // 미리보기 단추(순수, 2026-11-18) — 미리보기 중 = [정밀 계산] · [정밀 계산] 뒤에도 광효율 1% 미만 = [미리보기로] · 그 밖 = null
 export function previewBtn(snap, mode) {
   const eff = snap?.photometry?.eff, e = Number.isFinite(eff) ? `광효율 ${(eff * 100).toFixed(1)}%` : '광효율 낮음';
-  if (snap?.preview) return { k: 'precise', label: '정밀 계산', title: `미리보기 중(${e}) — 칸 ${PREVIEW.cell} mm · 노이즈 ${PREVIEW.noise * 100}% · 합격/불합격 판정 안 함. 누르면 원래 화질·노이즈 목표로 다시 계산해 판정(오래 걸림)` };
-  if (mode === 'precise' && Number.isFinite(eff) && eff < PREVIEW.effOn) return { k: 'auto', label: '미리보기로', title: `${e} — 정밀 계산이 오래 걸림. 누르면 칸 ${PREVIEW.cell} mm · 노이즈 ${PREVIEW.noise * 100}% 미리보기로` };
+  if (snap?.preview) return { k: 'precise', label: 'Final 계산', title: `Quick 계산 중(${e}) — 칸 ${PREVIEW.cell} mm · 노이즈 ${PREVIEW.noise * 100}% · 합격/불합격 판정 안 함. 누르면 원래 화질·노이즈 목표로 다시 계산해 판정(오래 걸림)` };
+  if (mode === 'precise' && Number.isFinite(eff) && eff < PREVIEW.effOn) return { k: 'auto', label: 'Quick으로', title: `${e} — Final 계산이 오래 걸림. 누르면 칸 ${PREVIEW.cell} mm · 노이즈 ${PREVIEW.noise * 100}% Quick 계산으로` };
   return null;
 }
 // 결과 위 모드 띠(순수, 2026-11-19 사용자: 미리보기·정밀 구분이 헷갈림) — { cls: 'pv'|'precise'|'idle', label, text, title, btn(previewBtn), load(effLoad) }
@@ -65,11 +65,11 @@ export function modeBand(snap, mode, observe, elapsedSec = 0) {
   const pc = (v) => `${+(v * 100).toFixed(2)}%`;
   if (snap.preview) {
     const why = Number.isFinite(eff) ? `광효율 ${(eff * 100).toFixed(1)}% < ${pc(PREVIEW.effOn)} 라 자동` : '광효율이 낮아 자동';
-    return { cls: 'pv', label: '미리보기', text: `판정 아님 — ${why} · 칸 ${PREVIEW.cell} mm · 노이즈 ${pc(PREVIEW.noise)}`, title: `미리보기 = 빠른 대략 계산(칸 ${PREVIEW.cell} mm · 노이즈 ${pc(PREVIEW.noise)}). 합격/불합격 판정은 [정밀 계산]으로`, btn, load: load.text ? load : null };
+    return { cls: 'pv', label: 'Quick', text: `판정 안 함 · 칸 ${PREVIEW.cell} mm · 노이즈 ${pc(PREVIEW.noise)}`, title: `${why} — Quick = 빠른 대략 계산(칸 ${PREVIEW.cell} mm · 노이즈 ${pc(PREVIEW.noise)}). 합격/불합격 판정은 [Final 계산]으로`, btn, load: load.text ? load : null };
   }
   const q = observe?.cellS ? `칸 ${observe.cellS}×${observe.cellW ?? observe.cellS} mm` : (QUALITY_OPTS.find(([v]) => v === (observe?.quality ?? 'low'))?.[1] ?? '');
-  const nz = Number.isFinite(snap.targetNoise) ? ` · 노이즈 목표 ${pc(snap.targetNoise)}` : '';
-  return { cls: 'precise', label: '정밀 계산', text: `판정 — ${q}${nz}`, title: '정밀 계산 = 설정한 화질·노이즈 목표로 합격/불합격 판정', btn, load: load.text ? load : null };
+  const nz = Number.isFinite(snap.targetNoise) ? ` · 노이즈 ${pc(snap.targetNoise)}` : '';   // 글은 짧게(2026-11-23 사용자) — 판정 설명은 툴팁
+  return { cls: 'precise', label: 'Final', text: `${q}${nz}`, title: `Final = 설정한 화질·노이즈 목표로 합격/불합격 판정 — ${q}${nz.replace('노이즈', '노이즈 목표')}`, btn, load: load.text ? load : null };
 }
 export function effLoad(eff, snap, elapsedSec) {
   if (!Number.isFinite(eff) || eff >= EFF_HEAVY) return { text: '', cls: '', title: '' };
@@ -676,7 +676,7 @@ export const mapMenuItems = (hasPin, onCell) => [
 // 1D 우클릭 메뉴 항목(순수)
 export const plotMenuItems = (title) => [{ k: 'csv', label: `${title} 데이터 CSV 저장` }, { k: 'png', label: '그래프 이미지 저장 (PNG)' }, { k: 'copy', label: '그래프 이미지 복사' }];
 // head = 판정·모드 띠·균일도 카드를 그릴 칸(2026-11-22 사용자 — 오른쪽 위 보드). 없으면 예전처럼 el 한 칸에 모두
-export function createResultsPanel(el, { onPalette = null, head = null, foot = null, anchor = () => null, onPreview = null, onOpt = null, onQuality = null, fileName = () => 'uds', onLeak = null, onBig = null, onCalc = null, calcBusy = () => false, onNote = null } = {}) {
+export function createResultsPanel(el, { onPalette = null, head = null, foot = null, anchor = () => null, onPreview = null, onOpt = null, onQuality = null, fileName = () => 'uds', onLeak = null, onBig = null, onCalc = null, calcBusy = () => false, onNote = null, kpi = null } = {}) {   // kpi = 상단 띠의 균일도·광량·광효율 칸(2026-11-23 사용자 — 늘 보이게)
   let effT = { key: null, t0: null };
   let optFrac = null, vCls = '';   // 기구 최적화 진행률(null = 안 돎) · 지금 종합 판정
   function syncNext() {   // 판정 옆 '다음 할 일' 단추
@@ -692,10 +692,10 @@ export function createResultsPanel(el, { onPalette = null, head = null, foot = n
     <div class="m3-msg" data-r="msg" hidden></div>
     <div class="m3-mode idle" data-r="mode"><b data-r="model">계산 전</b><span class="m3-mode-t" data-r="modet"></span><span class="m3-effload" data-r="effl" hidden></span><button type="button" class="m3-pvbtn" data-r="pv" hidden></button></div>
     <div class="m3-sum">
-      <div class="m3-sum-u"><div class="l">길이 균일도</div><div class="v" data-r="ul">–</div>${gaugeHtml('ulg')}<div class="s" data-r="ulj"></div></div>
-      <div class="m3-sum-u"><div class="l">폭 균일도</div><div class="v" data-r="uw">–</div>${gaugeHtml('uwg')}<div class="s" data-r="uwj"></div></div>
-      <div class="m3-sum-c"><div class="l">평균 광량</div><div class="v" data-r="avg" title="cd/m² 값은 보는 각도 설정과 상관없이 정면 ±10° 안의 평균 휘도">–</div><div class="s" data-r="avgs" title="최대 대비 % — LED 광속(lm)을 넣으면 cd/m² 로 표시"></div><div class="s m3-need" data-r="need"></div>${gaugeHtml('avgg')}</div>
-      <div class="m3-sum-c"><div class="l">광 효율</div><div class="v sm" data-r="eff">–</div><div class="s">관측면 원뿔 안 / LED 총 방출</div></div>
+      <div class="m3-sum-u"><div class="l" data-short="길이">길이 균일도</div><div class="v" data-r="ul">–</div>${gaugeHtml('ulg')}<div class="s" data-r="ulj"></div></div>
+      <div class="m3-sum-u"><div class="l" data-short="폭">폭 균일도</div><div class="v" data-r="uw">–</div>${gaugeHtml('uwg')}<div class="s" data-r="uwj"></div></div>
+      <div class="m3-sum-c"><div class="l" data-short="광량">평균 광량</div><div class="v" data-r="avg" title="cd/m² 값은 보는 각도 설정과 상관없이 정면 ±10° 안의 평균 휘도">–</div><div class="s" data-r="avgs" title="최대 대비 % — LED 광속(lm)을 넣으면 cd/m² 로 표시"></div><div class="s m3-need" data-r="need"></div>${gaugeHtml('avgg')}</div>
+      <div class="m3-sum-c"><div class="l" data-short="효율">광 효율</div><div class="v sm" data-r="eff">–</div><div class="s">관측면 원뿔 안 / LED 총 방출</div></div>
       <div class="m3-sum-x"><div class="m3-regl" data-r="reg" hidden title="큰 창(⤢)에서 고른 영역 — 길이 / 폭 균일도"></div>${leakHtml}</div>
     </div>`;
   // 그림: 2D(위) · 길이 1D | 폭 1D(아래 좌우 나란히, 2026-11-22 사용자)
@@ -708,8 +708,10 @@ export function createResultsPanel(el, { onPalette = null, head = null, foot = n
       <div class="m3-gw"><canvas class="m3-g" data-r="wprof" width="600" height="120"></canvas></div></div></div>`;
   el.innerHTML = head ? blkHtml : topHtml + blkHtml;
   if (head) head.innerHTML = topHtml;
+  if (kpi) { const s = (head ?? el).querySelector('.m3-sum'); if (s) { s.classList.add('m3-kpi-sum'); kpi.appendChild(s); } }   // 결과 카드를 상단 띠로 옮김 — 갱신 로직은 그대로
   if (foot) foot.innerHTML = leakBtn;   // 새는 빛 = 화면 맨 아래 줄(2026-11-22 사용자)
-  const q = (k) => el.querySelector(`[data-r="${k}"]`) ?? head?.querySelector(`[data-r="${k}"]`) ?? foot?.querySelector(`[data-r="${k}"]`);
+  const q = (k) => el.querySelector(`[data-r="${k}"]`) ?? head?.querySelector(`[data-r="${k}"]`) ?? foot?.querySelector(`[data-r="${k}"]`) ?? kpi?.querySelector(`[data-r="${k}"]`);
+  const kpiTip = () => { if (kpi) for (const c of kpi.querySelectorAll('.m3-sum-u, .m3-sum-c')) { const t = [...c.querySelectorAll('.l, .v, .s')].map((n) => n.textContent.trim()).filter(Boolean).join(' · '); if (c.title !== t) c.title = t; } };   // 상단 띠 칸은 한 줄 — 목표·미달 %p·보조 줄은 툴팁으로
   try { setPalette(localStorage.getItem('uds.m3.palette') ?? 'classic'); } catch {}   // 색 표(2026-11-22) — 이 브라우저에 기억
   let mapEq = false; try { mapEq = localStorage.getItem('uds.m3.mapEq') === '1'; } catch {}   // 메인 2D 실제 비율 — 이 브라우저에 기억
   const RATIO = { map: 2.6, prof: 2.6, wprof: 3.2 };   // 눈금·색 막대·읽기가 들어가도록 높게
@@ -954,7 +956,7 @@ export function createResultsPanel(el, { onPalette = null, head = null, foot = n
     if (q('model').textContent !== M.label) q('model').textContent = M.label;
     if (q('modet').textContent !== M.text) q('modet').textContent = M.text;
     const e = q('effl'), L = M.load; e.hidden = !L; if (L) { if (e.textContent !== L.text) e.textContent = L.text; e.className = `m3-effload ${L.cls}`; e.title = L.title; }
-    const c = big?.el.querySelector('[data-big-mode]'); if (c) { c.className = `m3-mode-chip ${M.cls}`; c.textContent = M.cls === 'pv' ? '미리보기 · 판정 아님' : M.cls === 'precise' ? '정밀 계산' : ''; c.title = `${M.label}${M.text ? ` — ${M.text}` : ''}`; c.hidden = M.cls === 'idle'; }
+    const c = big?.el.querySelector('[data-big-mode]'); if (c) { c.className = `m3-mode-chip ${M.cls}`; c.textContent = M.cls === 'pv' ? 'Quick · 판정 아님' : M.cls === 'precise' ? 'Final' : ''; c.title = `${M.label}${M.text ? ` — ${M.text}` : ''}`; c.hidden = M.cls === 'idle'; }
   };
   const pvSync = (b) => {
     if (!b) return;
@@ -1008,7 +1010,7 @@ export function createResultsPanel(el, { onPalette = null, head = null, foot = n
     q('avgg').hidden = true;
     q('msg').hidden = false; q('msg').textContent = message || DEFAULT_GUIDE;
     q('verdict').textContent = ''; q('verdict').className = 'm3-verdict'; vCls = ''; q('next').hidden = true;
-    modeSync(modeBand(null)); q('pv').hidden = true;
+    modeSync(modeBand(null)); q('pv').hidden = true; kpiTip();
   }
   function update(args) {
     last = args;
@@ -1066,7 +1068,7 @@ export function createResultsPanel(el, { onPalette = null, head = null, foot = n
       modeSync(modeBand(snap, args.calcMode ?? 'auto', observe, effT.t0 == null ? 0 : (now - effT.t0) / 1000)); }
     pvSync(q('pv'));
     const lk = args.leak ?? ''; if (q('leak').textContent !== lk) q('leak').textContent = lk; q('leak').hidden = !lk;   // 새는 빛(광 효율 아래)
-    paintBig(); syncBig();   // 큰 창도 계산을 따라감
+    kpiTip(); paintBig(); syncBig();   // 큰 창도 계산을 따라감
   }
   if (typeof ResizeObserver !== 'undefined') {
     let w0 = 0;

@@ -1015,7 +1015,7 @@ done();
 { // 판정 배지 옆 '다음 할 일' 단추(2026-11-12) — 미달·근처 = 기구 최적화 창, 통과 = 크게 보기, 계산 중·결과 없음 = 없음
   const okN = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
   const { nextAction } = await import('../src/ui/m3/results-panel.js');
-  okN(nextAction('bad')?.k === 'opt' && /기구 최적화/.test(nextAction('bad').label) && nextAction('near')?.k === 'opt', '미달·근처 → 기구 최적화로 개선');
+  okN(nextAction('bad')?.k === 'opt' && /최적화/.test(nextAction('bad').label) && nextAction('near')?.k === 'opt', '미달·근처 → 기구 최적화로 개선');
   okN(nextAction('ok')?.k === 'big' && /크게/.test(nextAction('ok').label), '통과 → 크게 보기');
   okN(nextAction('busy') === null && nextAction('') === null, '계산 중·결과 없음 → 단추 없음');
 }
@@ -1494,10 +1494,10 @@ done();
   const O = { targetLen: 0.8, targetWid: 0.8, targetNoise: 0.01 }, st = { Ulen: 0.6, Uwid: 0.9, seLen: 0.001, seWid: 0.001, relNoise: 0.01 }, pv = { ...st, preview: true };
   say(GRID_QUALITY.preview?.cell === 3, '미리보기 칸 3 mm');
   say(judgeStats(pv, O).all === 'preview' && judgeStats(st, O).all === 'bad', '미리보기 = 판정 안 함(보통은 그대로 미달)');
-  say(overallVerdict(pv, O).cls === 'preview' && /미리보기/.test(overallVerdict(pv, O).text) && overallVerdict(st, O).cls === 'bad', '결과 배지 = 미리보기 — 판정 아님');
+  say(overallVerdict(pv, O).cls === 'preview' && /Quick/.test(overallVerdict(pv, O).text) && overallVerdict(st, O).cls === 'bad', '결과 배지 = 미리보기 — 판정 아님');
   say(judgeText(0.6, 0.8, 0.001, 0.01, true).cls === 'preview' && judgeText(0.6, 0.8, 0.001, 0.01).cls === 'bad', '길이·폭 줄도 미리보기면 판정 안 함');
   const f = flowState({ state: 'done', stats: pv, targetNoise: 0.02, preview: true }, pv, { observe: O }, {});
-  say(/미리보기/.test(f.sim.text) && !/미달|통과/.test(f.sim.text) && !f.sim.done && !/미달/.test(f.opt.text), `상단 ④·⑤ 칩도 판정 안 함 (${f.sim.text} | ${f.opt.text})`);
+  say(/Quick/.test(f.sim.text) && !/미달|통과/.test(f.sim.text) && !f.sim.done && !/미달/.test(f.opt.text), `상단 ④·⑤ 칩도 판정 안 함 (${f.sim.text} | ${f.opt.text})`);
 }
 { // 미리보기 — 1D 제목 옆 균일도도 합격/불합격 색 없음
   const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
@@ -1509,8 +1509,8 @@ done();
   const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
   const { previewBtn } = await import('../src/ui/m3/results-panel.js');
   const a = previewBtn({ preview: true, photometry: { eff: 0.006 } }, 'auto'), b = previewBtn({ preview: false, photometry: { eff: 0.006 } }, 'precise'), c = previewBtn({ preview: false, photometry: { eff: 0.03 } }, 'auto');
-  say(a?.k === 'precise' && /정밀 계산/.test(a.label) && /0\.6%/.test(a.title) && /3 mm/.test(a.title), `미리보기 중 = [정밀 계산] (${a?.label} · ${a?.title})`);
-  say(b?.k === 'auto' && /미리보기/.test(b.label), '정밀 + 광효율 낮음 = [미리보기로]');
+  say(a?.k === 'precise' && /Final/.test(a.label) && /0\.6%/.test(a.title) && /3 mm/.test(a.title), `미리보기 중 = [정밀 계산] (${a?.label} · ${a?.title})`);
+  say(b?.k === 'auto' && /Quick/.test(b.label), '정밀 + 광효율 낮음 = [미리보기로]');
   say(c === null && previewBtn(null, 'auto') === null, '보통 = 단추 없음');
 }
 
@@ -1529,10 +1529,10 @@ done();
   const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
   const { modeBand } = await import('../src/ui/m3/results-panel.js');
   const pv = modeBand({ preview: true, state: 'running', progress: 40, stats: { relNoise: 0.03 }, photometry: { eff: 0.008 }, targetNoise: 0.02 }, 'auto', { quality: 'high' }, 30);
-  say(pv.cls === 'pv' && /미리보기/.test(pv.label) && /판정 아님/.test(pv.text) && /0\.8%/.test(pv.text) && /3 mm/.test(pv.text) && pv.btn?.k === 'precise', `미리보기 띠: 판정 아님 · 이유(광효율) · 칸 · [정밀 계산] (${pv.label} ${pv.text})`);
+  say(pv.cls === 'pv' && /Quick/.test(pv.label) && pv.text === '판정 안 함 · 칸 3 mm · 노이즈 2%' && /0\.8%/.test(pv.title) && pv.btn?.k === 'precise', `미리보기 띠: 판정 아님 · 이유(광효율) · 칸 · [정밀 계산] (${pv.label} ${pv.text})`);
   say(/계산 매우 느림/.test(pv.load?.text ?? ''), '미리보기 띠: 계산 부담·남은 시간도 띠에');
   const pr = modeBand({ preview: false, state: 'done', stats: { relNoise: 0.009 }, photometry: { eff: 0.2 }, targetNoise: 0.01 }, 'auto', { quality: 'high' }, 0);
-  say(pr.cls === 'precise' && /정밀 계산/.test(pr.label) && /판정/.test(pr.text) && /고화질 0\.5 mm/.test(pr.text) && /1%/.test(pr.text) && !pr.btn, `정밀 띠: 판정 · 화질 · 노이즈 목표 (${pr.label} ${pr.text})`);
+  say(pr.cls === 'precise' && /Final/.test(pr.label) && pr.text === '고화질 0.5 mm · 노이즈 1%' && /판정/.test(pr.title) && !pr.btn, `정밀 띠: 판정 · 화질 · 노이즈 목표 (${pr.label} ${pr.text})`);
   const pl = modeBand({ preview: false, state: 'running', stats: { relNoise: 0.02 }, photometry: { eff: 0.006 }, targetNoise: 0.01 }, 'precise', { quality: 'low' }, 10);
   say(pl.cls === 'precise' && pl.btn?.k === 'auto', '정밀 + 광효율 1% 미만 = [미리보기로]');
   const id = modeBand(null, 'auto', { quality: 'low' }, 0);
@@ -1609,4 +1609,41 @@ done();
   ok(amp(smoothMap({ ...G, valid: new Uint8Array(ns * nw).fill(1) }, cm, leds)) >= 0.95 * amp(cm) - 1e-9, 'LED 물결 높이 95% 이상 유지');
   const small = { ns: 30, nw: 8, ds: 1, valid: new Uint8Array(240).fill(1) }, m2 = Float64Array.from({ length: 240 }, () => rnd());
   ok(smoothMap(small, m2, []).every((v, k) => v === m2[k]), '칸이 적은 방향(< 40)은 다듬지 않음');
+}
+
+// 진행 한 줄(2026-11-23 사용자: 진행률과 계산 오차를 같이 · 예상 시간·현재 시간도) — 결과판 머리 아래 한 줄
+{
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const { simProgLine, fmtClock } = await import('../src/ui/m3/opt-dash.js');
+  say(fmtClock(5) === '0:05' && fmtClock(192) === '3:12' && fmtClock(3725) === '1:02:05', `시각 형식 (${fmtClock(5)} ${fmtClock(192)} ${fmtClock(3725)})`);
+  const a = simProgLine({ state: 'running', pct: 79.7, noise: 0.0223, tgt: 0.02, elapsedSec: 192, etaSec: 50 });
+  say(a === '79.7% · 오차 ±2.23% → ±2.00% · 경과 3:12 · 남은 약 0:50', `계산 중 (${a})`);
+  const b = simProgLine({ state: 'running', pct: 12, noise: 0.05, tgt: 0.02, elapsedSec: 4, etaSec: null });
+  say(b === '12.0% · 오차 ±5.00% → ±2.00% · 경과 0:04', `남은 시간 모르면 생략 (${b})`);
+  const c = simProgLine({ state: 'done', pct: 100, noise: 0.0198, tgt: 0.02, elapsedSec: 242, etaSec: 10 });
+  say(c === '100% · 오차 ±1.98% → ±2.00% · 걸린 시간 4:02', `완료 (${c})`);
+  say(simProgLine({ state: 'idle', pct: 0, noise: NaN, tgt: 0.02, elapsedSec: 0 }) === '', '계산 전 = 빈 줄');
+}
+{ // 상단 ④ 칩 짧은 글(2026-11-23 사용자 — 균일도 숫자는 옆 결과 칸에 늘 보이므로 칩에서는 뺌 · 1280 폭에서 ⑤ 가 밀려 안 보이던 것)
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const { flowState } = await import('../src/ui/m3/command-bar.js');
+  const M = { observe: { targetLen: 0.8, targetWid: 0.8, targetNoise: 0.01 } }, st = { Ulen: 0.58, Uwid: 0.64 };
+  const a = flowState({ state: 'running', stats: { relNoise: 0.02 } }, st, M).sim, b = flowState({ state: 'done' }, st, M).sim, c = flowState({ state: 'done' }, { Ulen: 0.85, Uwid: 0.9 }, M).sim;
+  say(a.chip === '계산 중 25.0%' && b.chip === '목표 미달' && c.chip === '목표 통과' && flowState(null, null, M).sim.chip === '–', `④ 칩 = 숫자 없이 (${a.chip} | ${b.chip} | ${c.chip})`);
+}
+
+{ // 결과판 짧은 글(2026-11-23 사용자 — 시뮬레이션 결과 글을 간략하게) — 카드 머리 상태 · 다음 할 일 단추
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const { simShortState } = await import('../src/ui/m3/opt-dash.js'), { nextAction } = await import('../src/ui/m3/results-panel.js');
+  const S = (...a) => simShortState(...a);
+  say(S('running') === '계산 중' && S('paused') === '일시정지' && S('paused', '', true) === '중지됨' && S('done', 'converged') === '완료' && S('done', 'adopted') === '완료 · 최적화 값' && S('done', 'restored') === '완료 · 저장된 결과' && S('done', 'judgeLimit') === '멈춤 · 5분 한도' && S('done', 'limit') === '한도 도달' && S('error') === '계산 실패' && S('running', '', false, true) === '최적화 중 · 일시정지' && S('idle') === '계산 전',
+    `상태 짧은 글 (${['running', 'done', 'error'].map((k) => S(k, 'converged')).join(' | ')})`);
+  say(nextAction('bad').label === '최적화로 개선 →' && /기구 최적화/.test(nextAction('bad').title), `다음 할 일 단추 짧게 (${nextAction('bad').label})`);
+}
+{ // 상단 ⑤ 칩 짧은 글(2026-11-23 — ④ 가 이미 '목표 미달'·'목표 통과' 를 보여 줌 · 1280 폭에서 Dashboard 가 둘째 줄로 밀림)
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const { flowState } = await import('../src/ui/m3/command-bar.js');
+  const M = { observe: { targetLen: 0.8, targetWid: 0.8, targetNoise: 0.01 } };
+  const bad = flowState({ state: 'done' }, { Ulen: 0.58, Uwid: 0.64 }, M).opt, ok = flowState({ state: 'done' }, { Ulen: 0.85, Uwid: 0.9 }, M).opt;
+  say(bad.chip === '필요' && bad.text === '필요 — 목표 미달' && ok.chip === '불필요' && flowState({ state: 'done' }, { Ulen: 0.58, Uwid: 0.64 }, M, { running: true, frac: 0.3 }).opt.chip === '진행 중 30.0%', `⑤ 칩 짧게 (${bad.chip} | ${ok.chip})`);
 }

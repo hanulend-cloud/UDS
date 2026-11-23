@@ -38,6 +38,7 @@ import { renderAdvanced } from '../l2-advanced.js';
 import { defaultRowGap, renderReflDb, setLpTab, refreshObsNow, refreshLedLum } from '../mech3d-light-panel.js';
 import { positionsFromLayout, addPosition, alignPositions } from '../../engine/mech3d/led-edit.js';
 import { createResultsPanel } from './results-panel.js';
+const SHOW_TREND = false;   // 결과판 계산 추이 그래프(2026-11-23 사용자 — 일단 숨김)
 import { renderStatusBar, leakText } from './status-bar.js';
 import { createAdRunner, resumable } from './autodesign-run.js';
 import { renderAutoPanel, seedFits, milkyTable, stageAvailability, clampCap, overallFrac, etaText, reusableCurrent, defaultHousingPart, applyDz, applyFinish, capDefault, nextFinish, finishText, shapeText, tileConfigHtml, AD_ITEMS, resultStageFlags, histFromRun, mergeHist, stageEffects, factorResult, adToFile, adFromFile } from './autodesign-panel.js';
@@ -240,13 +241,15 @@ export async function mount(ctx) {
   }
   const a = A = { ctx, store, pool, view: null, meshShown: null, lineKey: '', Gc: null, obsShown: null, checks: {}, markKey: '', timing: { start: 0, first: null, noise5: null } };
   a.prog = createProgressive({ ports: pool.ports(), onUpdate: onCalc, onSlow: (x) => reportError('계산', slowPortText(x, interactOverlap(interactIv, x.t0, x.t1), x.t1 - x.t0)), opts: { targetNoise: ctx.mspec.observe.targetNoise ?? 0.01 } });
-  a.results = createResultsPanel($('#m3-res'), { head: $('#m3-reshead'), foot: $('#m3-leakslot'), onPreview: (k) => setCalcMode(k), onOpt: () => { if (monitor) { monitor.open(); monitor.expand(); } }, onNote: (t) => setStatus(t), onCalc: (k) => calcCtl(k), calcBusy: () => !!A?.ad?.running, onLeak: () => A.store.update('session', (_, s) => { s.focusCheck = s.focusCheck === 'leak' ? null : 'leak'; }), onBig: (node) => { A?.simDash?.attach(node); winOpenChip('sim', !!node); }, anchor: () => document.querySelector('#m3-cmd [data-c="sim"]'), fileName: () => String(A?.store?.mspec?.name ?? 'uds').replace(/\.(stp|step)$/i, ''), onQuality: (v) => A.store.update('observe', (m) => { m.observe.quality = v; }), onPalette: () => { syncLegend(); if (A?.prog) paintObs(A.prog.snapshot()); } });
+  a.results = createResultsPanel($('#m3-res'), { head: $('#m3-reshead'), kpi: $('#m3-kpi'), foot: $('#m3-leakslot'), onPreview: (k) => setCalcMode(k), onOpt: () => { if (monitor) { monitor.open(); monitor.expand(); } }, onNote: (t) => setStatus(t), onCalc: (k) => calcCtl(k), calcBusy: () => !!A?.ad?.running, onLeak: () => A.store.update('session', (_, s) => { s.focusCheck = s.focusCheck === 'leak' ? null : 'leak'; }), onBig: (node) => { A?.simDash?.attach(node); winOpenChip('sim', !!node); }, anchor: () => document.querySelector('#m3-cmd [data-c="sim"]'), fileName: () => String(A?.store?.mspec?.name ?? 'uds').replace(/\.(stp|step)$/i, ''), onQuality: (v) => A.store.update('observe', (m) => { m.observe.quality = v; }), onPalette: () => { syncLegend(); if (A?.prog) paintObs(A.prog.snapshot()); } });
   syncLegend();   // 기억한 색 표로 3D 범례
   // 균일도 그래프 칸 = 창 왼쪽 아래(실행·결과 밑, 2026-11-05)
   let chartEl = $('#m3-odchart'); if (!chartEl) { chartEl = document.createElement('div'); chartEl.id = 'm3-odchart'; $('#m3-factor')?.appendChild(chartEl); }
   a.optDash = createOptDash($('#m3-optdash'), { history: () => { const st = A?.ad; return st ? { list: st.hist ?? [], tgLen: A.store.mspec.observe.targetLen, tgWid: A.store.mspec.observe.targetWid, busy: !!st.running } : null; }, onPick: (i) => adPickHist(i), onPartial: () => adRunPartial(), onSet: () => { if (A) { adState().view = 'set'; renderAuto(); } }, chart: chartEl, result: (k) => adFactorResult(k), config: (k) => (A?.tileState ? tileConfigHtml(k, A.tileState) : { on: false, html: '' }), onSel: (k, v) => adSel(k, v), onUnlock: (k) => adUnlock(k), board: $('#m3-factor'), now: () => (A ? factorNow() : {}) }); a.simDash = createSimDash($('#m3-simdash'), { onCtl: (k) => calcCtl(k), bar: $('#m3-run'), plots: $('#m3-simplots'), pathsEl: $('#m3-pathslot') });
   // 오른쪽 위 보드(진행·판정·균일도 카드·계산 추이·광경로) ↕ 아래 2D·1D: 경계선 끌어 높이 조절(보는 사람별). 처음 = 1 : 3(2026-11-22 사용자 — 보드 1/4)
-  mountSplit([$('#m3-dash'), $('#m3-res')], { key: 'uds.m3.dashSplit', dir: 'col', min: 80, init: [1, 3], onChange: () => window.dispatchEvent(new Event('resize')) });   // 아래 칸 = 기구 최적화 · 오른쪽 맨 위 = 광분포 시뮬레이션(항상 보임, 계산 제어 단추)
+  // 계산 추이(오차·균일도 그래프) 일단 숨김(2026-11-23 사용자) — 다시 보이려면 SHOW_TREND = true. 숨기면 보드는 글 높이만, 아래 2D·1D 가 나머지
+  if (!SHOW_TREND) $('#m3-dash').classList.add('no-trend');
+  else mountSplit([$('#m3-dash'), $('#m3-res')], { key: 'uds.m3.dashSplit', dir: 'col', min: 80, init: [1, 3], onChange: () => window.dispatchEvent(new Event('resize')) });   // 아래 칸 = 기구 최적화 · 오른쪽 맨 위 = 광분포 시뮬레이션(항상 보임, 계산 제어 단추)
   a.cmd = mountCommandBar($('#m3-cmd'), cmdHandlers());
   if (monitor?.isOpen()) $('#m3-cmd [data-c="opt"]')?.classList.add('on');
   winOpenChip('opt', !!monitor?.isOpen());   // 지난번 열어 둔 창은 칩 막대보다 먼저 열림 — 열림 표시를 여기서 맞춤
@@ -836,7 +839,7 @@ function monitorSummary() {
   const b = st?.result?.best, sn = A.prog?.snapshot(), s = sn?.stats, calc = ['running', 'pending', 'starting'].includes(sn?.state) ? `<b>계산 ${fmtProg(sn.progress ?? simPct(s?.relNoise, sn.targetNoise))}%</b> ` : '';
   if (!b && (!s || s.empty || s.relNoise > 0.05)) { monitor.setSummary(`<b>실행 전</b> ${calc || `<span>${!A.store.session.line ? '관측면 지정 전' : sn?.state === 'paused' ? '계산 일시정지' : '계산 대기'}</span>`}`); return; }   // 초반 값은 노이즈 · 계산하지 않을 때 '계산 중' 으로 보이던 것(2026-11-07)
   const U = b ? [b.Ulen, b.Uwid] : [s.Ulen, s.Uwid], pv = !b && !!s?.preview, c2 = (t, v, g) => (pv ? `<b>${t} ${fmtJudge(v)}</b>` : cell(t, v, g));   // 미리보기 = 판정 색 없음
-  monitor.setSummary(`${b ? '<b>진행 100%</b> <span>후보</span> ' : `<b>실행 전</b> ${calc}`}${pv ? '<span>미리보기</span> ' : ''}${c2('길이', U[0], M.observe.targetLen)} ${c2('폭', U[1], M.observe.targetWid)}`);
+  monitor.setSummary(`${b ? '<b>진행 100%</b> <span>후보</span> ' : `<b>실행 전</b> ${calc}`}${pv ? '<span>Quick</span> ' : ''}${c2('길이', U[0], M.observe.targetLen)} ${c2('폭', U[1], M.observe.targetWid)}`);
 }
 function adStop() { const st = adState(); if (!st.running || !st.runner) return; st.paused = false; st.runner.cancel(); setStatus('기구 최적화 중지됨'); A.optDash?.stop(); }
 function adPause(on) {

@@ -23,17 +23,19 @@ export function flowState(calc, stats, M, ad = {}) {
   const running = st === 'running' || st === 'pending' || st === 'starting', done = st === 'done';
   const sim = running ? { text: `계산 중 ${fmtProg(calc?.progress ?? (Number.isFinite(rn) && rn > 0 ? Math.min(1, (tn / rn) ** 2) * 100 : 0))}%${res ? ` · ${res}` : ''}`, cls: 'run', done: false }
     : st === 'paused' ? { text: `${calc?.stopped ? '중지됨' : '일시정지'}${res ? ` · ${res}` : ''}`, cls: '', done: false }
-    : done && J === 'preview' ? { text: `미리보기 · ${res}`, cls: '', done: false }   // 광효율 1% 미만 자동 미리보기 = 판정 안 함(2026-11-18)
+    : done && J === 'preview' ? { text: `Quick · ${res}`, cls: '', done: false }   // 광효율 1% 미만 자동 미리보기 = 판정 안 함(2026-11-18)
     : done && has ? { text: `${res} ${pass ? '목표 통과' : J === 'near' ? '목표 근처' : '목표 미달'}`, cls: pass ? 'ok' : J === 'near' ? 'near' : 'bad', done: true }
     : { text: '–', cls: '', done: false };
+  sim.chip = res ? sim.text.replace(running ? ` · ${res}` : st === 'paused' ? ` · ${res}` : J === 'preview' ? ` · ${res}` : `${res} `, '') : sim.text;   // 상단 칩 = 숫자 없이(옆 결과 칸에 늘 보임, 2026-11-23 사용자)
   const opt = ad.running ? { text: Number.isFinite(ad.frac) ? `진행 중 ${fmtProg(ad.frac * 100)}%` : '진행 중', cls: 'run', done: false }   // 진행률 %(2026-11-22 사용자 — 창의 진행률과 같은 값)
     : ad.result ? { text: '결과 확인 · 적용', cls: 'run', done: false }
-    : J === 'preview' ? { text: '정밀 계산 뒤', cls: '', done: false }
+    : J === 'preview' ? { text: 'Final 계산 뒤', cls: '', done: false }
     : !sim.done ? { text: '시뮬레이션 뒤', cls: '', done: false }
     : ad.applied ? (pass ? { text: '적용됨 · 목표 통과', cls: 'ok', done: true } : { text: `적용됨 · ${J === 'near' ? '목표 근처' : '목표 미달'}`, cls: J === 'near' ? 'near' : 'need', done: false })   // 적용한 뒤(2026-11-12)
     : pass ? { text: '불필요(목표 통과)', cls: 'ok', done: true }
     : J === 'near' ? { text: '선택 — 목표 근처', cls: 'near', done: false }
     : { text: '필요 — 목표 미달', cls: 'need', done: false };
+  opt.chip = opt.text.replace(/ — 목표 (미달|근처)$/, '').replace(/^불필요\(목표 통과\)$/, '불필요');   // 상단 칩 = 짧게(④ 가 판정을 보여 줌, 2026-11-23) · 전체 글은 툴팁
   return { sim, opt };
 }
 export function mountCommandBar(el, h) {
@@ -71,7 +73,7 @@ export function mountCommandBar(el, h) {
       lastFlow = f;
       for (const [k, n] of [['sim', '4'], ['opt', '5']]) {
         const x = b(k), s = el.querySelector(`[data-flow="${k}"]`), c = `m3-fs ${f[k].cls}`, i = x.querySelector('i');
-        if (s.textContent !== f[k].text) s.textContent = f[k].text;
+        const tx = f[k].chip ?? f[k].text; if (s.textContent !== tx) s.textContent = tx; if (s.title !== f[k].text) s.title = f[k].text;
         if (s.className !== c) s.className = c;
         x.classList.toggle('done', f[k].done); x.classList.toggle('need', f[k].cls === 'need');
         if (i.textContent !== (f[k].done ? '✓' : n)) i.textContent = f[k].done ? '✓' : n;

@@ -460,6 +460,15 @@ export function simPlotSvg(H, tgt, obs, w, h) {
     <div><div class="od-simt" title="균일도 — 목표 점선 위면 통과, 세로 막대 = 불확실 범위">${cw >= 190 ? '<b>균일도</b> ' : ''}<i class="od-k od-d1"></i>길이 ${fmtJudge(last.Ulen)}${mk(last.Ulen, tl, last.seLen, last.noise)} <i class="od-k od-d2"></i>폭 ${fmtJudge(last.Uwid)}${mk(last.Uwid, tw, last.seWid, last.noise)}</div>${svgB}</div></div>`;
 }
 // 그래프 위 설명 한 줄(순수) — 광선 수 / 총광선 · 남은 시간
+// 진행 한 줄(순수, 2026-11-23 사용자) — 진행률 · 오차 → 목표 · 경과(끝나면 걸린 시간) · 남은 시간(모르면 생략). 계산 전 = ''
+export const fmtClock = (sec) => { const s = Math.max(0, Math.round(sec)), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = String(s % 60).padStart(2, '0'); return h ? `${h}:${String(m).padStart(2, '0')}:${r}` : `${m}:${r}`; };
+export function simProgLine({ state, pct, noise, tgt, elapsedSec, etaSec = null }) {
+  if (!Number.isFinite(noise) || !['running', 'paused', 'done'].includes(state)) return '';
+  const done = state === 'done', p = done ? '100%' : `${fmtProg(pct)}%`, e = `오차 ±${(noise * 100).toFixed(2)}% → ±${(tgt * 100).toFixed(2)}%`;
+  const t = Number.isFinite(elapsedSec) ? (done ? `걸린 시간 ${fmtClock(elapsedSec)}` : `경과 ${fmtClock(elapsedSec)}`) : '';
+  const r = !done && state === 'running' && Number.isFinite(etaSec) && etaSec > 0 ? `남은 약 ${fmtClock(etaSec)}` : '';
+  return [p, e, t, r].filter(Boolean).join(' · ');
+}
 export function simCaption(H, tgt, obs, state, capMs = null) {
   const last = H[H.length - 1]; if (!last) return '광선 수 0';
   const e = state === 'running' ? etaCore(H, tgt, capMs) : null, tot = state === 'done' ? last.ph : e ? Math.max(last.ph, e.need) : simTotal(last, tgt);   // 총광선 = 남은 시간과 같은 기준(한도면 한도까지)
@@ -472,6 +481,13 @@ export function simStateText(state, reason = '', stopped = false, busy = false, 
   if (busy) return '기구 최적화 중 — 일시정지(끝나면 이어서)';
   if (state === 'error') return `계산 실패 — ${error ? `${error} · ` : ''}▶ 로 다시 계산`;   // 전에는 'error' 영어 그대로(2026-11-17)
   return { running: '계산 중', paused: stopped ? '중지됨' : '일시정지', done: reason === 'adopted' ? '계산 완료 — 기구 최적화 최종 판정 값' : reason === 'restored' ? '계산 완료 — 파일에 저장된 결과' : reason === 'converged' ? '계산 완료 — 노이즈 충분히 작음' : reason === 'judgeLimit' ? '계산 멈춤 — 판정 경계에서 5분 더 계산함(노이즈 0.5% 못 닿음)' : '계산 한도 도달 — 노이즈가 아직 큼', pending: '대기', starting: '장면 준비', idle: '계산 전' }[state] ?? state ?? '';
+}
+// 결과판 머리 짧은 상태 글(순수, 2026-11-23 사용자 — 글 간략하게) · 전체 글은 툴팁(simStateText)
+export function simShortState(state, reason = '', stopped = false, busy = false) {
+  if (busy) return '최적화 중 · 일시정지';
+  if (state === 'error') return '계산 실패';
+  if (state === 'done') return { converged: '완료', adopted: '완료 · 최적화 값', restored: '완료 · 저장된 결과', judgeLimit: '멈춤 · 5분 한도' }[reason] ?? '한도 도달';
+  return { running: '계산 중', paused: stopped ? '중지됨' : '일시정지', pending: '대기', starting: '장면 준비', idle: '계산 전' }[state] ?? '';
 }
 // 메인 화면 ④ 카드 상태 글(순수, 2026-11-17 사용자: 진행 % 가 안 보임 — 아래 진행 줄은 2026-11-13 숨김) — 계산 중·일시정지면 진행 % 를 붙임
 export function simCardText(state, pct, reason = '', stopped = false, busy = false, error = '') {
@@ -514,7 +530,7 @@ export function createSimDash(el, { onCtl = null, bar = null, plots = null, path
     if (bar && !el.querySelector('.od-simh')) {   // 상태줄 모드: 카드 = 제목 + 접는 칸
       let open = false; try { open = localStorage.getItem('uds.m3.simPlots') === '1'; } catch {}
       el.innerHTML = `<div class="od-h od-simh"><i class="m3-fl" data-s="step">4</i>${plots ? '시뮬레이션 결과' : '광분포 시뮬레이션'}<span class="m3-ad-sp"></span><span class="mut od-simst" data-s="st"></span></div>
-        <div class="od-bar od-cardbar off" data-s="cbar" title="계산 오차가 목표에 닿으면 100%"><i></i></div>${plots ? `
+        <div class="od-bar od-cardbar off" data-s="cbar" title="계산 오차가 목표에 닿으면 100%"><i></i></div>${plots ? `<div class="od-pline" data-s="pline"></div>
         <details class="od-diag" data-s="diag" hidden><summary data-s="diagh"></summary><div data-s="diagb"></div></details>` : `
         <details class="od-more od-plots"${open ? ' open' : ''}><summary title="계산 오차(목표 점선까지 내려가면 계산 끝) · 길이·폭 균일도가 광선 수에 따라 어떻게 변했는지">계산 추이</summary><div class="od-simbox"><div class="od-simplot" data-s="svg"></div></div></details>
         <details class="od-diag" data-s="diag" hidden><summary data-s="diagh"></summary><div data-s="diagb"></div></details>
@@ -534,8 +550,12 @@ export function createSimDash(el, { onCtl = null, bar = null, plots = null, path
         <details class="od-more"><summary><span data-s="sum">광경로</span></summary><div data-s="paths"></div></details>`;
     }
     const set = (k, html) => { const n = Q(`[data-s="${k}"]`); if (n && n.innerHTML !== html) n.innerHTML = html; };
-    set('st', esc(bar ? cTxt : sTxt));   // 메인 화면 카드 = 진행 % 포함(아래 진행 줄은 숨김, 2026-11-17)
-    { const n = el.querySelector('[data-s="st"]'); if (n) n.title = n.textContent; }
+    set('st', esc(bar ? (plots ? simShortState(state, reason, stopped, busy) : cTxt) : sTxt));   // 보드 카드 = 상태만(진행 %·대칭은 아래 진행 한 줄·툴팁, 2026-11-23) · 그 밖 = 진행 % 포함
+    { const n = el.querySelector('[data-s="st"]'); if (n) n.title = [simStateText(state, reason, stopped, busy, err), symNote(sym)].filter(Boolean).join(' · '); }
+    { const n = el.querySelector('[data-s="pline"]'); if (n) {   // 진행 한 줄 — 진행률 · 오차 → 목표 · 경과 · 남은 시간(2026-11-23 사용자)
+      const t0 = H[0]?.t, now = state === 'running' ? performance.now() : last?.t, el2 = reason === 'restored' || !Number.isFinite(t0) ? NaN : (now - t0) / 1000;
+      const t = simProgLine({ state, pct, noise: last?.noise, tgt, elapsedSec: el2, etaSec: state === 'running' ? etaCore(H, tgt, capMs)?.sec : null });
+      if (n.textContent !== t) n.textContent = t; n.title = [t, symNote(sym), row].filter(Boolean).join(' · '); } }
     { const cb = el.querySelector('[data-s="cbar"]'); if (cb) { cb.classList.toggle('off', !(state === 'running' || state === 'paused') || busy); cb.firstElementChild.style.width = `${pctT}%`; } }   // 좁은 칸에서 … 로 잘려도 전체 문구를 볼 수 있게
     setStepMark(el.querySelector('[data-s="step"]'), 4, state === 'done');
     setCtl((bar ?? el).querySelector('[data-sim-ctl]'), simCtl({ state, stopped }, busy), (k) => onCtl?.(k));

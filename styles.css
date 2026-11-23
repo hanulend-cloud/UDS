@@ -838,8 +838,8 @@ body.booting::after { content: "불러오는 중…"; position: fixed; left: 50%
 #mech3d-wrap { --m3-shell: #eceff4; --m3-panel: #fff; --m3-edge: #cdd3dd; --m3-head: #f3f5f9; --m3-headtx: #3b4658; --m3-simbg: #f8fafc; }
 #mech3d-wrap[data-theme="dark"] { --m3-shell: #0f141d; --m3-panel: #161c28; --m3-edge: #2f3a4d; --m3-head: #1f2736; --m3-headtx: #c9d1de; --m3-simbg: #1a2130; }
 @media (min-width: 1025px) {
-  .m3-main { gap: 8px; padding: 8px; background: var(--m3-shell); }
-  .m3-split-l { left: calc(var(--m3-l, 260px) + 8px); } .m3-split-r { right: calc(var(--m3-r, 430px) + 8px); }   /* 창 사이 틈에 — 스크롤바와 겹치지 않게 */
+  .m3-main { gap: 4px; padding: 4px; background: var(--m3-shell); }
+  .m3-split-l { left: calc(var(--m3-l, 260px) + 4px); } .m3-split-r { right: calc(var(--m3-r, 430px) + 4px); }   /* 창 사이 틈에 — 스크롤바와 겹치지 않게 */
   .m3-left, .m3-vp, .m3-right { border: 1px solid var(--m3-edge); border-radius: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(16,24,40,.07); }
   .m3-left, .m3-right { background: var(--m3-panel); }
   .m3-left { border-right: 1px solid var(--m3-edge); }
@@ -1710,3 +1710,34 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .m3-fpaths { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46vw; display: block; }
 .m3-fpaths > b { color: var(--m3-mut); font-weight: 600; margin-right: 4px; }
 .m3-simplots:not(:has(.od-pathbox)) { grid-template-columns: minmax(0, 1fr); }
+/* 2026-11-23 사용자: 결과판 단순화 — 상단 띠 = 단계 ①~⑤ + 늘 보는 값(균일도·광량·광효율) · 상태 줄 1줄 고정(깜빡임) · 진행 한 줄 · 가장자리 여백 최소 */
+.m3-cmdrow { display: flex; align-items: center; gap: 4px; min-width: 0; border-bottom: 1px solid var(--m3-line); }
+.m3-cmdrow { flex-wrap: wrap; }
+.m3-cmdrow > .m3-cmd { flex: 1 0 auto; max-width: 100%; border-bottom: 0; padding-left: 6px; padding-right: 4px; }   /* 자리가 모자라면 결과 칸이 다음 줄로 — 단계 칸이 가려지지 않게 */
+.m3-kpi { flex: none; display: flex; align-items: center; margin: 3px 4px 3px auto; padding: 3px; border: 1px solid var(--m3-acc); border-radius: 8px; background: var(--m3-acc); }   /* 결과 요약 영역 — 단계 칸과 다른 바탕색(2026-11-23 사용자: 제목 대신 바탕색으로 구분) */
+.m3-kpi:not(:has(.m3-sum)) { display: none; }
+.m3-dash.no-trend { flex: none !important; }
+.m3-dash.no-trend > .m3-simplots { display: none; }
+.m3-kpi .m3-sum { display: flex; gap: 3px; }
+.m3-kpi .m3-sum > div { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; min-height: 36px; box-sizing: border-box; padding: 4px 10px; border-radius: 6px; white-space: nowrap; cursor: default; }
+.m3-kpi .m3-sum .l { font-size: 12px; font-weight: 600; }
+.m3-kpi .m3-sum .v, .m3-kpi .m3-sum-u .v, .m3-kpi .m3-sum-c .v { font-size: 16px; font-weight: 700; line-height: 1.2; }
+.m3-kpi .m3-sum .s, .m3-kpi .m3-sum .m3-gauge { display: none; }
+.m3-kpi .m3-sum-x { padding: 0 !important; }
+.m3-kpi .m3-sum-x:not(:has(:not([hidden]))) { display: none; }
+.m3-simcard .od-simh { flex-wrap: nowrap; overflow: hidden; }
+.m3-simcard .od-simst { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; font-weight: 400; }
+.m3-simcard .od-pline { height: 18px; line-height: 18px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--m3-mut); font-variant-numeric: tabular-nums; }
+main:has(#mech3d-wrap:not([hidden])) { padding: 4px; gap: 4px; }
+@media (max-width: 1440px) { .m3-kpi .m3-sum .l { font-size: 0; } .m3-kpi .m3-sum .l::before { content: attr(data-short); font-size: 12px; } .m3-kpi .m3-sum > div { padding: 4px 8px; } }   /* 좁으면 짧은 이름(전체 이름은 툴팁) */
+
+/* 결과 요약 영역 배색 B(2026-11-23 사용자 선택: 네이비 + 시안, 굵은 글씨)
+   광량·효율 = 네이비 칸·시안 글씨 / 길이·폭 = 판정 색 칸(미달 빨강 · 통과 초록 · 근처 주황), 판정 전엔 광량·효율과 같은 칸 */
+#mech3d-wrap .m3-kpi, #mech3d-wrap[data-theme="dark"] .m3-kpi { background: #0b1d3a; border: 1px solid #00d4ff; padding: 3px; }
+#mech3d-wrap .m3-kpi .m3-sum .l, #mech3d-wrap .m3-kpi .m3-sum .v { font-weight: 800; text-shadow: none; }
+#mech3d-wrap .m3-kpi .m3-sum > div:not(.m3-sum-x) { background: #0b1d3a; border: 1px solid #00b8e6; }
+#mech3d-wrap .m3-kpi .m3-sum .l, #mech3d-wrap .m3-kpi .m3-sum .v { color: #00e5ff; }
+#mech3d-wrap .m3-kpi .m3-sum-u:has(> .v.bad) { background: #ff2e55; border-color: #ff2e55; }
+#mech3d-wrap .m3-kpi .m3-sum-u:has(> .v.ok) { background: #00a862; border-color: #00a862; }
+#mech3d-wrap .m3-kpi .m3-sum-u:has(> .v.near), #mech3d-wrap .m3-kpi .m3-sum-u:has(> .v.busy) { background: #e08600; border-color: #e08600; }
+#mech3d-wrap .m3-kpi .m3-sum-u:has(> .v.bad) :is(.l, .v), #mech3d-wrap .m3-kpi .m3-sum-u:has(> .v.ok) :is(.l, .v), #mech3d-wrap .m3-kpi .m3-sum-u:has(> .v.near) :is(.l, .v), #mech3d-wrap .m3-kpi .m3-sum-u:has(> .v.busy) :is(.l, .v) { color: #fff; }
