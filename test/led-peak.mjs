@@ -27,7 +27,8 @@ function ringSolid(r0, r1, z0, z1, n = 256) {
 
 const table = loadTable(), white = { kind: 'whiteDiffuse', R: 0.85 }, d2 = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]);
 const pcbPart = setPartFinish(defaultPart(1, 'pcb', 1), null, { kind: 'whiteDiffuse', R: 0.3 });
-const diffuser = (edges) => edges.reduce((p, f) => setPartFinish(p, f, white), setPartMaterialParam(setPartMaterial(defaultPart(0, 'diffuser', 1), 'milky'), 'milky', 3));
+const diffuser = (edges, milky = 3) => edges.reduce((p, f) => setPartFinish(p, f, white), setPartMaterialParam(setPartMaterial(defaultPart(0, 'diffuser', 1), 'milky'), 'milky', milky));
+const slow = process.argv.includes('--slow');   // npm run test:peak-slow — 두 줄 일관성을 실제 설계 Milky 7.65 로(약 5분)
 
 // 한 경우: 장면 → 실제 계산 경로(runJob → tallyStats 지도) → LED 마다 최고점 → 3D 거리
 function check(name, meshes, edges, emitters, labels, lineOk) {
@@ -65,21 +66,21 @@ function check(name, meshes, edges, emitters, labels, lineOk) {
   ok(r.ledger.lost === 0, `${name}: 잃은 광선 없음`);
 }
 
-{ // 링: 각도·반경으로 직접 놓음(라인 좌표계와 무관) — 반경 14·16·18 = 안쪽 가장자리에서 2·4·6 mm, 이음매(0°) 근처 하나
+if (!slow) { // 링: 각도·반경으로 직접 놓음(라인 좌표계와 무관) — 반경 14·16·18 = 안쪽 가장자리에서 2·4·6 mm, 이음매(0°) 근처 하나
   const deg = [3, 47, 92, 140, 181, 226, 272, 318], rad = [14, 18, 16, 14, 18, 16, 14, 18];
   const em = deg.map((d, k) => { const a = (d * Math.PI) / 180; return { pos: [rad[k] * Math.cos(a), rad[k] * Math.sin(a), 0.5], axis: [0, 0, 1], xAxis: [-Math.sin(a), Math.cos(a), 0] }; });
   check('링', [ringSolid(12, 20, 4, 6), boxMesh(-25, -25, -1, 50, 50, 1)], [0, 3], em, deg.map((d, k) => `${d}°, r${rad[k]}`), (l) => l.closed && Math.abs(l.length - 2 * Math.PI * 16) < 1);
 }
-{ // 직선 띠 100×8(상자 면 2·3 = 긴 옆면, 4·5 = 끝면 → 모두 백색) — y 2·4·6 = 한쪽 가장자리에서 2·4·6 mm, 끝(x 0)에서 5 mm 인 LED 하나
+if (!slow) { // 직선 띠 100×8(상자 면 2·3 = 긴 옆면, 4·5 = 끝면 → 모두 백색) — y 2·4·6 = 한쪽 가장자리에서 2·4·6 mm, 끝(x 0)에서 5 mm 인 LED 하나
   const xs = [5, 17, 30, 42, 55, 68, 80, 93], ys = [2, 6, 4, 2, 6, 4, 2, 6];
   const em = xs.map((x, k) => ({ pos: [x, ys[k], 0.5], axis: [0, 0, 1], xAxis: [1, 0, 0] }));
   check('직선 띠', [boxMesh(0, 0, 4, 100, 8, 2), boxMesh(-5, -5, -1, 110, 18, 1)], [2, 3, 4, 5], em, xs.map((x, k) => `x${x}, y${ys[k]}`), (l) => l.kind === 'line' && Math.abs(l.length - 100) < 0.6);
 }
-{ // 두 줄 일관성(2026-11-23): 4.2 mm 간격 두 줄은 빛이 겹쳐 최고점이 줄 사이로 1.2–1.7 mm 끌림(물리) — 최고점 대신
+function twoRows(milky) { // 두 줄 일관성(2026-11-23): 4.2 mm 간격 두 줄은 빛이 겹쳐 최고점이 줄 사이로 1.2–1.7 mm 끌림(물리) — 최고점 대신
   // "두 줄 함께 계산한 지도 = 한 줄씩 계산해 더한 지도"(빛의 선형성)를 확인. LED 수에 따라 광량·경로가 달라지면 깨짐
-  const meshes = [boxMesh(0, 0, 4, 100, 8, 2), boxMesh(-5, -5, -1, 110, 18, 1)], name = '두 줄';
+  const meshes = [boxMesh(0, 0, 4, 100, 8, 2), boxMesh(-5, -5, -1, 110, 18, 1)], name = `두 줄 Milky ${milky}`;
   setMech3dMesh(name, meshes);
-  const S = buildTraceScene(getMech3d(), { name, parts: [diffuser([2, 3, 4, 5]), pcbPart], contacts: [] }, { table });
+  const S = buildTraceScene(getMech3d(), { name, parts: [diffuser([2, 3, 4, 5], milky), pcbPart], contacts: [] }, { table });
   const faces = [{ part: 0, face: 1 }], line = recognizeLine(meshes, faces, [0, 0, 1]);
   const obs = { faces, dir: [0, 0, 1], cone: 90, edgeExcl: 0.5, targetLen: 0.8, targetWid: 0.8, cellS: 0.5, cellW: 0.5 }, G = tallyGeometry(line, obs);
   const em = (pts) => pts.map(([x, y]) => ({ pos: [x, y, 0.5], axis: [0, 0, 1], xAxis: [1, 0, 0] }));
@@ -88,12 +89,14 @@ function check(name, meshes, edges, emitters, labels, lineOk) {
   const t0 = Date.now(), mA = map(A, N, 7), mB = map(B, N, 9), mAB = map([...A, ...B], 2 * N, 11), sum = mA.map((v, k) => v + mB[k]);
   const tot = (m) => m.reduce((a, v, k) => a + (G.valid[k] ? v : 0), 0), ratio = tot(mAB) / tot(sum);
   // 폭 방향 단면(길이 전체 합)·길이 방향 단면(2 mm 묶음, 폭 전체 합) — 칸 하나보다 노이즈가 작아 비교 가능
-  const prof = (m, byW) => { const out = new Map(); for (let i = 0; i < G.ns; i++) for (let j = 0; j < G.nw; j++) { const k = i * G.nw + j; if (!G.valid[k]) continue; const b = byW ? j : Math.floor((i * G.ds) / 2); out.set(b, (out.get(b) ?? 0) + m[k]); } return out; };
+  const prof = (m, byW) => { const out = new Map(); for (let i = 0; i < G.ns; i++) for (let j = 0; j < G.nw; j++) { const k = i * G.nw + j; if (!G.valid[k]) continue; const b = byW ? j : Math.floor((i * G.ds) / bin); out.set(b, (out.get(b) ?? 0) + m[k]); } return out; };
   const worst = (byW) => { const p = prof(mAB, byW), q = prof(sum, byW), mean = [...q.values()].reduce((a, v) => a + v, 0) / q.size; return Math.max(...[...q.keys()].map((b) => Math.abs(p.get(b) - q.get(b)) / mean)); };
+  const bin = milky > 5 ? 4 : 2;   // 길이 방향 묶음 mm — Milky 7.65 는 칸 노이즈가 커 2 mm 묶음이 기준 6%에 붙음(5.89%) → 4 mm
   const dw = worst(true), ds = worst(false);
   console.log(`  계산 ${((Date.now() - t0) / 1000).toFixed(1)}s, 두 줄/합 광량 ${ratio.toFixed(4)}, 폭 단면 최대 차 ${(100 * dw).toFixed(2)}%, 길이 단면 최대 차 ${(100 * ds).toFixed(2)}%`);
   ok(Math.abs(ratio - 1) <= 0.01, `${name}: 함께 계산한 광량 = 한 줄씩 더한 광량(±1%): ${ratio.toFixed(4)}`);
   ok(dw <= 0.03, `${name}: 폭 방향 단면이 한 줄씩 더한 것과 같음(평균의 3% 안): 최대 ${(100 * dw).toFixed(2)}%`);
-  ok(ds <= 0.06, `${name}: 길이 방향 단면(2 mm 묶음)이 한 줄씩 더한 것과 같음(평균의 6% 안): 최대 ${(100 * ds).toFixed(2)}%`);
+  ok(ds <= 0.06, `${name}: 길이 방향 단면(${bin} mm 묶음)이 한 줄씩 더한 것과 같음(평균의 6% 안): 최대 ${(100 * ds).toFixed(2)}%`);
 }
+twoRows(slow ? 7.65 : 3);
 done();
