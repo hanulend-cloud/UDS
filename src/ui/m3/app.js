@@ -2014,7 +2014,7 @@ function downloadText(name, text, type) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); URL.revokeObjectURL(a.href);
 }
-// 확산 모델 (Mie) 창(개발자 메뉴) — 보기 전용. 부품 두께 = 메시 외곽 크기의 최솟값(부품 속성 요약과 같은 근사)
+// 확산 모델 (Mie) 창(설정 메뉴 맨 아래) — 보기 전용. 부품 두께 = 메시 외곽 크기의 최솟값(부품 속성 요약과 같은 근사)
 function diffusionCtx() {
   const db = A.ctx.materialDb?.(), parts = A.store.mspec.parts;
   return { table: A.ctx.l2Table?.(), dbList: db?.list() ?? [], parts, dbGet: (id) => db?.get(id) ?? null,
@@ -2026,7 +2026,7 @@ export function openDiffusionModel() { if (A) openDiffusionModelDlg(diffusionCtx
 const MDB_TABS = [['milky', '확산 (Milky · BSDF)'], ['clear', '투명 (굴절률·투과율)'], ['refl', '반사 (반사율)']];
 export function openMaterialDb(tab = 'milky') {
   if (!A) return;
-  if (!isAdmin()) { setStatus('소재 DB 관리는 관리자 모드에서 — 개발자 > 관리자 모드'); return; }
+  if (!isAdmin()) { setStatus('소재 DB 관리는 관리자 모드에서 — 설정 > 관리자 모드'); return; }
   const ctx = A.ctx, h = propHandlers();
   document.querySelector('.m3-matdb')?.remove();
   const dlg = document.createElement('div');

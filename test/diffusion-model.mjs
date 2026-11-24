@@ -50,13 +50,18 @@ const table = loadTable();
 {
   const main = fs.readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
   const block = (label) => { const i = main.indexOf(`{ label: '${label}', items: [`); return i < 0 ? '' : main.slice(i, main.indexOf('] },', i)); };
-  const dev = block('개발자'), set = block('설정');
-  ok(dev.includes("id: 'admin'") && dev.includes("id: 'mat-db'") && dev.includes("id: 'mie-model'"), '개발자 메뉴 = 관리자 모드 · 소재 DB 관리 · 확산 모델');
-  ok(!set.includes("id: 'admin'") && !set.includes("id: 'mat-db'"), '설정 메뉴에서는 빠짐');
-  ok(main.indexOf("label: '개발자'") > main.indexOf("label: '설정'") && main.indexOf("label: '개발자'") < main.indexOf("label: '도움말'"), '메뉴 순서: 설정 → 개발자 → 도움말');
-  ok(main.includes("if (id === 'mie-model') return m3app.openDiffusionModel();"), 'mie-model 실행 연결');
+  // 2026-11-24 사용자: 상단 메뉴 단순화 — 개발자 메뉴를 설정 맨 아래로 합침(7 → 6개), 관리자 항목은 관리자 모드에서만, 긴 이름 = 툴팁
+  const set = block('설정'), file = block('파일');
+  ok(!main.includes("label: '개발자'") && set.includes("id: 'admin'") && set.includes("id: 'mat-db'") && set.includes("id: 'mie-model'"), '개발자 메뉴 → 설정 맨 아래(관리자 모드 · 소재 DB 관리 · 확산 모델)');
+  ok(/id: 'mat-db'[^}]*hidden: \(\) => !isAdmin\(\)/.test(set) && /id: 'mat-export'[^}]*hidden: \(\) => !isAdmin\(\)/.test(file) && /id: 'mat-import'[^}]*hidden: \(\) => !isAdmin\(\)/.test(file), '관리자 항목 = 관리자 모드에서만 보임');
+  const labels = [...main.matchAll(/\{ id: '[^']+', label: '([^']+)'/g)].map((m) => m[1]);
+  ok(labels.length > 30 && labels.every((l) => !/ — |\(.*\)\s*…?$/.test(l) || /\((XY|XZ|YZ)\)$/.test(l)), `메뉴 이름에 괄호·대시 설명 없음(평면 XY 등 축 표시는 남김): ${labels.filter((l) => / — |\(.*\)\s*…?$/.test(l)).join(' | ')}`);
+  ok(/id: 'sym', label: '대칭 영역 검토', tip: '[^']*최종 판정은 전체 영역/.test(set), '설명은 툴팁(tip)으로');
+  const { menuHtml } = await import('../src/ui/menubar.js');
+  const mh = menuHtml([{ label: 'A', items: [{ id: 'a', label: 'a', tip: '설명' }, '-', { id: 'b', label: 'b', hidden: () => true }, '-', { id: 'c', label: 'c' }, '-', { id: 'd', label: 'd', hidden: () => true }] }], 0);
+  ok(/data-cmd="a" title="설명"/.test(mh) && (mh.match(/mb-sep/g) ?? []).length === 1, `툴팁 · 숨긴 항목 사이 구분선은 하나만, 끝 구분선 없음: ${(mh.match(/mb-sep/g) ?? []).length}`);
   const app = fs.readFileSync(new URL('../src/ui/m3/app.js', import.meta.url), 'utf8');
-  ok(!app.includes('설정 > 관리자 모드') && app.includes('개발자 > 관리자 모드') && app.includes('export function openDiffusionModel('), '안내 문구 = 개발자 > 관리자 모드 · 창 열기 export');
+  ok(!app.includes('개발자 > 관리자 모드') && app.includes('설정 > 관리자 모드') && app.includes('export function openDiffusionModel('), '안내 문구 = 설정 > 관리자 모드 · 창 열기 export');
 }
 {
   const rows = milkyMapRows(table, 'PC'), h = mapTableHtml(rows);

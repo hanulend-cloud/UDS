@@ -1,4 +1,4 @@
-// 확산 모델 (Mie) 창 — 개발자 메뉴(spec 2026-11-20 §4, 2단계 a). 보기 전용: 기본 비드 · Milky 대응표 · 각분포 · 신뢰 표시.
+// 확산 모델 (Mie) 창 — 설정 메뉴 맨 아래(spec 2026-11-20 §4, 2단계 a). 보기 전용: 기본 비드 · Milky 대응표 · 각분포 · 신뢰 표시.
 // HTML 조립 함수는 DOM 없이(node 테스트), openDiffusionModelDlg 만 DOM.
 import { milkyMapRows, presetSummary, phaseCurve, transmitCurve, MAP_T } from '../../model/diffusion-model.js';
 import { MIE_PRESETS } from '../../engine/l2/mie-preset.js';
