@@ -4,13 +4,32 @@ import { CLEAR_BASE, materialN, clearT } from './materials.js';
 
 const pc = (v) => `${Math.round(v * 1000) / 10}%`;
 // 고르기 목록(종류별 묶음). src = { milky: 실측 DB 목록, clear: 사용자 투명 측정 목록, refl: 반사 소재표(catalogOf) }
-export function materialGroups({ milky = [], clear = [], refl = [] } = {}) {
+// 기본(2026-11-24 사용자) = 대표 소재 6개(짧은 이름) + '기타 소재…'. all = 전체(실측·반투과·금속 등 확장 목록). keep = 지금 부품 소재 — 기본 목록에 없어도 보임
+export const MORE_ID = '__more';
+const MAIN = [
+  { label: '확산', items: [['milky', 'Milky']] },
+  { label: '투명', items: [['clear:PC', 'PC'], ['clear:PMMA', 'PMMA']] },
+  { label: '불투명', items: [['opaque:abs-white', 'White'], ['opaque:abs-gray', 'Gray'], ['opaque:abs-black', 'Black']] },
+];
+function allGroups({ milky = [], clear = [], refl = [] } = {}) {
   return [
     { label: '확산 (Milky) — 확산 정도는 아래 칸', items: [{ id: 'milky', name: '일반 Milky (추상)' }, ...milky.map((e) => ({ id: `milky:${e.id}`, name: e.name }))] },
     { label: '투명', items: [...CLEAR_BASE.map((e) => ({ id: `clear:${e.id}`, name: e.name })), ...clear.map((e) => ({ id: `clear:${e.id}`, name: `${e.name} (측정)` }))] },
     { label: '반투과', items: [{ id: 'wt', name: '반투과 백색' }] },
     { label: '불투명 (반사)', items: [...refl.filter((e) => !e.special).map((e) => ({ id: `opaque:${e.id}`, name: e.name })), { id: 'opaque', name: '불투명 (소재 미지정)' }] },
   ];
+}
+export function materialGroups(src = {}, { all = false, keep = '' } = {}) {
+  const full = allGroups(src);
+  if (all) return full;
+  const known = new Set(full.flatMap((g) => g.items.map((it) => it.id)));
+  const G = MAIN.map((g) => ({ label: g.label, items: g.items.filter(([id]) => known.has(id)).map(([id, name]) => ({ id, name })) }));
+  if (keep && known.has(keep) && !G.some((g) => g.items.some((it) => it.id === keep))) {
+    const it = full.flatMap((g) => g.items).find((x) => x.id === keep);
+    if (keep === 'wt') G.splice(2, 0, { label: '반투과', items: [it] });
+    else G[keep.startsWith('milky') ? 0 : keep.startsWith('clear:') ? 1 : 2].items.push(it);
+  }
+  return [...G.filter((g) => g.items.length), { label: '기타', items: [{ id: MORE_ID, name: '기타 소재…' }] }];
 }
 // 지금 부품의 선택 id
 export function pickOf(part) {

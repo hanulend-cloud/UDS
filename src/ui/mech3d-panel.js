@@ -5,7 +5,9 @@ import { bounds, meshVolume } from '../engine/mech3d/mesh.js';
 import { DEFAULT_FINISH_CATALOG, finishLimit } from '../engine/mech3d/housing-led.js';
 import { MEAS_CONDS, reflStatusText, REFLECT_KINDS } from '../model/reflect-db.js';
 import { readMeasTxt, measTxtSummary } from '../engine/meas-txt.js';
-import { materialGroups, pickOf, materialSummary } from '../engine/mech3d/material-pick.js';
+import { materialGroups, pickOf, materialSummary, MORE_ID } from '../engine/mech3d/material-pick.js';
+// 소재 목록 확장(기타 소재…) — 고르면 다시 기본 목록으로
+let MAT_ALL = false;
 import { weightHtml, wireWeight, weightSpd } from '../model/led-spectrum.js';
 
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
@@ -34,6 +36,14 @@ function finishRow(f, scope, allowInherit, lim = null, material = null) {
   return `<div class="m3-row"><label>${scope === 'face' ? '이 면' : '부품 전체'}</label><select data-m3-finish="${scope}" aria-label="${scope === 'face' ? '선택한 면' : '부품 기본'} 면 처리 종류">
       ${allowInherit ? `<option value="" ${f ? '' : 'selected'}>부품 기본 따름</option>` : ''}${opts(kinds, f?.kind)}</select>
     ${k?.hasR ? `반사율 <input type="number" min="0" max="100" step="1" value="${esc(pct(f.R))}" data-m3-finishr="${scope}" aria-label="반사율 %">%${limTxt}` : f?.kind === 'gloss' && material?.kind !== 'opaque' ? '<span class="mut" title="굴절률로 투과·반사 비율이 정해짐">굴절률로 정함</span>' : ''}</div>`;
+}
+
+// 반사 소재를 고른 불투명 부품의 표면 상태(2026-11-24 사용자) — 표면 종류는 소재가 정하고, 반사율만 여기서 바꿈(소재 상한까지)
+function reflRRow(f, lim) {
+  const k = f ? FINISH_KINDS[f.kind] : null;
+  if (!k?.hasR) return '<div class="m3-row"><label>부품 전체</label><span class="mut" title="표면 종류는 반사 소재가 정함">소재가 정함</span></div>';
+  const mx = lim && f.kind === lim.kind ? pct(lim.max) : 100;
+  return `<div class="m3-row"><label>반사율</label><input type="number" min="0" max="${esc(mx)}" step="0.1" value="${esc(pct(f.R))}" data-m3-finishr="part" aria-label="반사율 %"> % <span class="mut" title="표면 종류는 반사 소재가 정함 · 넘게 넣으면 상한으로 맞춤">최대 ${esc(mx)}%</span></div>`;
 }
 
 // 수지(바탕 소재) 고르기 — 굴절률을 함께 보임
@@ -77,12 +87,9 @@ export function materialPickHtml(p, groups) {
 // 기본 탭 소재(순수) — 기구 설계자: 소재 이름 하나 고르기(+ Milky 면 확산 정도) · 들어간 물성 한 줄(읽기 전용).
 // 측정값 입력·피팅·DB 편집은 '소재 DB 관리'(관리자 모드) 창에서. 관리자 모드면 아래에 숫자 물성 칸(미세 조정)도 보임
 function basicMaterialHtml(p, dbList, catalog, sel = {}) {
-  const mat = p.material, groups = materialGroups({ milky: dbList, clear: sel.clearList ?? [], refl: catalog });
+  const mat = p.material, groups = materialGroups({ milky: dbList, clear: sel.clearList ?? [], refl: catalog }, { all: MAT_ALL, keep: pickOf(p) });
   const milky = mat.kind === 'milky' ? `<div class="m3-row"><label>확산 정도</label><input type="number" min="0" max="10" step="0.1" value="${esc(mat.milky)}" data-m3-mat="milky" aria-label="Milky 값"> <span class="mut" title="Milky 0 = 투명 · 높을수록 빛이 고르게 퍼지지만 어두워짐">${+mat.milky > 0 ? '0 = 투명' : '<b>지금 투명</b>'}</span></div>` : '';
-  // 반사율 조정 확산 반사면 — 이 소재만 관리자가 아니어도 반사율을 직접 정함
-  const adj = mat.kind === 'opaque' ? catalog.find((e) => e.id === p.reflMaterial && e.adjustable) : null;
-  const adjR = adj && p.finish?.R != null ? `<div class="m3-row"><label>반사율</label><input type="number" min="0" max="${esc(pct(adj.max))}" step="0.1" value="${esc(pct(p.finish.R))}" data-m3-finishr="part" aria-label="반사율 %"> % <span class="mut">0~${esc(pct(adj.max))}%</span></div>` : '';
-  return `<div class="m3-sub">소재</div><div class="m3-row"><label>소재 이름</label>${materialPickHtml(p, groups)}</div>${milky}${adjR}
+  return `<div class="m3-sub">소재</div><div class="m3-row"><label>소재 이름</label>${materialPickHtml(p, groups)}</div>${milky}
     <div class="m3-row mut m3-matsum">${esc(materialSummary(p, { milky: dbList, refl: catalog, thick: sel?.meshInfo?.size ? Math.min(...sel.meshInfo.size) : null }))}</div>
     ${sel.admin ? `<div class="m3-admin"><div class="m3-sub">관리자 · 물성 직접 조정</div>${adminMaterialHtml(p, catalog)}</div>` : ''}`;
 }
@@ -95,9 +102,8 @@ function adminMaterialHtml(p, catalog) {
     case 'whiteTrans':
       return `<div class="m3-row"><label>투과율</label><input type="number" min="1" max="100" step="0.1" value="${esc(pct(mat.T))}" data-m3-mat="T" aria-label="투과율 %">% <span class="mut">두께</span><input type="number" min="0.1" step="0.1" value="${esc(mat.tRef)}" data-m3-mat="tRef" aria-label="투과율을 잰 두께 mm"> mm</div>${mat.kind === 'whiteTrans' ? `<div class="m3-row"><label>수지</label>${resinSel(mat.resin)}</div>` : ''}`;
     case 'opaque': {
-      const f = p.finish, fk = f ? FINISH_KINDS[f.kind] : null, lim = finishLimit(p, catalog);
-      if (lim?.entry.adjustable) return '<div class="mut">반사율은 위 소재 칸에서 조정</div>';
-      return fk?.hasR ? `<div class="m3-row"><label>반사율</label><input type="number" min="0" max="100" step="1" value="${esc(pct(f.R))}" data-m3-finishr="part" aria-label="반사율 %">%${lim && f.kind === lim.kind ? ` <span class="mut">상한 ${pct(lim.max)}%</span>` : ''}</div>` : `<div class="mut">${esc(fk?.label ?? '')} — 반사율 없음</div>`;
+      const fk = p.finish ? FINISH_KINDS[p.finish.kind] : null;
+      return fk?.hasR ? '<div class="mut">반사율은 아래 표면 상태에서 조정</div>' : `<div class="mut">${esc(fk?.label ?? '')} — 반사율 없음</div>`;
     }
     default: return '';
   }
@@ -190,7 +196,7 @@ function partEditor(p, sel, dbList) {
   const face = sel.face, cat = sel.catalog ?? DEFAULT_FINISH_CATALOG, lim = finishLimit(p, cat), opaque = p.material.kind === 'opaque', tab = PART_TAB;
   // 면 처리(상세): 불투명 + 반사 소재 지정 → 종류는 소재가 정함 · 미지정 → 종류만 · 투과 부품 → 종류·반사율
   const partFin = !opaque ? finishRow(p.finish, 'part', false, lim, p.material)
-    : p.reflMaterial ? '<div class="m3-row"><label>부품 전체</label><span class="mut" title="표면 종류는 반사 소재가 정함">소재가 정함</span></div>' : `<div class="m3-row"><label>부품 전체</label><select data-m3-finish="part" aria-label="부품 기본 면 처리 종류">${opts(FINISH_KINDS, p.finish?.kind)}</select></div>`;
+    : p.reflMaterial ? reflRRow(p.finish, lim) : finishRow(p.finish, 'part', false, lim, p.material);   // 소재 미지정 = 종류 + 반사율(2026-11-24: 반사율은 표면 상태에서)
   const faceRow = face != null ? `<div class="m3-row"><span class="mut">선택한 면 #${face}${p.faceFinish[face] ? ' · 덮어씀' : ''}</span></div>${finishRow(p.faceFinish[face] ?? null, 'face', true, lim, p.material)}` : '';
   const nOver = Object.keys(p.faceFinish ?? {}).length;
   const dSum = p.shapeMod ? '형상 변경됨' : '';
@@ -303,7 +309,7 @@ export function renderPartProps(el, m, sel0, dbList, h) {
   el.querySelector('[data-m3-untrace]')?.addEventListener('change', (e) => h.onUntrace?.(i, e.target.checked));
   el.querySelector('[data-m3-pcbr]')?.addEventListener('change', (e) => h.onPartPcbR?.(i, e.target.value));
   const pk = el.querySelector('[data-m3-pick]');
-  if (pk) pk.onchange = () => { if (pk.value) h.onMatPick?.(i, pk.value); };
+  if (pk) pk.onchange = () => { if (pk.value === MORE_ID) { MAT_ALL = true; renderPartProps(el, m, sel0, dbList, h); el.querySelector('[data-m3-pick]')?.focus(); return; } MAT_ALL = false; if (pk.value) h.onMatPick?.(i, pk.value); };
   el.querySelectorAll('[data-m3-mat]').forEach((x) => {
     x.onchange = () => {
       const k = x.dataset.m3Mat;
