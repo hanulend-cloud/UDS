@@ -1767,3 +1767,11 @@ done();
   say(/#m3-pathslot:not\(:empty\)[^{]*\{[^}]*border-left:\s*1px solid var\(--m3-line\)/.test(css), '새는 빛 | 광경로 사이 얇은 세로선');
   say(/\.m3-stxt\s*\{[^}]*border-left:\s*1px solid var\(--m3-line\)/.test(css), '점검 | 알림 글 사이 얇은 세로선');
 }
+// 상태줄 얇게(2026-11-24 사용자: 너무 두꺼움) — 44px → 28px, 위아래 여백 축소
+{
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const { readFileSync } = await import('node:fs'), css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
+  const mh = +(css.match(/\.m3-foot\s*\{[^}]*min-height:\s*(\d+)px/)?.[1] ?? 99);
+  say(mh <= 28, `맨 아래 상태줄 높이 ≤ 28px: ${mh}`);
+  say(/\.m3-foot > \.m3-status\s*\{[^}]*padding:\s*[0-2]px 12px/.test(css), '상태줄 위아래 여백 ≤ 2px');
+}
