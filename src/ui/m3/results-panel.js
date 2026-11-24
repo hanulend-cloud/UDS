@@ -19,13 +19,13 @@ const fl1000 = (v) => Math.floor(v * 1000 + 1e-9);   // 0.1% 단위 내림 — �
 export const fmtU = fmtJudge;   // 균일도 = % 소수 한 자리(2026-11-08)
 const finiteMax = (a) => { let m = -Infinity; for (const v of a) if (Number.isFinite(v) && v > m) m = v; return m; };
 // 판정도 표시된(내림) 값끼리 비교한다 — 화면에 0.80 / 목표 0.80 인데 "미달"이 뜨는 일이 없게
-export function judgeText(v, tg, se = null, relNoise = null, preview = false) {
+export function judgeText(v, tg, se = null, relNoise = null, preview = false, running = false) {   // running = 계산 중 → '예상'(2026-11-24, 규칙은 그대로)
   if (!Number.isFinite(v)) return { cls: '', text: `목표 ${fmtTg(Math.floor(tg * 100 + 1e-9) / 100)}` };
   if (preview) return { cls: 'preview', text: `목표 ${fmtTg(Math.floor(tg * 100 + 1e-9) / 100)} · Quick — 판정 아님` };   // 광효율 1% 미만 자동 미리보기(2026-11-18)
   if (relNoise > 0.05) return { cls: 'busy', text: `목표 ${fmtTg(Math.floor(tg * 100 + 1e-9) / 100)} · 노이즈 큼 — 판정 보류(계산 중)` };   // 계산 초반(광선 수천 개) 값은 크게 흔들림 — 빨간 미달로 보이지 않게(2026-11-07)
   if (uVerdict(v, tg, se, relNoise) === 'near') return { cls: 'near', text: `목표 ${fmtTg(Math.floor(tg * 100 + 1e-9) / 100)} · 근처 (오차 ±${(uBand(v, se, relNoise) * 100).toFixed(1)}%p)` };
   const ok = Math.floor(v * 100 + 1e-9) >= Math.floor(tg * 100 + 1e-9), gap = Math.max(1, Math.floor(tg * 100 + 1e-9) * 10 - fl1000(v));   // 판정 규칙은 그대로(1% 단위 내림 비교) · 미달 폭은 0.1%p
-  return { cls: ok ? 'ok' : 'bad', text: `목표 ${fmtTg(Math.floor(tg * 100 + 1e-9) / 100)} · ${ok ? '합격' : `미달 −${(gap / 10).toFixed(1)}%p`}` };
+  return { cls: ok ? 'ok' : 'bad', text: `목표 ${fmtTg(Math.floor(tg * 100 + 1e-9) / 100)} · ${ok ? `합격${running ? ' 예상' : ''}` : `미달${running ? ' 예상' : ''} −${(gap / 10).toFixed(1)}%p`}` };
 }
 export { needText } from './progressive.js';
 // 판정 배지 옆 '다음 할 일' 단추(순수, 2026-11-12) — 판정을 본 그 자리에서 다음 단계로: 미달·근처 = ⑤ 기구 최적화 창, 통과 = 큰 창
@@ -36,14 +36,14 @@ export function nextAction(cls, optFrac = null) {
   return null;
 }
 // 결과 요약 카드 종합 판정 배지(순수, 2026-11-12) — 길이·폭 judgeText 를 그대로 묶음(판정 규칙·숫자 안 바뀜). 폭 판정 불가면 길이로만
-export function overallVerdict(st, O) {
+export function overallVerdict(st, O, running = false) {   // running = 계산 중 → '예상'
   if (!st || st.empty || !O) return { cls: '', text: '' };
   if (st.preview) return { cls: 'preview', text: 'Quick — 판정 아님' };
   const J = [judgeText(st.Ulen, O.targetLen, st.seLen, st.relNoise), ...(Number.isFinite(st.Uwid) ? [judgeText(st.Uwid, O.targetWid, st.seWid, st.relNoise)] : [])].map((j) => j.cls);
   if (J.includes('busy')) return { cls: 'busy', text: '… 판정 보류(계산 중)' };
-  if (J.includes('bad')) return { cls: 'bad', text: '✕ 목표 미달' };
+  if (J.includes('bad')) return { cls: 'bad', text: `✕ 목표 미달${running ? ' 예상' : ''}` };
   if (J.includes('near')) return { cls: 'near', text: '≈ 목표 근처' };
-  if (J.length && J.every((c) => c === 'ok')) return { cls: 'ok', text: '✓ 목표 통과' };
+  if (J.length && J.every((c) => c === 'ok')) return { cls: 'ok', text: `✓ 목표 통과${running ? ' 예상' : ''}` };
   return { cls: '', text: '' };
 }
 // 평균 광량 카드: 광속이 있으면 cd/m²(목표 대비), 없으면 상대값(길이 프로파일 평균/최대)
@@ -1027,7 +1027,7 @@ ${uTip(c.dataset.u, tipWinS)}` : ''); if (c.title !== t) c.title = t; } };   // 
   };
   const resetGauge = (g) => { g.querySelector('.f').style.width = '0%'; };
   const gauge = (key, v, tg, se, relNoise, pv = false) => {
-    const j = judgeText(v, tg, se, relNoise, pv);
+    const j = judgeText(v, tg, se, relNoise, pv, last?.snap?.state === 'running');
     q(key).textContent = fmtU(v); q(key).className = `v ${j.cls}`; q(`${key}j`).textContent = j.text;
     fill(q(`${key}g`), Number.isFinite(v) ? v * 100 : 0, pv ? null : j.cls === 'ok', tg * 100);
     q(`${key}g`).querySelector('.f').classList.toggle('near', j.cls === 'near');
@@ -1090,7 +1090,7 @@ ${uTip(c.dataset.u, tipWinS)}` : ''); if (c.title !== t) c.title = t; } };   // 
       gauge('uw', st.Uwid, observe.targetWid, st.seWid, st.relNoise, !!st.preview);
       q('wsub').title = `최저 창 s = ${st.sWorst.toFixed(1)} mm${pp ? ` · 지정 점 s = ${pin.s.toFixed(1)} mm(주황, ${rad} 방향)` : ''}`;
     }
-    { const V = overallVerdict(st, observe); q('verdict').textContent = V.text; q('verdict').className = `m3-verdict ${V.cls}`; vCls = V.cls; syncNext(); }   // 요약 카드 종합 판정(길이·폭 judgeText 그대로)
+    { const V = overallVerdict(st, observe, last?.snap?.state === 'running'); q('verdict').textContent = V.text; q('verdict').className = `m3-verdict ${V.cls}`; vCls = V.cls; syncNext(); }   // 요약 카드 종합 판정(길이·폭 judgeText 그대로)
     const lc = lumCard(st, snap.photometry, observe.targetLum, LUM_UNIT, VIEW.map?.meanFrac); { const t = LUM_UNIT === 'pct' ? '광량' : '휘도'; q('avgl').dataset.short = t; q('avgl').textContent = `평균 ${t}`; }
     q('avg').innerHTML = lc.value.replace(/ cd\/m²$/, '<small class="u"> cd/m²</small>'); q('avgs').textContent = lc.sub; q('avg').className = `v ${lc.pass == null ? '' : lc.pass ? 'ok' : 'bad'}${lc.assumed ? ' assumed' : ''}`;
     q('avgs').classList.toggle('m3-unit', lc.ratio == null); q('avg').title = lc.tip ?? `정면 ±10° 평균 휘도${lc.ratio == null ? ` · ${lc.sub}` : ''}`;   // 보드에서는 목표 없는 보조 줄(최대 대비)을 숨기고 툴팁으로(2026-11-22)

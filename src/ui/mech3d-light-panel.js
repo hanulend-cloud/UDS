@@ -1,4 +1,4 @@
-import { pcbNames, pcbAllOff } from '../engine/mech3d/materials.js';
+import { pcbNames, pcbAllOff, partNames } from '../engine/mech3d/materials.js';
 import { requiredFlux, needText, lumFor } from './m3/progressive.js';
 // 3D 기구 — 광원 · LED · 관측면 · 목표 속성 편집기 (spec 2026-10-14 §4·§5, 2026-10-15 m3-cad-ui §2). 상태 없음.
 // P3 의 renderLightPanel 을 피처 트리 노드별로 나눴다. 계산 버튼·결과 표시는 자동 점진 계산(결과 패널·상태 띠)으로 옮김.
@@ -206,7 +206,7 @@ function pcbDetailHtml(m, ui) {
 export function pcbPanelHtml(m, ui) {
   if (LP_TAB.pcb === 'detail') return `<div class="m3-h">PCB</div>${tabsHtml('pcb')}<div class="m3-edit" role="tabpanel">${pcbDetailHtml(m, ui)}</div>`;
   const L = m.light, names = pcbNames(m), wait = ui.pick === 'mpcb', st = L.kind === 'step' ? L.step : null;
-  const rows = (m.parts ?? []).map((p, i) => (p.role !== 'pcb' ? '' : `<div class="m3-row"><label>${esc(p.name)}</label><input type="number" min="0" max="100" step="1" value="${+(100 * (p.finish?.R ?? 0.3)).toFixed(1)}" data-m3-pcbr data-i="${i}" aria-label="${esc(p.name)} 반사율 %"> %</div>`)).join('');
+  const PN = partNames(m.parts ?? []), rows = (m.parts ?? []).map((p, i) => (p.role !== 'pcb' ? '' : `<div class="m3-row"><label>${esc(PN[i])}</label><input type="number" min="0" max="100" step="1" value="${+(100 * (p.finish?.R ?? 0.3)).toFixed(1)}" data-m3-pcbr data-i="${i}" aria-label="${esc(p.name)} 반사율 %"> %</div>`)).join('');
   const stepRow = st && !st.fromMech && st.pcb >= 0 ? pcbRRow(L, 'LED STEP PCB') : '';
   return `<div class="m3-h">PCB</div>${tabsHtml('pcb')}<div class="m3-edit" role="tabpanel"><div class="m3-card m3-untrace pcb"><div class="m3-sub">PCB 지정</div>
     <div class="m3-row">${pickBtn(ui, 'mpcb', wait ? '클릭 대기 중 — 끝내기' : 'PCB 수동 선택')}</div>

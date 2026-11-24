@@ -12,7 +12,7 @@ import { createHistory } from './history.js';
 import { mountSplit, mountColSplit } from './pane-split.js';
 import { findLeds, supportPart, emitterFaceAway, autoLedGroup, autoStepLeds, findPcbParts } from '../../engine/mech3d/led-detect.js';
 import { loadClear, saveClear, clearExportJson, clearImport, parseMaterialFile } from '../../model/material-io.js';
-import { setPartMaterial, setPartMaterialParam, syncPcb, setPcbOff, pcbAllOff, setPcbR, pcbPickPlan, pcbNames, clampPcbPct, CLEAR_BASE, applyClearEntry, clearEntryFromForm, editClearEntry, syncClearParts } from '../../engine/mech3d/materials.js';
+import { partName, partNames, setPartMaterial, setPartMaterialParam, syncPcb, setPcbOff, pcbAllOff, setPcbR, pcbPickPlan, pcbNames, clampPcbPct, CLEAR_BASE, applyClearEntry, clearEntryFromForm, editClearEntry, syncClearParts } from '../../engine/mech3d/materials.js';
 import { lineFromData, lightData, obsDirection, widthDirection } from '../../engine/mech3d/line.js';
 import { tallyGeometry, tallyStats, autoCells, autoWidthCell, edgeOf, quickErr, QUICK_SE } from '../../engine/mech3d/tally.js';
 import { isUntraced, tracedParts } from '../../engine/mech3d/scene3d.js';
@@ -534,8 +534,8 @@ function onCalc(snap) {
   keepSimResult(snap);
   restoreAdFromFile();
   if (previewCheck(snap)) return;   // 미리보기 켜기·끄기 = 새로 계산(이 결과는 버림)
-  A.results.update({ snap, calcMode: A.calcMode ?? 'auto', observe: M.observe, message: guidance(snap), shape: shapeFor(S.line, snap?.G), leds: ledSW(M, S.line), ledsOrig: (() => { const c = ledChangeNow(M, S.line); return c?.changed ? c.orig : []; })(), leak: leakText(A.checks.leak, M.parts.map((p) => p.name)) });
-  A.simDash?.sample(snap, snap.etaNoise ?? snap.targetNoise ?? M.observe.targetNoise ?? 0.01, M.observe, M.parts.map((p) => p.name), M.parts.length, !!adState().running, M.parts.flatMap((p, i) => (isUntraced(p) ? [i] : [])));
+  A.results.update({ snap, calcMode: A.calcMode ?? 'auto', observe: M.observe, message: guidance(snap), shape: shapeFor(S.line, snap?.G), leds: ledSW(M, S.line), ledsOrig: (() => { const c = ledChangeNow(M, S.line); return c?.changed ? c.orig : []; })(), leak: leakText(A.checks.leak, partNames(M.parts)) });
+  A.simDash?.sample(snap, snap.etaNoise ?? snap.targetNoise ?? M.observe.targetNoise ?? 0.01, M.observe, partNames(M.parts), M.parts.length, !!adState().running, M.parts.flatMap((p, i) => (isUntraced(p) ? [i] : [])));
   drawLightPaths();
   adDetectPath();
   monitorSummary();
@@ -590,7 +590,7 @@ function refreshClash() {
   A.checks.clash = { status: 'na', count: 0, items: [] };
   geomClash(rt.parts.map((p, i) => (off[i] ? null : p))).then((r) => {
     if (!A || A.clashAsk !== ask) return;
-    const items = r.clashes ?? [], nm = (i) => A.store.mspec.parts[i]?.name ?? `부품 ${i + 1}`;
+    const items = r.clashes ?? [], nm = (i) => partName(A.store.mspec.parts, i);
     A.checks.clash = r.error ? { status: 'na', count: 0, items: [] } : { status: items.length ? 'bad' : 'ok', count: items.length, items, names: items.map((c) => `${nm(c.a)} – ${nm(c.b)} ${c.depth.toFixed(2)} mm`).join('\n') };
     renderMarkers(); renderStatus();
   });
@@ -650,7 +650,7 @@ function renderMarkers() {
 // 간섭 상대 이름 — 키 'p:j'(기구 부품) | 'l:j'(LED STEP 메쉬) | 'e:k'(발광점)
 function hitName(M, key, line = A.store.session.line) {
   const [k, j] = [key[0], +key.slice(2)];
-  if (k === 'p') return M.parts[j]?.name ?? `부품 ${j + 1}`;
+  if (k === 'p') return partName(M.parts, j);
   if (k === 'l') {   // j = 배치(원래/가상) 번호 — 가상 LED 는 복사 순번
     const lay = L.stepLayout(M, line), i = lay?.virtual ? lay.leds.indexOf(j) : -1;
     return j === (lay?.pcb ?? M.light.step?.pcb) ? 'PCB' : `LED ${(i >= 0 ? i : j) + 1}`;
@@ -706,7 +706,7 @@ function clearanceOf(i) {
   if (!r) return null;
   if (g.clrOut) return g.clrOut;
   g.clrOut = {
-    i, rows: r.parts.map((x) => ({ ...x, name: M.parts[x.part]?.name ?? `부품 ${x.part + 1}` })),
+    i, rows: r.parts.map((x) => ({ ...x, name: partName(M.parts, x.part) })),
     leds: r.leds.slice(0, 3).map((x) => ({ ...x, name: hitName(M, `l:${x.part}`) })),
     ledMin: r.ledMin, ledAxial: r.ledAxial,
   };
@@ -797,7 +797,7 @@ function renderAuto() {
   if (!st.running && st.sel.housingAuto !== false) { const k = defaultHousingPart(M, adInfo().boxes); st.sel.housingPart = avail.housing.ok ? (avail.housing.parts.includes(k) ? k : avail.housing.parts[0]) : -1; }   // ② 자동 = 관측 부품을 감싸는 가장 큰 불투명 부품(광경로 위일 때), 아니면 빛이 가장 많이 닿는 부품
   const mp = st.running ? st.milkyPart : adMilkyPart(M, avail), sel = { ...st.sel, milkyMax: st.sel.milkyMax ?? capDefault(st.sel, avail, mp != null ? M.parts[mp].material.milky : 0) };
   const hm = st.sel.housingPart >= 0 ? reflCat().find((e) => !e.special && e.id === M.parts[st.sel.housingPart]?.reflMaterial) : null;   // ④ 대상 반사 소재
-  A.tileState = { avail, sel, running: st.running, names: M.parts.map((p) => p.name), milkyPart: mp, housingMat: hm ? { name: hm.name, max: hm.max } : null, path: st.path ?? null };
+  A.tileState = { avail, sel, running: st.running, names: partNames(M.parts), milkyPart: mp, housingMat: hm ? { name: hm.name, max: hm.max } : null, path: st.path ?? null };
   if (!st.open) {   // 설정(tileState)은 위에서 먼저 — 설계 인자 현황 줄 체크가 접힘과 무관하게 보이게
     el.innerHTML = '<button type="button" class="m3-ad-collapsed" data-ad="open" aria-expanded="false"><i class="m3-fl">5</i>기구 최적화 <span class="mut">— 목표 미달일 때 Milky·LED 위치·형상 후보 찾기 · 펼치기 ▴</span></button>';
     el.querySelector('[data-ad="open"]').onclick = () => { adSetOpen(true); };
@@ -811,7 +811,7 @@ function renderAuto() {
   monitor?.setMode?.(mode, { set: true, run: hasRun, result: hasRes }); A.adMode = mode;
   monitor?.el?.classList.toggle('show-chart', !!st.showChart);
   const effects = (st.result ?? (st.undo ? st.applied : null))?.effects ?? null;   // 항목별 효과 — 실행이 끝날 때 결과에 붙임(적용 뒤에도 남음)
-  renderAutoPanel(el, { mode, hasResult: hasRes && mode === 'set' && !st.running, now: factorNow(), effects, hist: st.hist, locked: st.locked, flash: st.flash, caseView: adCaseView(), avail, sel, running: st.running && { ...st.running, paused: !!st.paused }, result: st.result, resultOpen: !!st.resultOpen, names: M.parts.map((p) => p.name), canRevert: !!st.undo, applied: st.undo ? st.applied ?? null : null, noLine: !A.store.session.line, noLed: A.store.session.line ? adBlock() : '', milkyPart: mp, housingMat: hm ? { name: hm.name, max: hm.max } : null, catalog: reflCat() }, {
+  renderAutoPanel(el, { mode, hasResult: hasRes && mode === 'set' && !st.running, now: factorNow(), effects, hist: st.hist, locked: st.locked, flash: st.flash, caseView: adCaseView(), avail, sel, running: st.running && { ...st.running, paused: !!st.paused }, result: st.result, resultOpen: !!st.resultOpen, names: partNames(M.parts), canRevert: !!st.undo, applied: st.undo ? st.applied ?? null : null, noLine: !A.store.session.line, noLed: A.store.session.line ? adBlock() : '', milkyPart: mp, housingMat: hm ? { name: hm.name, max: hm.max } : null, catalog: reflCat() }, {
     onSel: (k, v) => adSel(k, v),
     onAction: (k, v) => ({ caseSort: () => adCaseSort(v), casePick: () => adCasePick(v), caseRun: adCaseRun, applyBlocked: () => { st.flash = `LED 몸체가 부품과 ${st.result?.clash ?? ''}개 겹쳐 적용할 수 없음 — 다른 후보(오른쪽 '지난 최적화 후보' 표)를 고르거나 [취소] 후 LED 배치·개수를 바꿔 다시 실행하세요`; renderAuto(); }, casePart: () => { const i = +v; if (!Number.isInteger(i)) return; A.store.update('session', (_, x) => { x.multi = []; x.node = `part:${i}`; x.sel = { part: i, face: null }; x.ledSel = null; x.status = `케이스 부품 ${i + 1} — 속성에서 면 처리를 바꾸세요(추천 값은 결과 카드)`; }); monitor?.collapse?.(); }, shapeDeep: adShapeDeep, continue: adContinue, applyMilky: () => adApplyMilky(+v), hpick: () => adPickHist(+v), chart: () => { st.showChart = !st.showChart; renderAuto(); }, toSet: () => { st.view = 'set'; renderAuto(); }, toResult: () => { st.view = 'result'; renderAuto(); }, close: () => monitor?.close(), apply: adApply, applyAlt: adApplyAlt, twoRow: adTwoRow, cancel: adCancel, revert: adRevert, step: adStep, view: () => { st.resultOpen = true; renderAuto(); }, hide: () => { st.resultOpen = false; renderAuto(); } })[k]?.(),
   });
@@ -1039,9 +1039,9 @@ function drawLightPaths() {
   const up = Math.abs(ax[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0], side = S.line?.frame?.u ?? [ax[1] * up[2] - ax[2] * up[1], ax[2] * up[0] - ax[0] * up[2], ax[0] * up[1] - ax[1] * up[0]], sl = Math.hypot(...side) || 1;
   const gap = Math.max(1.5, Math.min(6, oa.len * 0.2));   // 경로 2개는 나란히(살짝 옆)
   const base = P.map((p, i) => {
-    const stops = [['LED', at(dotA(led))], ...p.parts.map((q) => [M.parts[q]?.name ?? `부품 ${q + 1}`, at(dotA(ctr(rt.parts[q])))]), ['관측면', at(0)]];
+    const stops = [['LED', at(dotA(led))], ...p.parts.map((q) => [partName(M.parts, q), at(dotA(ctr(rt.parts[q])))]), ['관측면', at(0)]];
     const pts = stops.map(([, q]) => q.map((v, k) => v + (side[k] / sl) * gap * i)), last = pts[pts.length - 1];
-    const nm = p.parts.map((q) => M.parts[q]?.name ?? `부품 ${q + 1}`);   // 경로가 지나는 부품 이름표(LED·관측면 글씨는 빼서 중복 없음)
+    const nm = p.parts.map((q) => partName(M.parts, q));   // 경로가 지나는 부품 이름표(LED·관측면 글씨는 빼서 중복 없음)
     return { pts: [...pts, last.map((v, k) => v + ax[k] * oa.len * 0.6)], names: nm.length ? nm : null, namePts: nm.map((_, k) => k + 1), axis: ax, side: side.map((v) => v / sl), share: p.share, label: `${(p.share * 100).toFixed(0)}%${p.refl ? ' 반사' : ''}`, offset: i };
   });
   A.view.setLightPaths(base);   // 먼저 곧은 기둥(바로), 이어서 Worker 가 실제 광자 경로를 찾으면 바꿔 그림
@@ -1738,7 +1738,7 @@ function onViewContext({ obs = false, part, face, led, x, y }) {
   const LS = ledsNow(), rows = ledRows(LS), ln = isLed ? ledOfHit({ part, led }, nMech, LS.lay) : null;
   const utIds = mech == null ? [] : multi.length > 1 && multi.includes(mech) ? multi : [mech];
   const ut = untraceItem(M, utIds);
-  const items = viewCtxItems({ untrace: ut, part: mech, isLed, ledRank: rows.find((r) => r.n === ln)?.rank ?? null, selPart: sel, multi, hidden: S.hidden ?? [], hideLeds: !!S.hideLeds, hidePcb: !!S.hidePcb, hiddenLeds: S.hiddenLeds ?? [], names: M.parts.map((p) => p.name), obsOn: obsOn(), obsHit: obs || mech != null && (M.observe?.faces ?? []).some((f) => f.part === mech && f.face === face) });
+  const items = viewCtxItems({ untrace: ut, part: mech, isLed, ledRank: rows.find((r) => r.n === ln)?.rank ?? null, selPart: sel, multi, hidden: S.hidden ?? [], hideLeds: !!S.hideLeds, hidePcb: !!S.hidePcb, hiddenLeds: S.hiddenLeds ?? [], names: partNames(M.parts), obsOn: obsOn(), obsHit: obs || mech != null && (M.observe?.faces ?? []).some((f) => f.part === mech && f.face === face) });
   if (!items.length) return;
   if (mech != null && multi.length > 1 && multi.includes(mech)) items.unshift({ k: 'group', label: `선택한 부품 ${multi.length}개로 새 그룹` });
   showCtxMenu(document, x, y, items, (k) => (k === 'obsShow' ? setObsOn(!obsOn()) : k === 'group' ? groupSelected() : k === 'untrace' ? setUntrace(ut) : st.update('view', (m, q) => {
@@ -2191,7 +2191,7 @@ function ledUi(LS, n) {
   const M = A.store.mspec, it = LS.list[n];
   if (!it) return null;
   const s = ledLineS(LS, it);
-  const nm = (p) => M.parts[p]?.name ?? `부품 ${p + 1}`;
+  const nm = (p) => partName(M.parts, p);
   const say = { inside: (p) => `발광점이 ${nm(p)} 안에 있음 — 간섭`, overlap: (p) => `LED 몸체가 ${nm(p)}과(와) 겹침 — 간섭`, 'body-inside': (p) => `LED 몸체가 ${nm(p)} 안에 있음 — 간섭` };
   const clash = [...new Set(ledClashItems(A.checks.interference?.items, n, LS.em, LS.lay).filter((x) => say[x.kind]).map((x) => say[x.kind](x.part)))];
   return { n, rank: ledRows(LS).find((r) => r.n === n)?.rank ?? n + 1, total: LS.list.length, s, gap: minFinite(ledGaps(LS.em)), adj: validAdjust(M.light)?.[n] ?? { ds: 0, dz: 0 }, excluded: it.excluded, clash };

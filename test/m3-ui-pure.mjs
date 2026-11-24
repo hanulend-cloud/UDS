@@ -1686,3 +1686,32 @@ done();
   say(short(e) && e.includes('정면') && !e.includes('원뿔'), `효율 뜻 — 쉬운 말 (${e})`);
   say(R.ASSUMED_TIP.length <= 80, `가정 휘도 툴팁 짧게 (${R.ASSUMED_TIP.length}자)`);
 }
+{ // 부품 표시 이름(2026-11-24 사용성 5번): 기본 이름 '부품 N' = 재질로, 같은 재질이 여럿일 때만 번호 · 사용자가 바꾼 이름은 그대로
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const M = await import('../src/engine/mech3d/materials.js');
+  const P = [
+    { name: '부품 1', material: { kind: 'opaque' }, finish: { kind: 'whiteDiffuse', R: 0.85 } },
+    { name: '부품 2', material: { kind: 'milky', milky: 5, resin: 'PC' } },
+    { name: '부품 3', material: { kind: 'opaque' }, finish: { kind: 'whiteDiffuse', R: 0.85 } },
+    { name: '부품 4', role: 'pcb', material: { kind: 'opaque' }, finish: { kind: 'whiteDiffuse', R: 0.3 } },
+    { name: '윗 커버', material: { kind: 'clear', resin: 'PC' } },
+    { name: '부품 6', material: { kind: 'clear', resin: 'PMMA' } },
+    { name: '부품 7', material: { kind: 'opaque' }, finish: { kind: 'black', R: 0.05 } },
+  ];
+  const n = M.partNames?.(P) ?? [];
+  say(n.join('|') === '불투명 백색 1|Milky|불투명 백색 2|PCB|윗 커버|투명 PMMA|불투명 흑색', `재질 이름 (${n.join('|')})`);
+  say(M.partName?.(P, 1) === 'Milky' && M.partName?.(P, 9) === '부품 10', '한 개 · 없는 번호');
+}
+{ // 계산 중 판정 = '예상'(2026-11-24 사용성): 판정 규칙·숫자는 그대로, 글만 '미달 예상'·'합격 예상' · 끝나면 '미달'·'합격'
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const a = judgeText(0.5, 0.8, null, 0.01, false, true), b = judgeText(0.9, 0.8, null, 0.01, false, true), c = judgeText(0.5, 0.8, null, 0.01);
+  say(a.cls === 'bad' && a.text === '목표 80% · 미달 예상 −30.0%p', `계산 중 미달 (${a.text})`);
+  say(b.cls === 'ok' && b.text === '목표 80% · 합격 예상', `계산 중 합격 (${b.text})`);
+  say(c.cls === 'bad' && c.text === '목표 80% · 미달 −30.0%p', '끝난 뒤는 그대로');
+}
+{ // 종합 배지도 계산 중 = 예상
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const { overallVerdict } = await import('../src/ui/m3/results-panel.js');
+  const O = { targetLen: 0.8, targetWid: 0.8 }, bad = { Ulen: 0.5, Uwid: 0.9, relNoise: 0.01 }, ok = { Ulen: 0.9, Uwid: 0.9, relNoise: 0.01 };
+  say(overallVerdict(bad, O, true).text === '✕ 목표 미달 예상' && overallVerdict(ok, O, true).text === '✓ 목표 통과 예상' && overallVerdict(bad, O).text === '✕ 목표 미달', '종합 배지 예상');
+}

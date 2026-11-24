@@ -82,6 +82,24 @@ export const FINISH_KINDS = {
 };
 
 // 빛이 들어가는 부품(Milky·투명·반투과)의 'gloss' = Fresnel 표면: 코팅 없이 양쪽 굴절률로 반사·투과 비율이 정해짐(mc3d·gpu-trace 의 fresnel 분기). 불투명 부품은 투과가 없어 '광택' 그대로
+// 부품 표시 이름(순수, 2026-11-24 사용성 5번) — 기본 이름 '부품 N' 은 재질로(같은 재질이 여럿이면 1·2… 번호), 사용자가 바꾼 이름은 그대로. 저장된 이름은 바꾸지 않음(표시 전용)
+const OPAQUE_FIN = { whiteDiffuse: '불투명 백색', metal: '불투명 금속', black: '불투명 흑색' };
+export const isDefaultPartName = (nm) => nm == null || /^부품 \d+$/.test(String(nm).trim());
+function matLabel(p) {
+  if (p?.role === 'pcb') return 'PCB';
+  const m = p?.material, k = m?.kind;
+  if (k === 'milky') return 'Milky';
+  if (k === 'clear') return `투명${m.resin ? ` ${m.resin}` : ''}`;
+  if (k === 'whiteTrans') return '반투과 백색';
+  if (k === 'opaque') return OPAQUE_FIN[p.finish?.kind] ?? '불투명';
+  return null;
+}
+export function partNames(parts = []) {
+  const lab = parts.map((p) => (p && isDefaultPartName(p.name) ? matLabel(p) : null)), cnt = {}, seen = {};
+  for (const l of lab) if (l) cnt[l] = (cnt[l] ?? 0) + 1;
+  return parts.map((p, i) => { const l = lab[i]; if (!l) return p?.name ?? `부품 ${i + 1}`; if (cnt[l] < 2) return l; seen[l] = (seen[l] ?? 0) + 1; return `${l} ${seen[l]}`; });
+}
+export const partName = (parts, i) => (i >= 0 && i < (parts?.length ?? 0) ? partNames(parts)[i] : `부품 ${i + 1}`);
 export const finishKindsFor = (material) => (material?.kind === 'opaque' ? FINISH_KINDS : { ...FINISH_KINDS, gloss: { ...FINISH_KINDS.gloss, label: 'Fresnel (굴절률)' } });
 
 // T: 기준 두께 tRef(mm)에서의 투과율(0~1). milky: 0~10, dbId: 실측소재 DB id('' = 추상 Milky)
@@ -147,7 +165,8 @@ export function pcbPickPlan(M, part, nMech) {
 // 지금 PCB 이름들(도면 부품 + LED STEP 파일의 PCB)
 export function pcbNames(M) {
   const st = M.light?.kind === 'step' ? M.light.step : null;
-  return [...(M.parts ?? []).filter((p) => p.role === 'pcb').map((p) => p.name), ...(st && !st.fromMech && st.pcb >= 0 ? ['LED STEP PCB'] : [])];
+  const N = partNames(M.parts ?? []);
+  return [...(M.parts ?? []).map((p, i) => (p.role === 'pcb' ? N[i] : null)).filter((x) => x != null), ...(st && !st.fromMech && st.pcb >= 0 ? ['LED STEP PCB'] : [])];
 }
 // PCB 빛 계산 제외(2026-11-05) — 도면 PCB = 부품의 untrace, LED STEP PCB = light.pcbOff(job.composeScene)
 export function setPcbOff(M, on) {

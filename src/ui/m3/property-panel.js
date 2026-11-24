@@ -1,4 +1,5 @@
 import { groupMembers } from './feature-tree.js';
+import { partNames } from '../../engine/mech3d/materials.js';
 // 속성 패널 — spec 2026-10-15 m3-cad-ui §2: 피처 트리에서 고른 노드의 편집기만 보인다(기존 편집기를 노드별로 재사용).
 // ui = { dbList, catalog(반사 소재표 행), auto, dir, lineInfo, meshInfo(고른 부품 실제 메쉬 외곽·부피) }, h = app.js propHandlers()
 import { renderPartProps, renderContactsProps } from '../mech3d-panel.js';
@@ -9,7 +10,7 @@ export function renderPropertyPanel(el, M, S, ui, h) {
   const id = S.node ?? 'parts';
   if (id.startsWith('part:')) {
     const i = +id.slice(5);
-    renderPartProps(el, M, { part: i, face: S.sel?.part === i ? S.sel.face : null, contacts: M.contacts, names: M.parts.map((p) => p.name), clearance: ui.clearance, xfMsg: ui.xfMsg, xfInfo: ui.xfInfo, meshInfo: ui.meshInfo ?? null, catalog: ui.catalog ?? catalogOf(null), admin: !!ui.admin, clearList: ui.clearList ?? [], clearUsed: ui.clearUsed ?? {}, milkyUsed: ui.milkyUsed ?? {} }, ui.dbList, h);
+    renderPartProps(el, M, { part: i, face: S.sel?.part === i ? S.sel.face : null, contacts: M.contacts, names: partNames(M.parts), clearance: ui.clearance, xfMsg: ui.xfMsg, xfInfo: ui.xfInfo, meshInfo: ui.meshInfo ?? null, catalog: ui.catalog ?? catalogOf(null), admin: !!ui.admin, clearList: ui.clearList ?? [], clearUsed: ui.clearUsed ?? {}, milkyUsed: ui.milkyUsed ?? {} }, ui.dbList, h);
     return;
   }
   if (id.startsWith('group:')) {   // 부품 그룹 — 이름·부품 목록(이름은 트리에서 더블클릭으로 변경)

@@ -1,6 +1,6 @@
 // 피처 트리 — spec 2026-10-15 m3-cad-ui §2: 관측면(라인 종류·길이·폭 · 목표, 맨 위) · 부품(소재 배지) · 광원(LED 개수·피치) · 접촉면.
 // 노드 id: 'parts' | 'part:i' | 'light' | 'leds' | 'obs' | 'contacts'. 클릭 → h.onNode(id)
-import { pcbAllOff } from '../../engine/mech3d/materials.js';
+import { pcbAllOff, partNames } from '../../engine/mech3d/materials.js';
 import { PART_KINDS } from '../../engine/mech3d/materials.js';
 import { badgeStyle } from './part-look.js';
 
@@ -21,6 +21,7 @@ export const ledFoldDefault = (n) => n > 30;   // 많으면 처음엔 접어 둠
 // LED STEP 파일 안의 PCB — 메쉬는 LED STEP 에 그대로, 목록에서는 부품으로(반사율 = light.pcbR)
 const stepPcb = (L) => L.kind === 'step' && !L.step?.fromMech && L.step?.pcb >= 0;
 export function treeNodes(M, S, lay, leds = []) {
+  const PN = partNames(M.parts);   // 표시 이름 — 기본 '부품 N' = 재질(2026-11-24)
   const L = M.light, O = M.observe, out = [], hid = new Set(S.hidden ?? []), hl = new Set(S.hiddenLeds ?? []);
   const node = (id, label, badge, child = false, kind = '', eye, extra = {}) => out.push({ id, label, badge, child, kind, sel: S.node === id || (S.multi ?? []).includes(id), eye, depth: child ? 1 : 0, ...extra });
   const fold = (k, def = false) => (S.fold?.[k] ?? def);   // 접힘 상태(세션) — 광원으로 옮긴 부품 묶음은 기본 접힘
@@ -35,7 +36,7 @@ export function treeNodes(M, S, lay, leds = []) {
   // 광원으로 옮긴 부품(role 'light') = 부품 리스트에 안 보임(2026-11-12) — 같은 LED 가 아래 광원 노드에 있음. 해제도 광원 노드에서
   const shown = new Set();
   // 도면에서 광원으로 옮긴 부품 = '→ 광원'(보기는 광원 그룹이 함) · 추적 제외 = '제외 ·' 접두
-  const partNode = (p, i, depth) => node(`part:${i}`, p.name, p.role === 'light' ? '→ 광원' : `${p.untrace ? '제외 · ' : ''}${p.shapeMod ? '형상 변경 · ' : ''}${partBadge(p)}`, true, p.role === 'light' ? 'led' : p.untrace ? 'off' : p.material.kind, p.role === 'light' ? undefined : hid.has(i) ? 'off' : 'on', { depth, strike: !!p.untrace, bstyle: badgeStyle(p) });   // 빛 계산 제외 = 취소선
+  const partNode = (p, i, depth) => node(`part:${i}`, PN[i] ?? p.name, p.role === 'light' ? '→ 광원' : `${p.untrace ? '제외 · ' : ''}${p.shapeMod ? '형상 변경 · ' : ''}${partBadge(p)}`, true, p.role === 'light' ? 'led' : p.untrace ? 'off' : p.material.kind, p.role === 'light' ? undefined : hid.has(i) ? 'off' : 'on', { depth, strike: !!p.untrace, bstyle: badgeStyle(p) });   // 빛 계산 제외 = 취소선
   if (!fold('parts')) M.parts.forEach((p, i) => {
     if (p.role === 'pcb' || p.role === 'light') return;   // PCB 는 아래 PCB 메뉴에 · 광원으로 옮긴 부품은 광원 노드에
     const g = gOf.get(i);

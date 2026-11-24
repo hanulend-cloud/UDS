@@ -262,8 +262,9 @@ ${fetchFailText(e, 'examples/index.json')}`); return; }
   catch (e) { alert(`예제를 열 수 없습니다. 지금 프로젝트는 그대로 둡니다.
 ${fetchFailText(e, ex.project)}`); return; }
   try { if (ex.theme && !localStorage.getItem('uds.m3.theme')) localStorage.setItem('uds.m3.theme', ex.theme); } catch {}
+  startLoading(`예제 '${ex.title}' 여는 중…`);   // 여는 동안 시작 화면 선택 단추를 숨김(2026-11-24 사용성 6번) — 3D 화면이 뜨면 applyMode 가 풂
   projFile?.clear(); m3app.setFileResults(null); m3app.unmount(); spec.mech3d = null; spec.mech3dPending = null; spec.mode = 'mech3d'; persist(); applyMode();
-  openProjectFile(file).catch((e) => { $('#m3-start-msg').textContent = `예제 열기 실패: ${e.message ?? e}`; });
+  openProjectFile(file).catch((e) => { startLoading(null); $('#m3-start-msg').textContent = `예제 열기 실패: ${e.message ?? e}`; });
 }
 // 예제 고르기 창 → 고른 항목 | null(닫음)
 function pickExample(list) {
@@ -403,11 +404,12 @@ function m3ctx() {
     onMaterialDbChanged: () => { solver?.postMessage({ type: 'db', db: dbLists() }); markSoloReset(); },   // 3D 실측 맞춤 대화상자에서 실측소재 DB 가 바뀜 → 평판 solver 도
   };
 }
+function startLoading(text) { const el = $('#m3-start'); el.classList.toggle('m3-loading', !!text); if (text) $('#m3-start-msg').textContent = text; }
 function applyMode() {
   // 3D 가 메인 화면: mode 'mech3d' + 기구 메쉬 = 3D 화면, mode 'mech3d' + 기구 없음 = 시작 화면, 'flat' = 평판(초기 검토)
   const m3 = spec.mode === 'mech3d' && !!spec.mech3d && !!getMech3d(), start = spec.mode === 'mech3d' && !m3, flat = !m3 && !start;
   $('#mech3d-wrap').hidden = !m3;
-  $('#m3-start').hidden = !start;
+  $('#m3-start').hidden = !start; if (m3 && $('#m3-start').classList.contains('m3-loading')) { startLoading(null); $('#m3-start-msg').textContent = ''; }
   $('#design-wrap').hidden = !flat;
   $('#results-wrap').hidden = !flat;
   $('#inputbar').hidden = !flat;
