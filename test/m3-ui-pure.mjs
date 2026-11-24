@@ -732,7 +732,7 @@ done();
   const SF = { ...SS, final: { Ulen: 0.7886, Uwid: 0.7052, label: 'x' } }, mh = monitorHtml(SF, 1);
   ok(mh.includes('78.8%') && !mh.includes('78.9%') && mh.includes('70.5%') && !mh.includes('70.6%'), '최종 값 = 결과 카드와 같은 내림 표시(표·문장·지표)');
   const { chartHtml } = await import('../src/ui/m3/opt-dash.js');
-  ok(chartHtml().includes('od-plot') && chartHtml().includes('od-legend'), '왼쪽 그래프 칸'); }
+  ok(chartHtml().includes('od-plot') && /title="[^"]*목표/.test(chartHtml()), '왼쪽 그래프 칸(범례 = 툴팁, 2026-11-24)'); }
 { // 우클릭 메뉴가 열리는 행 — 항목을 만들어 두고 화면에서 안 열리는 일이 없게(2026-11-05)
   const { treeHasCtx } = await import('../src/ui/m3/feature-tree.js');
   ok(['pcbs', 'part:0', 'group:a', 'light', 'leds', 'led:0'].every(treeHasCtx) && !treeHasCtx('plane') && !treeHasCtx('parts'), 'PCB 행도 우클릭 메뉴가 열림'); }
@@ -946,7 +946,7 @@ done();
   ok(h.includes('목표 미달') && !/rs-card/.test(h), '판정 · 카드 없음(값은 진행 그래프 제목 줄, 2026-11-17 사용자)');
   { const { factorResult } = await import('../src/ui/m3/autodesign-panel.js'), F = (k) => factorResult(r, eff, {}, k);
     ok(!h.includes('class="rs-fb ') && F('shape').chg && F('milky').chg && F('milky').body.includes('3.60') && /길이 \+\d+\.\d%p/.test(F('milky').eff) && !F('position').chg && F('position').chip === '안 돌림', '결과 = 설계 인자 상자 자리에(이전 → 이후 · 효과 · 상태)'); }
-  ok(h.includes('data-ad="apply"') && h.includes('data-ad="hpick" data-v="0"') && h.includes('지난 후보') && !h.includes('<details'), '적용 · 지난 후보(접지 않음)');
+  ok(h.includes('data-ad="apply"') && h.includes('data-ad="hpick" data-v="0"') && h.includes('지난 후보') && !/<details(?! class="rs-more")/.test(h), '적용 · 지난 후보(접지 않음 — 접는 것은 [더 보기] 단추만)');
   { const many = Array.from({ length: 6 }, (_, i) => ({ label: `M${i}`, Ulen: 0.7 + i * 0.01, Uwid: 0.7, eff: 0.5 })), hm = resultViewHtml(r, { hist: many }), h1 = resultViewHtml(r, { hist: many.slice(0, 1) });
     ok((hm.match(/data-ad="hpick"/g) ?? []).length === 6 && hm.includes('6개') && !hm.includes('data-ad="histAll"') && hm.includes('rs-histt') && h1.includes('rs-histt') && hm.includes('<colgroup>'), '지난 후보: 같은 크기 표(고정 높이 · 넘치면 스크롤 · 열 폭 고정)'); }
   { const { clip } = await import('../src/ui/m3/autodesign-panel.js'); ok(clip('가'.repeat(30), 10).includes('…') && clip('가'.repeat(30), 10).includes('title=') && clip('짧음', 10) === '짧음', '긴 글 = … + 전체는 마우스'); }
@@ -1729,4 +1729,25 @@ done();
   say(/<details class="m3-fix /.test(lp) && /<details class="m3-xfrange"/.test(mp), '고급 항목 접기(인식 고치기 · 위치 범위)');
   say(/tab === 'basic'[\s\S]*?: `[\s\S]*?untraceHtml\(p\)/.test(mp) || /detailExtra/.test(mp), '빛 계산 제외 = 상세 탭');
   say(/#m3-props \.m3-card \{[^}]*border: 0/.test(rd('../styles.css')), '속성창 카드 테두리 없앰');
+}
+{ // ⑤ 최적화 창 단순화(2026-11-24 사용자: 같은 원칙) — 반복 줄 · 진행 글 · 카드 표시 · 결과 버튼. 기능·판정은 그대로
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const AP = await import('../src/ui/m3/autodesign-panel.js'), OD = await import('../src/ui/m3/opt-dash.js');
+  const vis = (s) => s.replace(/<title>[\s\S]*?<\/title>/g, '').replace(/<[^>]*>/g, ' ');
+  const on = AP.autoCardHtml({ avail: { milky: { ok: true } }, sel: { milky: true }, running: null });
+  const none = AP.autoCardHtml({ avail: { milky: { ok: true } }, sel: {}, running: null });
+  say(!/켠 항목/.test(on) && !/위 ▶ 실행/.test(on) && /최적화할 항목을 체크/.test(none), `켠 항목 줄 없앰(카드에 보임) · 아무것도 안 켰을 때 안내는 남김: ${vis(on).trim()}`);
+  const fb = OD.factorBoardHtml(null, { milky: 2 }, (k) => ({ on: k === 'milky', box: `<input type="checkbox" data-ad="${k}">`, opt: '', why: '' }));
+  say(!/>켜짐</.test(fb) && !/>꺼짐</.test(fb) && /data-ad="milky"/.test(fb), '카드 = 체크 상자만(켜짐·꺼짐 글자 없음)');
+  const tiles = Object.fromEntries(OD.STAGES.map(([k]) => [k, { status: k === 'milky' ? 'run' : 'off', frac: 0.24, evals: [] }]));
+  say(/진행 24\.0%/.test(OD.factorBoardHtml({ tgLen: 0.8, tgWid: 0.8, tiles }, { milky: 2 }, null)), '실행 중 카드 = 진행 % 는 그대로');
+  const S = { tgLen: 0.8, tgWid: 0.8, before: {}, tiles: Object.fromEntries(OD.STAGES.map(([k]) => [k, { status: 'off', evals: [] }])), seq: [], symNote: '대칭 길이 ½ 합침 · 약 ×2 빠름(빠른 검토)', t0: 0 };
+  const mh = OD.monitorHtml(S, 13), st = mh.match(/<span class="mut od-simst"[^>]*>([^<]*)</);
+  say(st && !/대칭/.test(st[1]) && /후보 0개/.test(st[1]) && /title="[^"]*대칭 길이 ½ 합침/.test(mh), `진행 줄 = 시간 · 후보 수만, 대칭 안내는 툴팁: ${st?.[1]}`);
+  say(!/class="od-legend/.test(OD.chartHtml()) && /title="[^"]*최고 갱신[^"]*최종 판정/.test(OD.chartHtml()), '그래프 범례 줄 → 그래프 툴팁');
+  const r = { feasible: false, reason: '목표 미달', targets: { len: 0.8, wid: 0.8 }, stages: { shape: true, milky: true }, cur: { milky: 2, Ulen: 0.65, Uwid: 0.62, eff: 0.43 }, best: { milky: 3.6, Ulen: 0.75, Uwid: 0.77, eff: 0.55 }, shape: { dt: 2, h: 0, R: 0.9 } };
+  const rv = AP.resultViewHtml(r, {}), more = rv.match(/<details class="rs-more"[^>]*>([\s\S]*?)<\/details>/)?.[1] ?? '';
+  say(/data-ad="toSet"/.test(more) && /data-ad="step"/.test(more) && /data-ad="view"/.test(more) && /더 보기/.test(more), '설정 바꾸기 · STEP · 프로파일·표 = 더 보기 안');
+  const out = rv.replace(/<details class="rs-more"[\s\S]*?<\/details>/, '');
+  say(/data-ad="apply"/.test(out) && /data-ad="cancel"/.test(out) && /data-ad="continue"/.test(out), '적용 · 적용 안 함 · 이어서 = 늘 보임');
 }

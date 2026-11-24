@@ -1250,6 +1250,13 @@ select[data-r="pal"], select[data-big-pal] { margin-left: 8px; }   /* 색 표 �
 .rs-new { color: var(--m3-acc); font-weight: 600; }
 .rs-ef { color: var(--m3-ok); white-space: nowrap; }
 .rs-btn { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 12px 0 8px; }
+/* 결과 [더 보기] — 자주 안 쓰는 단추(설정 바꾸기 · STEP · 프로파일·표)를 접음(2026-11-24) */
+.rs-more { position: relative; }
+.rs-more > summary { list-style: none; cursor: pointer; padding: 3px 10px; border: 1px solid var(--m3-line, #d0d5dd); border-radius: 6px; font-size: 12px; user-select: none; }
+.rs-more > summary::-webkit-details-marker { display: none; }
+.rs-more > summary::after { content: ' ▾'; }
+.rs-more[open] > summary::after { content: ' ▴'; }
+.rs-more-in { position: absolute; right: 0; bottom: calc(100% + 4px); z-index: 5; display: flex; flex-direction: column; gap: 4px; padding: 6px; background: var(--m3-bg, #fff); border: 1px solid var(--m3-line, #d0d5dd); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.15); white-space: nowrap; }
 .rs-btn [data-ad="apply"] { background: var(--m3-acc); color: #fff; border-color: var(--m3-acc); font-weight: 600; padding-inline: 16px; }
 .rs-more { border-top: 1px solid var(--m3-line); padding-top: 4px; }
 .rs-link { border: 0; background: none; padding: 4px 0; color: var(--m3-mut); cursor: pointer; font-size: 12px; }
@@ -1595,6 +1602,8 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 #mech3d-wrap[data-theme="dark"] .m3-mon-tabs button.on, #mech3d-wrap[data-theme="dark"] .fb-card .od-chip.st-run { color: #0b1220; }
 /* ③ 다크 테마 설계 인자 카드 = 어두운 바탕 */
 #mech3d-wrap[data-theme="dark"] .fb-card { background: var(--m3-panel); color: var(--ui-text, #d8dee9); border-color: var(--m3-edge); --m3-mut: #8e98ab; }
+#mech3d-wrap[data-theme="dark"] .rs-more-in { background: var(--m3-panel); border-color: var(--m3-edge); }
+#mech3d-wrap[data-theme="dark"] .rs-more > summary { border-color: var(--m3-edge); }
 #mech3d-wrap[data-theme="dark"] .fb-card .fb-head, #mech3d-wrap[data-theme="dark"] .fb-card .fb-in { color: var(--ui-text, #d8dee9); }
 #mech3d-wrap[data-theme="dark"] .fb-card .fb-head { background: color-mix(in srgb, var(--fb, #888) 16%, var(--m3-panel)); }
 #mech3d-wrap[data-theme="dark"] .fb-card.fb-off { background: var(--m3-head) !important; border-color: #3a4558 !important; border-left-color: #3a4558 !important; }

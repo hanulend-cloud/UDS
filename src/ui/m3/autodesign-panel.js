@@ -164,7 +164,9 @@ export function autoCardHtml({ avail, sel, running, canRevert = false, noLine = 
   const on = AD_ITEMS.filter(([, , ks]) => ks.some((k) => sel[k] && avail[k]?.ok)).map(([, l]) => l);
   if (running) return '';   // 실행 단추·진행은 창 오른쪽 위
   const why = noLine ? '관측 라인이 없음' : noLed;
-  return `<div class="m3-ad-bar"><span class="m3-ad-on">${why ? `<span class="warn">${esc(why)}</span> ` : ''}${on.length ? `켠 항목 <b>${on.join(' ')}</b> <span class="mut">→ 위 ▶ 실행</span>` : '<span class="mut">위 설계 인자에서 최적화할 항목을 체크하세요</span>'}</span>${canRevert ? '<span class="m3-ad-sp"></span><button type="button" data-ad="revert" title="마지막 적용 전 값으로">↶ 되돌리기</button>' : ''}</div>${appliedHtml(applied)}`;
+  // '켠 항목 … → 위 ▶ 실행' 줄은 뺌(2026-11-24 사용자: 단순하게 — 켠 항목은 카드 체크로 보임). 아무것도 안 켰을 때 안내 · 이유 · 되돌리기만
+  const msg = `${why ? `<span class="warn">${esc(why)}</span> ` : ''}${on.length ? '' : '<span class="mut">위 설계 인자에서 최적화할 항목을 체크하세요</span>'}`;
+  return `${msg || canRevert ? `<div class="m3-ad-bar"><span class="m3-ad-on">${msg}</span>${canRevert ? '<span class="m3-ad-sp"></span><button type="button" data-ad="revert" title="마지막 적용 전 값으로">↶ 되돌리기</button>' : ''}</div>` : ''}${appliedHtml(applied)}`;
 }
 // 형상 문구 — 0 인 항 생략. e = 끝단 두께, c = 폭 가장자리 두께(+ 가장자리 두껍게 · − 얇게), h < 0 = 돌출
 const sg = (v) => `${v >= 0 ? '+' : '−'}${f2(Math.abs(v))}`, nz = (v) => Number.isFinite(v) && Math.abs(v) >= 5e-5;
@@ -491,7 +493,7 @@ export function resultViewHtml(r, { applied = null, effects = null, hist = null,
   const alt = r.unchanged && r.alt ? `<div class="rs-note">찾은 후보 ${fmtJudge(r.alt.Ulen)}/${fmtJudge(r.alt.Uwid)} — 지금보다 뚜렷이 낫지 않음</div>` : '';
   return `<div class="rs"><div class="rs-vd ${v[0]}"><b>${v[1]}</b> <span class="mut">${v[2]}</span>${lim ? ` <span class="rs-lim" title="한계: ${esc(lim)}">· 한계: ${esc(lim.split(' — ')[0])}</span>` : ''}</div>
     ${warn}${alt}${twoRowAltText(r) ? `<div class="rs-note">${esc(twoRowAltText(r))}</div>` : ''}${notesLines(r)}
-    <div class="rs-btn">${applyBtn(r, 'LED 몸체가 부품과 겹침')}${altBtn(r)}${shapeDeepBtn(r)}${twoRowBtn(r)}${r.clash > 0 ? '' : `<button type="button" data-ad="continue" title="${r.unchanged ? '지금 설계 그대로' : '이 안을 적용한 뒤'}, 체크했지만 이번에 돌리지 않은 항목을 이어서 최적화">이 안에서 이어서 ▸</button>`}${toSetBtn}<span class="m3-ad-sp"></span>${r.shape ? '<button type="button" data-ad="step">STEP 내보내기</button>' : ''}<button type="button" data-ad="view" title="프로파일 비교 · Milky 표 · 전체 비교표">프로파일·표</button><button type="button" data-ad="cancel" title="이 결과를 설계에 적용하지 않고 닫기 — 지난 후보 표에는 남음">적용 안 함</button></div>
+    <div class="rs-btn">${applyBtn(r, 'LED 몸체가 부품과 겹침')}${altBtn(r)}${shapeDeepBtn(r)}${twoRowBtn(r)}${r.clash > 0 ? '' : `<button type="button" data-ad="continue" title="${r.unchanged ? '지금 설계 그대로' : '이 안을 적용한 뒤'}, 체크했지만 이번에 돌리지 않은 항목을 이어서 최적화">이 안에서 이어서 ▸</button>`}<button type="button" data-ad="cancel" title="이 결과를 설계에 적용하지 않고 닫기 — 지난 후보 표에는 남음">적용 안 함</button><span class="m3-ad-sp"></span><details class="rs-more" data-keep="rs-more"><summary title="설정 바꾸기 · STEP 내보내기 · 프로파일·표">더 보기</summary><div class="rs-more-in">${toSetBtn}${r.shape ? '<button type="button" data-ad="step">STEP 내보내기</button>' : ''}<button type="button" data-ad="view" title="프로파일 비교 · Milky 표 · 전체 비교표">프로파일·표</button></div></details></div>
     ${histBox}</div>`;
 }
 // 참고 문구·Milky 표는 접어 둠(2026-11-08) — 메인 카드는 판정·값·단추만
