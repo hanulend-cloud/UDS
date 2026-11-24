@@ -25,7 +25,7 @@ const pcb = boxMesh(-40, -5, -1, 80, 10, 1), cover = boxMesh(-40, -5, 6, 80, 10,
   const M = { parts: [defaultPart(0, '부품 1', 5)], observe: defaultObserve(), groups: [], light: light({}) };
   const ids = (m, S = {}) => treeNodes(m, S).map((x) => x.id);
   const N = treeNodes(M, { node: 'pcbs', line: null }), h0 = N.find((x) => x.id === 'pcbs');
-  ok(h0 && h0.label === 'PCB' && /PCB 면 30%/.test(h0.badge) && h0.depth === 1 && h0.sel && !ids(M).includes('steppcb'), `LED STEP PCB = PCB 한 줄: ${h0?.badge}`);
+  ok(h0 && h0.label === 'PCB' && h0.badge === '30%' && h0.depth === 1 && h0.sel && !ids(M).includes('steppcb'), `LED STEP PCB = PCB 한 줄: ${h0?.badge}`);
   ok(ids(M).indexOf('pcbs') < ids(M).indexOf('light'), '광원이 아니라 부품 쪽에');
   ok(N.find((x) => x.id === 'parts').badge === '2', '부품 개수에 포함');
   const none = treeNodes({ ...M, light: light({ pcb: -1 }) }, {});

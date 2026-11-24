@@ -195,14 +195,14 @@ function partEditor(p, sel, dbList) {
   const nOver = Object.keys(p.faceFinish ?? {}).length;
   const dSum = p.shapeMod ? '형상 변경됨' : '';
   const tabs = `<div class="m3-tabs" role="tablist" aria-label="부품 속성">
-    <button type="button" role="tab" data-m3-tab="basic" aria-selected="${tab === 'basic'}">기본 <span class="m3-tab-s">소재 · 표면 상태</span></button>
-    <button type="button" role="tab" data-m3-tab="detail" aria-selected="${tab === 'detail'}">상세 <span class="m3-tab-s">${esc(dSum || '위치 · 크기 · 접촉면')}</span></button></div>`;
+    <button type="button" role="tab" data-m3-tab="basic" aria-selected="${tab === 'basic'}" title="소재 · 표면 상태">기본</button>
+    <button type="button" role="tab" data-m3-tab="detail" aria-selected="${tab === 'detail'}" title="${esc(['위치 · 크기 · 접촉면 · 빛 계산 제외', dSum].filter(Boolean).join(' · '))}">상세</button></div>`;
   const warn = `${overlapWarnHtml(sel.clearance)}${sel.xfMsg ? `<div class="m3-warn" role="status">${esc(sel.xfMsg)}</div>` : ''}`;
   const body = tab === 'basic'
     ? `${pcbRCardHtml(p)}<div class="m3-card">${basicMaterialHtml(p, dbList, cat, sel)}</div>
-      <div class="m3-card"><div class="m3-sub">표면 상태 <span class="mut">${face != null ? `면 #${face} 선택` : nOver ? `면 ${nOver}개 따로 지정` : ''}</span></div>${partFin}${faceRow}<div class="mut m3-note" title="3D 뷰에서 면을 클릭하면 그 면만 다르게 지정할 수 있습니다">면별 지정 = 3D 에서 면 클릭</div></div>${untraceHtml(p)}`
-    : `<div class="m3-card"><div class="m3-sub">위치 · 크기 <span class="mut">mm · ${esc(xfSummaryText(p, sel.xfInfo))}</span></div>${xformEditor(p, sel.xfInfo, sel.lock)}${ledDistHtml(sel.clearance)}</div>
-      ${secHtml('contact', '접촉면 (이 부품)', '', contactsForPartHtml(sel.contacts ?? [], sel.part, sel.names ?? []))}`;
+      <div class="m3-card"><div class="m3-sub" title="3D 뷰에서 면을 클릭하면 그 면만 다르게 지정할 수 있습니다">표면 상태 <span class="mut">${face != null ? `면 #${face} 선택` : nOver ? `면 ${nOver}개 따로 지정` : ''}</span></div>${partFin}${faceRow}</div>`
+    : `<div class="m3-card"><div class="m3-sub" title="mm · ${esc(xfSummaryText(p, sel.xfInfo))}">위치 · 크기</div>${xformEditor(p, sel.xfInfo, sel.lock)}${ledDistHtml(sel.clearance)}</div>
+      ${secHtml('contact', '접촉면 (이 부품)', '', contactsForPartHtml(sel.contacts ?? [], sel.part, sel.names ?? []))}${untraceHtml(p)}`;   // 빛 계산 제외 = 상세 탭(2026-11-24 단순화 — 우클릭 메뉴에도 있음)
   return `${warn}${tabs}<div class="m3-edit" role="tabpanel">${body}</div>`;
 }
 
@@ -239,6 +239,8 @@ const f2 = (v) => (Math.round(v * 100) / 100).toFixed(2);
 // 가능 범위 글자 — 무한은 '—'
 const rangeText = (lo, hi) => `${Number.isFinite(lo) ? f2(lo) : '—'} ~ ${Number.isFinite(hi) ? f2(hi) : '—'}`;
 // simple = 기본 탭: 위치·크기 숫자만(간섭 없는 범위는 입력이 자동으로 맞춤) + 원래대로. 가능 범위 표·비율 고정은 상세 탭
+let XF_RANGE_OPEN = false;   // 범위 보기 펼침(세션) — 다시 그려도 유지
+export const setXfRangeOpen = (v) => { XF_RANGE_OPEN = !!v; };
 export function xformEditor(p, info, lock = false, simple = false) {
   const o = p.xform?.offset ?? [0, 0, 0], s = p.xform?.scale ?? [1, 1, 1], c0 = info?.center0 ?? [0, 0, 0], z0 = info?.size0 ?? p.size ?? [0, 0, 0], lim = info?.lim;
   const cen = [0, 1, 2].map((k) => c0[k] + o[k]), siz = [0, 1, 2].map((k) => z0[k] * s[k]);
@@ -251,14 +253,16 @@ export function xformEditor(p, info, lock = false, simple = false) {
       <span>크기</span>${[0, 1, 2].map((k) => cell(`z${k}`, siz[k], MIN_SIZE, sizeHi(k), `크기 ${'XYZ'[k]} mm`)).join('')}
     </div>
     <div class="m3-row"><span class="mut">다른 부품과 겹치는 값은 자동으로 막힘</span> <button type="button" data-m3-xfreset ${p.xform ? '' : 'disabled'}>원래대로</button></div>`;
-  return `<div class="mut m3-note" title="위치 = 부품 외곽(바운딩 박스) 중심">mm · 외곽 중심 기준</div>
-    <div class="m3-xf">
+  return `<div class="m3-xf" title="mm · 위치 = 부품 외곽(바운딩 박스) 중심">
       <span></span><b>X</b><b>Y</b><b>Z</b>
       <span>위치</span>${[0, 1, 2].map((k) => cell(`c${k}`, cen[k], posLo(k), posHi(k), `위치 ${'XYZ'[k]} mm`)).join('')}
-      <span class="mut">가능</span>${[0, 1, 2].map((k) => `<span class="m3-lim">${lim ? rangeText(posLo(k), posHi(k)) : '계산 중'}</span>`).join('')}
       <span>크기</span>${[0, 1, 2].map((k) => cell(`z${k}`, siz[k], MIN_SIZE, sizeHi(k), `크기 ${'XYZ'[k]} mm`)).join('')}
-      <span class="mut">최대${lock ? '*' : ''}</span>${[0, 1, 2].map((k) => `<span class="m3-lim">${lim ? (Number.isFinite(sizeHi(k)) ? f2(sizeHi(k)) : '—') : '계산 중'}</span>`).join('')}
     </div>
+    <details class="m3-xfrange"${XF_RANGE_OPEN ? ' open' : ''}><summary>범위 보기</summary><div class="m3-xf">
+      <span></span><b>X</b><b>Y</b><b>Z</b>
+      <span class="mut">위치 가능</span>${[0, 1, 2].map((k) => `<span class="m3-lim">${lim ? rangeText(posLo(k), posHi(k)) : '계산 중'}</span>`).join('')}
+      <span class="mut">크기 최대${lock ? '*' : ''}</span>${[0, 1, 2].map((k) => `<span class="m3-lim">${lim ? (Number.isFinite(sizeHi(k)) ? f2(sizeHi(k)) : '—') : '계산 중'}</span>`).join('')}
+    </div></details>
     ${lock && lim && Number.isFinite(lim.uniform) && lim.uniform < 1.001 && (lim.size ?? []).some((v, k) => v > siz[k] + 0.01) ? '<div class="m3-xfhint">* 비율 고정 중 — 다른 축이 막혀 키울 수 없습니다. 고정을 끄면 축별로 키울 수 있습니다.</div>' : ''}
     <div class="m3-row"><label><input type="checkbox" data-m3-xflock ${lock ? 'checked' : ''}> 비율 고정</label>
       <button type="button" data-m3-xfreset ${p.xform ? '' : 'disabled'}>원래대로</button>
@@ -293,6 +297,7 @@ export function renderPartProps(el, m, sel0, dbList, h) {
   SEC_FACE = fk;
   el.innerHTML = `<div class="m3-h m3-title${p.untrace ? ' m3-untr' : ''}" title="${esc(partHeaderText(p, sel.meshInfo ?? null))}">${esc(partTitleText({ ...p, name: sel.names?.[sel.part] ?? p.name }, sel.meshInfo ?? null))}</div>${partEditor(p, sel, dbList)}`;
   const i = sel.part;
+  el.querySelector('.m3-xfrange')?.addEventListener('toggle', (e) => setXfRangeOpen(e.currentTarget.open));
   el.querySelectorAll('[data-m3-tab]').forEach((b) => { b.onclick = () => { if (PART_TAB !== b.dataset.m3Tab) { PART_TAB = b.dataset.m3Tab; renderPartProps(el, m, sel0, dbList, h); } }; });
   el.querySelectorAll('details[data-m3-sec]').forEach((d) => d.addEventListener('toggle', () => SEC_OPEN.set(d.dataset.m3Sec, d.open)));
   el.querySelector('[data-m3-untrace]')?.addEventListener('change', (e) => h.onUntrace?.(i, e.target.checked));

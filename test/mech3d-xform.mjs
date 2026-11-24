@@ -51,7 +51,7 @@ ok(!('bvh' in transformMesh(mb, [1, 0, 0], [0, 0, 0])), '변환 사본은 캐시
   ok(u.clamped && u.xf.scale.every((v) => Math.abs(v - 1.2) < 1e-9), '비율 고정: 최대 1.2배');
   ok(F(null, 'c0', NaN).xf === null && !F(null, 'c0', NaN).clamped, 'NaN 무시');
   const h = xformEditor({ size: [20, 10, 2], xform: { offset: [2, 0, 0], scale: [1, 1, 1] } }, info, false);
-  ok(h.includes('value="12.00"') && h.includes('min="9.00"') && h.includes('max="16.00"') && h.includes('9.00 ~ 16.00') && h.includes('— ~ —') && h.includes('24.00') && !h.includes('m3-xfhint') && !h.includes('m3-sub') && h.includes('외곽 중심 기준') && h.includes('title="위치 = 부품 외곽(바운딩 박스) 중심"'), '편집기: 현재 중심·가능 범위·최대 크기 표시(제목은 접는 구역 요약)');
+  ok(h.includes('value="12.00"') && h.includes('min="9.00"') && h.includes('max="16.00"') && h.includes('9.00 ~ 16.00') && h.includes('— ~ —') && h.includes('24.00') && !h.includes('m3-xfhint') && !h.includes('m3-sub') && h.includes('title="mm · 위치 = 부품 외곽(바운딩 박스) 중심"') && /<details class="m3-xfrange"[^>]*><summary>범위 보기<\/summary>[\s\S]*9\.00 ~ 16\.00/.test(h), '편집기: 현재 중심·크기 + 가능 범위·최대 크기는 [범위 보기] 접힘(2026-11-24 단순화)');
   const hl = xformEditor({ size: [20, 10, 2] }, { ...info, lim: { ...info.lim, uniform: 1 } }, true);
   ok(hl.includes('m3-xfhint') && hl.includes('최대*') && hl.includes('max="20.00"'), '비율 고정으로 막히면 이유 안내'); }
 { setMech3dMesh('s', [boxMesh(0, 0, 0, 40, 10, 2)]); const raw = getMech3d();

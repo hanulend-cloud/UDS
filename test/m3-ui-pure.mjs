@@ -28,14 +28,14 @@ const card = (o) => autoCardHtml(o) + ['milky', 'leds', 'shape', 'housing', 'hei
   ok(N.map((n) => n.id).join() === 'obs,parts,part:0,part:1,light,leds', `트리 노드(관측면 맨 위): ${N.map((n) => n.id).join()}`);
   const obsN = N.shift();
   ok(N[1].badge === 'Milky 3.0' && N[1].sel && N[1].child && N[2].badge.startsWith('불투명') && N[3].badge === '직접 배치' && N[4].label === 'LED ×10' && N[4].badge === '균등'
-    && obsN.badge === '직선 116×16 mm · 목표 80/80%', `배지: ${N.map((n) => n.badge).join(' | ')}`); }
+    && obsN.badge === '116×16 mm', `배지: ${N.map((n) => n.badge).join(' | ')}`); }
 { const N = treeNodes({ ...M, light: defaultLight() }, { node: null, line: null });
   ok(!N.some((n) => n.id === 'leds') && /인식 중$/.test(N.find((n) => n.id === 'obs').badge) && N.find((n) => n.id === 'light').badge === '지정 안 함', '광원 없음 → LED 노드 없음, 라인 인식 중');
   const N2 = treeNodes({ ...M, observe: defaultObserve() }, { node: null, line: null });
   ok(N2.find((n) => n.id === 'obs').badge === '미지정 — 클릭', '관측면 없음 → 미지정'); }
 ok(partBadge(setPartMaterial(defaultPart(0, 'p', 1), 'clear')).startsWith('투명 '), '투명 부품 배지 = 투명 + 투과율');
 { const N = treeNodes({ ...M, light: { ...defaultLight(), kind: 'manual', manual: { ...defaultLight().manual, pitch: 11.6000001 } } }, { node: null, line: { kind: 'zigzag', closed: false, length: 99.6, width: 7.4 } });
-  ok(N.find((n) => n.id === 'leds').badge === '피치 11.6' && N.find((n) => n.id === 'obs').badge === 'zigzag 100×7 mm · 목표 80/80%', `피치 반올림 · 모르는 라인 종류: ${N.find((n) => n.id === 'leds').badge} / ${N.find((n) => n.id === 'obs').badge}`); }
+  ok(N.find((n) => n.id === 'leds').badge === '피치 11.6' && N.find((n) => n.id === 'obs').badge === '100×7 mm', `피치 반올림 · 모르는 라인 종류: ${N.find((n) => n.id === 'leds').badge} / ${N.find((n) => n.id === 'obs').badge}`); }
 { const el = { innerHTML: '', addEventListener() {}, contains: () => false, ownerDocument: null, querySelectorAll: () => [] };
   const P = { ...M, parts: [{ ...M.parts[0], name: `<img src=x onerror="a()">&'` }] };
   renderFeatureTree(el, P, { node: null, line: null }, { onNode() {} });
@@ -489,7 +489,7 @@ ok(clampCap(12) === 10 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCap
 { // 부품 리스트 정리(2026-11-03): 관측면 맨 위 · 목표 노드 없음 · LED 줄 = 원설계 대비 Δx Δy Δz 만
   const { ledDeltaXYZ, ledChange } = await import('../src/ui/m3/led-change.js');
   const N0 = treeNodes(M, { node: null, line: { kind: 'line', length: 100, width: 7 }, hidden: [], hideLeds: false });
-  ok(N0[0].id === 'obs' && N0[0].grp0 && N0[0].badge.includes('100×7 mm') && N0[0].badge.includes('목표') && !N0.some((n) => n.id === 'target') && N0.filter((n) => n.id === 'obs').length === 1, `관측면 맨 위 · 목표 포함: ${N0[0].badge}`);
+  ok(N0[0].id === 'obs' && N0[0].grp0 && N0[0].badge === '100×7 mm' && N0[0].tip.includes('목표 80/80%') && !N0.some((n) => n.id === 'target') && N0.filter((n) => n.id === 'obs').length === 1, `관측면 맨 위 · 목표 포함: ${N0[0].badge}`);
   const c = ledChange([{ s: 0, w: 0, pos: [0, 0, 0] }, { s: 10, w: 0, pos: [10, 0, 0] }], [{ s: 0, w: 0, pos: [0, 0, 0], n: 0 }, { s: 12, w: -1, pos: [12, 0, -1], n: 1 }, { s: 40, w: 0, pos: [40, 0, 0], n: 2 }]);
   ok(ledDeltaXYZ(c.rows[0]) === '' && ledDeltaXYZ(c.rows[1]) === 'Δx +2 Δz −1' && ledDeltaXYZ(c.rows[2]) === '추가' && ledDeltaXYZ(null) === '', `Δ 표시: ${ledDeltaXYZ(c.rows[1])}`);
   ok(ledDeltaXYZ({ state: 'same', d: [0, 0, 3] }) === 'Δz +3', '높이만 바뀌어도 표시');
@@ -981,7 +981,7 @@ done();
   okG(top.map((n) => n.id).join() === 'obs,parts,light' && top.every((n) => n.icon && !n.child), `같은 단계 묶음: ${top.map((n) => n.id).join()}`);
   okG(N[0].label === '관측면' && !N.some((n) => n.top), '관측면 이름에 기호 없음 · 밑줄 구분 없음');
   const lt = N.find((n) => n.id === 'light');
-  okG(lt.fold === 'closed' && !N.some((n) => n.id === 'leds') && /LED ×10/.test(lt.badge), `광원 처음 접힘 · 배지에 개수: ${lt.badge}`);
+  okG(lt.fold === 'closed' && !N.some((n) => n.id === 'leds') && lt.badge === 'LED 10개', `광원 처음 접힘 · 배지에 개수: ${lt.badge}`);
   const open = tn(M, { node: null, line: null, fold: { light: false } });
   okG(open.some((n) => n.id === 'leds') && !/LED ×/.test(open.find((n) => n.id === 'light').badge), '펼치면 LED 줄이 따로 보이고 배지엔 개수 없음');
   okG(tn(M, { node: 'leds', line: null }).some((n) => n.id === 'leds'), 'LED 를 고르면(3D·트리) 광원이 접혀 있어도 펼쳐 보임');
@@ -1437,7 +1437,7 @@ done();
 {
   const okS = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
   const { readFileSync } = await import('node:fs'), mp = readFileSync(new URL('../src/ui/mech3d-panel.js', import.meta.url), 'utf8'), css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
-  okS(!/>\(삭제 아님|>3D 뷰에서 면을 클릭하면|>체크 = 공기층 없이|>이 부품에 닿은 다른 부품 없음|>mm · 위치 = 부품 외곽 중심/.test(mp) && /title="삭제 아님 — 빛이 이 부품을 그냥 지나감"/.test(mp) && />면별 지정 = 3D 에서 면 클릭</.test(mp), '긴 회색 설명 → 짧은 글 + 툴팁');
+  okS(!/>\(삭제 아님|>3D 뷰에서 면을 클릭하면|>체크 = 공기층 없이|>이 부품에 닿은 다른 부품 없음|>mm · 위치 = 부품 외곽 중심/.test(mp) && /title="삭제 아님 — 빛이 이 부품을 그냥 지나감"/.test(mp) && /title="3D 뷰에서 면을 클릭하면 그 면만 다르게 지정할 수 있습니다"/.test(mp), '긴 회색 설명 → 툴팁(2026-11-24: 짧은 글도 툴팁으로)');
   okS(/#m3-props \.mut \{ font-size: 11px; \}/.test(css), '부품 설정 회색 글 11px');
 }
 // 관측면·광원·결과 칸 회색 글(2026-11-18 사용자) — 짧게 + 긴 설명은 title
@@ -1714,4 +1714,19 @@ done();
   const { overallVerdict } = await import('../src/ui/m3/results-panel.js');
   const O = { targetLen: 0.8, targetWid: 0.8 }, bad = { Ulen: 0.5, Uwid: 0.9, relNoise: 0.01 }, ok = { Ulen: 0.9, Uwid: 0.9, relNoise: 0.01 };
   say(overallVerdict(bad, O, true).text === '✕ 목표 미달 예상' && overallVerdict(ok, O, true).text === '✓ 목표 통과 예상' && overallVerdict(bad, O).text === '✕ 목표 미달', '종합 배지 예상');
+}
+{ // 왼쪽 트리·속성창 단순화(2026-11-24 사용자: 겉 구조·메뉴 안도 심플하게) — 기능은 그대로, 글은 툴팁·접힌 구역으로
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const T = await import('../src/ui/m3/feature-tree.js'), MT = await import('../src/engine/mech3d/materials.js');
+  const parts = [MT.setPartMaterialParam(MT.setPartMaterial(MT.defaultPart(0, '부품 1', 1), 'milky'), 'milky', 2), MT.setPartMaterial(MT.defaultPart(1, '부품 2', 1), 'clear'), MT.setPartMaterial(MT.defaultPart(2, '하우징', 1), 'clear')];
+  const N = T.treeNodes({ ...M, parts }, { node: null, line: null }), b = (id) => N.find((n) => n.id === id);
+  say(b('part:0').label === 'Milky' && b('part:0').badge === '2.0' && b('part:1').label === '투명 PC' && b('part:1').badge === '89%' && b('part:2').badge === '투명 89%', `부품 줄 = 재질 이름 + 값만(바꾼 이름은 그대로): ${N.map((n) => `${n.label}/${n.badge}`).join(' | ')}`);
+  const h = T.treeHtml({ ...M, parts }, { node: null, line: null });
+  say(!/m3-tree-tip/.test(h) && /우클릭 = 그룹/.test(h), '트리 머리 안내 = 툴팁만');
+  const { readFileSync } = await import('node:fs'), rd = (q) => readFileSync(new URL(q, import.meta.url), 'utf8'), mp = rd('../src/ui/mech3d-panel.js'), lp = rd('../src/ui/mech3d-light-panel.js');
+  say(!/m3-tab-s/.test(mp) && !/>면별 지정 = 3D 에서 면 클릭</.test(mp) && !/>mm · 외곽 중심 기준</.test(mp), '부품 탭 부제·고정 안내 글 → 툴팁');
+  say(!/>하늘색 = 관측면 · 다시 클릭 = 빼기/.test(lp) && !/>균일도 = 최저 ÷ 최고</.test(lp) && !/<span class="mut">3D 에서 LED 1개의 빛 나오는 면 클릭/.test(lp) && !/<span class="mut">LED 가 아닌 부품이 잡혔거나/.test(lp), '관측면·광원 고정 안내 글 → 툴팁');
+  say(/<details class="m3-fix /.test(lp) && /<details class="m3-xfrange"/.test(mp), '고급 항목 접기(인식 고치기 · 위치 범위)');
+  say(/tab === 'basic'[\s\S]*?: `[\s\S]*?untraceHtml\(p\)/.test(mp) || /detailExtra/.test(mp), '빛 계산 제외 = 상세 탭');
+  say(/#m3-props \.m3-card \{[^}]*border: 0/.test(rd('../styles.css')), '속성창 카드 테두리 없앰');
 }
