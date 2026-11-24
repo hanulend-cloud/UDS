@@ -384,7 +384,7 @@ canvas.m3-g { width: 100%; display: block; border-radius: 4px; background: #fafb
 .m3-chk.on { text-decoration: underline; font-weight: 600; }
 .m3-dot { width: 8px; height: 8px; border-radius: 50%; background: #c3c8d2; }
 .m3-dot.ok { background: var(--m3-ok); } .m3-dot.warn { background: var(--m3-warn); } .m3-dot.bad { background: var(--m3-bad); }
-.m3-stxt { margin-left: auto; color: var(--m3-mut); }
+.m3-stxt { margin-left: auto; color: var(--m3-mut); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 40vw; padding-left: 12px; border-left: 1px solid var(--m3-line); }   /* 알림 글 한 줄(2026-11-24) — 전체는 툴팁 */
 .m3-part { padding: 4px 6px; border-radius: 4px; cursor: pointer; }
 .m3-part.on { background: rgba(255, 176, 32, 0.18); }
 .m3-kind { display: inline-block; min-width: 64px; font-size: 11px; padding: 1px 4px; border-radius: 3px; background: #2a3242; color: #e8edf5; }
@@ -1715,6 +1715,7 @@ button.rs-note { border: 0; background: none; padding: 0; cursor: pointer; }
 .m3-insight { display: flex; align-items: center; gap: 14px; padding: 0 12px; min-width: 0; flex: 0 1 auto; font-size: 11.5px; border-right: 1px solid var(--m3-line); }
 .m3-insight:not(:has(:not([hidden]):not(:empty))) { display: none; }
 .m3-insight > span { min-width: 0; display: flex; }
+#m3-pathslot:not(:empty):has(.m3-fpaths:not([hidden])) { border-left: 1px solid var(--m3-line); padding-left: 14px; }   /* 새는 빛 | 광경로 구분선(2026-11-24) */
 .m3-insight .m3-leak { margin: 0; padding: 0; font-size: 11.5px; white-space: nowrap; }
 .m3-fpaths { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46vw; display: block; }
 .m3-fpaths > b { color: var(--m3-mut); font-weight: 600; margin-right: 4px; }

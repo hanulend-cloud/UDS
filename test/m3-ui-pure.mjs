@@ -1751,3 +1751,19 @@ done();
   const out = rv.replace(/<details class="rs-more"[\s\S]*?<\/details>/, '');
   say(/data-ad="apply"/.test(out) && /data-ad="cancel"/.test(out) && /data-ad="continue"/.test(out), '적용 · 적용 안 함 · 이어서 = 늘 보임');
 }
+// 맨 아래 상태줄 단순화(2026-11-24 사용자): 광경로 1위만 보이고 나머지는 툴팁 · 알림 글 한 줄(긴 글은 … + 툴팁) · 새는 빛 | 광경로 | 점검 구분선
+{
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const { footPaths } = await import('../src/ui/m3/opt-dash.js');
+  const P = [{ share: 0.9, t: 'LED → 투명 PC → Milky → 관측면' }, { share: 0.05, t: 'LED → Milky → 관측면 (케이스 반사 포함)' }, { share: 0.03, t: 'LED → 투명 PC → 관측면' }];
+  const f = footPaths(P, (p) => `${(p.share * 100).toFixed(0)}% ${p.t}`);
+  say(/<b>광경로<\/b> 90% LED → 투명 PC → Milky → 관측면/.test(f.html) && !/5%|3%/.test(f.html), '상태줄 광경로: 비중 1위 하나만 보임');
+  say(/90% LED/.test(f.title) && /5% LED → Milky/.test(f.title) && /3% LED/.test(f.title), '상태줄 광경로: 나머지 경로는 툴팁에 모두');
+  const e = footPaths([], (p) => p.t);
+  say(e.html === '' && e.title === '', '광경로 없으면 빈 칸');
+  const { readFileSync } = await import('node:fs'), css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8'), sb = readFileSync(new URL('../src/ui/m3/status-bar.js', import.meta.url), 'utf8');
+  say(/\.m3-stxt\s*\{[^}]*white-space:\s*nowrap[^}]*text-overflow:\s*ellipsis/.test(css), '알림 글 = 한 줄(길면 …)');
+  say(/setAttr\(S\.txt, 'title', tx\)/.test(sb), '알림 글 전체는 툴팁');
+  say(/#m3-pathslot:not\(:empty\)[^{]*\{[^}]*border-left:\s*1px solid var\(--m3-line\)/.test(css), '새는 빛 | 광경로 사이 얇은 세로선');
+  say(/\.m3-stxt\s*\{[^}]*border-left:\s*1px solid var\(--m3-line\)/.test(css), '점검 | 알림 글 사이 얇은 세로선');
+}

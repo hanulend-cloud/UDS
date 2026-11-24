@@ -8,6 +8,11 @@ import { judgeStats, uVerdict } from '../../engine/mech3d/tally.js';
 import { simCtl, setCtl, setStepMark } from './run-ctl.js';
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 // 계산 순서대로(엔진: 위치 → 케이스 면 → 형상 → Milky, 2026-10-30) — 번호도 이 순서
+// 맨 아래 상태줄 광경로(2026-11-24 사용자: 한 줄 단순하게) — 비중 1위만 보이고, 전체 경로는 툴팁. pt(p) = '90% LED → … → 관측면'
+export function footPaths(P, pt) {
+  if (!P?.length) return { html: '', title: '' };
+  return { html: `<b>광경로</b> ${esc(pt(P[0]))}`, title: `빛이 관측면까지 가는 주 경로(비중 큰 순)\n${P.map(pt).join('\n')}` };
+}
 export const STAGES = [['position', '① 위치/개수'], ['shape', '② 형상'], ['milky', '③ 확산도(Milky)']];   // 케이스 면은 부품 속성에서 직접(2026-11-05)
 // 기구 최적화 진행 단계 이름 → 타일(LED 배치·높이 = ② 기구 위치). 현재안·기준·검증 = 타일 없음(머리 줄 문구로만)
 // 진행 상태 갱신(순수, 2026-11-11) — 전체·단계 % 는 내려가지 않음. 끝난 항목을 다시 돌릴 때만 새로 시작
@@ -572,7 +577,7 @@ export function createSimDash(el, { onCtl = null, bar = null, plots = null, path
     }
     // 접힌 줄에는 주 광경로 한 줄 요약, 펼치면 광경로 목록
     set('sum', P.length ? `광경로 <span class="mut">${(P[0].share * 100).toFixed(0)}% ${esc(pathText(P[0], names))}</span>` : '광경로');
-    { const n = Q('[data-s="fpaths"]'); if (n) { const pt = (p) => `${(p.share * 100).toFixed(0)}% ${pathText(p, names)}`, html = P.length ? `<b>광경로</b> ${P.map((p, i) => i ? `<span class="mut">${esc(pt(p))}</span>` : esc(pt(p))).join(' · ')}` : ''; if (n.innerHTML !== html) n.innerHTML = html; n.title = P.length ? `빛이 관측면까지 가는 주 경로(비중 큰 순)\n${P.map(pt).join('\n')}` : ''; n.hidden = !P.length; } }   // 맨 아래 줄: 한 줄(1위 진하게)
+    { const n = Q('[data-s="fpaths"]'); if (n) { const { html, title } = footPaths(P, (p) => `${(p.share * 100).toFixed(0)}% ${pathText(p, names)}`); if (n.innerHTML !== html) n.innerHTML = html; n.title = title; n.hidden = !P.length; } }   // 맨 아래 줄: 1위만(나머지는 툴팁)
     set('paths', P.length ? `<div class="od-paths">${P.map((p) => `<div class="od-path" title="${esc(pathText(p, names))}"><span class="od-pbar"><i style="width:${(p.share * 100).toFixed(0)}%"></i></span><b>${(p.share * 100).toFixed(0)}%</b> ${esc(pathText(p, names))}</div>`).join('')}</div>` : '');
   }
   render();

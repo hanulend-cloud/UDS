@@ -63,6 +63,6 @@ export function renderStatusBar(el, d, h) {
   const anyBad = checkLabels(d.checks ?? {}).some((x) => x.st === 'warn' || x.st === 'bad'), okN = S.ok ?? (S.ok = el.querySelector('[data-s="ok"]'));
   if (okN && okN.hidden !== anyBad) okN.hidden = anyBad;
   const tx = d.text ? String(d.text) : '';
-  setText(S.txt, tx);
+  setText(S.txt, tx); setAttr(S.txt, 'title', tx);   // 한 줄(길면 …) — 전체는 툴팁
   if (S.txt.hidden !== !tx) S.txt.hidden = !tx;
 }
