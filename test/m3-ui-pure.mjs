@@ -1675,3 +1675,14 @@ done();
   say(R.barLabels?.('lum', null)?.join() === '0%,20%,40%,60%,80%,100%', '휘도를 모르면 % 눈금');
   say(R.levelText?.(0.873, 'pct', 1000) === '87.3%' && R.levelText?.(0.5, 'lum', 1000) === '500 cd/m²' && R.levelText?.(0.5, 'lum', null) === '50.0%', '마우스 값 글');
 }
+{ // 칸 뜻 툴팁(2026-11-24 사용성 3·4번) — 상단 길이·폭·효율 칸에 뜻을 짧은 한 줄로(사용자: 설명은 간단하게)
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const R = await import('../src/ui/m3/results-panel.js');
+  const w = R.uTip?.('wid', 12.4), w0 = R.uTip?.('wid'), l = R.uTip?.('len'), e = R.uTip?.('eff');
+  const short = (t) => typeof t === 'string' && t.length <= 45;
+  say(short(w) && w.includes('약 12 mm') && w.includes('최저 ÷ 최고') && w.includes('가장 낮은'), `폭 뜻 (${w})`);
+  say(short(w0) && !w0.includes('mm') && w0.includes('구간'), '구간 길이 모르면 mm 없이');
+  say(short(l) && l.includes('길이 방향') && l.includes('최저 ÷ 최고'), `길이 뜻 (${l})`);
+  say(short(e) && e.includes('정면') && !e.includes('원뿔'), `효율 뜻 — 쉬운 말 (${e})`);
+  say(R.ASSUMED_TIP.length <= 80, `가정 휘도 툴팁 짧게 (${R.ASSUMED_TIP.length}자)`);
+}
