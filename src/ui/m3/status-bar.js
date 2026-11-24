@@ -34,7 +34,7 @@ const setText = (n, v) => { if (n.textContent !== v) n.textContent = v; };
 const setAttr = (n, k, v) => { if (n.getAttribute(k) !== v) n.setAttribute(k, v); };
 const IDS = ['interference', 'wall', 'clash'];
 function init(el) {
-  el.innerHTML = `<span class="mut m3-chkok" data-s="ok">✓ 조립·성형 점검 이상 없음(간섭 · 살두께)</span>
+  el.innerHTML = `<span class="mut m3-chkok" data-s="ok" title="조립·성형 점검: 간섭 · 살두께 이상 없음">✓ 점검 이상 없음</span>
     ${IDS.map((id) => `<span class="m3-chk" role="button" tabindex="0" data-chk="${id}"><span class="m3-dot na"></span><span class="m3-ico" aria-hidden="true"></span><span data-t></span></span>`).join('')}
     <span class="m3-stxt" data-s="txt" hidden></span>`;
   const S = {

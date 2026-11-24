@@ -1775,3 +1775,11 @@ done();
   say(mh <= 28, `맨 아래 상태줄 높이 ≤ 28px: ${mh}`);
   say(/\.m3-foot > \.m3-status\s*\{[^}]*padding:\s*[0-2]px 12px/.test(css), '상태줄 위아래 여백 ≤ 2px');
 }
+// 점검 문구 짧게(2026-11-24 사용자) — 보이는 글은 '✓ 점검 이상 없음', 무엇을 점검했는지는 툴팁
+{
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const { readFileSync } = await import('node:fs'), sb = readFileSync(new URL('../src/ui/m3/status-bar.js', import.meta.url), 'utf8');
+  const m = sb.match(/<span class="mut m3-chkok"([^>]*)>([^<]*)<\/span>/);
+  say(m && m[2] === '✓ 점검 이상 없음', `점검 문구 짧게: ${m?.[2]}`);
+  say(m && /title="[^"]*간섭[^"]*살두께/.test(m[1]), '점검 항목(간섭 · 살두께)은 툴팁');
+}
