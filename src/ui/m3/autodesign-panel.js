@@ -131,11 +131,11 @@ export function tileConfigHtml(k, { avail, sel, running, names = [], milkyPart =
   const pname = (i) => esc(names[i] ?? `부품 ${i + 1}`), dis = running ? ' disabled' : '';
   const pct = (i) => (path && (path.shares?.[i] ?? 0) > 0 ? ` · 빛 ${Math.round(path.shares[i] * 100)}%` : '');
   const pathNote = (t) => `<span class="fb-i" title="${path ? '광경로에서 자동 검출 · 빛 많은 순' : '광경로 검출 전 — 쓸 수 있는 부품 전체'} · ${t}">ⓘ</span>`;   // 긴 안내 = 마우스(2026-11-12)
-  if (k === 'position') {   // ② 기구 위치 = LED 배치 + LED 높이(쓸 수 있는 것만)
-    const okL = !!avail.leds?.ok, okH = !!avail.height?.ok;
-    if (!okL && !okH) { const why = avail.leds?.why ?? avail.height?.why ?? ''; return { on: false, box: '<input type="checkbox" data-ad="position" disabled aria-label="① 위치/개수 사용">', opt: '', why, html: `<label class="od-sw off"><input type="checkbox" data-ad="position" disabled> 사용 안 함</label><div class="od-why mut">${esc(why)}</div>` }; }
-    const on = !!(sel.leds || sel.height), why = `${okL ? '부족한 방향으로 LED 이동 → 모자라면 개수 추가(피치 줄임)' : ''}${okL && okH ? ' + ' : ''}${okH ? 'LED–커버 거리(높이)' : ''}`;
-    const opt = okL ? `<label class="od-opt" title="LED 를 한 줄로만 배치(PCB·LED 재료비 ↓) — 폭 균일도는 마지막 Milky 단계가 올려 맞춤"><input type="checkbox" data-ad="oneRow"${sel.oneRow !== false ? ' checked' : ''}${dis}> 1열만(재료비 ↓)</label>` : '';
+  if (k === 'position') {   // ① 위치/개수 = LED 폭 위치·개수만 — 높이는 검토 안 함(2026-11-25 사용자: 효과 없음)
+    const okL = !!avail.leds?.ok;
+    if (!okL) { const why = avail.leds?.why ?? ''; return { on: false, box: '<input type="checkbox" data-ad="position" disabled aria-label="① 위치/개수 사용">', opt: '', why, html: `<label class="od-sw off"><input type="checkbox" data-ad="position" disabled> 사용 안 함</label><div class="od-why mut">${esc(why)}</div>` }; }
+    const on = !!sel.leds, why = '빛이 없는 쪽으로 LED 이동 → 모자라면 개수 추가(피치 줄임)';
+    const opt = `<label class="od-opt" title="LED 를 한 줄로만 배치(PCB·LED 재료비 ↓) — 폭 균일도는 마지막 Milky 단계가 올려 맞춤"><input type="checkbox" data-ad="oneRow"${sel.oneRow !== false ? ' checked' : ''}${dis}> 1열만(재료비 ↓)</label>`;
     return { on, box: `<input type="checkbox" data-ad="position"${on ? ' checked' : ''}${dis} aria-label="① 위치/개수 사용">`, opt, why, html: `<label class="od-sw"><input type="checkbox" data-ad="position"${on ? ' checked' : ''}${dis}> ${on ? '사용' : '사용 안 함'}</label><div class="od-why mut">${esc(why)}</div>` };
   }
   const a = avail[k];

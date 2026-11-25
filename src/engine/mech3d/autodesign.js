@@ -439,6 +439,17 @@ const FAR_MARGIN = 0.1, FAR_MS = 60000;
 const SHARPEN_MAX = 3;   // ② 후보를 0.5% 로 재는 개수 상한 — 하나에 몇 분
 export const lateralCoarse = (cs) => cs.filter((c) => c % 2 === 0);
 export const lateralFine = (cs, pick) => cs.filter((c) => Math.abs(c - pick) === 1);
+// 빛이 없는(어두운) 폭 쪽(순수, 2026-11-25 사용자) — 지도 폭 칸 왼쪽(−w) 평균 vs 오른쪽(+w) 평균. +1 = 오른쪽이 어두움 · −1 = 왼쪽 · 0 = 모름/노이즈 수준(≤ 2%)
+// 지도 칸 j 의 폭 위치 = w0 + (j + ½)·cell, w0 = −nw·cell/2(관측면 중심 대칭) → j < nw/2 가 −w. 홀수면 가운데 칸은 뺌
+export function darkSide(stats, tol = 0.02) {
+  const m = stats?.map, ns = stats?.profile?.length ?? 0, nw = ns ? Math.round((m?.length ?? 0) / ns) : 0;
+  if (!m || nw < 2 || nw * ns !== m.length) return 0;
+  let l = 0, nl = 0, r = 0, nr = 0;
+  for (let i = 0; i < ns; i++) for (let j = 0; j < nw; j++) { const v = m[i * nw + j]; if (!(Number.isFinite(v) && v > 0)) continue; if (2 * j + 1 < nw) { l += v; nl++; } else if (2 * j + 1 > nw) { r += v; nr++; } }
+  if (!nl || !nr) return 0;
+  l /= nl; r /= nr; const mean = (l + r) / 2;
+  return Math.abs(l - r) <= tol * mean ? 0 : r < l ? 1 : -1;
+}
 export function pickLateral(res, obs) {
   const wid = (x) => x.stats?.Uwid, sc = (x) => (wid(x) ?? x.stats?.Ulen ?? -Infinity), okR = (res ?? []).filter((x) => x.ok);
   if (!okR.length) return null;
@@ -520,11 +531,12 @@ export async function runAutoDesign(cfg, io) {
     if (ref) steps.push({ stage: 'ledsRef', milky: mRef, finish: d.finish ?? null });
     // LED 전체 폭 방향 이동(2026-10-30) — cfg.lateral = 이동량 후보(mm, 기준 LED 대비 · 앱이 PCB 위·간섭 없음만 넘김). 지금 배치를 그대로 옮겨 빠르게 비교 →
     // 최고 점수(SCORE_EPS 안이면 덜 옮긴 쪽) 를 중심으로 아래 배치 탐색. 관측면이 광원에서 비켜 있으면(꺾인 확산판) 이것이 가장 큰 효과
-    if (cfg.lateral?.length > 1 && io.evalLateral) {
-      io.progress?.('leds', 0, `LED 폭 위치 후보 ${cfg.lateral.length}개 비교`);
-      const res0 = await io.evalLateral(d, lateralCoarse(cfg.lateral));
+    const side = darkSide(currentVerified?.stats), latC = side ? (cfg.lateral ?? []).filter((c) => c * side >= 0) : cfg.lateral;   // 빛이 없는 쪽으로만 옮김(2026-11-25 사용자) · 모르면 양쪽
+    if (latC?.length > 1 && io.evalLateral) {
+      io.progress?.('leds', 0, `LED 폭 위치 후보 ${latC.length}개 비교${side ? ` — 어두운 ${side > 0 ? '+' : '−'}폭 쪽` : ''}`);
+      const res0 = await io.evalLateral(d, lateralCoarse(latC));
       if (stop()) return halt();
-      const pick0 = pickLateral(res0, obs), fine = pick0 == null ? [] : lateralFine(cfg.lateral, pick0), res = fine.length ? [...res0, ...await io.evalLateral(d, fine)] : res0;
+      const pick0 = pickLateral(res0, obs), fine = pick0 == null ? [] : lateralFine(latC, pick0), res = fine.length ? [...res0, ...await io.evalLateral(d, fine)] : res0;
       if (stop()) return halt();
       const pick = pickLateral(res, obs);
       steps.push({ stage: 'ledsLateral', pick, results: (res ?? []).map((x) => ({ wCenter: x.cand.wCenter, ok: x.ok, Ulen: x.stats?.Ulen ?? null, Uwid: x.stats?.Uwid ?? null, eff: x.eff })) });

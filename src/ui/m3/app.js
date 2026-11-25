@@ -767,7 +767,7 @@ function adSetOpen(v) { adState().open = v; try { localStorage.setItem(AD_OPEN_K
 function adSel(k, v) {
   const st = adState(); if (st.running) return;
   st.flash = '';
-  if (k === 'position') { const av = adAvail(A.store.mspec); st.sel.leds = !!v && !!av.leds?.ok; st.sel.height = !!v && !!av.height?.ok; }   // ② 기구 위치 = LED 배치 + 높이
+  if (k === 'position') { const av = adAvail(A.store.mspec); st.sel.leds = !!v && !!av.leds?.ok; st.sel.height = false; }   // ① 위치/개수 = LED 폭 위치·개수만 — 높이는 검토 안 함(2026-11-25 사용자: 효과 없음)
   else st.sel[k] = k === 'milkyMax' ? clampCap(v) : v;
   if (k === 'shapePart') st.sel.shapeAuto = false;   // 직접 고르면 검출 결과가 바뀌어도 그대로(목록에서 빠질 때만 다시 자동)
   if (k === 'housingPart') st.sel.housingAuto = false;
@@ -779,7 +779,7 @@ function factorNow() {
   const M = A.store.mspec, S = A.store.session, st = adState(), mp = A.tileState?.milkyPart ?? null, sel = A.tileState?.sel ?? st.sel ?? {};
   let n = null; try { n = ledsNow(M, S.line).list.length; } catch { n = null; }
   const stt = A.prog?.snapshot()?.stats, on = (k) => !!st.sel?.[k];
-  return { milky: mp != null ? +M.parts[mp].material.milky : null, milkyCap: Number.isFinite(sel.milkyMax) ? sel.milkyMax : null, leds: n != null ? `LED ${n}개 · 높이 그대로` : '–', shape: M.parts.some((p) => p.shapeMod) ? '형상 변경됨' : '원래 형상',
+  return { milky: mp != null ? +M.parts[mp].material.milky : null, milkyCap: Number.isFinite(sel.milkyMax) ? sel.milkyMax : null, leds: n != null ? `LED ${n}개` : '–', shape: M.parts.some((p) => p.shapeMod) ? '형상 변경됨' : '원래 형상',
     housing: (() => { const hp = sel.housingPart; if (!(hp >= 0) || !M.parts[hp]) return '–'; const f = M.parts[hp].finish; return `${M.parts[hp].name} · ${f ? finishText({ ...f, ...(M.parts[hp].coating ? { coating: M.parts[hp].coating } : {}) }, reflCat()) : '–'}`; })(),
     on: { milky: on('milky'), position: on('leds') || on('height') || on('position'), shape: on('shape'), housing: on('housing') }, Ulen: stt?.Ulen, Uwid: stt?.Uwid, eff: A.prog?.snapshot()?.photometry?.eff, tgLen: M.observe.targetLen, tgWid: M.observe.targetWid, locked: st.locked ?? {} };
 }
@@ -1204,7 +1204,7 @@ async function adRun(opt = {}) {
   if (/^기구 최적화 실패/.test(S.status ?? '')) setStatus('');   // 지난 실패 문구는 지움
   const M0 = adClone(A.store.mspec), line = S.line, rt = getMech3d();   // 실행 격리 — 편집은 실행을 중지시킴(onChange)
   const avail = adAvail(M0), stages = opt.stages ?? { milky: st.sel.milky && avail.milky.ok, leds: st.sel.leds && avail.leds.ok, shape: st.sel.shape && avail.shape.ok && avail.shape.parts.includes(st.sel.shapePart),
-    height: st.sel.height && avail.height.ok, housing: st.sel.housing && avail.housing.ok && avail.housing.parts.includes(st.sel.housingPart) };
+    height: false, housing: st.sel.housing && avail.housing.ok && avail.housing.parts.includes(st.sel.housingPart) };
   st.milkyPart = adMilkyPart(M0, avail);
   const hpSel = avail.housing?.parts?.includes(st.sel.housingPart) ? st.sel.housingPart : defaultHousingPart(M0, adInfo().boxes);   // 보완으로 ④ 를 더했으면 기본 케이스 부품
   // 최적화 판정 격자 = 늘 저화질(2026-11-02) — 고화질 칸(0.5 mm)으로 짧게 평가하면 노이즈가 '불균일' 로 보여 값이 크게 낮게 나오고(실측 길이 균일도 0.65 vs 정밀 0.76)

@@ -1,4 +1,5 @@
 // P4 단계 실행기(가짜 io): node test/mech3d-autodesign.mjs
+import { darkSide } from '../src/engine/mech3d/autodesign.js';
 import { LADDER_MS, lateralCoarse, lateralFine, pickLateral, runAutoDesign, shapeScore, halving, smoothU, halvingTotal, sameDesign, screenShapeVars, shapeTotal, pickVariant, refineShapeCurve, refineShapeField, fieldError, fieldResponse, ledPhase, shapeModes, foldMap, solveBox, solveShapeModes, curveDirection, shapeSize } from '../src/engine/mech3d/autodesign.js';
 import { shapeVarRanges, gridCandidates, curveAt } from '../src/engine/mech3d/shape-opt.js';
 import { candidateGrid } from '../src/engine/mech3d/basis.js';
@@ -751,5 +752,18 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   const r = await runAutoDesign({ stages: { milky: true }, obs, current: { milky: 1, count: 5, pitch: 0, shape: null }, milkyMax: 10 }, io);
   ok(Math.max(...calls.map((c) => c.m)) <= 2.5 + 1e-9 && Math.min(...calls.slice(-2).map((c) => c.m)) >= 2.5 - 1e-9 && calls.at(-1).precise, `통과 창(2.5)에서 멈춤 — 아래로 다시 안 찾음: ${calls.map((c) => `${c.m}${c.precise ? 'p' : ''}`).join(',')}`);
   ok(Math.abs(r.best.milky - 2.75) < 1e-9 && r.feasible, `통과 행 중 여유 최대(★) = ${r.best.milky}`);
+}
+{ // 폭 위치는 빛이 없는(어두운) 쪽으로만(2026-11-25 사용자) — 지도 폭 칸의 왼쪽(−w)·오른쪽(+w) 평균을 비교
+  const mk = (l, r, nw = 4, ns = 3) => ({ profile: new Float64Array(ns).fill(1), map: Float64Array.from({ length: ns * nw }, (_, k) => (k % nw < nw / 2 ? l : r)) });
+  ok(darkSide(mk(1, 0.4)) === 1 && darkSide(mk(0.4, 1)) === -1, '오른쪽(+w)이 어두우면 +1 · 왼쪽이면 −1');
+  ok(darkSide(mk(1, 0.99)) === 0 && darkSide(null) === 0 && darkSide({ profile: [1], map: [1] }) === 0, '차이가 노이즈 수준(≤ 2%)이거나 폭 칸이 1개면 0(양쪽 다 봄)');
+  const G = { ns: 100, nw: 1, ds: 1, cell: 1, w0: -0.5, L: 100, closed: false, winS: 10, area: new Float64Array(100).fill(1), valid: new Uint8Array(100).fill(1) }, line = { length: 100, closed: false };
+  const asked = [], dark = mk(1, 0.3, 4, 100);
+  const io = { progress() {}, cancelled: () => false, verify: async () => ({ stats: { Ulen: 0.5, Uwid: 0.5, ...dark }, eff: 0.2 }),
+    evalLateral: async (d, list) => { asked.push(...list); return list.map((c) => ({ cand: { wCenter: c }, ok: true, eff: 0.2, stats: { Ulen: 0.5, Uwid: 0.5 + c / 100 } })); },
+    basis: async (d) => { const cand = candidateGrid(line, { sStep: 2, wOffsets: [d.wCenter ?? 0] }); return { cand, emitted: 1, gaps: [], sMargin: 0, maps: cand.map(({ s }) => Float32Array.from({ length: 100 }, (_, i) => Math.exp(-((i + 0.5 - s) ** 2) / 72))) }; } };
+  const r = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.7, targetWid: 0.95 }, current: { milky: 1, count: 5, pitch: 0 }, G, line, nMax: 20, rowsOptions: [1], lateral: [0, -4, -2, 2, 4, 6] }, io);
+  const lat = r.steps.find((x) => x.stage === 'ledsLateral');
+  ok(asked.length > 0 && asked.every((c) => c >= 0) && lat?.pick > 0, `오른쪽이 어두우면 +w 쪽 후보만 비교(${[...new Set(asked)].join()}) → ${lat?.pick}`);
 }
 done();

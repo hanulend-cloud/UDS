@@ -241,7 +241,7 @@ ok(clampCap(12) === 10 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCap
   const c = stepA([]), d = stepA([{ part: 1 }]);
   ok(!c.housing.ok && /불투명/.test(c.housing.why) && !c.height.ok && /발광면/.test(c.height.why) && d.height.ok, '④ 불투명 없음 → 불가 · ⑤ LED STEP 발광점 없음 → 불가, 있으면 가능');
   const h = card({ avail: a, sel: { height: true, housing: true, housingPart: 2 }, running: null, names: ['LGP', '케이스', '덮개'] });
-  ok(h.includes('data-ad="height" checked') && h.includes('data-ad="housing" checked') && /<option value="2" selected>덮개/.test(h) && tileConfigHtml('position', { avail: a, sel: { height: true } }).html.includes('data-ad="position" checked'), '카드: ⑤ 켜짐 = ② 기구 위치 사용 · 실행 가능');
+  ok(h.includes('data-ad="height" checked') && h.includes('data-ad="housing" checked') && /<option value="2" selected>덮개/.test(h) && tileConfigHtml('position', { avail: a, sel: { leds: true } }).html.includes('data-ad="position" checked') && !tileConfigHtml('position', { avail: a, sel: { height: true } }).html.includes('data-ad="position" checked'), '카드: ⑤ 표시는 그대로 · ① 위치/개수는 LED 배치일 때만 켜짐(높이 제외, 2026-11-25)');
   const M = { parts, observe: { faces: [{ part: 0, face: 1 }] } };
   const box0 = [0, 0, 0, 10, 10, 2], small = [-1, -1, -1, 11, 11, 3], big = [-5, -5, -5, 15, 15, 5], far = [100, 0, 0, 200, 100, 50];
   ok(defaultHousingPart(M, [box0, small, big]) === 2 && defaultHousingPart(M, [box0, small, far]) === 1 && defaultHousingPart(M, [box0, far, [0, 0, 0, 1, 1, 1]]) === 1
@@ -1824,4 +1824,12 @@ done();
   const od = fs.readFileSync('src/ui/m3/opt-dash.js', 'utf8'), rp = fs.readFileSync('src/ui/m3/results-panel.js', 'utf8');
   const body = (src, name) => src.slice(src.indexOf(`export function ${name}(`), src.indexOf(`export function ${name}(`) + 1500);
   say(/claimEl\(el\)/.test(body(od, 'createOptDash')) && /claimEl\(el\)/.test(body(od, 'createSimDash')) && /claimEl\(el\)/.test(body(rp, 'createResultsPanel')), '최적화 창·시뮬레이션 창·결과 패널: 다시 열면 옛 것 멈춤');
+}
+{ // ① 위치/개수 = LED 폭 위치·개수만, 높이(LED–커버 거리)는 검토 안 함(2026-11-25 사용자: 효과 없음 — 위치·개수 위주로)
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const app = (await import('node:fs')).readFileSync('src/ui/m3/app.js', 'utf8');
+  say(/if \(k === 'position'\) \{[^}]*st\.sel\.height = false;/.test(app) && /height: false, housing: st\.sel\.housing/.test(app), '위치/개수 켜도 높이 검토 안 함');
+  const { tileConfigHtml } = await import('../src/ui/m3/autodesign-panel.js');
+  const t = tileConfigHtml('position', { avail: { leds: { ok: true }, height: { ok: true } }, sel: { leds: true } });
+  say(!/높이|LED–커버/.test(t.why ?? '') && !/높이|LED–커버/.test(t.html ?? ''), '위치/개수 설명에 높이 없음');
 }
