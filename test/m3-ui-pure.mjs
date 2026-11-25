@@ -1810,3 +1810,18 @@ done();
   renderPartProps(el, M, { ...sel, admin: true }, [], {});
   say((html.match(/data-m3-finishr="part"/g) ?? []).length === 1, '관리자 모드에서도 반사율 칸 1개');
 }
+{ // 상단 결과 칸 중복(2026-11-25 사용자) — 프로젝트를 다시 열면(mount 재호출) 결과 패널을 새로 만들 때 이전 칸을 지우고 하나만
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const rp = (await import('node:fs')).readFileSync('src/ui/m3/results-panel.js', 'utf8');
+  say(/kpi\.replaceChildren\(s\)/.test(rp) && !/kpi\.appendChild\(s\)/.test(rp), '상단 결과 칸: 다시 열어도 한 줄만(이전 칸 지움)');
+}
+{ // 프로젝트를 다시 열면(mount 재호출) 옛 최적화 창·결과 패널이 살아 있어 새 것과 번갈아 그래프를 비우고 채움 = 깜빡임(2026-11-25 사용자, 72-LED 재현)
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const fs = await import('node:fs');
+  let claimEl = null; try { ({ claimEl } = await import('../src/ui/m3/claim.js')); } catch { /* 아직 없음 */ }
+  const el = {}, s1 = claimEl?.(el), s2 = claimEl?.(el);
+  say(!!claimEl && s1.aborted && !s2.aborted, '같은 칸을 다시 맡으면 옛 담당은 멈춤(새 담당만 그림)');
+  const od = fs.readFileSync('src/ui/m3/opt-dash.js', 'utf8'), rp = fs.readFileSync('src/ui/m3/results-panel.js', 'utf8');
+  const body = (src, name) => src.slice(src.indexOf(`export function ${name}(`), src.indexOf(`export function ${name}(`) + 1500);
+  say(/claimEl\(el\)/.test(body(od, 'createOptDash')) && /claimEl\(el\)/.test(body(od, 'createSimDash')) && /claimEl\(el\)/.test(body(rp, 'createResultsPanel')), '최적화 창·시뮬레이션 창·결과 패널: 다시 열면 옛 것 멈춤');
+}

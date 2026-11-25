@@ -6,6 +6,7 @@ import { judgeStats, uVerdict } from '../../engine/mech3d/tally.js';
 // 타일마다 상태(대기·진행 %·완료·건너뜀) · 시험 중 값 → 지금까지 최고 · 후보별 길이/폭 균일도 점 그래프(목표선) · 진행 막대.
 // 시뮬레이션: 점진 계산 스냅숏마다 sample(snap, targetNoise) — 광선 수에 따른 노이즈 %·길이/폭 균일도 추정과 진행률 %(노이즈가 목표에 닿으면 100%).
 import { simCtl, setCtl, setStepMark } from './run-ctl.js';
+import { claimEl } from './claim.js';
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 // 계산 순서대로(엔진: 위치 → 케이스 면 → 형상 → Milky, 2026-10-30) — 번호도 이 순서
 // 맨 아래 상태줄 광경로(2026-11-24 사용자: 한 줄 단순하게) — 비중 1위만 보이고, 전체 경로는 툴팁. pt(p) = '90% LED → … → 관측면'
@@ -322,9 +323,11 @@ export function keepOpen(node) {
 // h = { config(k) → { on, html }(타일 머리의 켜기 스위치·설정), onSel(key, value) } — 실행 전·후에는 타일에서 항목을 고르고, 실행 중에는 진행을 봄
 export function createOptDash(el, h = {}) {
   let S = null, raf = 0;
+  const sig = claimEl(el), ros = [];   // 다시 열면(mount 재호출) 옛 것은 멈춤 — 새 것과 번갈아 그래프를 비우고 채워 깜빡였음(2026-11-25)
+  sig.addEventListener('abort', () => { for (const r of ros) r.disconnect(); clearTimeout(raf); });
   const onChange = (e) => { const x = e.target.closest('[data-ad]'); if (!x || !h.onSel) return; const k = x.dataset.ad; h.onSel(k, x.type === 'checkbox' ? x.checked : x.tagName === 'SELECT' ? +x.value : x.value === '' ? NaN : +x.value); };
-  el.addEventListener('change', onChange); h.board?.addEventListener('change', onChange);
-  h.board?.addEventListener('click', (e) => { const b = e.target.closest('[data-adunlock]'); if (b) h.onUnlock?.(b.dataset.adunlock); });   // 🔒 고정 → [다시 최적화]   // 켜기·설정 = 설계 인자 현황 줄
+  el.addEventListener('change', onChange, { signal: sig }); h.board?.addEventListener('change', onChange, { signal: sig });
+  h.board?.addEventListener('click', (e) => { const b = e.target.closest('[data-adunlock]'); if (b) h.onUnlock?.(b.dataset.adunlock); }, { signal: sig });   // 🔒 고정 → [다시 최적화]   // 켜기·설정 = 설계 인자 현황 줄
   const blank = () => Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', frac: 0, text: '', evals: [] }]));
   function reset({ stages = {}, tgLen, tgWid, locked = {}, done = [] } = {}) {   // done = 중지 때 끝난 항목(그 안만 정밀 판정할 때 '완료'로)
     S = { tiles: blank(), tgLen, tgWid, t0: performance.now(), cur: null, note: '', seq: [], log: [], locked, before: h.now?.() ?? {} };   // before = 실행 전 사양(타일 전후 비교) · locked = 고정 항목(진행 줄 표시)
@@ -341,14 +344,14 @@ export function createOptDash(el, h = {}) {
   }
   function evals(stage, list) { if (!S) return; pushEvals(S, stage, list); draw(); }
   function finish(ok, text = '', effBest = NaN, final = null) { if (!S) return; S.effBest = effBest; S.final = final; closePhase(S, performance.now()); S.endSec = (performance.now() - S.t0) / 1000; for (const [k] of STAGES) if (S.tiles[k].status === 'run') { S.tiles[k].status = 'done'; S.tiles[k].frac = 1; } S.note = text; S.ended = ok; draw(); }
-  function draw() { if (raf) return; raf = setTimeout(() => { raf = 0; render(); renderBoard(); }, 40); }   // setTimeout: 화면이 숨겨져도(다른 탭) 갱신 — rAF 는 멈춤
+  function draw() { if (raf || sig.aborted) return; raf = setTimeout(() => { raf = 0; if (!sig.aborted) { render(); renderBoard(); } }, 40); }   // setTimeout: 화면이 숨겨져도(다른 탭) 갱신 — rAF 는 멈춤
   // 높이 조절 손잡이(.m3-fac-split)는 남기고 내용만 바꿈
   function renderBoard() { if (!h.board) return; let c = h.board.querySelector('.fb-body'); if (!c) { c = document.createElement('div'); c.className = 'fb-body'; h.board.appendChild(c); } const nw = h.now?.() ?? {}; { const html = factorBoardHtml(S, nw, h.config, h.result); if (c._html !== html) { const op = keepOpen(c); c.innerHTML = html; c._html = html; op(); } } }   // 같으면 그대로(깜빡임·체크 클릭 사라짐 방지)
-  if (h.board && typeof ResizeObserver !== 'undefined') { let w0 = 0, h0 = 0; new ResizeObserver(() => { const b = h.board; if (b.clientWidth === w0 && b.clientHeight === h0) return; w0 = b.clientWidth; h0 = b.clientHeight; renderBoard(); }).observe(h.board); }   // 칸 크기가 바뀌면 그래프를 그 크기로 다시
+  if (h.board && typeof ResizeObserver !== 'undefined') { let w0 = 0, h0 = 0; const ro = new ResizeObserver(() => { const b = h.board; if (b.clientWidth === w0 && b.clientHeight === h0) return; w0 = b.clientWidth; h0 = b.clientHeight; renderBoard(); }); ro.observe(h.board); ros.push(ro); }   // 칸 크기가 바뀌면 그래프를 그 크기로 다시
   // 오른쪽 모니터 — 진행 줄 · 지표 · 그래프(자리 크기로) · 기록. 끝나도 그대로 남김(결과 카드는 위 #m3-auto)
   // 지난 후보 표(2026-11-07) — 실행 결과 아래에 늘 붙임(실행 전에도 지난 후보가 있으면)
   const histHtml = () => { const H = h.history?.(); return H?.list?.length ? histTableHtml(H.list, H.tgLen, H.tgWid, H.busy) : ''; };
-  el.addEventListener('click', (e) => { const b = e.target.closest('[data-hpick]'); if (b && !b.disabled) h.onPick?.(+b.dataset.hpick); if (e.target.closest('[data-adpartial]')) h.onPartial?.(); if (e.target.closest('[data-adset]')) h.onSet?.(); });
+  el.addEventListener('click', (e) => { const b = e.target.closest('[data-hpick]'); if (b && !b.disabled) h.onPick?.(+b.dataset.hpick); if (e.target.closest('[data-adpartial]')) h.onPartial?.(); if (e.target.closest('[data-adset]')) h.onSet?.(); }, { signal: sig });
   function render() {
     // 바뀐 것만 갱신(2026-11-07) — 전에는 초당 3~4번 통째로 다시 만들고 그래프 칸을 비웠다가 그려 화면이 깜빡였음
     const put = (node, html) => { if (node && node._html !== html) { const op = keepOpen(node); node.innerHTML = html; node._html = html; op(); } };
@@ -360,8 +363,8 @@ export function createOptDash(el, h = {}) {
     if (p && h.chart) { const hh = `${chartHeight(p.clientWidth)}px`; if (p.style.height !== hh) p.style.height = hh; }
     if (p && p.clientWidth > 40 && p.clientHeight > 30) put(p, factorChartSvg(S, { ...(S.before ?? {}), tgLen: S.tgLen, tgWid: S.tgWid }, p.clientWidth, p.clientHeight));
   }
-  if (typeof ResizeObserver !== 'undefined') { let w0 = 0; new ResizeObserver(() => { if (el.clientWidth !== w0) { w0 = el.clientWidth; draw(); } }).observe(el); if (h.chart) { let cw = 0, ch = 0; new ResizeObserver(() => { const b = h.chart; if (b.clientWidth !== cw || b.clientHeight !== ch) { cw = b.clientWidth; ch = b.clientHeight; draw(); } }).observe(h.chart); } }
-  if (typeof setInterval !== 'undefined') setInterval(() => { if (S && S.ended == null && !S.stopped && el.isConnected && el.offsetParent) draw(); }, 1000);   // 걸린 시간 갱신
+  if (typeof ResizeObserver !== 'undefined') { let w0 = 0; const ro = new ResizeObserver(() => { if (el.clientWidth !== w0) { w0 = el.clientWidth; draw(); } }); ro.observe(el); ros.push(ro); if (h.chart) { let cw = 0, ch = 0; const rc = new ResizeObserver(() => { const b = h.chart; if (b.clientWidth !== cw || b.clientHeight !== ch) { cw = b.clientWidth; ch = b.clientHeight; draw(); } }); rc.observe(h.chart); ros.push(rc); } }
+  if (typeof setInterval !== 'undefined') { const iv = setInterval(() => { if (S && S.ended == null && !S.stopped && el.isConnected && el.offsetParent) draw(); }, 1000); sig.addEventListener('abort', () => clearInterval(iv)); }   // 걸린 시간 갱신
   render(); renderBoard();
   function stop() { if (S) { closePhase(S, S.pauseAt ?? performance.now()); S.stopped = true; S.pauseAt = null; stopTiles(S); draw(); } }
   function fail(text) { if (S && S.ended == null && !S.stopped) { failRun(S, text, S.pauseAt ?? performance.now()); draw(); } }
@@ -505,6 +508,7 @@ export function simCardText(state, pct, reason = '', stopped = false, busy = fal
 // plots = 계산 추이 | 광경로를 늘 보이게 그릴 칸(2026-11-22 사용자 — 오른쪽 보드). 있으면 카드에서 그 두 접는 칸을 뺌
 export function createSimDash(el, { onCtl = null, bar = null, plots = null, pathsEl = null } = {}) {   // pathsEl = 광경로 한 줄을 그릴 칸(화면 맨 아래 줄, 2026-11-22 사용자) — 있으면 보드에는 계산 추이만
   let H = [], tgt = 0.02, raf = 0, state = '', obs = null, P = [], names = [], reason = '', stopped = false, err = '';
+  const sig = claimEl(el);   // 다시 열면 옛 것은 멈춤(2026-11-25)
   // names = 부품 이름, nMech = 기구 부품 수(LED STEP 부품 번호는 그 뒤 — 경로에서 뺌)
   let busy = false;   // 기구 최적화 중(점진 계산 일시정지)
   let diag = null, lastPh = 0;   // 빛 도달 진단(관측면 도달 < 1%) · 앞 갱신의 광선 수(줄면 새 계산)
@@ -524,7 +528,7 @@ export function createSimDash(el, { onCtl = null, bar = null, plots = null, path
     if (H.length > 400) H = H.filter((_, i) => i % 2 === 0 || i === H.length - 1);
     draw();
   }
-  function draw() { if (raf) return; raf = setTimeout(() => { raf = 0; render(); }, 40); }   // setTimeout: 화면이 숨겨져도(다른 탭) 갱신 — rAF 는 멈춤
+  function draw() { if (raf || sig.aborted) return; raf = setTimeout(() => { raf = 0; if (!sig.aborted) render(); }, 40); }   // setTimeout: 화면이 숨겨져도(다른 탭) 갱신 — rAF 는 멈춤
   function render() {
     const last = H[H.length - 1], pct = state === 'done' ? 100 : Number.isFinite(prog) ? prog : last ? simPct(last.noise, tgt) : 0, pctT = fmtProg(pct);
     const Q = (s) => el.querySelector(s) ?? plots?.querySelector(s) ?? pathsEl?.querySelector(s);   // 카드 또는 보드 아래 칸
@@ -581,8 +585,8 @@ export function createSimDash(el, { onCtl = null, bar = null, plots = null, path
     set('paths', P.length ? `<div class="od-paths">${P.map((p) => `<div class="od-path" title="${esc(pathText(p, names))}"><span class="od-pbar"><i style="width:${(p.share * 100).toFixed(0)}%"></i></span><b>${(p.share * 100).toFixed(0)}%</b> ${esc(pathText(p, names))}</div>`).join('')}</div>` : '');
   }
   render();
-  if (typeof ResizeObserver !== 'undefined') { const ro = new ResizeObserver(() => draw()); ro.observe(el); if (plots) ro.observe(plots); }   // 칸 크기가 바뀌면 그래프를 그 크기로
+  if (typeof ResizeObserver !== 'undefined') { const ro = new ResizeObserver(() => draw()); ro.observe(el); if (plots) ro.observe(plots); sig.addEventListener('abort', () => ro.disconnect()); }   // 칸 크기가 바뀌면 그래프를 그 크기로
   // 창 크기가 바뀌면 끝난 계산도 그 크기로 다시 그림
-  const miniRO = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => draw()) : null;
+  const miniRO = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => draw()) : null; sig.addEventListener('abort', () => miniRO?.disconnect());
   return { sample, paths: () => P, attach: (node) => { miniRO?.disconnect(); mini = node; if (node) miniRO?.observe(node); draw(); } };
 }

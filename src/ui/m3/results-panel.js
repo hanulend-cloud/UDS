@@ -4,6 +4,7 @@ import { mountSplit, mountHeightHandle } from './pane-split.js';
 import { clampRect, fitRect, winTop, dragBy, raiseWin, mountResizers, COLLAPSED_W, maxRect, DEF_RECT, flyWin, collapsedRect } from './monitor.js';
 import { simPct } from './opt-dash.js';
 import { simCtl, setCtl, setStepMark, iconLabel } from './run-ctl.js';
+import { claimEl } from './claim.js';
 import { showCtxMenu } from './feature-tree.js';
 // 결과 패널 — spec 2026-10-15 m3-cad-ui §2(시안 m3-ui-mockup 오른쪽):
 // ① 2D 광량 분포(관측면 펼침 s×w) + 평균 광량(목표 대비)·광 효율 ② 길이 1D 프로파일(목표선) + 길이 균일도 ③ 폭 1D 프로파일(최저 창) + 폭 균일도.
@@ -705,6 +706,7 @@ export const mapMenuItems = (hasPin, onCell) => [
 export const plotMenuItems = (title) => [{ k: 'csv', label: `${title} 데이터 CSV 저장` }, { k: 'png', label: '그래프 이미지 저장 (PNG)' }, { k: 'copy', label: '그래프 이미지 복사' }];
 // head = 판정·모드 띠·균일도 카드를 그릴 칸(2026-11-22 사용자 — 오른쪽 위 보드). 없으면 예전처럼 el 한 칸에 모두
 export function createResultsPanel(el, { onPalette = null, head = null, foot = null, anchor = () => null, onPreview = null, onOpt = null, onQuality = null, fileName = () => 'uds', onLeak = null, onBig = null, onCalc = null, calcBusy = () => false, onNote = null, kpi = null, onFlux = null } = {}) {   // kpi = 상단 띠의 균일도·광량·광효율 칸(2026-11-23 사용자 — 늘 보이게)
+  const sig = claimEl(el);   // 다시 열면 옛 패널은 멈춤 — 옛 결과를 새 캔버스에 그리지 않게(2026-11-25)
   let effT = { key: null, t0: null };
   let optFrac = null, vCls = '';   // 기구 최적화 진행률(null = 안 돎) · 지금 종합 판정
   function syncNext() {   // 판정 옆 '다음 할 일' 단추
@@ -736,7 +738,7 @@ export function createResultsPanel(el, { onPalette = null, head = null, foot = n
       <div class="m3-gw"><canvas class="m3-g" data-r="wprof" width="600" height="120"></canvas></div></div></div>`;
   el.innerHTML = head ? blkHtml : topHtml + blkHtml;
   if (head) head.innerHTML = topHtml;
-  if (kpi) { const s = (head ?? el).querySelector('.m3-sum'); if (s) { s.classList.add('m3-kpi-sum'); kpi.appendChild(s); } }   // 결과 카드를 상단 띠로 옮김 — 갱신 로직은 그대로
+  if (kpi) { const s = (head ?? el).querySelector('.m3-sum'); if (s) { s.classList.add('m3-kpi-sum'); kpi.replaceChildren(s); } }   // 결과 카드를 상단 띠로 옮김 — 갱신 로직은 그대로 · 이전 칸은 지움(프로젝트 다시 열면 중복, 2026-11-25)
   if (foot) foot.innerHTML = leakBtn;   // 새는 빛 = 화면 맨 아래 줄(2026-11-22 사용자)
   const q = (k) => el.querySelector(`[data-r="${k}"]`) ?? head?.querySelector(`[data-r="${k}"]`) ?? foot?.querySelector(`[data-r="${k}"]`) ?? kpi?.querySelector(`[data-r="${k}"]`);
   { const c = q('avg')?.closest('.m3-sum-c'); c?.addEventListener('click', () => { if (q('avg').classList.contains('assumed')) onFlux?.(); }); }   // 가정 휘도 칸 클릭 = LED 광속 입력으로(2026-11-23)
@@ -1108,7 +1110,7 @@ ${uTip(c.dataset.u, tipWinS)}` : ''); if (c.title !== t) c.title = t; } };   // 
   }
   if (typeof ResizeObserver !== 'undefined') {
     let w0 = 0;
-    new ResizeObserver(() => { const c = q('map'), w = c.clientWidth ? `${c.clientWidth}x${c.clientHeight}` : 0; if (w && w !== w0) { w0 = w; if (last) update(last); } }).observe(el);   // 폭·높이(아래 칸 높이 조절) 바뀌면 다시 그림
+    const ro = new ResizeObserver(() => { const c = q('map'), w = c.clientWidth ? `${c.clientWidth}x${c.clientHeight}` : 0; if (w && w !== w0) { w0 = w; if (last) update(last); } }); ro.observe(el); sig.addEventListener('abort', () => ro.disconnect());   // 폭·높이(아래 칸 높이 조절) 바뀌면 다시 그림
   }
   clear();
   // 기구 최적화 진행률(null = 안 돎) — 판정 옆 단추 글만 고침(그래프는 다시 안 그림)
