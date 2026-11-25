@@ -198,7 +198,7 @@ export function screenSummary(gains) {
 const dU = (a, b) => (Number.isFinite(a) && Number.isFinite(b) && Math.abs(flU(b) - flU(a)) >= 0.0005 ? ` <span class="m3-dl">(${fmtDp(flU(b) - flU(a))})</span>` : '');   // 균일도 차이(%p)
 const dl = (a, b, k = 1, u = '') => { if (!Number.isFinite(a) || !Number.isFinite(b)) return ''; const d = +(b * k).toFixed(2) - +(a * k).toFixed(2); return Math.abs(d) >= 0.005 ? ` <span class="m3-dl">(${d > 0 ? '+' : ''}${d.toFixed(2)}${u})</span>` : ''; };
 // 총 LED 수(2열 = 열 수 × 열당, 위치 목록 = 그 수)
-const ledTotal = (x) => (x?.positions?.length ? x.positions.length : Number.isFinite(x?.count) ? x.count * (x.rows >= 2 ? x.rows : 1) : NaN);   // N열(2026-11-25)
+export const ledTotal = (x) => (x?.positions?.length ? x.positions.length : Number.isFinite(x?.count) ? x.count * (x.rows >= 2 ? x.rows : 1) : NaN);   // N열(2026-11-25)
 // 비교표 줄(현재 → 최적/적용 후) — compareHtml 과 적용 뒤 요약(appliedHtml)이 같이 씀
 const passMark = (v, t, j) => (Number.isFinite(v) && Number.isFinite(t) ? (j === 'near' ? ' <b class="near" title="목표와의 차이가 노이즈보다 작음">≈</b>' : v + 1e-9 >= t ? ' <b class="ok">✓</b>' : ' <b class="bad">✕</b>') : '');
 // targets = { len, wid } — 균일도 줄에 목표·통과(✓/✕)
@@ -476,6 +476,84 @@ function notesLines(r) {
   const ch = caseHintText(r) ? `<button type="button" class="rs-note m3-rhint" data-ad="casePart" data-v="${r.hint.finish.part}" title="${esc(caseHintText(r))}">💡 ${esc(shortNote(caseHintText(r)))} ▸</button>` : '';
   return n.join('') + ch;
 }
+// ---- 결과 화면 시안 4(2026-11-25 사용자): 빛 분포 이전/이후 · 기구 변경 단면 · 부품 영향 · 검토 흐름 · 시뮬레이션 근거 ----
+// 관측면 맵(i*nw+j, i = 길이) → 작은 그림 {w,h,v(0~1, 칸 평균/최대)} — 파일에 저장해도 작게(길이 ≤W · 폭 ≤H 칸)
+export function thumbMap(map, ns, W = 60, H = 8) {
+  const n = map?.length ?? 0, nw = ns > 0 ? Math.round(n / ns) : 0;
+  if (!n || nw < 1 || nw * ns !== n) return null;
+  const w = Math.min(W, ns), h = Math.min(H, nw), v = new Array(w * h).fill(0), c = new Array(w * h).fill(0);
+  for (let i = 0; i < ns; i++) for (let j = 0; j < nw; j++) { const x = map[i * nw + j]; if (!Number.isFinite(x)) continue; const k = Math.min(h - 1, Math.floor((j * h) / nw)) * w + Math.min(w - 1, Math.floor((i * w) / ns)); v[k] += x; c[k]++; }
+  const a = v.map((s, k) => (c[k] ? s / c[k] : 0)), mx = Math.max(...a);
+  return { w, h, v: a.map((x) => (mx > 0 ? Math.round((x / mx) * 1000) / 1000 : 0)) };
+}
+const RAMP = [[12, 20, 60], [40, 90, 170], [90, 180, 200], [240, 220, 120], [255, 250, 220]];
+const rampOf = (t) => { t = Math.max(0, Math.min(1, t)); const s = t * 4, i = Math.min(3, Math.floor(s)), f = s - i; return `rgb(${RAMP[i].map((v, k) => Math.round(v + (RAMP[i + 1][k] - v) * f)).join(',')})`; };
+export function mapThumbSvg(t) {
+  if (!t?.v?.length) return '';
+  let r = ''; for (let y = 0; y < t.h; y++) for (let x = 0; x < t.w; x++) r += `<rect x="${x}" y="${y}" width="1.05" height="1.05" fill="${rampOf(t.v[y * t.w + x])}"/>`;
+  return `<svg class="rs-map" viewBox="0 0 ${t.w} ${t.h}" preserveAspectRatio="none" role="img" aria-label="관측면 휘도">${r}</svg>`;
+}
+// 검토 흐름 — 무엇을 어떻게 검토했나(결과값은 지난 후보 표에) · off = 이번에 안 돌린 항목
+export function reviewFlow(steps = [], { cur = {}, nMax = null, stages = {} } = {}) {
+  const has = (s) => steps.some((x) => x?.stage === s), items = [];
+  const lat = steps.find((x) => x?.stage === 'ledsLateral');
+  if (lat) { const ws = (lat.results ?? []).map((q) => q.wCenter).filter((w) => Number.isFinite(w) && w !== 0); items.push({ k: 'position', t: '위치', v: ws.some((w) => w > 0) && ws.some((w) => w < 0) ? '폭 양쪽 이동' : '어두운 쪽 이동' }); }
+  if (has('leds') || has('ledsCount') || has('ledsVerify')) { const n0 = ledTotal(cur), ok0 = Number.isFinite(n0); items.push({ k: 'position', t: '개수', v: ok0 && nMax ? `${n0} → 최대 ${nMax}` : ok0 ? `${n0}개부터` : '늘려 봄' }); }
+  if (has('ledsTwoRow') || has('ledsRows')) { const mx = Math.max(2, ...steps.filter((x) => x?.stage === 'ledsRows').flatMap((x) => (x.tried ?? []).map((t) => (t?.design?.rows >= 2 ? Math.round(t.design.rows) : 1)))); items.push({ k: 'position', t: '열', v: mx > 2 ? `2→${mx}열` : '2열' }); }
+  const sh = steps.filter((x) => x?.stage === 'shapeScreen' || x?.stage === 'shapeField'), shN = sh.reduce((a, x) => a + (x.results?.length ?? x.tried?.length ?? 0), 0);
+  if (sh.length || has('shape')) items.push({ k: 'shape', t: '형상', v: shN ? `후보 ${shN}개` : '입광면 다듬기' });
+  const mk = steps.filter((x) => x?.stage === 'milky').flatMap((x) => (x.rows ?? []).map((q) => +q.milky)).filter(Number.isFinite);
+  if (mk.length) items.push({ k: 'milky', t: 'Milky', v: `${Math.min(...mk).toFixed(1)}~${Math.max(...mk).toFixed(1)}` });
+  const ran = new Set(items.map((x) => x.k)); if (stages.position || stages.leds) ran.add('position'); if (stages.shape) ran.add('shape'); if (stages.milky) ran.add('milky');
+  return { items, off: [['position', '위치'], ['shape', '형상'], ['milky', 'Milky']].filter(([k]) => !ran.has(k)).map(([, n]) => n) };
+}
+const rowsN = (x) => (x?.rows >= 2 ? Math.round(x.rows) : 1);
+export function partImpactText(cur = {}, best = {}) {
+  const a = ledTotal(cur), b = ledTotal(best), out = [];
+  if (Number.isFinite(a) && Number.isFinite(b) && a !== b) out.push(`LED ${a} → ${b}개 (×${(b / a).toFixed(1)})`);
+  if (rowsN(best) > rowsN(cur)) out.push('LED PCB 새로 설계');
+  if (Number.isFinite(cur.milky) && Number.isFinite(best.milky) && Math.abs(cur.milky - best.milky) >= 0.005) out.push(`Milky ${f2(cur.milky)} → ${f2(best.milky)}`);
+  return out.join(' · ');
+}
+// 밝기 비 = 효율 × LED 수(같은 LED 광속) — 휘도 값 대신 몇 배인지만
+export function brightText(cur = {}, best = {}) {
+  const a = ledTotal(cur), b = ledTotal(best);
+  if (!(a > 0 && b > 0 && cur.eff > 0 && best.eff > 0)) return '';
+  const k = (best.eff * b) / (cur.eff * a);
+  return Math.abs(k - 1) < 0.05 ? '' : `밝기 ×${k.toFixed(1)}`;
+}
+// 기구 변경 단면(이전 | 이후) — 확산판 진하기 = Milky, 그 아래 LED 열
+export function mechSectionSvg(cur = {}, best = {}) {
+  const side = (x, x0, hi) => {
+    const op = Number.isFinite(x.milky) ? Math.min(0.95, 0.15 + 0.08 * x.milky) : 0.15, k = rowsN(x), nd = Math.min(k, 6), cw = 10, gp = 4, w0 = x0 + 55 - (nd * cw + (nd - 1) * gp) / 2;
+    const leds = Array.from({ length: nd }, (_, i) => `<rect class="rs-led" x="${(w0 + i * (cw + gp)).toFixed(1)}" y="56" width="${cw}" height="8" rx="1"/>`).join('');
+    const n = x.count ?? ledTotal(x), lb = `${k}열 × ${Number.isFinite(n) ? n : '?'}${x.pitch > 0 && hi ? ` · 피치 ${(+x.pitch).toFixed(1)}` : ''}`;
+    return `<rect class="rs-mk" x="${x0}" y="22" width="110" height="10" rx="2" opacity="${op.toFixed(2)}"/><rect class="rs-pcb" x="${x0}" y="64" width="110" height="5"/>${leds}
+      <text class="rs-st${hi ? ' hi' : ''}" x="${x0 + 55}" y="48">${Number.isFinite(x.milky) ? `Milky ${f2(x.milky)}` : '확산판'}</text><text class="rs-st${hi ? ' hi' : ''}" x="${x0 + 55}" y="84">${esc(lb)}</text>`;
+  };
+  return `<svg class="rs-sec" viewBox="0 0 300 90" role="img" aria-label="기구 변경 단면 — 이전과 이후"><text class="rs-st" x="70" y="12">이전</text><text class="rs-st" x="225" y="12">이후</text>${side(cur, 15, false)}<path class="rs-arr" d="M135 46 H160 M155 42 L160 46 L155 50"/>${side(best, 170, true)}</svg>`;
+}
+export const runText = (run) => [run?.n > 0 ? `후보 ${run.n}개 시뮬레이션` : '', '정밀 재확인 ✓', run?.sec > 0 ? (run.sec >= 60 ? `${Math.round(run.sec / 60)}분` : `${Math.round(run.sec)}초`) : ''].filter(Boolean).join(' · ');
+const passOf = (v, t) => Number.isFinite(v) && Number.isFinite(t) && Math.floor(v * 1000 + 1e-9) >= Math.floor(t * 100 + 1e-9) * 10;
+const gapOf = (v, t) => (Number.isFinite(v) && Number.isFinite(t) && !passOf(v, t) ? ((Math.floor(t * 100 + 1e-9) * 10 - Math.floor(v * 1000 + 1e-9)) / 10).toFixed(1) : null);
+function gapLine(r) { const tg = r.targets ?? {}, a = gapOf(r.best?.Ulen, tg.len), b = gapOf(r.best?.Uwid, tg.wid); return [a && `길이 −${a}%p`, b && `폭 −${b}%p`].filter(Boolean).join(' · '); }
+function baHtml(r) {
+  const tg = r.targets ?? {}, c = r.cur ?? {}, b = r.best ?? {}, pc = (x) => (Number.isFinite(x) ? `${(x * 100).toFixed(1)}%` : '–');
+  const val = (v, t) => (Number.isFinite(t) ? `<b class="${passOf(v, t) ? 'ok' : 'bad'}">${fmtJudge(v)} ${passOf(v, t) ? '✓' : '✕'}</b>` : `<b>${fmtJudge(v)}</b>`);
+  const bt = brightText(c, b);
+  return `<div class="rs-ba"><div class="rs-h">빛 분포 <span class="mut">관측면 휘도</span></div>
+    <div class="rs-bal mut">이전</div>${mapThumbSvg(c.thumb)}<div class="rs-bav mut">길이 ${fmtJudge(c.Ulen)} · 폭 ${fmtJudge(c.Uwid)} · 효율 ${pc(c.eff)}</div>
+    <div class="rs-bal">이후</div>${mapThumbSvg(b.thumb)}<div class="rs-bav">길이 ${val(b.Ulen, tg.len)} · 폭 ${val(b.Uwid, tg.wid)}${bt ? ` · ${bt}` : ''} · 효율 ${pc(b.eff)}</div></div>`;
+}
+function mechHtml(r) {
+  const im = partImpactText(r.cur, r.best);
+  return `<div class="rs-mech"><div class="rs-h">기구 변경 <span class="mut">단면</span><span class="m3-ad-sp"></span><button type="button" data-ad="pvSwap" title="3D 화면을 이전 ↔ 이후로 바꿔 보기(적용 전)">${r.pvBefore ? '3D: 이전 ▸ 이후' : '3D: 이후 ▸ 이전'}</button></div>${mechSectionSvg(r.cur, r.best)}${im ? `<div class="rs-impact"><b>부품 영향</b> · ${esc(im)}</div>` : ''}</div>`;
+}
+function flowHtml(f) {
+  if (!f?.items?.length) return '';
+  const col = { position: 'p', shape: 's', milky: 'm' };
+  return `<div class="rs-flow"><span class="mut">검토</span>${f.items.map((x) => `<span class="rs-fi"><b class="rs-c${col[x.k]}">${esc(x.t)}</b> ${esc(x.v)}</span>`).join('<span class="rs-fa">›</span>')}<span class="rs-fa">›</span><b>★ 정밀 재확인</b>${f.off.length ? `<span class="m3-ad-sp"></span><span class="mut">${esc(f.off.join('·'))} 안 돌림</span>` : ''}</div>`;
+}
 // 결과 화면 — 판정 · 균일도 카드 · 최적화 인자 상자 · 참고 · 단추 · 지난 후보(위 3개, 나머지는 [전체 보기])
 export function resultViewHtml(r, { applied = null, effects = null, hist = null, busy = false, catalog = null, locked = {} } = {}) {
   const x = r ?? applied, tg = x?.targets ?? {};
@@ -486,12 +564,13 @@ export function resultViewHtml(r, { applied = null, effects = null, hist = null,
     return `<div class="rs"><div class="rs-vd ok"><b>✓ 적용됨</b> <span class="mut">${esc(applied.at ?? '')} · 되돌리기 전까지 유지</span>${va?.[0] && va[0] !== 'ok' ? ` <span class="rs-lim">· ${esc(va[1])}</span>` : ''}</div>${effDrop}${notesLines(applied)}
     <div class="rs-btn"><button type="button" data-ad="revert" title="적용 전 값으로">↶ 되돌리기</button>${toSetBtn}</div>${histBox}</div>`;
   }
-  const v = verdictOf(r), lim = limitText(r.reason);
+  const v = verdictOf(r), lim = limitText(r.reason), gp = v[0] === 'bad' ? gapLine(r) : '', vis4 = !!(r.cur && r.best && Number.isFinite(r.best.Ulen));   // 시안 4 = 이전/이후 값이 있을 때
   const warn = [r.clash > 0 ? `<div class="m3-clash" role="alert">LED 몸체가 부품과 겹침(${r.clash}개) — 적용 불가</div>` : '',
-    r.best?.rows >= 2 && (r.cur?.rows ?? 1) < r.best.rows ? `<div class="rs-note warn">⚠ ${r.best.rows}열 배치 = LED PCB 새로 설계</div>` : '',
+    !vis4 && r.best?.rows >= 2 && (r.cur?.rows ?? 1) < r.best.rows ? `<div class="rs-note warn">⚠ ${r.best.rows}열 배치 = LED PCB 새로 설계</div>` : '',
     effDropHtml(r.cur, r.best)].join('');
   const alt = r.unchanged && r.alt ? `<div class="rs-note">찾은 후보 ${fmtJudge(r.alt.Ulen)}/${fmtJudge(r.alt.Uwid)} — 지금보다 뚜렷이 낫지 않음</div>` : '';
-  return `<div class="rs"><div class="rs-vd ${v[0]}"><b>${v[1]}</b> <span class="mut">${v[2]}</span>${lim ? ` <span class="rs-lim" title="한계: ${esc(lim)}">· 한계: ${esc(lim.split(' — ')[0])}</span>` : ''}</div>
+  return `<div class="rs"><div class="rs-vd ${v[0]}"><b>${v[1]}${gp ? ` · ${gp}` : ''}</b>${gp ? '' : ` <span class="mut">${v[2]}</span>`}${lim ? ` <span class="rs-lim" title="한계: ${esc(lim)}">· 한계: ${esc(lim.split(' — ')[0])}</span>` : ''}${vis4 ? `<span class="m3-ad-sp"></span><span class="rs-run" title="찾은 안을 노이즈 2%로 다시 계산해 판정 · 후보 = 이번에 시뮬레이션한 설계 수">${esc(runText(r.run))}</span>` : ''}</div>
+    ${vis4 ? `<div class="rs-grid">${baHtml(r)}${mechHtml(r)}</div>${flowHtml(r.review)}` : ''}
     ${warn}${alt}${twoRowAltText(r) ? `<div class="rs-note">${esc(twoRowAltText(r))}</div>` : ''}${notesLines(r)}
     <div class="rs-btn">${applyBtn(r, 'LED 몸체가 부품과 겹침')}${altBtn(r)}${shapeDeepBtn(r)}${twoRowBtn(r)}${r.clash > 0 ? '' : `<button type="button" data-ad="continue" title="${r.unchanged ? '지금 설계 그대로' : '이 안을 적용한 뒤'}, 체크했지만 이번에 돌리지 않은 항목을 이어서 최적화">이 안에서 이어서 ▸</button>`}<button type="button" data-ad="cancel" title="이 결과를 설계에 적용하지 않고 닫기 — 지난 후보 표에는 남음">적용 안 함</button><span class="m3-ad-sp"></span><details class="rs-more" data-keep="rs-more"><summary title="설정 바꾸기 · STEP 내보내기 · 프로파일·표">더 보기</summary><div class="rs-more-in">${toSetBtn}${r.shape ? '<button type="button" data-ad="step">STEP 내보내기</button>' : ''}<button type="button" data-ad="view" title="프로파일 비교 · Milky 표 · 전체 비교표">프로파일·표</button></div></details></div>
     ${histBox}</div>`;

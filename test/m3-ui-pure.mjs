@@ -1851,5 +1851,52 @@ done();
   say(maxLedsOnLine?.(100, false, 1.5) === 31 && maxLedsOnLine?.(100, false, 0.5) === 50, '열린 100 mm: 반폭 1.5 → 31개 · 작은 LED 는 최소 간격 2 mm → 50개');
   say(maxLedsOnLine?.(1, false, 1.5) === 1 && maxLedsOnLine?.(0, true, 1) === 1, '아주 짧아도 1개');
   const app = (await import('node:fs')).readFileSync('src/ui/m3/app.js', 'utf8');
-  say(/nMax: maxLedsOnLine\(line\.length, line\.closed, ledHalfWidth\(M0, line\)\)/.test(app) && !/Math\.min\(60, Math\.floor\(line\.length \/ 2\)\)/.test(app), '최적화 개수 상한 = 몸체 한계(60개 제한 없음)');
+  say(/nMaxL = maxLedsOnLine\(line\.length, line\.closed, ledHalfWidth\(M0, line\)\)/.test(app) && /nMax: nMaxL,/.test(app) && !/Math\.min\(60, Math\.floor\(line\.length \/ 2\)\)/.test(app), '최적화 개수 상한 = 몸체 한계(60개 제한 없음)');
+}
+// 결과 화면 시안 4(2026-11-25 사용자): 빛 분포 이전/이후 그림 · 기구 변경 단면 · 부품 영향 · 검토 흐름 · 시뮬레이션 근거
+{
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const AP = await import('../src/ui/m3/autodesign-panel.js');
+  say(AP.ledTotal({ count: 72 }) === 72 && AP.ledTotal({ rows: 3, count: 107 }) === 321 && AP.ledTotal({ rows: 1, count: 300, positions: Array(321).fill({}) }) === 321 && Number.isNaN(AP.ledTotal({})), 'LED 총 개수 = 열 × 개수 · 위치 목록 길이');
+  // map: ns=4(길이) × nw=2(폭), i*nw+j
+  const t = AP.thumbMap([1, 1, 2, 2, 3, 3, 4, 4], 4, 2, 2);
+  say(t && t.w === 2 && t.h === 2 && t.v.length === 4 && Math.abs(t.v[1] - 1) < 1e-9 && Math.abs(t.v[0] - 1.5 / 3.5) < 1e-3, `빛 분포 그림 = 칸 평균 · 최대 1: ${JSON.stringify(t)}`);
+  say(AP.thumbMap(null, 4) === null && AP.thumbMap([1, 2, 3], 2) === null, '맵 없거나 크기 안 맞으면 그림 없음');
+  const big = AP.thumbMap(Array(220 * 7).fill(1), 220);
+  say(big.w === 60 && big.h === 7, `큰 맵 = 길이 60칸 · 폭은 그대로(≤8): ${big.w}×${big.h}`);
+  const svg = AP.mapThumbSvg(t);
+  say(/<svg[^>]*class="rs-map"/.test(svg) && (svg.match(/<rect/g) ?? []).length === 4 && AP.mapThumbSvg(null) === '', '빛 분포 SVG = 칸마다 사각형');
+  const steps = [
+    { stage: 'ledsLateral', results: [{ wCenter: 0 }, { wCenter: 0.5 }, { wCenter: 1 }] },
+    { stage: 'leds' }, { stage: 'ledsTwoRow', tried: [] },
+    { stage: 'ledsRows', tried: [{ design: { rows: 3 } }, { design: { rows: 6 } }] },
+    { stage: 'milky', phase: 'coarse', rows: [{ milky: 4 }, { milky: 7.5 }] }, { stage: 'milky', phase: 'peak', rows: [{ milky: 6.5 }] },
+  ];
+  const f = AP.reviewFlow(steps, { cur: { count: 72 }, nMax: 119, stages: { position: true, milky: true } });
+  const txt = f.items.map((x) => `${x.t} ${x.v}`).join(' | ');
+  say(txt === '위치 어두운 쪽 이동 | 개수 72 → 최대 119 | 열 2→6열 | Milky 4.0~7.5' && f.off.join() === '형상', `검토 흐름: ${txt} · 안 돌림 ${f.off}`);
+  const f2 = AP.reviewFlow([{ stage: 'ledsLateral', results: [{ wCenter: -1 }, { wCenter: 1 }] }], { cur: { count: 10 }, stages: { position: true } });
+  say(f2.items[0].v === '폭 양쪽 이동' && f2.off.join() === '형상,Milky', `양쪽 이동 · 안 돌림 2개: ${f2.items[0].v} / ${f2.off}`);
+  const cur = { count: 72, rows: 1, milky: 4, eff: 0.19 }, best = { count: 107, rows: 3, milky: 6.5, eff: 0.168, pitch: 6.3 };
+  const pi = AP.partImpactText(cur, best);
+  say(pi === 'LED 72 → 321개 (×4.5) · LED PCB 새로 설계 · Milky 4.00 → 6.50', `부품 영향: ${pi}`);
+  say(AP.partImpactText({ count: 72, milky: 4 }, { count: 72, milky: 4 }) === '' && AP.partImpactText({ count: 72, milky: 4 }, { count: 72, milky: 5 }) === 'Milky 4.00 → 5.00', '바뀐 부품만');
+  say(AP.brightText(cur, best) === '밝기 ×3.9' && AP.brightText({ count: 72 }, best) === '', `밝기 비 = 효율 × LED 수: ${AP.brightText(cur, best)}`);
+  const sec = AP.mechSectionSvg(cur, best);
+  say(/class="rs-sec"/.test(sec) && (sec.match(/class="rs-led"/g) ?? []).length === 4 && /1열 × 72/.test(sec) && /3열 × 107/.test(sec) && /Milky 6\.50/.test(sec), `기구 단면: LED 1 + 3 · 라벨: ${(sec.match(/class="rs-led"/g) ?? []).length}`);
+  say(AP.runText({ n: 31, sec: 1080 }) === '후보 31개 시뮬레이션 · 정밀 재확인 ✓ · 18분' && AP.runText(null) === '정밀 재확인 ✓', `시뮬레이션 근거 줄: ${AP.runText({ n: 31, sec: 1080 })}`);
+  const r = { feasible: false, reason: '목표 미달', targets: { len: 0.8, wid: 0.8 }, stages: { position: true, milky: true }, review: f, run: { n: 31, sec: 1080 },
+    cur: { ...cur, Ulen: 0.505, Uwid: 0.126, thumb: t }, best: { ...best, Ulen: 0.802, Uwid: 0.496, thumb: t } };
+  const h = AP.resultViewHtml(r, { hist: [{ label: 'x', Ulen: 0.8, Uwid: 0.49, eff: 0.17 }] });
+  say(/class="rs-ba"/.test(h) && (h.match(/class="rs-map"/g) ?? []).length === 2 && /50\.5%/.test(h) && /80\.2%/.test(h) && /밝기 ×3\.9/.test(h), '결과 = 빛 분포 이전/이후 + 값 + 밝기');
+  say(/class="rs-sec"/.test(h) && /class="rs-impact"/.test(h) && /data-ad="pvSwap"/.test(h) && /class="rs-flow"/.test(h) && /후보 31개 시뮬레이션/.test(h), '결과 = 기구 단면 · 부품 영향 · 3D 이전↔이후 · 검토 흐름 · 근거 줄');
+  say(/폭 −30\.4%p/.test(h), '판정 옆 = 남은 차이');
+  say(!/rs-fef|무엇을 바꿔서/.test(h), '결과 화면 긴 효과 표 없음');
+}
+{ // 시안 4 연결(app.js): 결과에 빛 분포 그림 · 검토 흐름 · 후보 수/시간 저장 · 3D 이전↔이후 단추
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const { readFileSync } = await import('node:fs'), app = readFileSync(new URL('../src/ui/m3/app.js', import.meta.url), 'utf8'), od = readFileSync(new URL('../src/ui/m3/opt-dash.js', import.meta.url), 'utf8');
+  say(/thumb: thumbMap\(C\?\.stats\?\.map/.test(app) && /thumb: thumbMap\(res\.verified\.stats\.map/.test(app), '이전/이후 빛 분포 그림 저장');
+  say(/review: reviewFlow\(res\.steps/.test(app) && /run: A\.optDash\?\.summary\?\.\(\)/.test(app) && /function summary\(\)/.test(od), '검토 흐름 · 후보 수/시간 저장');
+  say(/pvSwap: \(\) =>/.test(app) && /r\.pvBefore\) return null/.test(app), '3D 이전↔이후 = 결과 미리보기 끄고 켬');
 }

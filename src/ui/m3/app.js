@@ -41,7 +41,7 @@ import { createResultsPanel } from './results-panel.js';
 const SHOW_TREND = false;   // 결과판 계산 추이 그래프(2026-11-23 사용자 — 일단 숨김)
 import { renderStatusBar, leakText } from './status-bar.js';
 import { createAdRunner, resumable } from './autodesign-run.js';
-import { renderAutoPanel, seedFits, milkyTable, stageAvailability, clampCap, overallFrac, etaText, reusableCurrent, defaultHousingPart, applyDz, applyFinish, capDefault, nextFinish, finishText, shapeText, tileConfigHtml, AD_ITEMS, resultStageFlags, histFromRun, mergeHist, stageEffects, factorResult, adToFile, adFromFile } from './autodesign-panel.js';
+import { renderAutoPanel, seedFits, milkyTable, stageAvailability, clampCap, overallFrac, etaText, reusableCurrent, defaultHousingPart, applyDz, applyFinish, capDefault, nextFinish, finishText, shapeText, tileConfigHtml, AD_ITEMS, resultStageFlags, histFromRun, mergeHist, stageEffects, factorResult, adToFile, adFromFile, thumbMap, reviewFlow } from './autodesign-panel.js';
 import { ledHeightRange, heightCandidates, catalogOf, finishCandidatesFor, setReflMaterial, partFinishEdit } from '../../engine/mech3d/housing-led.js';
 import { migrateFinishCatalog, reflectPatch, copyAsUser, entryFromForm, addSamples, parsePercents, uniqueReflId } from '../../model/reflect-db.js';
 import { intersectRay } from '../../engine/mech3d/bvh.js';
@@ -814,7 +814,7 @@ function renderAuto() {
   const effects = (st.result ?? (st.undo ? st.applied : null))?.effects ?? null;   // 항목별 효과 — 실행이 끝날 때 결과에 붙임(적용 뒤에도 남음)
   renderAutoPanel(el, { mode, hasResult: hasRes && mode === 'set' && !st.running, now: factorNow(), effects, hist: st.hist, locked: st.locked, flash: st.flash, caseView: adCaseView(), avail, sel, running: st.running && { ...st.running, paused: !!st.paused }, result: st.result, resultOpen: !!st.resultOpen, names: partNames(M.parts), canRevert: !!st.undo, applied: st.undo ? st.applied ?? null : null, noLine: !A.store.session.line, noLed: A.store.session.line ? adBlock() : '', milkyPart: mp, housingMat: hm ? { name: hm.name, max: hm.max } : null, catalog: reflCat() }, {
     onSel: (k, v) => adSel(k, v),
-    onAction: (k, v) => ({ caseSort: () => adCaseSort(v), casePick: () => adCasePick(v), caseRun: adCaseRun, applyBlocked: () => { st.flash = `LED 몸체가 부품과 ${st.result?.clash ?? ''}개 겹쳐 적용할 수 없음 — 다른 후보(오른쪽 '지난 최적화 후보' 표)를 고르거나 [취소] 후 LED 배치·개수를 바꿔 다시 실행하세요`; renderAuto(); }, casePart: () => { const i = +v; if (!Number.isInteger(i)) return; A.store.update('session', (_, x) => { x.multi = []; x.node = `part:${i}`; x.sel = { part: i, face: null }; x.ledSel = null; x.status = `케이스 부품 ${i + 1} — 속성에서 면 처리를 바꾸세요(추천 값은 결과 카드)`; }); monitor?.collapse?.(); }, shapeDeep: adShapeDeep, continue: adContinue, applyMilky: () => adApplyMilky(+v), hpick: () => adPickHist(+v), chart: () => { st.showChart = !st.showChart; renderAuto(); }, toSet: () => { st.view = 'set'; renderAuto(); }, toResult: () => { st.view = 'result'; renderAuto(); }, close: () => monitor?.close(), apply: adApply, applyAlt: adApplyAlt, twoRow: adTwoRow, cancel: adCancel, revert: adRevert, step: adStep, view: () => { st.resultOpen = true; renderAuto(); }, hide: () => { st.resultOpen = false; renderAuto(); } })[k]?.(),
+    onAction: (k, v) => ({ caseSort: () => adCaseSort(v), casePick: () => adCasePick(v), caseRun: adCaseRun, applyBlocked: () => { st.flash = `LED 몸체가 부품과 ${st.result?.clash ?? ''}개 겹쳐 적용할 수 없음 — 다른 후보(오른쪽 '지난 최적화 후보' 표)를 고르거나 [취소] 후 LED 배치·개수를 바꿔 다시 실행하세요`; renderAuto(); }, casePart: () => { const i = +v; if (!Number.isInteger(i)) return; A.store.update('session', (_, x) => { x.multi = []; x.node = `part:${i}`; x.sel = { part: i, face: null }; x.ledSel = null; x.status = `케이스 부품 ${i + 1} — 속성에서 면 처리를 바꾸세요(추천 값은 결과 카드)`; }); monitor?.collapse?.(); }, shapeDeep: adShapeDeep, continue: adContinue, applyMilky: () => adApplyMilky(+v), hpick: () => adPickHist(+v), chart: () => { st.showChart = !st.showChart; renderAuto(); }, toSet: () => { st.view = 'set'; renderAuto(); }, toResult: () => { st.view = 'result'; renderAuto(); }, close: () => monitor?.close(), apply: adApply, applyAlt: adApplyAlt, twoRow: adTwoRow, cancel: adCancel, revert: adRevert, step: adStep, view: () => { st.resultOpen = true; renderAuto(); }, hide: () => { st.resultOpen = false; renderAuto(); }, pvSwap: () => { const r = st.result; if (!r) return; r.pvBefore = !r.pvBefore; A.meshShown = null; renderView(); renderAuto(); } })[k]?.(),
   });
 }
 // 접은 창에 보일 현재 결과 — 실행 중 = 진행률, 결과 있음 = 후보 값, 그 밖 = 지금 값(길이·폭 균일도)
@@ -1375,9 +1375,10 @@ async function adRun(opt = {}) {
   }
   let res = null, kept = null;
   st.partial = null;
+  const nMaxL = maxLedsOnLine(line.length, line.closed, ledHalfWidth(M0, line));   // 개수 상한 = LED 몸체 한계(2026-11-25 사용자, 전에는 60개)
   try {
     res = await runAutoDesign({
-      stages, obs, G, line, current: cur, milkyMax: st.sel.milkyMax ?? null, housingProbe, finishText: (f) => finishText(f, reflCat()), nMax: maxLedsOnLine(line.length, line.closed, ledHalfWidth(M0, line)),   /* 개수 상한 = LED 몸체 한계(2026-11-25 사용자, 전에는 60개) */ pitchRange: null, stepMode: stp, currentIrregular: stages.leds && (() => { try { const q = pitchOf(L.currentEmitters(M0, line).map((e) => { const [s, w] = line.toSW(...line.to2D(e.pos)); return { s, w }; })); return !q.uniform; } catch { return false; } })(),
+      stages, obs, G, line, current: cur, milkyMax: st.sel.milkyMax ?? null, housingProbe, finishText: (f) => finishText(f, reflCat()), nMax: nMaxL, pitchRange: null, stepMode: stp, currentIrregular: stages.leds && (() => { try { const q = pitchOf(L.currentEmitters(M0, line).map((e) => { const [s, w] = line.toSW(...line.to2D(e.pos)); return { s, w }; })); return !q.uniform; } catch { return false; } })(),
       shapePart: sp, shapeField, ...(opt.caseCheck ? { shapeCands: [opt.caseCheck], schedule: [[1, lens.schedule[0][1], lens.schedule[0][2]]], curve: false, fixedShape: true } : quickShape ? { shapeCands: lens.cands, schedule: lens.schedule, curve: false, shapeEmptyWhy: lens.cands.length ? null : lens.why } : {}),
       shapeStart: stages.shape && M0.parts[sp]?.shapeMod ? (({ dt, h, R, e, c, kL, kW, kF }) => ({ dt, h, R, e, c, kL, kW, kF }))(M0.parts[sp].shapeMod) : null,   // 이미 적용한 형상에서 이어서
       lateral, rowsOptions: st.sel.oneRow ? [1] : [1, 2], rowsMax: st.sel.oneRow ? 1 : ROWS_MAX, currentVerified: opt.partial?.currentVerified ?? currentVerified, partial: opt.partial?.d ?? null, screenGrid: !lowQ, currentScreen, heightRange: hInfo?.range ?? null, housingPart: hp, finishCands, ledsAtCurrentMilky: !!opt.added?.length,
@@ -1404,8 +1405,9 @@ async function adRun(opt = {}) {
     st.result = { seed: res.verified?.raw ?? null, shapeLimited: !!res.steps?.find((x) => x.stage === 'shapeField')?.limited, milkyRows: stages.milky ? milkyTable(res.steps ?? []) : null, targets: { len: obs.targetLen, wid: obs.targetWid, judge: judgeStats(res.verified?.stats, A.store.mspec.observe) }, design: res.best, feasible: res.feasible, reason: res.reason, shapeSwing: quickShape && !opt.shapeDeep && !opt.caseCheck, caseCheck: !!opt.caseCheck, shapeNote: res.shapeNote ?? null, sharpErr: res.verified?.sharpErr ?? null, hint: res.hint ?? null, peek: res.peek ?? null, lowered: res.milkyLowered ?? null, shape: res.best.shape ?? null, screen: res.steps?.find((x) => x.stage === 'shapeScreen')?.gains ?? null, stepLeds: nStep, unchanged: !!res.unchanged, ctx, stages: resultStageFlags(stages),
       added: opt.added ?? [], base: opt.base ?? null, clash: clashN, oneRow: !!st.sel.oneRow, twoRow,
       finish: stages.housing ? (() => { const c = { ...M0.parts[hp].finish, ...(M0.parts[hp].coating ? { coating: M0.parts[hp].coating } : {}) }; return { cur: c, best: res.best.finish ?? c }; })() : null, height: stages.height && hInfo ? { dz: res.best.dz ?? 0, gap: hInfo.gap } : null,
-      cur: { ...cur, shape: sm ? { dt: sm.dt, h: sm.h, R: sm.R, e: sm.e ?? 0, c: sm.c ?? 0, kF: sm.kF ?? null } : null, Ulen: C?.stats?.Ulen, Uwid: C?.stats?.Uwid, eff: C?.eff ?? NaN, profile: C?.stats?.profile ?? null },
-      best: { ...res.best, ...(stp ? { stepOrig: !res.best.stepVirt } : {}), Ulen: res.verified.stats.Ulen, Uwid: res.verified.stats.Uwid, eff: res.verified.eff, profile: res.verified.stats.profile ?? null } };
+      cur: { ...cur, shape: sm ? { dt: sm.dt, h: sm.h, R: sm.R, e: sm.e ?? 0, c: sm.c ?? 0, kF: sm.kF ?? null } : null, Ulen: C?.stats?.Ulen, Uwid: C?.stats?.Uwid, eff: C?.eff ?? NaN, profile: C?.stats?.profile ?? null, thumb: thumbMap(C?.stats?.map, C?.stats?.profile?.length ?? 0) },
+      best: { ...res.best, ...(stp ? { stepOrig: !res.best.stepVirt } : {}), Ulen: res.verified.stats.Ulen, Uwid: res.verified.stats.Uwid, eff: res.verified.eff, profile: res.verified.stats.profile ?? null, thumb: thumbMap(res.verified.stats.map, res.verified.stats.profile?.length ?? 0) },
+      review: reviewFlow(res.steps ?? [], { cur, nMax: nMaxL, stages: resultStageFlags(stages) }), run: A.optDash?.summary?.() ?? null };   // 결과 화면 시안 4(2026-11-25): 빛 분포 그림 · 검토 흐름 · 후보 수/시간
     const gd = res.unchanged ? res.steps?.find((x) => x.stage === 'guard') : null;   // 찾은 후보가 현재안보다 노이즈 수준만큼만 나음 — 원하면 적용
     if (gd?.tried && gd.triedVerified?.stats) st.result.alt = { design: gd.tried, Ulen: gd.triedVerified.stats.Ulen, Uwid: gd.triedVerified.stats.Uwid, eff: gd.triedVerified.eff, milky: gd.tried.milky };
     if (stages.shape) adSaveCases({ opt, res, M0, sp, stages, caseLog });
@@ -1474,6 +1476,7 @@ function adPreview() { return adCasePreview() ?? adResultPreview(); }
 function adResultPreview() {
   const r = A.ad?.result;
   if (!r) return null;
+  if (r.pvBefore) return null;   // [3D 이전↔이후] = 지금 설계 그대로 보기
   if (!r.preview) { const { M, parts } = designScene(r.design, r.ctx); r.preview = { M, parts, raw: r.ctx.rt.raw }; }
   return r.preview;
 }

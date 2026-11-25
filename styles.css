@@ -1231,6 +1231,24 @@ select[data-r="pal"], select[data-big-pal] { margin-left: 8px; }   /* 색 표 �
 .rs-vd { font-size: 14px; margin: 2px 0 10px; }
 .rs-vd b { font-size: 15px; margin-right: 4px; }
 .rs-vd.ok b { color: var(--m3-ok); } .rs-vd.bad b { color: var(--m3-bad); } .rs-vd.near b { color: var(--m3-warn); }
+.rs-vd { display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; }
+.rs-run { font-size: 12px; color: var(--m3-mut); }
+/* 결과 화면 시안 4(2026-11-25): 빛 분포 이전/이후 | 기구 변경 단면 · 검토 흐름 */
+.rs-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; margin: 4px 0 10px; }
+@media (max-width: 860px) { .rs-grid { grid-template-columns: minmax(0, 1fr); } }
+.rs-grid .rs-h { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.rs-grid .rs-h button { font-size: 12px; padding: 1px 8px; }
+.rs-bal { font-size: 11px; margin: 4px 0 2px; }
+.rs-map { display: block; width: 100%; height: 34px; border-radius: 4px; }
+.rs-bav { font-size: 12px; margin-top: 3px; }
+.rs-bav b.ok { color: var(--m3-ok); } .rs-bav b.bad { color: var(--m3-bad); }
+.rs-sec { display: block; width: 100%; max-height: 130px; }
+.rs-sec .rs-mk { fill: #db2777; } .rs-sec .rs-pcb { fill: var(--m3-mut); opacity: .6; } .rs-sec .rs-led { fill: #f59e0b; }
+.rs-sec .rs-st { font-size: 11px; fill: var(--m3-mut); text-anchor: middle; } .rs-sec .rs-st.hi { fill: currentColor; font-weight: 600; }
+.rs-sec .rs-arr { stroke: var(--m3-mut); fill: none; stroke-width: 1.2; }
+.rs-impact { margin-top: 6px; padding: 5px 8px; border-radius: 6px; font-size: 12px; color: var(--m3-warn); background: color-mix(in srgb, var(--m3-warn) 12%, transparent); }
+.rs-flow { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 6px 10px; margin-bottom: 8px; border-radius: 6px; font-size: 12px; background: color-mix(in srgb, var(--m3-mut) 10%, transparent); }
+.rs-flow .rs-fa { color: var(--m3-mut); } .rs-flow .rs-cp { color: #0d9488; } .rs-flow .rs-cs { color: #7c3aed; } .rs-flow .rs-cm { color: #db2777; }
 .rs-lim { color: var(--m3-mut); font-size: 12px; }
 .rs-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
 .rs-card { background: rgba(127,127,160,.08); border-radius: 8px; padding: 8px 10px; font-size: 12px; }

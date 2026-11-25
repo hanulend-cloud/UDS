@@ -378,7 +378,8 @@ export function createOptDash(el, h = {}) {
   // 단계별 최고(실제 계산값) — 결과 화면의 항목별 효과
   function stageBests() { if (!S) return null; const o = {}; for (const [k] of STAGES) { const t = S.tiles[k]; if (t.status !== 'off') { const e = stageBest(t, S.tgLen, S.tgWid); if (e && !e.est) o[k] = { Ulen: e.Ulen, Uwid: e.Uwid }; } } return o; }
   const hasRun = () => !!S;
-  return { setSym, stageBests, hasRun, reset, addStages, progress, evals, finish, stop, fail, setPartial, setPaused, refresh, clear };
+  function summary() { if (!S) return null; return { n: S.seq.filter((e) => e.ok !== false && !e.est).length, sec: Math.round(S.endSec ?? (performance.now() - S.t0) / 1000) }; }   // 결과 화면 근거 줄(후보 수 · 걸린 시간)
+  return { summary, setSym, stageBests, hasRun, reset, addStages, progress, evals, finish, stop, fail, setPartial, setPaused, refresh, clear };
 }
 
 // 광경로 순위(순수) — paths = { 'R:2>1': 가중 합 } → [{ parts:[번호], refl, share }] 비중 큰 순(기구 부품만, 같은 경로 합침)
