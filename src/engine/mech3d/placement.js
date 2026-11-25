@@ -36,6 +36,15 @@ export function maxLedsOnLine(L, closed, ledHalf) {
 // 자동설계 ② 열 간격 후보 δ = ks·W(W = 관측 폭) — 상한으로 자르고 0.1 mm 내림 · 중복·0 제거(후보 격자 w 값과 정확히 같게)
 export const ROW_GAP_KS = [0.2, 0.27, 0.33];
 export const rowGapOptions = (line, ks = ROW_GAP_KS) => [...new Set(ks.map((k) => Math.floor(clampRowGap(line, k * (line.width ?? 0)) * 10 + 1e-9) / 10))].filter((g) => g > 0);
+// 2열 간격을 실제로 들어가는 자리로 거름(2026-11-25 사용자: 폭 방향 간섭을 따져도 2열이 들어갈 것 같음) — cs = 폭 위치 후보(겹치지 않고 PCB 위, 기준 LED 대비 정수 mm),
+// wc = 폭 중심. 양쪽 열(wc ± g)이 모두 cs 안 · LED 몸체끼리 안 겹침(2g ≥ minGap). 주어진 비율 간격 중 들어가는 것 + 들어가는 가장 좁은·넓은 정수 간격. cs 모름(직접 배치) = 그대로
+export function rowGapsFit(cs, wc, gaps, minGap = 0) {
+  if (!Array.isArray(cs)) return gaps;
+  const set = new Set(cs), inC = (w) => set.has(Math.floor(w + 1e-9)) && set.has(Math.ceil(w - 1e-9)), r4 = (x) => Math.round(x * 1e4) / 1e4;
+  const fits = (g) => g > 0 && 2 * g + 1e-9 >= minGap && inC(wc - g) && inC(wc + g);
+  const ints = [...new Set(cs.filter((c) => c > wc).map((c) => r4(c - wc)))].filter(fits).sort((a, b) => a - b);
+  return [...new Set([...gaps.filter(fits), ...(ints.length ? [ints[0], ints[ints.length - 1]] : [])])].sort((a, b) => a - b);
+}
 
 // 라인 위 (s, w) 한 곳의 LED — manualLeds 와 P4 ② 후보 위치가 같이 씀. w = 중심선 오프셋. 반환 { s, pos, axis, xAxis }
 export function ledAtS(line, s, { side = 'direct', pcb }, rt = null, w = 0) {

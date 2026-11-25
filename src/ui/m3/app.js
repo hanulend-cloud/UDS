@@ -49,7 +49,7 @@ import { runAutoDesign, shapeTotal, shapeBudget, sameDesign } from '../../engine
 import { milkyRows, milkyTraceOpts, MILKY_STEADY_SE } from '../../engine/mech3d/milky-search.js';
 import { detectSym, ledsSW, symStats, symInfo } from '../../engine/mech3d/symmetry.js';
 import { candidateGrid } from '../../engine/mech3d/basis.js';
-import { ledAtS, clampRowGap, rowGapOptions, wrapS, rowsSpacing, maxLedsOnLine } from '../../engine/mech3d/placement.js';
+import { ledAtS, clampRowGap, rowGapOptions, rowGapsFit, wrapS, rowsSpacing, maxLedsOnLine } from '../../engine/mech3d/placement.js';
 import { virtualEmittersAt, stepRefEmitter } from '../../engine/mech3d/virtual-leds.js';
 import { rw4, rowWs } from '../../engine/mech3d/layout-solver.js';
 const ROWS_MAX = 8;   // ① 위치/개수 N열 상한(2026-11-25 사용자 — 폭 미달이면 2열에서 멈추지 않고 계속, 실제 한도는 폭·LED 몸체)
@@ -807,12 +807,12 @@ function renderAuto() {
   }
   A.optDash?.refresh();
   // 창 화면(2026-11-08): 설정 · 진행 · 결과 — 실행하면 진행, 끝나면 결과로 넘어감. 탭 없음 — 머리에 단계 표시만, 진행 기록은 결과 아래 접는 칸(2026-11-12)
-  const hasRes = !!(st.result || (st.undo && st.applied) || st.hist?.length), hasRun = !!st.running || !!A.optDash?.hasRun?.();
+  const hasRes = !!(st.result || st.lastResult || (st.undo && st.applied) || st.hist?.length), hasRun = !!st.running || !!A.optDash?.hasRun?.();
   let mode = st.view ?? 'set'; if (mode === 'result' && !hasRes) mode = 'set'; if (mode === 'run' && !hasRun) mode = 'set';
   monitor?.setMode?.(mode, { set: true, run: hasRun, result: hasRes }); A.adMode = mode;
   monitor?.el?.classList.toggle('show-chart', !!st.showChart);
   const effects = (st.result ?? (st.undo ? st.applied : null))?.effects ?? null;   // 항목별 효과 — 실행이 끝날 때 결과에 붙임(적용 뒤에도 남음)
-  renderAutoPanel(el, { mode, hasResult: hasRes && mode === 'set' && !st.running, now: factorNow(), effects, hist: st.hist, locked: st.locked, flash: st.flash, caseView: adCaseView(), avail, sel, running: st.running && { ...st.running, paused: !!st.paused }, result: st.result, resultOpen: !!st.resultOpen, names: partNames(M.parts), canRevert: !!st.undo, applied: st.undo ? st.applied ?? null : null, noLine: !A.store.session.line, noLed: A.store.session.line ? adBlock() : '', milkyPart: mp, housingMat: hm ? { name: hm.name, max: hm.max } : null, catalog: reflCat() }, {
+  renderAutoPanel(el, { mode, hasResult: hasRes && mode === 'set' && !st.running, now: factorNow(), effects, hist: st.hist, locked: st.locked, flash: st.flash, caseView: adCaseView(), avail, sel, running: st.running && { ...st.running, paused: !!st.paused }, result: st.result ?? st.lastResult ?? null, viewOnly: !st.result && !!st.lastResult, resultOpen: !!st.resultOpen, names: partNames(M.parts), canRevert: !!st.undo, applied: st.undo ? st.applied ?? null : null, noLine: !A.store.session.line, noLed: A.store.session.line ? adBlock() : '', milkyPart: mp, housingMat: hm ? { name: hm.name, max: hm.max } : null, catalog: reflCat() }, {
     onSel: (k, v) => adSel(k, v),
     onAction: (k, v) => ({ caseSort: () => adCaseSort(v), casePick: () => adCasePick(v), caseRun: adCaseRun, applyBlocked: () => { st.flash = `LED 몸체가 부품과 ${st.result?.clash ?? ''}개 겹쳐 적용할 수 없음 — 다른 후보(오른쪽 '지난 최적화 후보' 표)를 고르거나 [취소] 후 LED 배치·개수를 바꿔 다시 실행하세요`; renderAuto(); }, shapeDeep: adShapeDeep, continue: adContinue, applyMilky: () => adApplyMilky(+v), hpick: () => adPickHist(+v), chart: () => { st.showChart = !st.showChart; renderAuto(); }, toSet: () => { st.view = 'set'; renderAuto(); }, toResult: () => { st.view = 'result'; renderAuto(); }, close: () => monitor?.close(), apply: adApply, applyAlt: adApplyAlt, twoRow: adTwoRow, cancel: adCancel, revert: adRevert, step: adStep, view: () => { st.resultOpen = true; renderAuto(); }, hide: () => { st.resultOpen = false; renderAuto(); }, pvSwap: () => { const r = st.result; if (!r) return; r.pvBefore = !r.pvBefore; A.meshShown = null; renderView(); renderAuto(); } })[k]?.(),
   });
@@ -1222,7 +1222,7 @@ async function adRun(opt = {}) {
   const snap0 = A.prog.snapshot(), ps = snap0.state, currentVerified = reusableCurrent(snap0, G), curS = lowQ ? null : reusableCurrent(snap0, Gs), currentScreen = curS ? { ...curS, sharp: true } : null;   // 수렴한 점진 결과 = 현재안(verify 생략)
   st.userPaused = ps === 'paused'; st.deferred = ['paused', 'running', 'pending', 'starting'].includes(ps);
   if (ps === 'pending') A.prog.cancel(); else A.prog.pause();
-  st.running = { frac: 0, text: '준비' }; st.view = 'run'; st.result = null; st.caseSel = null; st.casePv = null; A.meshShown = null; renderView(); renderAuto();
+  st.running = { frac: 0, text: '준비' }; st.view = 'run'; st.result = null; st.lastResult = null; st.caseSel = null; st.casePv = null; A.meshShown = null; renderView(); renderAuto();
   let hInfo = null; if (stages.height) { try { hInfo = await adHeightInfo(M0, line, rt); } catch { stages.height = false; } if (A !== a) return null; }   // 범위 계산 실패 = ⑤ 생략. 실행 중 표시(running) 뒤에 해야 양보하는 동안 두 번 실행되지 않음
   // LED STEP: 현재 = 가상이면 그 개수·피치, 아니면 현재 발광점 수·0(stepOrig = 원래 위치) · stepVirt = 설계가 가상 배치인가(② 가 STEP 에서 돌면 엔진이 true)
   const stp = M0.light.kind === 'step', sv0 = stp ? M0.light.step?.virtual ?? null : null, sv = sv0 && !sv0.positions ? sv0 : null;   // STEP 에서 편집한 배치(positions) = 원래 배치처럼 '현재 그대로'
@@ -1286,8 +1286,10 @@ async function adRun(opt = {}) {
     async basis(d, bo = {}) {   // bo.rows = k(3 이상) → 그 열 수 배치만 볼 후보 격자(2026-11-25 N열) · ①·④ 를 함께 켜면 실행기가 d.milky = 거친 최고점 · d.finish = 최고 등급으로 넘김(§2.2c)
       const wc = rw4(d.wCenter ?? 0), { M: Md, parts } = designScene({ ...d, rows: 1, rowGap: 0 }, ctx), ledHalf = ledHalfWidth(Md, line);
       const nk = bo.rows >= 3 ? rowsSpacing(line.width, bo.rows, ledHalf, wc) : null;   // k열 열 간격(못 넣으면 null)
-      if (bo.rows >= 3 && !nk) return { cand: [], maps: [], emitted: 1, gaps: [] };
-      const gaps = nk ? [nk] : st.sel.oneRow ? [] : rowGapOptions(line);   // 1열만 = 2열 후보 계산 생략
+      // 열 자리가 실제로 들어가는지(2026-11-25 사용자) — 폭 위치 후보(lateral = 겹치지 않고 PCB 위인 자리)에 모든 열이 들어야 함. 2열은 들어가는 간격으로 거름(좁게 붙이는 간격 포함)
+      const inLat = (w) => !Array.isArray(lateral) || (lateral.includes(Math.floor(w + 1e-9)) && lateral.includes(Math.ceil(w - 1e-9)));
+      if (bo.rows >= 3 && (!nk || !rowWs(bo.rows, nk, wc).every(inLat))) return { cand: [], maps: [], emitted: 1, gaps: [] };
+      const gaps = nk ? [nk] : st.sel.oneRow ? [] : rowGapsFit(lateral, wc, rowGapOptions(line), Math.max(2, 2 * ledHalf + 0.2));   // 1열만 = 2열 후보 계산 생략
       const cand = candidateGrid(line, { sStep: 2, wOffsets: nk ? rowWs(bo.rows, nk, wc) : [wc, ...gaps.flatMap((g) => [rw4(wc - g), rw4(wc + g)])] });   // 폭 위치(wc) 중심
       let sets;
       if (Md.light.kind === 'step') {   // 기준 LED 발광점을 후보 위치로 · 장면은 LED 몸체 없이(PCB·기타만 = 가상 0개)
@@ -1486,7 +1488,7 @@ function adFactorResult(k) {
   const x = st.result ?? (st.undo ? st.applied : null);
   return x ? factorResult(x, x.effects ?? null, st.locked ?? {}, k) : null;
 }
-function adCancel() { const st = adState(); st.result = null; st.view = 'set'; A.meshShown = null; renderView(); renderAuto(); A.ctx.persist?.(); }
+function adCancel() { const st = adState(); st.lastResult = st.result; st.result = null; st.view = 'set'; A.meshShown = null; renderView(); renderAuto(); A.ctx.persist?.(); }
 // 적용 = 바뀐 항목만 씀(① Milky 값이 다르면 · ② 를 돌렸고 개수·피치가 다르면(LED STEP = step.virtual) · ③ 형상). 되돌리기용으로 그 항목의 전체 복사본을 남김
 function adApply() {
   const st = adState(), r = st.result, d = r?.design;
@@ -1511,7 +1513,7 @@ function adApply() {
     finish: finCh ? [fp, adClone(pf), pc] : null, dz: dzCh ? (M.light.kind === 'step' ? { step: adClone({ offset: M.light.step.offset, emitters: M.light.step.emitters }) } : { depth: M.light.manual.pcb.depth }) : null };
   const tm = new Date();
   st.applied = { ...r, seed: null, catalog: reflCat(), at: `${tm.getHours()}:${String(tm.getMinutes()).padStart(2, '0')} 적용` };   // 적용 뒤 요약(이전 → 적용 후) — renderAutoPanel 이 compareHtml 과 같은 인자로 그림
-  st.result = null; A.meshShown = null;
+  st.result = null; st.lastResult = null; A.meshShown = null;
   // 이번 실행에서 돌린 항목 = 🔒 고정(체크 해제) — 다음 실행은 나머지만. [되돌리기]·[다시 최적화] 로 풀림
   const ran = r.stages ?? {}, lockK = [ran.leds || ran.height ? 'position' : null, ran.housing ? 'housing' : null, ran.shape ? 'shape' : null, ran.milky ? 'milky' : null].filter(Boolean);
   st.locked ??= {}; for (const k of lockK) st.locked[k] = { at: tm.getTime() };

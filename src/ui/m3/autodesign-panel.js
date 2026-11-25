@@ -546,9 +546,9 @@ function baHtml(r) {
     <div class="rs-bal mut">이전</div>${mapThumbSvg(c.thumb)}<div class="rs-bav mut">길이 ${fmtJudge(c.Ulen)} · 폭 ${fmtJudge(c.Uwid)} · 효율 ${pc(c.eff)}</div>
     <div class="rs-bal">이후</div>${mapThumbSvg(b.thumb)}<div class="rs-bav">길이 ${val(b.Ulen, tg.len)} · 폭 ${val(b.Uwid, tg.wid)}${bt ? ` · ${bt}` : ''} · 효율 ${pc(b.eff)}</div></div>`;
 }
-function mechHtml(r) {
+function mechHtml(r, viewOnly = false) {
   const im = partImpactText(r.cur, r.best);
-  return `<div class="rs-mech"><div class="rs-h">기구 변경 <span class="mut">단면</span><span class="m3-ad-sp"></span><button type="button" data-ad="pvSwap" title="3D 화면을 이전 ↔ 이후로 바꿔 보기(적용 전)">${r.pvBefore ? '3D: 이전 ▸ 이후' : '3D: 이후 ▸ 이전'}</button></div>${mechSectionSvg(r.cur, r.best)}${im ? `<div class="rs-impact"><b>부품 영향</b> · ${esc(im)}</div>` : ''}</div>`;
+  return `<div class="rs-mech"><div class="rs-h">기구 변경 <span class="mut">단면</span><span class="m3-ad-sp"></span>${viewOnly ? '' : `<button type="button" data-ad="pvSwap" title="3D 화면을 이전 ↔ 이후로 바꿔 보기(적용 전)">${r.pvBefore ? '3D: 이전 ▸ 이후' : '3D: 이후 ▸ 이전'}</button>`}</div>${mechSectionSvg(r.cur, r.best)}${im ? `<div class="rs-impact"><b>부품 영향</b> · ${esc(im)}</div>` : ''}</div>`;
 }
 function flowHtml(f) {
   if (!f?.items?.length) return '';
@@ -556,7 +556,7 @@ function flowHtml(f) {
   return `<div class="rs-flow"><span class="mut">검토</span>${f.items.map((x) => `<span class="rs-fi"><b class="rs-c${col[x.k]}">${esc(x.t)}</b> ${esc(x.v)}</span>`).join('<span class="rs-fa">›</span>')}<span class="rs-fa">›</span><b>★ 정밀 재확인</b>${f.off.length ? `<span class="m3-ad-sp"></span><span class="mut">${esc(f.off.join('·'))} 안 돌림</span>` : ''}</div>`;
 }
 // 결과 화면 — 판정 · 균일도 카드 · 최적화 인자 상자 · 참고 · 단추 · 지난 후보(위 3개, 나머지는 [전체 보기])
-export function resultViewHtml(r, { applied = null, effects = null, hist = null, busy = false, catalog = null, locked = {} } = {}) {
+export function resultViewHtml(r, { applied = null, effects = null, hist = null, busy = false, catalog = null, locked = {}, viewOnly = false } = {}) {   // viewOnly = [적용 안 함] 뒤 다시 보기(2026-11-25) — 결정 단추 없음
   const x = r ?? applied, tg = x?.targets ?? {};
   const histBox = hist?.length ? `<div class="rs-hist"><div class="rs-h" title="균일도 순 · 골라서 [적용]">지난 후보 <span class="rs-hn mut">${hist.length}개</span></div>${histTableHtml(hist, tg.len, tg.wid, busy, { pick: 'ad' })}</div>` : '';
   if (!x) return `<div class="rs"><div class="rs-h mut">이번 결과 없음</div>${histBox}</div>`;
@@ -571,9 +571,9 @@ export function resultViewHtml(r, { applied = null, effects = null, hist = null,
     effDropHtml(r.cur, r.best)].join('');
   const alt = r.unchanged && r.alt ? `<div class="rs-note">찾은 후보 ${fmtJudge(r.alt.Ulen)}/${fmtJudge(r.alt.Uwid)} — 지금보다 뚜렷이 낫지 않음</div>` : '';
   return `<div class="rs"><div class="rs-vd ${v[0]}"><b>${v[1]}${gp ? ` · ${gp}` : ''}</b>${gp ? '' : ` <span class="mut">${v[2]}</span>`}${lim ? ` <span class="rs-lim" title="한계: ${esc(lim)}">· 한계: ${esc(lim.split(' — ')[0])}</span>` : ''}${vis4 ? `<span class="m3-ad-sp"></span><span class="rs-run" title="찾은 안을 노이즈 2%로 다시 계산해 판정 · 후보 = 이번에 시뮬레이션한 설계 수">${esc(runText(r.run))}</span>` : ''}</div>
-    ${vis4 ? `<div class="rs-grid">${baHtml(r)}${mechHtml(r)}</div>${flowHtml(r.review)}` : ''}
+    ${vis4 ? `<div class="rs-grid">${baHtml(r)}${mechHtml(r, viewOnly)}</div>${flowHtml(r.review)}` : ''}
     ${warn}${alt}${twoRowAltText(r) ? `<div class="rs-note">${esc(twoRowAltText(r))}</div>` : ''}${notesLines(r)}
-    <div class="rs-btn">${applyBtn(r, 'LED 몸체가 부품과 겹침')}${altBtn(r)}${shapeDeepBtn(r)}${twoRowBtn(r)}${r.clash > 0 ? '' : `<button type="button" data-ad="continue" title="${r.unchanged ? '지금 설계 그대로' : '이 안을 적용한 뒤'}, 체크했지만 이번에 돌리지 않은 항목을 이어서 최적화">이 안에서 이어서 ▸</button>`}<button type="button" data-ad="cancel" title="이 결과를 설계에 적용하지 않고 닫기 — 지난 후보 표에는 남음">적용 안 함</button><span class="m3-ad-sp"></span><details class="rs-more" data-keep="rs-more"><summary title="설정 바꾸기 · STEP 내보내기 · 프로파일·표">더 보기</summary><div class="rs-more-in">${toSetBtn}${r.shape ? '<button type="button" data-ad="step">STEP 내보내기</button>' : ''}<button type="button" data-ad="view" title="프로파일 비교 · Milky 표 · 전체 비교표">프로파일·표</button></div></details></div>
+    ${viewOnly ? `<div class="rs-btn"><span class="rs-note mut" title="[적용 안 함] 을 고른 결과 — 쓰려면 아래 지난 후보에서 골라 [적용]">적용 안 함 — 보기만</span><span class="m3-ad-sp"></span>${toSetBtn}</div>` : `<div class="rs-btn">${applyBtn(r, 'LED 몸체가 부품과 겹침')}${altBtn(r)}${shapeDeepBtn(r)}${twoRowBtn(r)}${r.clash > 0 ? '' : `<button type="button" data-ad="continue" title="${r.unchanged ? '지금 설계 그대로' : '이 안을 적용한 뒤'}, 체크했지만 이번에 돌리지 않은 항목을 이어서 최적화">이 안에서 이어서 ▸</button>`}<button type="button" data-ad="cancel" title="이 결과를 설계에 적용하지 않고 닫기 — 지난 후보 표에는 남음">적용 안 함</button><span class="m3-ad-sp"></span><details class="rs-more" data-keep="rs-more"><summary title="설정 바꾸기 · STEP 내보내기 · 프로파일·표">더 보기</summary><div class="rs-more-in">${toSetBtn}${r.shape ? '<button type="button" data-ad="step">STEP 내보내기</button>' : ''}<button type="button" data-ad="view" title="프로파일 비교 · Milky 표 · 전체 비교표">프로파일·표</button></div></details></div>`}
     ${histBox}</div>`;
 }
 // 참고 문구·Milky 표는 접어 둠(2026-11-08) — 메인 카드는 판정·값·단추만
@@ -608,7 +608,7 @@ export function renderAutoPanel(el, state, h) {
   const r = state.result, full = r ? compareHtml({ ...r, canRevert: state.canRevert, ...(state.catalog ? { catalog: state.catalog } : {}) }) : '';
   const flashH = state.flash ? `<div class="m3-rflash" role="alert">${esc(state.flash)}</div>` : '';
   const modal = r && state.resultOpen ? `<div class="m3-rmodal" role="dialog" aria-modal="true" aria-label="기구 최적화 결과"><div class="m3-rmodal-in"><div class="m3-rmodal-hd"><b>기구 최적화 결과 — 프로파일·표</b><span class="m3-ad-sp"></span><button type="button" data-ad="hide" title="결과는 남음">✕ 닫기</button></div>${full}${milkyTableHtml(r.milkyRows, r.best?.milky, r.targets ?? {})}</div></div>` : '';
-  const html = state.mode === 'result' ? `${flashH}${resultViewHtml(r, { applied: state.applied, effects: state.effects, hist: state.hist, busy: !!state.running, catalog: state.catalog, locked: state.locked ?? {} })}${modal}`
+  const html = state.mode === 'result' ? `${flashH}${resultViewHtml(r, { applied: state.applied, effects: state.effects, hist: state.hist, busy: !!state.running, catalog: state.catalog, locked: state.locked ?? {}, viewOnly: !!state.viewOnly })}${modal}`
     : state.mode === 'set' ? `${nowCardsHtml(state.now)}${flashH}${autoCardHtml({ ...state, applied: null })}${state.hasResult ? '<div class="rs-btn"><button type="button" data-ad="toResult" title="지난 실행 결과·지난 후보 보기">↩ 결과 다시 보기</button></div>' : ''}`
     : state.mode === 'run' ? flashH
     : r ? `${state.flash ? `<div class="m3-rflash" role="alert">${esc(state.flash)}</div>` : ''}${resultLineHtml(r)}${state.resultOpen ? `<div class="m3-rmodal" role="dialog" aria-modal="true" aria-label="기구 최적화 결과"><div class="m3-rmodal-in"><div class="m3-rmodal-hd"><b>기구 최적화 결과</b><span class="m3-ad-sp"></span><button type="button" data-ad="hide" title="결과는 남음">✕ 닫기</button></div>

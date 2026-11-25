@@ -140,7 +140,9 @@ export function factorChartSvg(S, nw = {}, W = 240, H = 100) {
     return e.vf ? `<rect class="od-vf${e.est ? ' est' : ''}" x="${(X(e.Ulen) - 3).toFixed(1)}" y="${(Y(e.Uwid) - 3).toFixed(1)}" width="6" height="6">${t}</rect>` : `<circle class="od-cand" fill="${col(e.k)}" cx="${X(e.Ulen).toFixed(1)}" cy="${Y(e.Uwid).toFixed(1)}" r="3">${t}</circle>`; }).join('');
   // 최적화 길 — 시작 → 최고안 갱신 자리(구간 색 = 그 갱신을 만든 항목)
   const nodes = [...(st0 ? [st0] : []), ...ups];
-  const path = nodes.slice(1).map((e, n) => `<line class="od-path" stroke="${col(e.k)}" x1="${X(nodes[n].Ulen).toFixed(1)}" y1="${Y(nodes[n].Uwid).toFixed(1)}" x2="${X(e.Ulen).toFixed(1)}" y2="${Y(e.Uwid).toFixed(1)}"/>`).join('');
+  // 점선 = 빠른 계산으로 찾은 유력 후보를 따라간 길 · 실선 = 정밀 판정(최종)까지(2026-11-25 사용자)
+  const seg = (a, e, c, k) => `<line class="od-path ${k}" stroke="${c}" x1="${X(a.Ulen).toFixed(1)}" y1="${Y(a.Uwid).toFixed(1)}" x2="${X(e.Ulen).toFixed(1)}" y2="${Y(e.Uwid).toFixed(1)}"/>`;
+  const path = nodes.slice(1).map((e, n) => seg(nodes[n], e, col(e.k), 'q')).join('') + (fOk && nodes.length ? seg(nodes[nodes.length - 1], fin, '#20262f', 'v') : '');
   const lastUp = {}, gain = {}; ups.forEach((e, n) => { lastUp[e.k] = n; });
   { let b = st0; for (const k of Object.keys(lastUp).sort((a, c) => lastUp[a] - lastUp[c])) { const e = ups[lastUp[k]]; gain[k] = b ? [e.Ulen - b.Ulen, e.Uwid - b.Uwid] : null; b = e; } }
   const dp = (d) => `${d < 0 ? '−' : '+'}${Math.abs(d * 100).toFixed(1)}`;

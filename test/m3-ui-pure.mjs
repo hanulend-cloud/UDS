@@ -13,7 +13,7 @@ import { setPartTab, meshInfo, partHeaderText, reflAddFormHtml, renderPartProps,
 import { DEFAULT_FINISH_CATALOG, finishCandidatesFor, catalogOf } from '../src/engine/mech3d/housing-led.js';
 import { reflDbHtml } from '../src/ui/mech3d-light-panel.js';
 import { stepLayoutRowHtml, clampVirtual, virtCountMax, ledRowsHtml, defaultRowGap } from '../src/ui/mech3d-light-panel.js';
-import { rowGapOptions } from '../src/engine/mech3d/placement.js';
+import { rowGapOptions, rowGapsFit } from '../src/engine/mech3d/placement.js';
 import { ok, done } from './mech3d-util.mjs';
 import { stageAvailability, autoCardHtml, tileConfigHtml, compareHtml, clampCap, overallFrac, etaText, profileSvg, shapeText, screenSummary, reusableCurrent, defaultHousingPart, finishText, applyDz, applyFinish, capDefault, nextFinish } from '../src/ui/m3/autodesign-panel.js';
 
@@ -272,6 +272,13 @@ ok(clampCap(12) === 10 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCap
   const cv = clampVirtual({ count: 10, pitch: 0, rows: 2, rowGap: 20 }, ln), cd = clampVirtual({ count: 10, pitch: 0, rows: 2, rowGap: 0 }, ln), c1 = clampVirtual({ count: 10, pitch: 0, rows: 1, rowGap: 5 }, ln);
   ok(cv.rows === 2 && cv.rowGap === 7.5 && cd.rowGap === 4.3 && c1.rows === 1 && c1.rowGap === 0, `clampVirtual 열: 상한 ${cv.rowGap} · 0 → 기본 ${cd.rowGap}(0.27·W) · 1열 = 0`);
   ok(defaultRowGap(ln) === 4.3 && JSON.stringify(rowGapOptions(ln)) === '[3.2,4.3,5.2]' && JSON.stringify(rowGapOptions({ width: 2 })) === '[0.4,0.5]' && rowGapOptions({ width: 0.5 }).length === 0, `열 간격 후보 0.2/0.27/0.33·W (${rowGapOptions(ln)}) · 상한으로 자르고 중복 제거`);
+  // 2026-11-25 사용자: 폭 방향 간섭을 따져도 2열이 들어갈 것 같음 — 고정 비율 간격이 모두 부품에 걸리면 2열을 아예 안 봤음.
+  // 폭 위치 후보(겹치지 않고 PCB 위인 자리 cs, 1 mm 간격)에 양쪽 열이 모두 드는 간격만 · LED 몸체끼리 안 겹치는 최소 간격(2g ≥ minGap) · 넓은 것·좁은 것 함께
+  { const cs = [-3, -2, -1, 0, 1, 2, 3];
+    ok(JSON.stringify(rowGapsFit(cs, 0, [3.2, 4.3, 5.2], 3)) === '[2,3]', `비율 간격이 다 걸리면 들어가는 간격(좁은 2 · 넓은 3) (${JSON.stringify(rowGapsFit(cs, 0, [3.2, 4.3, 5.2], 3))})`);
+    ok(JSON.stringify(rowGapsFit([-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5], 0, [3.2, 4.3, 5.2], 3)) === '[2,3.2,4.3,5]', '비율 간격 중 들어가는 것은 남기고 가장 넓은·좁은 정수 간격 더함');
+    ok(JSON.stringify(rowGapsFit([-1, 0, 1, 2, 3], 1, [], 3)) === '[2]' && rowGapsFit([0, 1], 0, [], 3).length === 0, '폭 위치(wc) 기준 대칭 · 들어갈 곳 없으면 빈 목록');
+    ok(rowGapsFit(null, 0, [3.2], 3)[0] === 3.2, '폭 위치 후보를 모르면(직접 배치) 그대로'); }
   const man = treeNodes({ ...M, light: { ...defaultLight(), kind: 'manual', manual: { ...defaultLight().manual, count: 10, rows: 2, rowGap: 5 } } }, { node: null, line: null }).find((n) => n.id === 'leds');
   const vt = treeNodes({ ...M, light: { ...defaultLight(), kind: 'step', step: st } }, { node: null, line: null }).find((n) => n.id === 'leds');
   ok(man.label === 'LED ×20' && man.badge === '2열 × 10개 균등' && vt.label === 'LED ×20' && vt.badge === '자동 2열 × 10개 균등', `배지: ${man.label} ${man.badge} / ${vt.label} ${vt.badge}`);
@@ -592,7 +599,9 @@ ok(judgeText(0.3, 0.8, null, 0.2).cls === 'busy' && /판정 보류/.test(judgeTe
   ok((g.match(/<svg/g) ?? []).length === 1 && /길이 균일도/.test(g) && /폭 균일도/.test(g) && g.includes('od-xy') && g.includes('③ 확산도(Milky)') && (g.match(/class="od-cand/g) ?? []).length === 3 && g.includes('<title>후보 2'), '그래프 1개(길이×폭): 후보 점 3개 · 항목 이름 · 마우스 값');
   ok(factorChartSvg({ ...S, seq: [] }, {}, 600, 220).includes('후보를 시험하면'), '후보 전 안내');
   ok(g.includes('목표 80% · 80%') && g.includes('od-goal') && g.includes('시작 60.0% · 70.0%') && /시험한 후보 3개/.test(g), '목표 영역(오른쪽 위) · 시작점 · 후보 수');
-  ok((g.match(/class="od-path"/g) ?? []).length === 2 && (g.match(/class="od-up"/g) ?? []).length === 2, '최고안이 바뀐 자리를 잇는 최적화 길 · 갱신 표시');
+  ok((g.match(/class="od-path q"/g) ?? []).length === 2 && !/od-path v/.test(g) && (g.match(/class="od-up"/g) ?? []).length === 2, '최고안이 바뀐 자리를 잇는 최적화 길(빠른 계산 = 점선) · 갱신 표시');
+  // 2026-11-25 사용자: 검토 내용은 점, 유력한 길은 점선(빠른 계산) → 실선(정밀 판정)
+  ok((factorChartSvg({ ...S, final: { Ulen: 0.85, Uwid: 0.86 } }, S.before, 600, 220).match(/class="od-path v"/g) ?? []).length === 1, '정밀 판정(최종)까지는 실선');
   { const gf = factorChartSvg({ ...S, final: { Ulen: 0.7886, Uwid: 0.8 } }, S.before, 600, 220);
     ok(!g.includes('최종') && gf.includes('최종 78.8% · 80.0%') && (gf.match(/class="od-final"/g) ?? []).length === 1, '최종 판정 값 = ◆ 하나(길이·폭)'); }
   { const { chartHtml, chartHeight } = await import('../src/ui/m3/opt-dash.js'), L = chartHtml();
@@ -948,6 +957,11 @@ done();
   const eff = stageEffects({ shape: { Ulen: 0.7, Uwid: 0.74 }, milky: { Ulen: 0.72, Uwid: 0.75 } }, r.cur, r.best);
   ok(Math.abs(eff.shape.dl + eff.milky.dl - 0.1) < 1e-9 && Math.abs(eff.shape.dw + eff.milky.dw - 0.15) < 1e-9 && eff.shape.dl > eff.milky.dl, `항목 효과 합 = 전체 변화(배분): ${JSON.stringify(eff)}`);
   const h = resultViewHtml(r, { effects: eff, hist: [{ label: 'Milky 3.6', Ulen: 0.75, Uwid: 0.77, eff: 0.5 }] });
+  // 2026-11-25 사용자: [적용 안 함] 뒤에도 결과 다시 보기 — 보기만(적용·이어서·3D 바꾸기 단추 없음, 지난 후보에서 골라 적용)
+  { const hv = resultViewHtml(r, { viewOnly: true, hist: [{ label: 'Milky 3.6', Ulen: 0.75, Uwid: 0.77, eff: 0.5 }] });
+    ok(/적용 안 함 — 보기만/.test(hv) && !/data-ad="apply"/.test(hv) && !/data-ad="continue"/.test(hv) && !/data-ad="cancel"/.test(hv) && !/data-ad="pvSwap"/.test(hv) && /data-ad="toSet"/.test(hv) && /지난 후보/.test(hv), '보기만 결과 화면: 결정 단추 없음 · 설정 바꾸기·지난 후보 남음'); }
+  { const src = (await import('node:fs')).readFileSync(new URL('../src/ui/m3/app.js', import.meta.url), 'utf8');
+    ok(/function adCancel\(\) \{ const st = adState\(\); st\.lastResult = st\.result;/.test(src) && /viewOnly: !st\.result && !!st\.lastResult/.test(src) && /st\.lastResult = null/.test(src), '적용 안 함 = 마지막 결과를 보기용으로 남김 · 새 실행·적용 때 지움'); }
   { const hs = resultViewHtml({ ...r, sharpErr: '노이즈 0.5% 재계산 실패(Worker 응답 없음 (chunk 90초)) — 노이즈 1.0% 값으로 판정' });
     ok(/rs-note warn[^>]*>⚠ [^<]*재계산 실패/.test(hs) && !/💡 노이즈 0\.5%/.test(hs), '정밀 재계산 실패 = 결과 화면에 경고 한 줄(2026-11-17)'); }
   ok(h.includes('목표 미달') && !/rs-card/.test(h), '판정 · 카드 없음(값은 진행 그래프 제목 줄, 2026-11-17 사용자)');
