@@ -31,7 +31,7 @@ export const SCORE_EPS = 0.01;   // 최종안이 현재안보다 이만큼은 �
 // stepVirt = LED STEP 가상 배치 여부(② 가 STEP 에서 돌면 true, current 는 현재 배치가 가상인지) — 개수가 같아도 원래 ↔ 가상은 다른 설계
 // dz = LED 높이 이동(mm, 없음 = 0), finish = ④ 케이스 면 { part, kind, R } | null
 // 열 배치(spec P4 §2.2b): rows 없음 = 1, 열 간격은 2열일 때만 의미 · 총 LED 수 = rows·count
-const rowsOf = (x) => (x?.rows === 2 ? 2 : 1), gapOf = (x) => (rowsOf(x) === 2 ? x.rowGap ?? 0 : 0);
+const rowsOf = (x) => (x?.rows >= 2 ? Math.round(x.rows) : 1), gapOf = (x) => (rowsOf(x) >= 2 ? x.rowGap ?? 0 : 0);   // N열(2026-11-25) — 3열 이상도
 export const totalLeds = (x) => (x?.count ?? 0) * rowsOf(x);
 const sameFinish = (f, g) => (!f && !g) || (!!f && !!g && f.part === g.part && f.kind === g.kind && (f.R ?? null) === (g.R ?? null));
 export const sameDesign = (a, b) => ['count', 'pitch', 'milky'].every((k) => (a?.[k] ?? null) === (b?.[k] ?? null)) && !!a?.stepVirt === !!b?.stepVirt && JSON.stringify(a?.shape ?? null) === JSON.stringify(b?.shape ?? null)
@@ -574,6 +574,7 @@ export async function runAutoDesign(cfg, io) {
     if (!r.feasible) { feasible = false; reason = keepCount ? `배치를 바꿔도 목표에서 멀어 LED ${totalLeds(cfg.current)}개를 유지 — Milky·형상으로 보완하세요` : r.reason; }
     // 폭 미달이면 위치/개수 단계에서 먼저 2열 검토(2026-11-21 사용자) — 1열 최선안을 빠르게 재서 폭이 목표 미달이면 2열 배치를 재고, 길이가 미달이면 2열 그대로 LED 를 늘림.
     // 2열이 더 나으면 2열로 이어서 다음 단계(높이·Milky)를 한 번만(끝에 2열만 따로 Milky 를 다시 찾던 것 = 시간 두 배·Milky 칸에 섞임 → 없앰). 1열 안은 지난 후보 표 대안
+    let rowsBest = null, twoDone = false;   // 열 검토에서 잰 지금 안(빠른 검토) — N열 검토가 이어서 씀 · twoDone = 2열 검토를 이미 함
     if (ledMore2 && obs.targetWid > 0 && !keepCount && !stop()) {
       const lenM = (s) => quickMargin({ ...s, Uwid: null }, obs), lab = (e) => e.layoutText ?? `LED ${totalLeds(e)}개`;
       const ut = (s) => `길이 균일도 ${fmtJudge(s.Ulen, obs.targetLen)}${s.Uwid == null ? '' : ` · 폭 균일도 ${fmtJudge(s.Uwid, obs.targetWid)}`}`;
@@ -603,11 +604,59 @@ export async function runAutoDesign(cfg, io) {
         // 위치/개수 카드에 한 묶음으로(기준 줄 = 지금 Milky)
         io.trace?.('leds', [one, ...tried2].map((t) => ({ label: lab(t.design), Ulen: t.verified.stats.Ulen, Uwid: t.verified.stats.Uwid ?? null, ok: !t.verified.stats.empty, eff: t.verified.eff, base: `폭 미달 — 2열 검토 (Milky ${d.milky ?? 0})` })));
         steps.push({ stage: 'ledsTwoRow', one, tried: tried2, pick: two2, chosen });
+        rowsBest = chosen ? two2 : one; twoDone = true;
         if (chosen) {
           d = two2.design; ledRows = 2; ledMore = ledMore2; ledAlts = []; ledLimit = null; ledTwoRow = null;
           const okQ = quickMargin(two2.verified.stats, obs) >= 0;
           feasible = okQ; reason = okQ ? '' : `2열 ${lab(d)} 에서도 목표 미달 — ${ut(two2.verified.stats)}`;
         }
+      }
+    }
+    // N열(2026-11-25 사용자) — 폭이 아직 미달이면 2열에서 멈추지 않고 3열·4열…(cfg.rowsMax 까지) 계속. 열 수마다 길이가 모자라면 그 열 수 그대로 LED 를 늘림.
+    // 열 간격은 앱이 정함(LED 몸체가 겹치지 않고 폭 안 · 없으면 gaps = [] → 더 못 넣음 = 멈춤). 더 나은 안만 받아들이고, 폭이 통과하면 멈춤
+    // 먼 미달로 개수를 유지(keepCount)해도 폭이 미달이면 열 검토는 함(72-LED 링: 통째로 건너뛰었음) · 2열 검토가 안 돌았으면 2열부터
+    if (two && (cfg.rowsMax ?? 2) >= 3 && obs.targetWid > 0 && !stop()) {
+      const lenM = (s) => quickMargin({ ...s, Uwid: null }, obs), lab = (e) => e.layoutText ?? `LED ${totalLeds(e)}개`, wShort = (v) => v.stats.Uwid != null && v.stats.Uwid < obs.targetWid;
+      let best = rowsBest ?? { design: d, verified: await qv(d) };
+      if (stop()) return halt();
+      const tried = [], t0 = clock(); let took = false;
+      const perRow = (x) => (x && totalLeds(x) > 0 ? Math.round(totalLeds(x) / rowsOf(x)) : 0), n1 = Math.max(1, perRow(best.design), perRow(cfg.current)), capRow = Math.max(cfg.nMax ?? 0, n1);   // 열당 개수는 지금보다 줄이지 않음 · 총수 상한 = 열 수 × max(nMax, 지금 열당)(72-LED 링: 60개 상한에 묶여 열당 개수가 줄었음)
+      for (let k = twoDone ? Math.max(3, ledRows + 1) : Math.max(2, ledRows + 1); k <= cfg.rowsMax && wShort(best.verified) && clock() - t0 < (cfg.ladderMs ?? LADDER_MS); k++) {
+        io.progress?.('leds', 0.96, `폭 미달 — ${k}열 배치 검토`);
+        const Bk = await io.basis({ ...d, rows: 1, rowGap: 0, positions: null }, { rows: k });
+        if (stop()) return halt();
+        if (!Bk?.gaps?.length) break;   // 열 간격 없음 = 이 폭에 더 못 넣음
+        if (Bk.maps && two0(Bk)) smoothMapsS(Bk.maps, cfg.G);
+        const sk = await solveLayoutAsync({ G: cfg.G, obs: { ...obs, targetWid: null }, line: cfg.line, cand: Bk.cand, maps: Bk.maps, pitchRange: cfg.pitchRange ?? null, nMax: k * capRow, emitted: Bk.emitted, ...(Bk.minGap ? { minGap: Bk.minGap } : {}),
+          uniformOnly: cfg.uniformPitch !== false, wCenter: d.wCenter ?? 0, rowsOptions: [k], gaps: Bk.gaps, inner: true, sMargin: Bk.sMargin ?? 0, timeBudget: cfg.layoutBudget ?? 20000, safety: cfg.layoutSafety ?? 0.02 }, { tick: pacer(), cancelled: stop });
+        if (stop()) return halt();
+        if (!sk?.positions?.length) break;
+        const gk = sk.rowGap, moreK = (n) => { if (n % k) return null; const e = sk.atCount?.(n / k, k, gk); return e?.positions?.length ? lay(e) : null; };
+        const at1 = sk.n >= n1 ? null : sk.atCount?.(n1, k, gk), base = at1?.positions?.length ? at1 : sk;   // 고른 안이 열당 n1 보다 적으면 n1 로
+        const e0 = { ...d, ...lay(base), stepVirt: !!cfg.stepMode }, tk = [{ design: e0, verified: await qv(e0) }];
+        if (stop()) return halt();
+        if (lenM(tk[0].verified.stats) < 0) {   // 이 열 수에서 길이 미달 → 열 수 그대로 LED 늘림
+          const t1 = clock();
+          await ladderUp(async (n) => {
+            const L = moreK(n);
+            if (!L) return null;
+            if (io.clash) { try { if (await io.clash({ ...e0, ...L }) > 0) return null; } catch { /* 검사 실패 = 겹침 아님(기존과 같음) */ } }
+            io.progress?.('leds', 0.97, `${k}열 길이 미달 — LED ${n}개로 늘려 재확인`);
+            const t = { design: { ...e0, ...L }, verified: await qv({ ...e0, ...L }) };
+            tk.push(t);
+            return lenM(t.verified.stats);
+          }, { from: totalLeds(e0) + k, cap: k * capRow, step: k, base: lenM(tk[0].verified.stats), inTime: () => clock() - t1 < (cfg.ladderMs ?? LADDER_MS), cancelled: stop });
+          if (stop()) return halt();
+        }
+        const P = tk.filter((t) => lenM(t.verified.stats) >= 0);
+        const pk = P.length ? P.reduce((a, b) => (totalLeds(b.design) < totalLeds(a.design) ? b : a)) : tk.reduce((a, b) => (lenM(b.verified.stats) > lenM(a.verified.stats) ? b : a));
+        tried.push(...tk);
+        if (quickMargin(pk.verified.stats, obs) > quickMargin(best.verified.stats, obs) + SCORE_EPS) { best = pk; d = pk.design; ledRows = k; ledMore = moreK; ledAlts = []; ledLimit = null; ledTwoRow = null; took = true; }
+      }
+      if (tried.length) {
+        io.trace?.('leds', tried.map((t) => ({ label: lab(t.design), Ulen: t.verified.stats.Ulen, Uwid: t.verified.stats.Uwid ?? null, ok: !t.verified.stats.empty, eff: t.verified.eff, base: `폭 미달 — 열 추가 검토 (Milky ${d.milky ?? 0})` })));
+        steps.push({ stage: 'ledsRows', tried, pick: best });
+        if (took) { const okQ = quickMargin(best.verified.stats, obs) >= 0; feasible = okQ; reason = okQ ? '' : `${lab(d)} 에서도 목표 미달 — 길이 균일도 ${fmtJudge(best.verified.stats.Ulen, obs.targetLen)}${best.verified.stats.Uwid == null ? '' : ` · 폭 균일도 ${fmtJudge(best.verified.stats.Uwid, obs.targetWid)}`}`; }
       }
     }
   }
@@ -913,7 +962,7 @@ export async function runAutoDesign(cfg, io) {
     d = pick.design; verified = pick.verified;
     if (more && mgOf(pick) < 0) {
       const s = verified.stats, wid = s.Uwid != null && s.Uwid - obs.targetWid < s.Ulen - obs.targetLen;
-      reason = `LED ${ledRows === 2 ? '2열 총 ' : '1열 '}${Math.max(...tried.map((t) => totalLeds(t.design)))}개까지 늘려도 목표 미달 — ${uText(s)} · 한계: ${wid ? '폭 방향 확산 부족(LED 개수로는 안 오름) — Milky·형상으로 보완' : '길이 방향 끝 어두움 — Milky·LED 높이·형상으로 보완'}`;
+      reason = `LED ${ledRows >= 2 ? `${ledRows}열 총 ` : '1열 '}${Math.max(...tried.map((t) => totalLeds(t.design)))}개까지 늘려도 목표 미달 — ${uText(s)} · 한계: ${wid ? '폭 방향 확산 부족(LED 개수로는 안 오름) — Milky·형상으로 보완' : '길이 방향 끝 어두움 — Milky·형상으로 보완'}`;
     }
   }
   // 개수별 후보(2026-11-21 사용자 3번) — 고른 배치와 같은 열 수로 총수 ±1·±2 열 단위를 빠른 검토로 재서 지난 후보 표에(최종안 선택은 그대로). 이미 잰 개수는 건너뜀

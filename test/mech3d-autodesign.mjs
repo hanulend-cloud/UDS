@@ -766,4 +766,62 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   const lat = r.steps.find((x) => x.stage === 'ledsLateral');
   ok(asked.length > 0 && asked.every((c) => c >= 0) && lat?.pick > 0, `오른쪽이 어두우면 +w 쪽 후보만 비교(${[...new Set(asked)].join()}) → ${lat?.pick}`);
 }
+{ // N열(2026-11-25 사용자): 폭이 미달이면 2열에서 멈추지 않고 3열·4열… 로 계속 — 열 수마다 길이가 모자라면 개수도 늘림 · 더 못 넣으면(열 간격 없음) 멈춤
+  const nw = 6, G = { ns: 100, nw, ds: 1, cell: 2, w0: -6, L: 100, closed: false, winS: 10, area: new Float64Array(100 * nw).fill(1), valid: new Uint8Array(100 * nw).fill(1) }, line = { length: 100, closed: false };
+  const wcol = [-5, -3, -1, 1, 3, 5], mapsOf = (cand) => cand.map(({ s, w }) => Float32Array.from({ length: 100 * nw }, (_, k) => Math.exp(-(((k / nw | 0) + 0.5 - s) ** 2) / 72) * Math.exp(-((wcol[k % nw] - w) ** 2) / 4.5)));
+  const asked = [];
+  const basis = (maxRows) => async (d, o = {}) => {
+    const k = o.rows ?? 0; asked.push(k);
+    const gs = k >= 3 ? (k <= maxRows ? [3.2] : []) : [2];   // 3열 이상 = 열 간격 하나(넘치면 없음)
+    const ws = k >= 3 && gs.length ? Array.from({ length: k }, (_, i) => (i - (k - 1) / 2) * gs[0]) : [0, -2, 2];
+    const cand = candidateGrid(line, { sStep: 2, wOffsets: [...new Set(ws)] });
+    return { cand, maps: mapsOf(cand), emitted: 1, gaps: gs, sMargin: 0 };
+  };
+  const rowsIn = (d) => new Set((d.positions ?? []).map((q) => q.w)).size || (d.rows ?? 1);
+  const U = (d) => { const k = rowsIn(d); return st(k >= 3 && d.count >= 6 ? 0.9 : k >= 3 ? 0.4 : 0.9, k >= 3 ? 0.995 : k === 2 ? 0.7 : 0.4); };
+  const run = (maxRows, extra = {}) => runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.5, targetWid: 0.99 }, current: { milky: 1, count: 5, pitch: 0, rows: 1 }, G, line, nMax: 60, rowsOptions: [1, 2], rowsMax: 8, ladderMs: 60000, ...extra },
+    { basis: basis(maxRows), progress() {}, cancelled: () => false, verify: async (d) => ({ stats: U(d), eff: 0.5 }) });
+  const r = await run(4), n3 = r.steps.find((x) => x.stage === 'ledsRows');
+  ok(r.best.rows === 3 && rowsIn(r.best) === 3 && r.best.positions.length === 3 * r.best.count && r.best.count >= 6 && r.feasible && !!n3, `2열로 폭 미달 → 3열(길이 모자라 개수 늘림): 최종 ${r.best.rows}열 × ${r.best.count} · ${r.best.layoutText ?? ''}`);
+  ok(/3열 × \d+개/.test(r.best.layoutText ?? ''), `배치 글 = 3열 × n개: ${r.best.layoutText}`);
+  asked.length = 0;
+  const U2 = (d) => st(0.9, rowsIn(d) >= 5 ? 0.995 : 0.3 + 0.1 * rowsIn(d));
+  const r2 = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.5, targetWid: 0.99 }, current: { milky: 1, count: 5, pitch: 0, rows: 1 }, G, line, nMax: 60, rowsOptions: [1, 2], rowsMax: 8, ladderMs: 60000 },
+    { basis: basis(4), progress() {}, cancelled: () => false, verify: async (d) => ({ stats: U2(d), eff: 0.5 }) });
+  ok(!/(\d열) /.test(r2.reason) && /4열/.test(r2.reason) && !/1열/.test(r2.reason), `미달 사유에 열 수 한 번만(4열): ${r2.reason}`);
+  ok(rowsIn(r2.best) === 4 && !r2.feasible && asked.includes(5) && !asked.includes(6), `5열은 안 들어감 → 4열(가장 나은 안)에서 멈춤 · 미달 표시: ${rowsIn(r2.best)}열 · 물어본 열 ${[...new Set(asked)].join()}`);
+  asked.length = 0;
+  const r1 = await run(4, { rowsMax: 2 });
+  ok(!asked.some((k) => k >= 3) && (r1.best.rows ?? 1) <= 2, '열 상한 2(1열만·기존 설정) = 3열 이상 안 봄');
+}
+{ // N열: 2열 검토가 따로 안 돌았으면(1열 배치 결과에 2열 대안 없음 · 먼 미달로 개수 유지 등) 2열부터 — 72-LED 링에서 열 검토를 통째로 건너뛰었음(2026-11-25)
+  const nw = 6, G = { ns: 100, nw, ds: 1, cell: 2, w0: -6, L: 100, closed: false, winS: 10, area: new Float64Array(100 * nw).fill(1), valid: new Uint8Array(100 * nw).fill(1) }, line = { length: 100, closed: false };
+  const wcol = [-5, -3, -1, 1, 3, 5], mapsOf = (cand) => cand.map(({ s, w }) => Float32Array.from({ length: 100 * nw }, (_, k) => Math.exp(-(((k / nw | 0) + 0.5 - s) ** 2) / 72) * Math.exp(-((wcol[k % nw] - w) ** 2) / 4.5)));
+  const asked = [];
+  const basis = async (d, o = {}) => {
+    const k = o.rows ?? 0; asked.push(k);
+    const gs = k >= 3 ? [3.2] : k === 2 ? [2] : [];   // 처음 배치 = 1열 후보만(2열 대안 없음)
+    const ws = k >= 3 ? Array.from({ length: k }, (_, i) => (i - (k - 1) / 2) * 3.2) : k === 2 ? [-2, 2] : [0];
+    const cand = candidateGrid(line, { sStep: 2, wOffsets: ws });
+    return { cand, maps: mapsOf(cand), emitted: 1, gaps: gs, sMargin: 0 };
+  };
+  const rowsIn = (d) => new Set((d.positions ?? []).map((q) => q.w)).size || (d.rows ?? 1);
+  const r = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.5, targetWid: 0.99 }, current: { milky: 1, count: 5, pitch: 0, rows: 1 }, G, line, nMax: 60, rowsOptions: [1, 2], rowsMax: 8, ladderMs: 60000 },
+    { basis, progress() {}, cancelled: () => false, verify: async (d) => ({ stats: st(0.9, rowsIn(d) >= 2 ? 0.995 : 0.3), eff: 0.5 }) });
+  ok(asked.includes(2) && rowsIn(r.best) === 2 && r.feasible && !asked.includes(3), `2열 검토가 안 돌았으면 2열부터 → 2열에서 통과 후 멈춤 (물어본 열 ${[...new Set(asked)].join()} · 최종 ${rowsIn(r.best)}열)`);
+}
+{ // N열: 열을 늘려도 열당 개수는 지금보다 줄이지 않음(총수 상한 = 열 수 × max(nMax, 지금 열당)) — 72-LED 링: 총 60개 상한에 묶여 3열 × 18·4열 × 13… 으로 줄어 길이가 무너졌음(2026-11-25)
+  const nw = 6, G = { ns: 100, nw, ds: 1, cell: 2, w0: -6, L: 100, closed: true, winS: 10, area: new Float64Array(100 * nw).fill(1), valid: new Uint8Array(100 * nw).fill(1) }, line = { length: 100, closed: true };
+  const wcol = [-5, -3, -1, 1, 3, 5], mapsOf = (cand) => cand.map(({ s, w }) => Float32Array.from({ length: 100 * nw }, (_, k) => Math.exp(-(((k / nw | 0) + 0.5 - s) ** 2) / 72) * Math.exp(-((wcol[k % nw] - w) ** 2) / 4.5)));
+  const basis = async (d, o = {}) => {
+    const k = o.rows ?? 0, gs = k >= 3 ? [3.2] : k === 2 ? [2] : [], ws = k >= 3 ? Array.from({ length: k }, (_, i) => (i - (k - 1) / 2) * 3.2) : k === 2 ? [-2, 2] : [0];
+    const cand = candidateGrid(line, { sStep: 2, wOffsets: ws });
+    return { cand, maps: mapsOf(cand), emitted: 1, gaps: gs, sMargin: 0 };
+  };
+  const rowsIn = (d) => new Set((d.positions ?? []).map((q) => q.w)).size || (d.rows ?? 1), perRow = (d) => Math.round((d.positions?.length ?? d.count) / rowsIn(d));
+  const r = await runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.5, targetWid: 0.99 }, current: { milky: 1, count: 30, pitch: 0, rows: 1 }, G, line, nMax: 20, rowsOptions: [1, 2], rowsMax: 8, ladderMs: 60000 },
+    { basis, progress() {}, cancelled: () => false, verify: async (d) => ({ stats: st(perRow(d) >= 30 ? 0.9 : 0.2, rowsIn(d) >= 3 ? 0.995 : 0.4), eff: 0.5 }) });
+  const tried = r.steps.find((x) => x.stage === 'ledsRows')?.tried ?? [];
+  ok(rowsIn(r.best) === 3 && perRow(r.best) >= 30 && r.feasible && tried.every((t) => perRow(t.design) >= 30), `열당 30개 유지(총수 상한 20 보다 많아도): 최종 ${rowsIn(r.best)}열 × ${perRow(r.best)} · 시험 ${tried.map((t) => `${rowsIn(t.design)}×${perRow(t.design)}`).join(', ')}`);
+}
 done();

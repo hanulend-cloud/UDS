@@ -1833,3 +1833,14 @@ done();
   const t = tileConfigHtml('position', { avail: { leds: { ok: true }, height: { ok: true } }, sel: { leds: true } });
   say(!/높이|LED–커버/.test(t.why ?? '') && !/높이|LED–커버/.test(t.html ?? ''), '위치/개수 설명에 높이 없음');
 }
+{ // N열 열 간격(2026-11-25 사용자) — k열을 폭 안에 고르게, 바깥 열은 벽에서 LED 반폭 + 0.3 mm 안쪽, LED 몸체가 겹치면(간격 < 2·반폭 + 0.2) 못 넣음
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const { rowsSpacing } = await import('../src/engine/mech3d/placement.js');
+  const { rowWs } = await import('../src/engine/mech3d/layout-solver.js');
+  say(rowsSpacing?.(30, 3, 1.5) === 10 && rowWs(3, 10).join() === '-10,0,10', '폭 30·3열 = 간격 10(−10, 0, +10)');
+  say(rowsSpacing?.(16, 4, 1.5) === 4 && Math.max(...rowWs(4, 4).map(Math.abs)) + 1.8 <= 8, '폭 16·4열 = 간격 4 · 바깥 열이 벽 안');
+  say(rowsSpacing?.(16, 6, 1.5) === null && rowsSpacing?.(0, 3, 1) === null, '몸체가 겹치거나 폭을 모르면 못 넣음(null)');
+  say(rowsSpacing?.(30, 3, 1.5, 6) === 7.2, '폭 위치를 옮기면(wc 6) 그만큼 좁힘');
+  const app = (await import('node:fs')).readFileSync('src/ui/m3/app.js', 'utf8');
+  say(/rowsMax: st\.sel\.oneRow \? 1 : ROWS_MAX/.test(app) && /const ROWS_MAX = 8/.test(app), '1열만 끄면 N열(최대 8열)까지 검토');
+}

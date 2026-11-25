@@ -19,6 +19,13 @@ export function ledSPositions(line, count, pitch) {
 export const clampRowGap = (line, g) => Math.max(0, Math.min(Number(g) || 0, (line.width ?? 0) / 2 - 0.5));
 // 열 오프셋 w 목록: 1열 [0], 2열 [−δ, +δ]
 export const rowOffsets = (rows, gap) => (rows === 2 ? [-gap, gap] : [0]);
+// N열 열 간격(2026-11-25 사용자, 3열 이상) — k열을 폭 W 안에 고르게: 간격 = min(W/k, 바깥 열이 벽에서 LED 반폭 + 0.3 mm 안쪽이 되는 최대), 0.1 mm 내림.
+// 폭 위치를 옮겼으면(wc) 그만큼 좁힘. LED 몸체가 겹치면(간격 < max(2, 2·반폭 + 0.2)) 또는 폭을 모르면 null = 못 넣음
+export function rowsSpacing(W, k, ledHalf, wc = 0) {
+  if (!(W > 0) || !(k >= 2)) return null;
+  const room = W / 2 - (ledHalf + 0.3) - Math.abs(wc), g = Math.floor(Math.min(W / k, (2 * room) / (k - 1)) * 10 + 1e-9) / 10;
+  return g > 0 && g >= Math.max(2, 2 * ledHalf + 0.2) - 1e-9 ? g : null;
+}
 // 자동설계 ② 열 간격 후보 δ = ks·W(W = 관측 폭) — 상한으로 자르고 0.1 mm 내림 · 중복·0 제거(후보 격자 w 값과 정확히 같게)
 export const ROW_GAP_KS = [0.2, 0.27, 0.33];
 export const rowGapOptions = (line, ks = ROW_GAP_KS) => [...new Set(ks.map((k) => Math.floor(clampRowGap(line, k * (line.width ?? 0)) * 10 + 1e-9) / 10))].filter((g) => g > 0);
