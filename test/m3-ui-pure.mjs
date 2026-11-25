@@ -141,7 +141,9 @@ ok(judgeText(0.8004, 0.8009).cls === 'ok' && judgeText(0.7999, 0.8).cls === 'bad
       const h = (Ulen, Uwid) => ({ finish: { part: 0 }, text: '백색 90%', Ulen, Uwid, base: { Ulen: 0.8, Uwid: 0.45 } });
       ok(/추천: 부품 속성에서 케이스 면을 '백색 90%'.*길이 \+1\.0%p · 폭 \+7\.0%p 정도 오름/.test(caseHintText({ hint: h(0.81, 0.52) })), `케이스 면 추천: ${caseHintText({ hint: h(0.81, 0.52) })}`);
       ok(caseHintText({ hint: h(0.805, 0.455) }) === '' && caseHintText({ hint: h(0.75, 0.6) }) === '' && caseHintText({}) === '', '뚜렷이 나아질 때만(하나라도 크게 나빠지면 안 띄움)');
-      ok(/data-ad="casePart" data-v="0"/.test(resultLineHtml({ best: { Ulen: 0.8, Uwid: 0.45 }, cur: {}, targets: {}, stages: { milky: true }, hint: h(0.81, 0.52) })), '추천 줄 = 누르면 케이스 부품으로'); }
+      // 2026-11-25 사용자: 누르면 메인으로 가며 창이 탭으로 접힘(접기 기능은 없앰) → 누르기 없앰, 글만
+      { const rl = resultLineHtml({ best: { Ulen: 0.8, Uwid: 0.45 }, cur: {}, targets: {}, stages: { milky: true }, hint: h(0.81, 0.52) }), src = (await import('node:fs')).readFileSync(new URL('../src/ui/m3/', import.meta.url).pathname.slice(process.platform === 'win32' ? 1 : 0) + 'app.js', 'utf8');
+        ok(/케이스 면을 '백색 90%'/.test(rl) && !/casePart/.test(rl) && !/<button[^>]*m3-rhint/.test(rl) && !/casePart/.test(src), '추천 줄 = 글만(누르면 창이 접히던 동작 없앰)'); } }
     { const { resultStageFlags, factorResult } = await import('../src/ui/m3/autodesign-panel.js');
       const stages = resultStageFlags({ leds: true, height: false, milky: false });
       { const { applyProgress, traceFrac } = await import('../src/ui/m3/opt-dash.js'), T = () => ({ status: 'wait', frac: 0, evals: [] }), S = { tiles: { position: T(), shape: T(), milky: T() } };
@@ -585,15 +587,17 @@ ok(judgeText(0.3, 0.8, null, 0.2).cls === 'busy' && /판정 보류/.test(judgeTe
   const { factorChartSvg, monitorHtml, STAGES } = await import('../src/ui/m3/opt-dash.js');
   const seq = [{ k: 'milky', label: 'Milky 1', Ulen: 0.7, Uwid: 0.9 }, { k: 'milky', label: 'Milky 2', Ulen: 0.82, Uwid: 0.84 }, { k: 'milky', label: 'Milky 3', Ulen: 0.75, Uwid: 0.86 }];
   const S = { tgLen: 0.8, tgWid: 0.8, seq, before: { Ulen: 0.6, Uwid: 0.7 }, overall: 0.44, tiles: Object.fromEntries(STAGES.map(([k]) => [k, { status: 'off', evals: [] }])) };
-  const g = factorChartSvg(S, S.before, 600, 170);
-  ok((g.match(/<svg/g) ?? []).length === 2 && g.includes('길이 균일도') && g.includes('폭 균일도') && !g.includes('→ 최고') && g.includes('시작 60.0%') && g.includes('③ 확산도(Milky)') && (g.match(/od-cand/g) ?? []).length === 6 && g.includes('<title>후보 2'), '그래프 2개: 최고 = 같은 후보 · 후보 점 · 항목 이름');
-  ok(factorChartSvg({ ...S, seq: [] }, {}, 600, 170).includes('후보를 시험하면'), '후보 전 안내');
-  ok(g.includes('목표 80%') && g.includes('시작 60.0%') && g.includes('시작 70.0%') && /시험한 후보 3개/.test(g), '그래프 안에 목표·시작선 이름과 가로축 뜻');
-  ok(!g.includes('최종') && factorChartSvg({ ...S, final: { Ulen: 0.7886, Uwid: 0.8 } }, S.before, 600, 170).includes('최종 78.8%') && (factorChartSvg({ ...S, final: { Ulen: 0.7886, Uwid: 0.8 } }, S.before, 600, 170).match(/od-final/g) ?? []).length === 2, '최종 판정 값을 후보 값과 구분해 표시');
+  const g = factorChartSvg(S, S.before, 600, 220);
+  // 2026-11-25 사용자: 그래프 2개 → 하나(가로 = 길이 균일도, 세로 = 폭 균일도) — 점을 찍어 가며 최적화 길이 그려짐
+  ok((g.match(/<svg/g) ?? []).length === 1 && /길이 균일도/.test(g) && /폭 균일도/.test(g) && g.includes('od-xy') && g.includes('③ 확산도(Milky)') && (g.match(/class="od-cand/g) ?? []).length === 3 && g.includes('<title>후보 2'), '그래프 1개(길이×폭): 후보 점 3개 · 항목 이름 · 마우스 값');
+  ok(factorChartSvg({ ...S, seq: [] }, {}, 600, 220).includes('후보를 시험하면'), '후보 전 안내');
+  ok(g.includes('목표 80% · 80%') && g.includes('od-goal') && g.includes('시작 60.0% · 70.0%') && /시험한 후보 3개/.test(g), '목표 영역(오른쪽 위) · 시작점 · 후보 수');
+  ok((g.match(/class="od-path"/g) ?? []).length === 2 && (g.match(/class="od-up"/g) ?? []).length === 2, '최고안이 바뀐 자리를 잇는 최적화 길 · 갱신 표시');
+  { const gf = factorChartSvg({ ...S, final: { Ulen: 0.7886, Uwid: 0.8 } }, S.before, 600, 220);
+    ok(!g.includes('최종') && gf.includes('최종 78.8% · 80.0%') && (gf.match(/class="od-final"/g) ?? []).length === 1, '최종 판정 값 = ◆ 하나(길이·폭)'); }
   { const { chartHtml, chartHeight } = await import('../src/ui/m3/opt-dash.js'), L = chartHtml();
-    ok(!/얼마나 좋아졌나/.test(L) && /위로 갈수록 좋음/.test(L) && /시험한 후보/.test(L) && /지금까지 최고/.test(L) && /최종 판정/.test(L) && /대략값/.test(L), '그래프 제목·범례가 뜻을 말함');
-    ok(chartHeight(600) === 150 && chartHeight(401) === 150 && chartHeight(300) === 250, `높이 제한: 나란히 ${chartHeight(600)} · 위아래 ${chartHeight(300)}`);
-    ok(factorChartSvg(S, S.before, 300, 250).includes('od-sim2 one') && !factorChartSvg(S, S.before, 600, 150).includes('od-sim2 one'), '좁으면 위아래로'); }
+    ok(/오른쪽 위로 갈수록 좋음/.test(L) && /시험한 후보/.test(L) && /최적화 길/.test(L) && /최종 판정/.test(L) && /대략값/.test(L), '그래프 툴팁이 뜻을 말함');
+    ok(chartHeight(600) === 220 && chartHeight(300) === 240, `높이: ${chartHeight(600)} · 좁을 때 ${chartHeight(300)}`); }
   { const { clampLeft } = await import('../src/ui/m3/pane-split.js');
     ok(clampLeft(500, 1000) === 500 && clampLeft(100, 1000) === 300 && clampLeft(950, 1000) === 680 && clampLeft(500, 500) === 300 && !(clampLeft(NaN, 1000) >= 0), `좌우 경계 제한: 왼쪽 ≥ 300 · 오른쪽 ≥ 320`); }
   const m = monitorHtml(S, 65); ok(m.includes('<b>44.0%</b>') && m.includes('width:44.0%') && m.includes('진행 01:05') && /role="progressbar"[^>]*aria-valuenow="44.0"/.test(m) && m.indexOf('44.0%') < m.indexOf('om-steps'), '맨 위 진행 막대 % · aria');
@@ -927,6 +931,9 @@ done();
   const h = histFromRun(res, r, '10:00', lab);
   ok(h.length === 2 && h[0].kind === 'final' && h[0].label === '2열 × 29' && h.some((e) => e.label === '2열 × 28') && !h.some((e) => e.label === '2열 × 30') && h[0].r === r, `후보 모음: 최종 + 대안, 겹침·중복 제외 (${h.map((e) => e.label).join(', ')})`);
   ok(histFromRun({ ...res, unchanged: true, steps: [] }, r, 't', lab).length === 0 && histFromRun(res, { clash: 2 }, 't', lab).every((e) => e.kind !== 'final'), '현재안 유지·겹친 최종안은 빼기');
+  // 2026-11-25: 2열이 부품과 겹쳐 검토 안 한 단계(pick = null)에서 결과 화면이 멈춤(histFromRun 이 q.design 읽다 오류)
+  { let e = null, n = -1; try { n = histFromRun({ ...res, steps: [...(res.steps ?? []), { stage: 'ledsTwoRow', one: null, tried: [], pick: null, chosen: false, clash: '2열 = LED 몸체가 부품과 겹침' }] }, r, 't', lab).length; } catch (x) { e = x; }
+    ok(!e && n >= 0, `2열 겹침 단계(pick 없음)에서도 지난 후보 만들기 (${e?.message ?? n})`); }
   const all = mergeHist(h, histFromRun({ best: { milky: 2 }, verified: v(0.81, 0.82) }, r, '10:05', () => 'Milky 2'));
   ok(all.length === 3 && all[all.length - 1].label === 'Milky 2', '실행마다 이어 붙임');
   const t = histTableHtml(all, 0.8, 0.8, false), i81 = t.indexOf('Milky 2'), i72 = t.indexOf('2열 × 29'), i67 = t.indexOf('2열 × 28');
@@ -1129,7 +1136,7 @@ done();
   pushEvals(S, 'final', [{ label: 'LED 10개', Ulen: 0.81, Uwid: 0.8, est: true }]);
   okV(S.seq.length === 3 && S.seq[1].k === 'verify' && S.seq[1].vf && S.verify.label === 'LED 10개' && S.tiles.milky.evals.length === 1, '검증 결과도 그래프 순서(seq)에 들어감 · 마지막 검증값 그대로');
   const g = factorChartSvg(S, S.before, 600, 170);
-  okV((g.match(/class="od-vf/g) ?? []).length === 4 && /검증/.test(g) && /LED 8개 · 길이 72\.0%/.test(g), '그래프에 검증 점(길이·폭) · 검증 띠 · 마우스 값');
+  okV((g.match(/class="od-vf/g) ?? []).length === 2 && /검증/.test(g) && /LED 8개 · 길이 72\.0%/.test(g), '그래프에 검증 점(길이·폭) · 검증 띠 · 마우스 값');
   const m = monitorHtml({ ...S, tiles: { ...S.tiles, milky: { status: 'run', frac: 0.5, evals: S.tiles.milky.evals } } }, 5);
   okV(/≈50\.0%/.test(m) && !/81\.0%/.test(m), '진행 지표(지금까지 최고)는 그대로 — 검증 점은 그래프에만');
 }
@@ -1241,12 +1248,12 @@ done();
   closePhase(S, 700000); S.ended = true; S.endSec = 700;
   say(S.tm.verify === 180000 && /검증<\/b><span>✓ <i class="om-tm"[^>]*>3:00<\/i>/.test(monitorHtml(S, 700)), `끝나면 검증 시간 확정 (${S.tm.verify})`);
   const g = factorChartSvg(S, S.before, 700, 200);
-  say((g.match(/class="od-up"/g) ?? []).length === 8, `최고가 갱신된 자리마다 표시 — 길이·폭 그래프에 4개씩 (${(g.match(/class="od-up"/g) ?? []).length})`);
-  say(/① 위치\/개수 · 폭 위치 −1 mm · 길이 60\.0% → 76\.6%/.test(g), '표시에 마우스를 올리면 항목 · 바꾼 것 · 값 변화');
-  say(/od-upl[^>]*>① \+32\.6%p</.test(g) && /od-upl[^>]*>③ \+2\.4%p</.test(g) && /od-upl[^>]*>① \+6\.3%p</.test(g) && /od-upl[^>]*>③ \+2\.6%p</.test(g), '항목마다 올린 폭(시작 대비 · 앞 항목 대비)을 그래프에 적음');
-  { const g3 = factorChartSvg({ ...S, seq: [{ k: 'verify', vf: true, label: '현재안', Ulen: 0.7, Uwid: 0.16 }, ...S.seq] }, {}, 700, 200); say((g3.match(/class="od-up"/g) ?? []).length === 6 && /길이 70\.0% → 76\.6%/.test(g3), '시뮬레이션 값이 없으면 현재 설계 다시 계산 값이 시작'); }
+  say((g.match(/class="od-up"/g) ?? []).length === 4, `최고가 갱신된 자리마다 표시 — 4개 (${(g.match(/class="od-up"/g) ?? []).length})`);
+  say(/① 위치\/개수 · 폭 위치 −1 mm · 길이 60\.0% → 76\.6% · 폭 15\.0% → 18\.3%/.test(g), '표시에 마우스를 올리면 항목 · 바꾼 것 · 길이·폭 변화');
+  say(/od-upl[^>]*>① 길이 \+32\.6 · 폭 \+6\.3%p</.test(g) && /od-upl[^>]*>③ 길이 \+2\.4 · 폭 \+2\.6%p</.test(g), '항목마다 올린 폭(시작 대비 · 앞 항목 대비)을 길이·폭 함께 적음');
+  { const g3 = factorChartSvg({ ...S, seq: [{ k: 'verify', vf: true, label: '현재안', Ulen: 0.7, Uwid: 0.16 }, ...S.seq] }, {}, 700, 200); say((g3.match(/class="od-up"/g) ?? []).length === 3 && /길이 70\.0% → 76\.6%/.test(g3), '시뮬레이션 값이 없으면 현재 설계 다시 계산 값이 시작'); }
   const g2 = factorChartSvg(S, { Ulen: 0.7, Uwid: 0.16 }, 700, 200);   // 시작(현재 설계)보다 못한 후보는 '올림' 이 아님
-  say((g2.match(/class="od-up"/g) ?? []).length === 6 && /od-upl[^>]*>① \+6\.6%p</.test(g2) && /길이 70\.0% → 76\.6%/.test(g2), `시작값을 넘긴 갱신만 표시 · 올린 폭은 시작 대비 (${(g2.match(/class="od-up"/g) ?? []).length})`);
+  say((g2.match(/class="od-up"/g) ?? []).length === 3 && /od-upl[^>]*>① 길이 \+6\.6 · 폭 \+2\.3%p</.test(g2) && /길이 70\.0% → 76\.6%/.test(g2), `시작값을 넘긴 갱신만 표시 · 올린 폭은 시작 대비 (${(g2.match(/class="od-up"/g) ?? []).length})`);
 }
 { // 2026-11-16: 계산이 실패(Worker 응답 없음 등)해도 진행 화면이 '진행 중' 으로 남고 시간이 계속 올라감 → 실패로 멈춤
   const { applyProgress, monitorHtml, failRun } = await import('../src/ui/m3/opt-dash.js');
@@ -1899,4 +1906,12 @@ done();
   say(/thumb: thumbMap\(C\?\.stats\?\.map/.test(app) && /thumb: thumbMap\(res\.verified\.stats\.map/.test(app), '이전/이후 빛 분포 그림 저장');
   say(/review: reviewFlow\(res\.steps/.test(app) && /run: A\.optDash\?\.summary\?\.\(\)/.test(app) && /function summary\(\)/.test(od), '검토 흐름 · 후보 수/시간 저장');
   say(/pvSwap: \(\) =>/.test(app) && /r\.pvBefore\) return null/.test(app), '3D 이전↔이후 = 결과 미리보기 끄고 켬');
+}
+{ // 검토 흐름에 간섭(2026-11-25): 열 검토가 부품 겹침으로 멈췄으면 '열' 칸에 표시
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const { reviewFlow } = await import('../src/ui/m3/autodesign-panel.js');
+  const f = reviewFlow([{ stage: 'ledsTwoRow', tried: [] }, { stage: 'ledsRows', tried: [], clash: '3열 = LED 몸체가 부품과 겹침 — 더 많은 열은 검토 안 함' }], { cur: { count: 72 } });
+  const g = reviewFlow([{ stage: 'ledsTwoRow', tried: [], clash: '2열 = LED 몸체가 부품과 겹침' }], { cur: { count: 72 } });
+  const col = (x) => x.items.find((i) => i.t === '열')?.v;
+  say(col(f) === '2열 · 3열 겹침' && col(g) === '2열 겹침', `열 칸: ${col(f)} / ${col(g)}`);
 }

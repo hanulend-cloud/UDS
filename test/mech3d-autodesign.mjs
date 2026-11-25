@@ -824,4 +824,25 @@ ok(halvingTotal(27) === 35 && halvingTotal(4) === 10 && halvingTotal(1) === 3, '
   const tried = r.steps.find((x) => x.stage === 'ledsRows')?.tried ?? [];
   ok(rowsIn(r.best) === 3 && perRow(r.best) >= 30 && r.feasible && tried.every((t) => perRow(t.design) >= 30), `열당 30개 유지(총수 상한 20 보다 많아도): 최종 ${rowsIn(r.best)}열 × ${perRow(r.best)} · 시험 ${tried.map((t) => `${rowsIn(t.design)}×${perRow(t.design)}`).join(', ')}`);
 }
+{ // 열 검토 간섭검사(2026-11-25 사용자): 2열·N열 기본 배치가 부품과 겹치면(io.clash > 0) 고르지 않음 — 72-LED 링: 3열×87 이 130개 겹쳐 적용 불가였음
+  const nw = 6, G = { ns: 100, nw, ds: 1, cell: 2, w0: -6, L: 100, closed: false, winS: 10, area: new Float64Array(100 * nw).fill(1), valid: new Uint8Array(100 * nw).fill(1) }, line = { length: 100, closed: false };
+  const wcol = [-5, -3, -1, 1, 3, 5], mapsOf = (cand) => cand.map(({ s, w }) => Float32Array.from({ length: 100 * nw }, (_, k) => Math.exp(-(((k / nw | 0) + 0.5 - s) ** 2) / 72) * Math.exp(-((wcol[k % nw] - w) ** 2) / 4.5)));
+  const asked = [];
+  const basis = async (d, o = {}) => {
+    const k = o.rows ?? 0; asked.push(k);
+    const gs = k >= 3 ? [3.2] : [2], ws = k >= 3 ? Array.from({ length: k }, (_, i) => (i - (k - 1) / 2) * 3.2) : [0, -2, 2];
+    const cand = candidateGrid(line, { sStep: 2, wOffsets: [...new Set(ws)] });
+    return { cand, maps: mapsOf(cand), emitted: 1, gaps: gs, sMargin: 0 };
+  };
+  const rowsIn = (d) => new Set((d.positions ?? []).map((q) => q.w)).size || (d.rows ?? 1);
+  const U = (d) => st(0.9, rowsIn(d) >= 3 ? 0.995 : rowsIn(d) === 2 ? 0.7 : 0.4);
+  const mk = (clashRows) => runAutoDesign({ stages: { leds: true }, obs: { targetLen: 0.5, targetWid: 0.99 }, current: { milky: 1, count: 5, pitch: 0, rows: 1 }, G, line, nMax: 60, rowsOptions: [1, 2], rowsMax: 8, ladderMs: 60000 },
+    { basis, progress() {}, cancelled: () => false, verify: async (d) => ({ stats: U(d), eff: 0.5 }), clash: async (d) => (rowsIn(d) >= clashRows ? 7 : 0) });
+  const r = await mk(3);
+  ok(rowsIn(r.best) === 2 && !asked.includes(4), `3열이 부품과 겹침 → 3열 안 고름 · 4열 이상 안 봄(더 바깥): 최종 ${rowsIn(r.best)}열 · 물어본 열 ${[...new Set(asked)].join()}`);
+  asked.length = 0;
+  const r2 = await mk(2);
+  ok(rowsIn(r2.best) === 1, `2열도 겹치면 1열 유지: 최종 ${rowsIn(r2.best)}열`);
+  ok(/겹/.test(JSON.stringify(r.steps.find((x) => x.stage === 'ledsRows') ?? {})), '열 검토 기록에 겹침 표시');
+}
 done();

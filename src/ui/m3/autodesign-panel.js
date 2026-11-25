@@ -333,7 +333,7 @@ export function twoRowAltText(r) {
 }
 export const twoRowBtn = (r) => (r?.twoRow?.layout && !(r.twoRow.clash > 0) ? '<button type="button" data-ad="twoRow" title="2열 배치를 적용한 뒤, 체크한 형상·Milky 를 그 위에서 다시 최적화(예상값은 빠른 계산 — 끝난 뒤 최종 판정으로 확인). [되돌리기] 로 취소 가능">2열로 이어서 ▸</button>' : '');
 export function oneRowHint(r) { const w = r.best?.Uwid, t = r.targets?.wid; return r.oneRow && r.stages?.leds && Number.isFinite(w) && t != null && w < t ? `💡 폭 균일도 미달 — 설계 인자에서 '1열만(재료비↓)'을 끄면 2열 이상 배치도 찾아 봅니다(LED 개수·재료비 늘 수 있음)` : ''; }
-// 케이스 면 추천(2026-11-07) — ④ 최적화는 없앴지만 하우징 면 처리를 한 단계 올리면 나아지는지는 알려 줌(설계 값은 안 바꿈, 바꾸는 건 사용자가 부품 속성에서).
+// 케이스 면 추천(2026-11-07) — 글만(2026-11-25 사용자: 누르면 창이 탭으로 접히던 동작 없앰) — ④ 최적화는 없앴지만 하우징 면 처리를 한 단계 올리면 나아지는지는 알려 줌(설계 값은 안 바꿈, 바꾸는 건 사용자가 부품 속성에서).
 // 뚜렷이 나아질 때만(길이·폭 중 하나 +0.02 이상, 어느 쪽도 0.01 넘게 나빠지지 않음). 표시값은 내림
 export function caseHintText(r) {
   const h = r.hint, b = h?.base; if (!h || !b || !h.text) return '';
@@ -373,7 +373,7 @@ export function histFromRun(res, r, at, labelOf) {
   if (!(r.clash > 0)) add(res.best, res.verified, 'final');
   for (const t of res.steps?.find((x) => x.stage === 'ledsVerify')?.tried ?? []) if (!t.clash) add(t.design, t.verified, 'alt');
   for (const t of res.steps?.filter((x) => x.stage === 'milkyRecheck') ?? []) add(t.design, t.verified, 'alt');   // 최종 판정 목표 근처 → ★ Milky 정밀 재확인(2026-11-21)
-  for (const t of res.steps?.filter((x) => x.stage === 'ledsTwoRow') ?? []) for (const q of [t.one, t.pick]) add(q.design, q.verified, 'alt');   // 위치 단계 2열 검토(빠른 검토, 2026-11-21) — 고르지 않은 쪽(1열 또는 2열)도 대안으로
+  for (const t of res.steps?.filter((x) => x.stage === 'ledsTwoRow') ?? []) for (const q of [t.one, t.pick]) if (q) add(q.design, q.verified, 'alt');   // 위치 단계 2열 검토(빠른 검토, 2026-11-21) — 고르지 않은 쪽(1열 또는 2열)도 대안으로
   for (const t of res.steps?.find((x) => x.stage === 'ledsCount')?.tried ?? []) add(t.design, t.verified, 'alt');   // 개수별 후보 ±2(빠른 검토, 2026-11-21)
   return out;
 }
@@ -473,7 +473,7 @@ function notesLines(r) {
     nextTryText(r), oneRowHint(r), r.sharpErr ?? '', r.shapeNote ? `형상 그대로: ${r.shapeNote}` : '', shapeMissText(r),
     r.lowered ? loweredText(r.lowered, r.unchanged) : '', !r.feasible && r.peek ? peekText(r.peek) : '',
   ].filter(Boolean).slice(0, 3).map((t) => tipNote(t, t === r.sharpErr ? 'warn' : ''));   // 정밀 재계산 실패 = 경고(2026-11-17)
-  const ch = caseHintText(r) ? `<button type="button" class="rs-note m3-rhint" data-ad="casePart" data-v="${r.hint.finish.part}" title="${esc(caseHintText(r))}">💡 ${esc(shortNote(caseHintText(r)))} ▸</button>` : '';
+  const ch = caseHintText(r) ? `<div class="rs-note m3-rhint" title="${esc(caseHintText(r))} — 케이스 부품 속성에서 직접 바꿈">💡 ${esc(shortNote(caseHintText(r)))}</div>` : '';
   return n.join('') + ch;
 }
 // ---- 결과 화면 시안 4(2026-11-25 사용자): 빛 분포 이전/이후 · 기구 변경 단면 · 부품 영향 · 검토 흐름 · 시뮬레이션 근거 ----
@@ -499,7 +499,8 @@ export function reviewFlow(steps = [], { cur = {}, nMax = null, stages = {} } = 
   const lat = steps.find((x) => x?.stage === 'ledsLateral');
   if (lat) { const ws = (lat.results ?? []).map((q) => q.wCenter).filter((w) => Number.isFinite(w) && w !== 0); items.push({ k: 'position', t: '위치', v: ws.some((w) => w > 0) && ws.some((w) => w < 0) ? '폭 양쪽 이동' : '어두운 쪽 이동' }); }
   if (has('leds') || has('ledsCount') || has('ledsVerify')) { const n0 = ledTotal(cur), ok0 = Number.isFinite(n0); items.push({ k: 'position', t: '개수', v: ok0 && nMax ? `${n0} → 최대 ${nMax}` : ok0 ? `${n0}개부터` : '늘려 봄' }); }
-  if (has('ledsTwoRow') || has('ledsRows')) { const mx = Math.max(2, ...steps.filter((x) => x?.stage === 'ledsRows').flatMap((x) => (x.tried ?? []).map((t) => (t?.design?.rows >= 2 ? Math.round(t.design.rows) : 1)))); items.push({ k: 'position', t: '열', v: mx > 2 ? `2→${mx}열` : '2열' }); }
+  if (has('ledsTwoRow') || has('ledsRows')) { const mx = Math.max(2, ...steps.filter((x) => x?.stage === 'ledsRows').flatMap((x) => (x.tried ?? []).map((t) => (t?.design?.rows >= 2 ? Math.round(t.design.rows) : 1)))); const ck = steps.map((x) => (x?.stage === 'ledsTwoRow' || x?.stage === 'ledsRows') && x.clash ? +String(x.clash).match(/^(\d+)열/)?.[1] : NaN).find(Number.isFinite);   // 부품과 겹쳐 멈춘 열 수
+    items.push({ k: 'position', t: '열', v: ck === 2 ? '2열 겹침' : `${mx > 2 ? `2→${mx}열` : '2열'}${ck ? ` · ${ck}열 겹침` : ''}` }); }
   const sh = steps.filter((x) => x?.stage === 'shapeScreen' || x?.stage === 'shapeField'), shN = sh.reduce((a, x) => a + (x.results?.length ?? x.tried?.length ?? 0), 0);
   if (sh.length || has('shape')) items.push({ k: 'shape', t: '형상', v: shN ? `후보 ${shN}개` : '입광면 다듬기' });
   const mk = steps.filter((x) => x?.stage === 'milky').flatMap((x) => (x.rows ?? []).map((q) => +q.milky)).filter(Number.isFinite);
@@ -578,7 +579,7 @@ export function resultViewHtml(r, { applied = null, effects = null, hist = null,
 // 참고 문구·Milky 표는 접어 둠(2026-11-08) — 메인 카드는 판정·값·단추만
 function notesHtml(r) {
   const n = [
-    caseHintText(r) ? `<button type="button" class="m3-rlim m3-rhint" data-ad="casePart" data-v="${r.hint.finish.part}" title="케이스 부품 속성 열기 — 면 처리는 직접 바꿈">${esc(caseHintText(r))} ▸</button>` : '',
+    caseHintText(r) ? `<div class="m3-rlim m3-rhint" title="케이스 부품 속성에서 면 처리를 직접 바꿈">${esc(caseHintText(r))}</div>` : '',
     oneRowHint(r) ? `<div class="m3-rlim">${esc(oneRowHint(r))}</div>` : '',
     twoRowAltText(r) ? `<div class="m3-rlim">${esc(twoRowAltText(r))}</div>` : '',
     r.sharpErr ? `<div class="m3-rlim">⚠ ${esc(r.sharpErr)}</div>` : '',

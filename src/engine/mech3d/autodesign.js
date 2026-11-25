@@ -574,7 +574,8 @@ export async function runAutoDesign(cfg, io) {
     if (!r.feasible) { feasible = false; reason = keepCount ? `배치를 바꿔도 목표에서 멀어 LED ${totalLeds(cfg.current)}개를 유지 — Milky·형상으로 보완하세요` : r.reason; }
     // 폭 미달이면 위치/개수 단계에서 먼저 2열 검토(2026-11-21 사용자) — 1열 최선안을 빠르게 재서 폭이 목표 미달이면 2열 배치를 재고, 길이가 미달이면 2열 그대로 LED 를 늘림.
     // 2열이 더 나으면 2열로 이어서 다음 단계(높이·Milky)를 한 번만(끝에 2열만 따로 Milky 를 다시 찾던 것 = 시간 두 배·Milky 칸에 섞임 → 없앰). 1열 안은 지난 후보 표 대안
-    let rowsBest = null, twoDone = false;   // 열 검토에서 잰 지금 안(빠른 검토) — N열 검토가 이어서 씀 · twoDone = 2열 검토를 이미 함
+    let rowsBest = null, twoDone = false, rowsClash = null;   // rowsClash = 부품과 겹친 열 수(2026-11-25 사용자: 열 검토에 간섭검사) — 그보다 많은 열(더 바깥)은 안 봄
+    const clashOf = async (e) => { if (!io.clash) return false; try { return (await io.clash(e)) > 0; } catch { return false; } };   // 검사 실패 = 겹침 아님(기존과 같음)   // 열 검토에서 잰 지금 안(빠른 검토) — N열 검토가 이어서 씀 · twoDone = 2열 검토를 이미 함
     if (ledMore2 && obs.targetWid > 0 && !keepCount && !stop()) {
       const lenM = (s) => quickMargin({ ...s, Uwid: null }, obs), lab = (e) => e.layoutText ?? `LED ${totalLeds(e)}개`;
       const ut = (s) => `길이 균일도 ${fmtJudge(s.Ulen, obs.targetLen)}${s.Uwid == null ? '' : ` · 폭 균일도 ${fmtJudge(s.Uwid, obs.targetWid)}`}`;
@@ -583,7 +584,10 @@ export async function runAutoDesign(cfg, io) {
       if (stop()) return halt();
       if (one.verified.stats.Uwid != null && one.verified.stats.Uwid < obs.targetWid) {
         io.progress?.('leds', 0.92, '폭 미달 — 2열 배치 검토');
-        const e0 = { ...d, ...ledTwoRow.layout }, tried2 = [{ design: e0, verified: await qv(e0) }];
+        const e0 = { ...d, ...ledTwoRow.layout };
+        if (await clashOf(e0)) { rowsClash = 2; twoDone = true; rowsBest = one; steps.push({ stage: 'ledsTwoRow', one, tried: [], pick: null, chosen: false, clash: '2열 = LED 몸체가 부품과 겹침' }); }
+        else {
+        const tried2 = [{ design: e0, verified: await qv(e0) }];
         if (stop()) return halt();
         if (lenM(tried2[0].verified.stats) < 0) {   // 2열에서 길이 미달 → 2열 그대로 LED 늘림(사용자)
           const t0 = clock();
@@ -610,12 +614,13 @@ export async function runAutoDesign(cfg, io) {
           const okQ = quickMargin(two2.verified.stats, obs) >= 0;
           feasible = okQ; reason = okQ ? '' : `2열 ${lab(d)} 에서도 목표 미달 — ${ut(two2.verified.stats)}`;
         }
+        }
       }
     }
     // N열(2026-11-25 사용자) — 폭이 아직 미달이면 2열에서 멈추지 않고 3열·4열…(cfg.rowsMax 까지) 계속. 열 수마다 길이가 모자라면 그 열 수 그대로 LED 를 늘림.
     // 열 간격은 앱이 정함(LED 몸체가 겹치지 않고 폭 안 · 없으면 gaps = [] → 더 못 넣음 = 멈춤). 더 나은 안만 받아들이고, 폭이 통과하면 멈춤
     // 먼 미달로 개수를 유지(keepCount)해도 폭이 미달이면 열 검토는 함(72-LED 링: 통째로 건너뛰었음) · 2열 검토가 안 돌았으면 2열부터
-    if (two && (cfg.rowsMax ?? 2) >= 3 && obs.targetWid > 0 && !stop()) {
+    if (two && (cfg.rowsMax ?? 2) >= 3 && obs.targetWid > 0 && !rowsClash && !stop()) {
       const lenM = (s) => quickMargin({ ...s, Uwid: null }, obs), lab = (e) => e.layoutText ?? `LED ${totalLeds(e)}개`, wShort = (v) => v.stats.Uwid != null && v.stats.Uwid < obs.targetWid;
       let best = rowsBest ?? { design: d, verified: await qv(d) };
       if (stop()) return halt();
@@ -633,7 +638,9 @@ export async function runAutoDesign(cfg, io) {
         if (!sk?.positions?.length) break;
         const gk = sk.rowGap, moreK = (n) => { if (n % k) return null; const e = sk.atCount?.(n / k, k, gk); return e?.positions?.length ? lay(e) : null; };
         const at1 = sk.n >= n1 ? null : sk.atCount?.(n1, k, gk), base = at1?.positions?.length ? at1 : sk;   // 고른 안이 열당 n1 보다 적으면 n1 로
-        const e0 = { ...d, ...lay(base), stepVirt: !!cfg.stepMode }, tk = [{ design: e0, verified: await qv(e0) }];
+        const e0 = { ...d, ...lay(base), stepVirt: !!cfg.stepMode };
+        if (await clashOf(e0)) { rowsClash = k; break; }   // 이 열 수가 부품과 겹침 → 더 많은 열(더 바깥)도 겹침 = 멈춤
+        const tk = [{ design: e0, verified: await qv(e0) }];
         if (stop()) return halt();
         if (lenM(tk[0].verified.stats) < 0) {   // 이 열 수에서 길이 미달 → 열 수 그대로 LED 늘림
           const t1 = clock();
@@ -653,9 +660,9 @@ export async function runAutoDesign(cfg, io) {
         tried.push(...tk);
         if (quickMargin(pk.verified.stats, obs) > quickMargin(best.verified.stats, obs) + SCORE_EPS) { best = pk; d = pk.design; ledRows = k; ledMore = moreK; ledAlts = []; ledLimit = null; ledTwoRow = null; took = true; }
       }
-      if (tried.length) {
-        io.trace?.('leds', tried.map((t) => ({ label: lab(t.design), Ulen: t.verified.stats.Ulen, Uwid: t.verified.stats.Uwid ?? null, ok: !t.verified.stats.empty, eff: t.verified.eff, base: `폭 미달 — 열 추가 검토 (Milky ${d.milky ?? 0})` })));
-        steps.push({ stage: 'ledsRows', tried, pick: best });
+      if (tried.length || rowsClash) {
+        if (tried.length) io.trace?.('leds', tried.map((t) => ({ label: lab(t.design), Ulen: t.verified.stats.Ulen, Uwid: t.verified.stats.Uwid ?? null, ok: !t.verified.stats.empty, eff: t.verified.eff, base: `폭 미달 — 열 추가 검토 (Milky ${d.milky ?? 0})` })));
+        steps.push({ stage: 'ledsRows', tried, pick: best, ...(rowsClash ? { clash: `${rowsClash}열 = LED 몸체가 부품과 겹침 — 더 많은 열은 검토 안 함` } : {}) });
         if (took) { const okQ = quickMargin(best.verified.stats, obs) >= 0; feasible = okQ; reason = okQ ? '' : `${lab(d)} 에서도 목표 미달 — 길이 균일도 ${fmtJudge(best.verified.stats.Ulen, obs.targetLen)}${best.verified.stats.Uwid == null ? '' : ` · 폭 균일도 ${fmtJudge(best.verified.stats.Uwid, obs.targetWid)}`}`; }
       }
     }

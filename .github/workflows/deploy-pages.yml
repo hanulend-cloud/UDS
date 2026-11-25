@@ -23,8 +23,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - name: Collect site files (app only — no tests/tools)
+        run: |
+          mkdir _site
+          cp -r index.html styles.css src data examples docs _site/
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'
-      - id: deployment
+          path: '_site'
+      # GitHub 쪽에서 방금 올린 파일을 잠깐 못 찾는 일이 있어(2026-11-25 3번) — 실패하면 30초 뒤 한 번 더
+      - id: deploy1
+        continue-on-error: true
         uses: actions/deploy-pages@v4
+      - if: steps.deploy1.outcome == 'failure'
+        run: sleep 30
+      - id: deploy2
+        if: steps.deploy1.outcome == 'failure'
+        uses: actions/deploy-pages@v4
+      - id: deployment
+        run: echo "page_url=${{ steps.deploy1.outputs.page_url || steps.deploy2.outputs.page_url }}" >> "$GITHUB_OUTPUT"
