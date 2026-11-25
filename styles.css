@@ -1761,12 +1761,12 @@ main:has(#mech3d-wrap:not([hidden])) { padding: 4px; gap: 4px; }
 
 /* 결과 요약 영역 배색 B(2026-11-23 사용자 선택: 네이비 + 시안, 굵은 글씨)
    광량·효율 = 네이비 칸·시안 글씨 / 길이·폭 = 판정 색 칸(미달 빨강 · 통과 초록 · 근처 주황), 판정 전엔 광량·효율과 같은 칸 */
-#mech3d-wrap .m3-kpi, #mech3d-wrap[data-theme="dark"] .m3-kpi { background: #0b1d3a; border: 1px solid #00d4ff; padding: 3px; }
+#mech3d-wrap .m3-kpi, #mech3d-wrap[data-theme="dark"] .m3-kpi { background: #232b36; border: 1px solid #3a4452; padding: 3px; }   /* 평상시 = 차분한 슬레이트(2026-11-25 사용자 A안) — 판정 파랑·빨강이 돋보이게 */
 #mech3d-wrap .m3-kpi .m3-sum .l, #mech3d-wrap .m3-kpi .m3-sum .v { font-weight: 800; text-shadow: none; }
-#mech3d-wrap .m3-kpi .m3-sum > div:not(.m3-sum-x) { background: #0b1d3a; border: 1px solid #00b8e6; }
-#mech3d-wrap .m3-kpi .m3-sum .l, #mech3d-wrap .m3-kpi .m3-sum .v { color: #00e5ff; }
-#mech3d-wrap .m3-kpi .m3-sum > div.m3-sum-u { background: #16294a; border-color: #3a5378; }   /* 길이·폭 균일도 = 흰 글씨 + 진한 파랑 글자 테두리(2026-11-23 사용자), 판정은 칸 바탕색: 통과 파랑 · 미달 빨강 · 근처/계산 중 주황 */
-#mech3d-wrap .m3-kpi .m3-sum-u :is(.l, .v) { color: #c9d6ea; }   /* 판정 전(보통) = 차분한 회청색 칸 · 옅은 글씨, 테두리 글자 없음(2026-11-24 사용자) */
+#mech3d-wrap .m3-kpi .m3-sum > div:not(.m3-sum-x) { background: #2b3441; border: 1px solid #46505f; }
+#mech3d-wrap .m3-kpi .m3-sum .l, #mech3d-wrap .m3-kpi .m3-sum .v { color: #dde3ea; }
+#mech3d-wrap .m3-kpi .m3-sum > div.m3-sum-u { background: #2b3441; border-color: #46505f; }   /* 길이·폭 균일도 = 흰 글씨 + 진한 파랑 글자 테두리(2026-11-23 사용자), 판정은 칸 바탕색: 통과 파랑 · 미달 빨강 · 근처/계산 중 주황 */
+#mech3d-wrap .m3-kpi .m3-sum-u :is(.l, .v) { color: #b9c3cf; }   /* 판정 전(보통) = 차분한 회청색 칸 · 옅은 글씨, 테두리 글자 없음(2026-11-24 사용자) */
 #mech3d-wrap .m3-kpi .m3-sum-u:has(> .v:is(.ok, .bad, .near, .busy)) :is(.l, .v) { color: #fff; text-shadow: -1px -1px 0 #08195a, 1px -1px 0 #08195a, -1px 1px 0 #08195a, 1px 1px 0 #08195a, 0 0 3px #08195a; }
 #mech3d-wrap .m3-kpi .m3-sum > div.m3-sum-u:has(> .v.bad) { background: #e8193f; }
 #mech3d-wrap .m3-kpi .m3-sum > div.m3-sum-u:has(> .v.ok) { background: #1d6cf0; }
