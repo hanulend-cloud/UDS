@@ -49,7 +49,7 @@ import { runAutoDesign, shapeTotal, shapeBudget, sameDesign } from '../../engine
 import { milkyRows, milkyTraceOpts, MILKY_STEADY_SE } from '../../engine/mech3d/milky-search.js';
 import { detectSym, ledsSW, symStats, symInfo } from '../../engine/mech3d/symmetry.js';
 import { candidateGrid } from '../../engine/mech3d/basis.js';
-import { ledAtS, clampRowGap, rowGapOptions, wrapS, rowsSpacing } from '../../engine/mech3d/placement.js';
+import { ledAtS, clampRowGap, rowGapOptions, wrapS, rowsSpacing, maxLedsOnLine } from '../../engine/mech3d/placement.js';
 import { virtualEmittersAt, stepRefEmitter } from '../../engine/mech3d/virtual-leds.js';
 import { rw4, rowWs } from '../../engine/mech3d/layout-solver.js';
 const ROWS_MAX = 8;   // ① 위치/개수 N열 상한(2026-11-25 사용자 — 폭 미달이면 2열에서 멈추지 않고 계속, 실제 한도는 폭·LED 몸체)
@@ -1377,7 +1377,7 @@ async function adRun(opt = {}) {
   st.partial = null;
   try {
     res = await runAutoDesign({
-      stages, obs, G, line, current: cur, milkyMax: st.sel.milkyMax ?? null, housingProbe, finishText: (f) => finishText(f, reflCat()), nMax: Math.max(1, Math.min(60, Math.floor(line.length / 2))), pitchRange: null, stepMode: stp, currentIrregular: stages.leds && (() => { try { const q = pitchOf(L.currentEmitters(M0, line).map((e) => { const [s, w] = line.toSW(...line.to2D(e.pos)); return { s, w }; })); return !q.uniform; } catch { return false; } })(),
+      stages, obs, G, line, current: cur, milkyMax: st.sel.milkyMax ?? null, housingProbe, finishText: (f) => finishText(f, reflCat()), nMax: maxLedsOnLine(line.length, line.closed, ledHalfWidth(M0, line)),   /* 개수 상한 = LED 몸체 한계(2026-11-25 사용자, 전에는 60개) */ pitchRange: null, stepMode: stp, currentIrregular: stages.leds && (() => { try { const q = pitchOf(L.currentEmitters(M0, line).map((e) => { const [s, w] = line.toSW(...line.to2D(e.pos)); return { s, w }; })); return !q.uniform; } catch { return false; } })(),
       shapePart: sp, shapeField, ...(opt.caseCheck ? { shapeCands: [opt.caseCheck], schedule: [[1, lens.schedule[0][1], lens.schedule[0][2]]], curve: false, fixedShape: true } : quickShape ? { shapeCands: lens.cands, schedule: lens.schedule, curve: false, shapeEmptyWhy: lens.cands.length ? null : lens.why } : {}),
       shapeStart: stages.shape && M0.parts[sp]?.shapeMod ? (({ dt, h, R, e, c, kL, kW, kF }) => ({ dt, h, R, e, c, kL, kW, kF }))(M0.parts[sp].shapeMod) : null,   // 이미 적용한 형상에서 이어서
       lateral, rowsOptions: st.sel.oneRow ? [1] : [1, 2], rowsMax: st.sel.oneRow ? 1 : ROWS_MAX, currentVerified: opt.partial?.currentVerified ?? currentVerified, partial: opt.partial?.d ?? null, screenGrid: !lowQ, currentScreen, heightRange: hInfo?.range ?? null, housingPart: hp, finishCands, ledsAtCurrentMilky: !!opt.added?.length,

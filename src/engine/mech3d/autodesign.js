@@ -547,7 +547,7 @@ export async function runAutoDesign(cfg, io) {
     if (B.maps && two0(B)) smoothMapsS(B.maps, cfg.G);   // 후보 지도의 칸 노이즈를 줄임 — 배치 비교는 칸 하나가 아니라 곡선 모양이 중요
     if (stop()) return halt();
     // 후보가 {s, w} 면 (s, w) 격자 — 열 수·열 간격까지(searchLeds2, nMax = 총수 상한), 숫자면 1열(기존)
-    const two = typeof B.cand[0] === 'object', a = { G: cfg.G, obs, line: cfg.line, cand: B.cand, maps: B.maps, pitchRange: cfg.pitchRange ?? null, nMax: cfg.nMax, emitted: B.emitted, ...(B.minGap ? { minGap: B.minGap } : {}) };   // minGap = 이웃 LED 몸체가 겹치지 않는 최소 피치
+    const two = typeof B.cand[0] === 'object', a = { G: cfg.G, obs, line: cfg.line, cand: B.cand, maps: B.maps, pitchRange: cfg.pitchRange ?? null, nMax: two ? cfg.nMax * Math.max(1, ...(cfg.rowsOptions ?? [1, 2])) : cfg.nMax, emitted: B.emitted, ...(B.minGap ? { minGap: B.minGap } : {}) };   // minGap = 이웃 LED 몸체가 겹치지 않는 최소 피치
     // (s, w) 격자 = 배치 Solver(같은 피치+끝 여백 → 끝 압축 → 자유 위치, spec 2026-10-20 led-layout-solver) · 숫자 격자 = 1열 기존 탐색
     // 균일한 구조 = 균일한 피치(2026-11-02, 설계자 원칙) — 끝 압축·자유 배치는 노이즈 낀 후보 지도에 맞춰 간격을 제멋대로 바꿈(실측: 안쪽 불균일 4.3% vs 등간격 2.8%). cfg.uniformPitch = false 일 때만 비균등
     const solved = two ? await solveLayoutAsync({ ...a, uniformOnly: cfg.uniformPitch !== false, wCenter: d.wCenter ?? 0, rowsOptions: cfg.rowsOptions ?? [1, 2], gaps: cfg.rowsOptions && !cfg.rowsOptions.includes(2) ? [] : B.gaps ?? [],   // rowsOptions [1] = 1열만(재료비)
@@ -595,7 +595,7 @@ export async function runAutoDesign(cfg, io) {
             const t = { design: { ...e0, ...L }, verified: await qv({ ...e0, ...L }) };
             tried2.push(t);
             return lenM(t.verified.stats);
-          }, { from: totalLeds(e0) + 2, cap: cfg.nMax ?? 0, step: 2, base: lenM(tried2[0].verified.stats), inTime: () => clock() - t0 < (cfg.ladderMs ?? LADDER_MS), cancelled: stop });
+          }, { from: totalLeds(e0) + 2, cap: 2 * (cfg.nMax ?? 0), step: 2, base: lenM(tried2[0].verified.stats), inTime: () => clock() - t0 < (cfg.ladderMs ?? LADDER_MS), cancelled: stop });
           if (stop()) return halt();
         }
         const P = tried2.filter((t) => lenM(t.verified.stats) >= 0);
@@ -946,7 +946,7 @@ export async function runAutoDesign(cfg, io) {
     if (ledMore) {   // 빠른 검토 통과안이 정밀 판정(화면 격자 · 저화질은 노이즈 0.5%)에서 조금 미달이면 LED 를 늘려 정밀 확인(최대 SHARPEN_MAX 개) — 저화질도(2026-11-22 사용자: 2열 × 29 가 79.2% 로 끝남)
       pick.verified = await judge(pick.design, pick.verified);
       let left = SHARPEN_MAX - 1;
-      for (let n = upTo(totalLeds(pick.design) + 1); left > 0 && quickMargin(pick.verified.stats, obs) < 0 && quickMargin(pick.verified.stats, obs) >= -JUDGE_BAND && n <= cfg.nMax; n += ledRows) {
+      for (let n = upTo(totalLeds(pick.design) + 1); left > 0 && quickMargin(pick.verified.stats, obs) < 0 && quickMargin(pick.verified.stats, obs) >= -JUDGE_BAND && n <= cfg.nMax * ledRows; n += ledRows) {   // 상한 = 열당 nMax(몸체 한계, 2026-11-25)
         if (stop()) return halt();
         const known = tried.find((t) => totalLeds(t.design) === n && (t.design.rows ?? 1) === ledRows), L = known ? null : ledMore(n);
         if (!known && (!L || await clashes({ ...d, ...L }))) continue;
@@ -970,7 +970,7 @@ export async function runAutoDesign(cfg, io) {
     const key = (e) => `${totalLeds(e)}|${e.rows ?? 1}`, known = new Set([d, ...(steps.find((x) => x.stage === 'ledsVerify')?.tried ?? []).map((t) => t.design)].map(key)), T = totalLeds(d), tried3 = [];
     for (const k of [-2, -1, 1, 2]) {
       const n = T + k * ledRows;
-      if (n < ledRows || n > cfg.nMax) continue;
+      if (n < ledRows || n > cfg.nMax * ledRows) continue;
       const L = ledMore(n);
       if (!L || known.has(key({ ...d, ...L })) || await clashes({ ...d, ...L })) continue;
       if (stop()) return halt();

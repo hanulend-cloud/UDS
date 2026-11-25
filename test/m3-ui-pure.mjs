@@ -1844,3 +1844,12 @@ done();
   const app = (await import('node:fs')).readFileSync('src/ui/m3/app.js', 'utf8');
   say(/rowsMax: st\.sel\.oneRow \? 1 : ROWS_MAX/.test(app) && /const ROWS_MAX = 8/.test(app), '1열만 끄면 N열(최대 8열)까지 검토');
 }
+{ // LED 개수 상한 = LED 몸체 한계(2026-11-25 사용자) — 전에는 min(60, L/2). 이웃 몸체 최소 간격 = max(2, 2·반폭 + 0.2) · 열린 라인은 양 끝 반폭 + 0.3 mm 여유
+  const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
+  const { maxLedsOnLine } = await import('../src/engine/mech3d/placement.js');
+  say(maxLedsOnLine?.(670, true, 1.5) === 209, `닫힌 링 670 mm · 반폭 1.5 → 209개 (${maxLedsOnLine?.(670, true, 1.5)})`);
+  say(maxLedsOnLine?.(100, false, 1.5) === 31 && maxLedsOnLine?.(100, false, 0.5) === 50, '열린 100 mm: 반폭 1.5 → 31개 · 작은 LED 는 최소 간격 2 mm → 50개');
+  say(maxLedsOnLine?.(1, false, 1.5) === 1 && maxLedsOnLine?.(0, true, 1) === 1, '아주 짧아도 1개');
+  const app = (await import('node:fs')).readFileSync('src/ui/m3/app.js', 'utf8');
+  say(/nMax: maxLedsOnLine\(line\.length, line\.closed, ledHalfWidth\(M0, line\)\)/.test(app) && !/Math\.min\(60, Math\.floor\(line\.length \/ 2\)\)/.test(app), '최적화 개수 상한 = 몸체 한계(60개 제한 없음)');
+}

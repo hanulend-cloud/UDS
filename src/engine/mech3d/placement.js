@@ -26,6 +26,13 @@ export function rowsSpacing(W, k, ledHalf, wc = 0) {
   const room = W / 2 - (ledHalf + 0.3) - Math.abs(wc), g = Math.floor(Math.min(W / k, (2 * room) / (k - 1)) * 10 + 1e-9) / 10;
   return g > 0 && g >= Math.max(2, 2 * ledHalf + 0.2) - 1e-9 ? g : null;
 }
+// 한 열에 놓을 수 있는 LED 최대 개수 = LED 몸체 한계(2026-11-25 사용자 — 전에는 min(60, L/2)). 이웃 몸체 최소 간격 = max(2, 2·반폭 + 0.2)(배치 Solver minGap 과 같음)
+// 닫힌 라인 = L / 간격 · 열린 라인 = 양 끝 반폭 + 0.3 mm 안쪽에서 (L − 2·여유) / 간격 + 1. 최소 1
+export function maxLedsOnLine(L, closed, ledHalf) {
+  const g = Math.max(2, 2 * ledHalf + 0.2), m = ledHalf + 0.3;
+  const n = closed ? Math.floor(L / g + 1e-9) : Math.floor((L - 2 * m) / g + 1e-9) + 1;
+  return Math.max(1, Number.isFinite(n) ? n : 1);
+}
 // 자동설계 ② 열 간격 후보 δ = ks·W(W = 관측 폭) — 상한으로 자르고 0.1 mm 내림 · 중복·0 제거(후보 격자 w 값과 정확히 같게)
 export const ROW_GAP_KS = [0.2, 0.27, 0.33];
 export const rowGapOptions = (line, ks = ROW_GAP_KS) => [...new Set(ks.map((k) => Math.floor(clampRowGap(line, k * (line.width ?? 0)) * 10 + 1e-9) / 10))].filter((g) => g > 0);
