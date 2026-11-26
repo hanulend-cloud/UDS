@@ -111,6 +111,33 @@ const ui = (o = {}) => ({ line, ledList: list, ledGap: 6.25, ...o });
   ok(/data-lp-sizeauto="2.84,1.26"[^>]*disabled/.test(h), '이미 같은 크기 = [이 크기로] 꺼짐');
   ok(!ledPanelHtml(man, ui()).includes('data-lp-sizeauto'), '직접 배치(인식 면 없음) = 표시 없음');
 }
+// LED 밝기 단위 lm/개 ↔ cd(2026-11-26 사용자): 사양서 광도(cd)로 넣으면 지향각에 맞춰 광속 환산. 빈칸 = 0(1 lm 가정, 판정 안 함)
+{ const { ledSolid, syncFlux, setLedBright, setLedUnit } = await import('../src/ui/m3/led-select.js');
+  ok(Math.abs(ledSolid({ model: 'lambertian', beam: 120 }) - Math.PI) < 1e-9, '램버시안 120° = π sr(1 cd → π lm)');
+  const g90 = ledSolid({ model: 'gaussian', beam: 90 }), g60 = ledSolid({ model: 'gaussian', beam: 60 });
+  ok(g60 < g90 && g90 < Math.PI * 1.2 && g60 > 0.5, `좁을수록 같은 cd 에 광속 적음 (90°:${g90.toFixed(3)} 60°:${g60.toFixed(3)} sr)`);
+  const sp = { model: 'lambertian', beam: 120, fluxLm: 0, lumUnit: 'lm', intensityCd: 0 };
+  setLedUnit(sp, 'cd'); setLedBright(sp, 2);
+  ok(sp.lumUnit === 'cd' && sp.intensityCd === 2 && Math.abs(sp.fluxLm - 2 * Math.PI) < 1e-3, `cd 입력 → 광속 = cd × 입체각 (${sp.fluxLm})`);
+  Object.assign(sp, { model: 'gaussian', beam: 60 }); syncFlux(sp);
+  ok(sp.intensityCd === 2 && Math.abs(sp.fluxLm - 2 * g60) < 1e-3, '지향각 바꾸면 cd 그대로 · 광속 다시 계산');
+  setLedUnit(sp, 'lm');
+  ok(sp.lumUnit === 'lm' && Math.abs(sp.fluxLm - 2 * g60) < 1e-3, 'lm 으로 바꿔도 광속 그대로');
+  Object.assign(sp, { model: 'lambertian', beam: 120 }); syncFlux(sp);
+  ok(Math.abs(sp.fluxLm - 2 * g60) < 1e-3, 'lm 단위면 지향각 바꿔도 광속 그대로');
+  setLedUnit(sp, 'cd');
+  ok(Math.abs(sp.intensityCd * Math.PI - sp.fluxLm) < 1e-3, 'cd 로 바꾸면 지금 광속에 맞는 cd 로 채움');
+  setLedBright(sp, 0);
+  ok(sp.fluxLm === 0 && sp.intensityCd === 0, '빈칸·0 = 1 lm 가정(판정 안 함)');
+  setLpTab('leds', 'detail');
+  const m1 = { ...man, light: { ...man.light, spec: { ...man.light.spec, lumUnit: 'cd', intensityCd: 2, fluxLm: 2 * Math.PI } } }, h = ledPanelHtml(m1, ui());
+  ok(/data-lp-unit/.test(h) && /<option value="cd" selected>/.test(h) && /value="2" data-lp-spec="fluxLm"/.test(h) && /≈ 6\.28 lm/.test(h), '상세 탭: 단위 고르기 · cd 값 · 환산 광속 표시');
+  const h2 = ledPanelHtml(man, ui());
+  ok(/<option value="lm" selected>/.test(h2) && h2.includes('0 = 1 lm 가정'), '기본 = lm/개 · 빈칸 1 lm 가정');
+  const { migrateMech3d } = await import('../src/engine/mech3d/defs.js');
+  const a = migrateMech3d({ light: { ...defaultLight(), spec: { model: 'lambertian', beam: 120, fluxLm: 5 } } }), b = migrateMech3d({ light: { ...defaultLight(), spec: { model: 'lambertian', beam: 120, fluxLm: 1, lumUnit: 'cd', intensityCd: 3 } } });
+  ok(a.light.spec.lumUnit === 'lm' && a.light.spec.fluxLm === 5 && Math.abs(b.light.spec.fluxLm - 3 * Math.PI) < 1e-3, '예전 저장 = lm 그대로 · cd 저장은 cd 로 광속 맞춤');
+}
 done();
 { // 3D 빛 원뿔 크기(2026-11-08): 넓은 지향각도 보이게 — 반각 60° 넘으면 빗변 길이 고정, 최대 89.5°(179°)
   const { coneDims } = await import('../src/ui/m3/cone-dims.js');

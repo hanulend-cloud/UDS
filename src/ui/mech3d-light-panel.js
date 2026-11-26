@@ -137,7 +137,7 @@ function ledNodeBodyHtml(m, ui, adv = false, showBeam = false, noSize = false) {
     ${adv && !showBeam ? '' : `<div class="m3-row"><label>배광</label><select data-lp-spec="model"><option value="lambertian" ${sel(L.spec.model, 'lambertian')}>램버시안</option><option value="gaussian" ${sel(L.spec.model, 'gaussian')}>가우시안</option></select>
       지향각<input type="number" min="10" max="180" step="5" value="${L.spec.beam}" data-lp-spec="beam">°</div>`}
     ${noSize ? '' : ledSizeRow(L)}
-    ${adv ? '' : `<div class="m3-row"><label>광속</label><input type="number" min="0" step="1" value="${L.spec.fluxLm ?? 0}" data-lp-spec="fluxLm"> lm/개 <span data-lp-lum>${ledLumHtml(L.spec, ui.photometry ?? null, m.observe?.targetLum)}</span></div>`}
+    ${adv ? '' : ledBrightRow(L.spec, ui, m, '광속')}
     ${L.kind === 'step' ? '' : pcbRRow(L, 'PCB 반사율')}`;   // 도면 광원의 PCB = 기구 부품(부품 속성에서)
 }
 // 원설계 대비 변경(순수, 2026-11-02) — 위치·개수가 바뀌면 눈에 띄게. c = ledChange 결과 | null(비교 기준 없음)
@@ -177,7 +177,7 @@ function ledTabHtml(m, ui, tab) {
       ${ledListHtml(ui, canDel)}
       ${ui.led ? ledMoveHtml(ui.led) : '<div class="m3-row mut">줄을 누르면 3D 에 표시되고 옮길 수 있음 · 3D 에서 LED 를 눌러도 됨</div>'}</div>
     <div class="m3-card"><div class="m3-sub">밝기·높이 <span class="mut">(모든 LED)</span></div>
-      <div class="m3-row"><label>밝기</label><input type="number" min="0" step="1" value="${L.spec.fluxLm ?? 0}" data-lp-spec="fluxLm" aria-label="LED 1개 광속 lm"> lm/개 <span data-lp-lum>${ledLumHtml(L.spec, ui.photometry ?? null, m.observe?.targetLum)}</span></div>
+      ${ledBrightRow(L.spec, ui, m, '밝기')}
       <div class="m3-row"><label>커버까지</label><input type="number" min="0" step="0.1" value="${numIn(gap, 1)}" data-lp-dist${dis ? ' disabled' : ''} aria-label="LED 에서 커버까지 거리 mm"> mm <span class="mut">${dis || '가장 가까운 LED 기준'}</span></div></div>
     ${ledNodeBodyHtml(m, ui, true, true, true)}`;
   // LED 위치·개수가 바뀌었으면 기본 탭에도 늘 보임(바뀐 것을 놓치지 않게)
@@ -250,8 +250,10 @@ export function renderLedProps(el, m, ui, h) {
     const k = x.dataset.lpSpec;
     if (k === 'model') { h.onLedSpec(k, x.value); return; }
     const val = readNum(x);
-    if (val != null) h.onLedSpec(k, val); else if (k === 'fluxLm') h.onLedSpec(k, 0);   // 광속 빈칸 = 0(상대값)
+    if (k === 'fluxLm') { h.onLedBright?.(val ?? 0); return; }   // 밝기(지금 단위 lm | cd) · 빈칸 = 0(상대값)
+    if (val != null) h.onLedSpec(k, val);
   });
+  on(el, '[data-lp-unit]', 'change', (x) => h.onLedUnit?.(x.value));
   on(el, '[data-lp-pcbr]', 'change', (x) => h.onPcbR(x.value));
   on(el, '[data-lp-sizeauto]', 'click', (x) => { const [a, b] = x.dataset.lpSizeauto.split(',').map(Number); h.onLedSize?.(a, b); });
   on(el, '[data-lp-mauto]', 'click', () => h.onMechAuto?.());
@@ -273,6 +275,14 @@ export function renderLedProps(el, m, ui, h) {
   }
 }
 
+// LED 밝기 줄(2026-11-26): 단위 lm/개 | cd(사양서 광도). cd 면 지향각에 맞춘 광속을 옆에(지향각을 바꾸면 cd 그대로 · 광속 다시 계산). 빈칸 = 1 lm 가정
+const fmtLm = (v) => (v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v.toFixed(2));
+function ledBrightRow(spec, ui, m, label) {
+  const cd = spec.lumUnit === 'cd', v = cd ? spec.intensityCd ?? 0 : spec.fluxLm ?? 0;
+  const unit = `<select data-lp-unit aria-label="밝기 단위" title="LED 사양서 단위로 — 광도(cd)면 지향각에 맞춰 광속(lm)으로 바꿔 계산"><option value="lm"${cd ? '' : ' selected'}>lm/개</option><option value="cd"${cd ? ' selected' : ''}>cd</option></select>`;
+  const conv = cd && spec.fluxLm > 0 ? ` <span class="mut" title="광속 = 광도 × 배광 입체각(지향각 ${spec.beam}°) — 지향각을 바꾸면 다시 계산">≈ ${fmtLm(spec.fluxLm)} lm</span>` : '';
+  return `<div class="m3-row"><label>${label}</label><input type="number" min="0" step="${cd ? 0.1 : 1}" value="${v}" data-lp-spec="fluxLm" aria-label="LED 1개 ${cd ? '광도 cd' : '광속 lm'}"> ${unit}${conv} <span data-lp-lum>${ledLumHtml(spec, ui.photometry ?? null, m.observe?.targetLum)}</span></div>`;
+}
 // LED 광속 옆 예상 휘도(2026-11-11) — 입력한 lm 과 지금 설계의 광 효율로(계산 다시 안 함). 목표가 있으면 비교
 export function ledLumHtml(spec, ph, targetLum) {
   const f = spec?.fluxLm ?? 0;

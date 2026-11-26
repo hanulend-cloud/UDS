@@ -63,7 +63,7 @@ import { pacer } from '../../engine/mech3d/yield.js';
 import { scaleMoveMesh, isIdentityXform } from '../../engine/mech3d/xform.js';
 import { defaultChecks } from '../../engine/mech3d/defs.js';
 import { validAdjust } from '../../engine/mech3d/led-adjust.js';
-import { beamSpec, ledOfHit, ledClashItems, dropStaleAdjust, setLedAdjust, pcbNodeOfHit } from './led-select.js';
+import { beamSpec, syncFlux, setLedBright, setLedUnit, ledOfHit, ledClashItems, dropStaleAdjust, setLedAdjust, pcbNodeOfHit } from './led-select.js';
 import { keepStepSource } from '../step-sources.js';
 import { viewBarHtml, oppositeView, baseView } from './view-bar.js';
 import { readTheme, nextTheme, applyPageTheme, THEME_KEY } from '../theme.js';
@@ -1984,12 +1984,14 @@ function propHandlers() {
     }),
     onPcbOff: (on) => st.update('light', (m) => { setPcbOff(m, on); }),
     onPcbR: (v) => { const R = clampPcbPct(v); if (R != null) st.update('light', (m) => { m.light.pcbR = R; }); else st.update('session', () => {}); },   // 빈칸·숫자 아님 = 원래 값으로 다시 그림
-    onLedSpec: (key, v) => st.update(key === 'fluxLm' ? 'target' : 'light', (m) => { m.light.spec[key] = v; }),
+    onLedSpec: (key, v) => st.update(key === 'fluxLm' ? 'target' : 'light', (m) => { m.light.spec[key] = v; syncFlux(m.light.spec); }),   // cd 단위면 배광·지향각 바뀐 만큼 광속 다시
+    onLedBright: (v) => st.update('target', (m) => { setLedBright(m.light.spec, v); }),
+    onLedUnit: (u) => st.update('target', (m) => { setLedUnit(m.light.spec, u); }),
     onGoNode: (id, tab = null) => { if (tab) setPartTab(tab); st.update('session', (_, x) => { x.node = id; x.multi = []; x.ledSel = null; x.sel = id.startsWith('part:') ? { part: +id.slice(5), face: null } : null; }); },   // PCB 메뉴 상세 → 그 부품 상세 탭 · LED STEP PCB → 광원(위치 보정)
     onLedSize: (a, b) => st.update('light', (m) => { m.light.spec.sizeX = a; m.light.spec.sizeY = b; }),   // [이 크기로] = 인식된 발광면 크기(한 번에 — 되돌리기 1번)   // 광속은 휘도 환산만 — 재계산 없음
     // LED 선택·속성(spec §4a)
     onLedSel: (n) => st.update('session', (_, x) => { x.ledSel = n; if (n != null) { x.node = 'leds'; x.sel = null; } }),
-    onLedBeam: (a) => { const b = beamSpec(a); if (b) st.update('light', (m) => { Object.assign(m.light.spec, b); }); },   // 120 = 램버시안, 그 밖 = 가우시안
+    onLedBeam: (a) => { const b = beamSpec(a); if (b) st.update('light', (m) => { Object.assign(m.light.spec, b); syncFlux(m.light.spec); }); },   // 120 = 램버시안, 그 밖 = 가우시안
     onLedDist: (g) => ledDist(g),
     onLedAdjust: (n, adj) => st.update('light', (m) => { setLedAdjust(m.light, n, adj); }),
     // 이 LED 삭제: 원래 STEP = 제외 토글(번호 n = step.leds 위치) · 편집한 배치 = 목록에서 뺌

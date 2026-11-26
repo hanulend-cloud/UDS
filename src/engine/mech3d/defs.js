@@ -1,13 +1,14 @@
 import { isAdjustWellFormed } from './led-adjust.js';
 // 3D 기구 광원·관측 지정 기본값 — spec 2026-10-14 §4·§5 (P3 계획 "데이터 모델"), 2026-10-15 m3-cad-ui(광속·목표·점검 기준).
 import { CLEAR_BASE } from './materials.js';
+import { normLedBright } from './led-flux.js';
 const SOLDER_R = { '백색': 0.8, '녹색': 0.3, '흑색': 0.05 };
 export const LED_BODY_FINISH = { kind: 'whiteDiffuse', R: 0.8 };   // 백색 실리콘 패키지
 
 export function defaultLight() {
   return {
     kind: 'none', pcbR: 0.3,   // PCB 면 반사율(0~1) — LED STEP·직접 배치 PCB. 기본 30%(도면 PCB 와 같게), 숫자로 입력(2026-11-05)
-    spec: { model: 'lambertian', beam: 120, sizeX: 2, sizeY: 2, fluxLm: 0 },   // fluxLm: LED 1개 광속(lm), 0 = 미입력(화면은 1 lm 가정 휘도, 판정 안 함)
+    spec: { model: 'lambertian', beam: 120, sizeX: 2, sizeY: 2, fluxLm: 0, lumUnit: 'lm', intensityCd: 0 },   // fluxLm: LED 1개 광속(lm), 0 = 미입력(화면은 1 lm 가정 휘도, 판정 안 함)
     step: null,
     manual: { pcb: { kind: 'depth', depth: 10 }, count: 10, pitch: 0, side: 'direct', rows: 1, rowGap: 0 },   // rows 1|2, rowGap = 열 간격 ±δ mm
   };
@@ -29,6 +30,7 @@ export function migrateMech3d(m) {
   delete m.light.solder; delete m.light.pcbRev;
   const f = Number(m.light.spec.fluxLm);
   m.light.spec.fluxLm = Number.isFinite(f) && f > 0 ? f : 0;
+  normLedBright(m.light.spec);   // 밝기 단위 lm | cd(2026-11-26) — cd 면 지향각으로 광속 맞춤
   m.observe.targetLum ??= null;
   // 투명 소재 예전 기본값(2 mm 100%) → 그 소재 값(2026-11-05, 사용자 요청). 입력한 값·측정 항목은 그대로
   if (m.clearRev !== 1) { for (const p of m.parts ?? []) { const q = p.material; if (q?.kind === 'clear' && q.T === 1 && q.tRef === 2 && q.matId == null && !Number.isFinite(q.n)) q.T = (CLEAR_BASE.find((e) => e.id === q.resin) ?? CLEAR_BASE[0]).T; } m.clearRev = 1; }
