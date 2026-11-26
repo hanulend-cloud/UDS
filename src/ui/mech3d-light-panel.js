@@ -34,7 +34,7 @@ export const lpTab = (k) => LP_TAB[k];
 // 가장자리 제외 안내(2026-11-18 사용자: 2~3 mm 좁은 면은 폭의 10% 정도) — 실제 쓰는 값이 설정보다 작으면 그 값을 보여 줌
 export const edgeNote = (O, auto) => (Number.isFinite(auto?.edge) && auto.edge < (O.edgeExcl ?? 0.5) - 1e-9 ? `좁은 면 → 폭 10% = ${+auto.edge.toFixed(2)} mm` : '판정에서 뺌');
 export function setLpTab(k, t) { LP_TAB[k] = t === 'detail' ? 'detail' : 'basic'; }
-const TAB_SUB = { leds: ['지향각 · 발광면', '배치 · 밝기 · 배광'], obs: ['면 · 목표', '방향 · 계산 · 점검'], pcb: ['지정 · 반사율', '위치 · 크기'] };   // 탭에 무엇이 있는지
+const TAB_SUB = { leds: ['밝기 · 지향각 · 발광면', '배치 · 높이 · 배광'], obs: ['면 · 목표', '보는 범위 · 해상도 · 점검'], pcb: ['지정 · 반사율', '위치 · 크기'] };   // 탭에 무엇이 있는지
 const tabsHtml = (k, dSum = '') => `<div class="m3-tabs" role="tablist"><button type="button" role="tab" data-lp-tab="basic" aria-selected="${LP_TAB[k] === 'basic'}" title="${TAB_SUB[k][0]}">기본</button><button type="button" role="tab" data-lp-tab="detail" aria-selected="${LP_TAB[k] === 'detail'}" title="${esc(dSum || TAB_SUB[k][1])}">상세</button></div>`;
 const wireTabs = (el, k, redraw) => on(el, '[data-lp-tab]', 'click', (x) => { if (LP_TAB[k] !== x.dataset.lpTab) { LP_TAB[k] = x.dataset.lpTab; redraw(); } });
 const wirePick = (el, ui, h) => { el.querySelectorAll('details.m3-fix').forEach((d) => d.addEventListener('toggle', () => setFixOpen(d.open))); on(el, '[data-lp-pick]', 'click', (x) => h.onPick(ui.pick === x.dataset.lpPick ? null : x.dataset.lpPick)); };
@@ -163,7 +163,7 @@ function ledMoveHtml(d) {
     <div class="m3-row mut">라인 방향 + = 라인 진행 쪽, 높이 + = 커버 쪽</div>
     ${(d.clash ?? []).map((t) => `<div class="m3-clash" role="alert">${esc(t)}</div>`).join('')}`;
 }
-// LED 노드 기본 탭(순수, 2026-11-02 정리) — ① 배치(추가·정렬 + 목록 + 고른 LED 옮기기) ② 지향각 ③ 밝기·커버까지 거리. 발광면·배광 모델·인식 고치기는 상세 탭
+// LED 노드 기본 탭(순수, 2026-11-02 정리 · 2026-11-26 밝기를 기본 탭으로) — 밝기·지향각 · 발광면 크기. 상세 = 배치 · 커버까지 거리. 발광면·배광 모델·인식 고치기는 상세 탭
 function ledTabHtml(m, ui, tab) {
   const L = m.light, st = L.kind === 'step' ? L.step : null, man = L.manual, lay = ui.lay ?? null, pre = beamPreset(L.spec);
   const n = st ? (lay?.emitters?.length ?? (st.leds ?? []).filter((i) => !(st.excluded ?? []).includes(i)).length) : (man?.count ?? 0) * (man?.rows === 2 ? 2 : 1);
@@ -176,13 +176,12 @@ function ledTabHtml(m, ui, tab) {
   if (tab === 'detail') return `<div class="m3-card"><div class="m3-sub">배치</div>${ledChangeHtml(ui.ledChange)}${arrange}
       ${ledListHtml(ui, canDel)}
       ${ui.led ? ledMoveHtml(ui.led) : '<div class="m3-row mut">줄을 누르면 3D 에 표시되고 옮길 수 있음 · 3D 에서 LED 를 눌러도 됨</div>'}</div>
-    <div class="m3-card"><div class="m3-sub">밝기·높이 <span class="mut">(모든 LED)</span></div>
-      ${ledBrightRow(L.spec, ui, m, '밝기')}
+    <div class="m3-card"><div class="m3-sub">높이 <span class="mut">(모든 LED)</span></div>
       <div class="m3-row"><label>커버까지</label><input type="number" min="0" step="0.1" value="${numIn(gap, 1)}" data-lp-dist${dis ? ' disabled' : ''} aria-label="LED 에서 커버까지 거리 mm"> mm <span class="mut">${dis || '가장 가까운 LED 기준'}</span></div></div>
     ${ledNodeBodyHtml(m, ui, true, true, true)}`;
   // LED 위치·개수가 바뀌었으면 기본 탭에도 늘 보임(바뀐 것을 놓치지 않게)
   return `${!ready ? '<div class="m3-card"><div class="m3-row warn">LED 빛 나오는 면을 아직 모름 — 부품 리스트의 광원에서 지정하세요</div></div>' : ''}${ui.ledChange?.changed ? `<div class="m3-card">${ledChangeHtml(ui.ledChange)}</div>` : ''}
-    <div class="m3-card"><div class="m3-sub">지향각 <span class="mut">(모든 LED)</span></div><div class="m3-seg m3-seg3" role="group" aria-label="지향각">${seg}</div>
+    <div class="m3-card"><div class="m3-sub">밝기·지향각 <span class="mut">(모든 LED)</span></div>${ledBrightRow(L.spec, ui, m, '밝기')}<div class="m3-seg m3-seg3" role="group" aria-label="지향각">${seg}</div>
       <div class="m3-row">직접 입력 <input type="number" min="10" max="180" step="5" data-lp-beamc value="${pre === 'custom' ? L.spec.beam : ''}" aria-label="지향각 °">°</div></div>
     <div class="m3-card"><div class="m3-sub">발광면 크기 <span class="mut">(모든 LED)</span></div>${ledSizeRow(L)}</div>`;
 }
@@ -316,6 +315,22 @@ export function refreshObsNow(el, m, stats, photometry = null) {
   for (const c of cells) { const f = tmp.querySelector(`[data-lp-now="${c.dataset.lpNow}"]`); if (f && c.innerHTML !== f.innerHTML) { c.innerHTML = f.innerHTML; n++; } }
   return n;
 }
+// 관측면 상세 탭(순수, 2026-11-26 사용자: simple-ui 규칙으로 다시 짧게) — 보는 범위 · 해상도(칸, 균일도와 2D 광량 분포 같은 격자) · 오차 목표. 보는 방향·설계 점검 기준은 접기. 설명은 툴팁
+export function obsDetailHtml(O, C, ui) {
+  const nF = O.faces?.length ?? 0, ed = edgeNote(O, ui.auto), narrow = ed !== '판정에서 뺌';
+  const dir = nF ? secHtml('obsdir', '보는 방향', O.dir ? '직접' : '자동', `<div class="m3-row">x<input type="number" step="0.1" value="${numIn(ui.dir?.[0], 3)}" data-lp-dir="0"> y<input type="number" step="0.1" value="${numIn(ui.dir?.[1], 3)}" data-lp-dir="1"> z<input type="number" step="0.1" value="${numIn(ui.dir?.[2], 3)}" data-lp-dir="2"> ${O.dir ? '<button data-lp-dirauto>자동으로</button>' : ''}</div>`) : '';
+  const chk = secHtml('obschk', '설계 점검 기준', `살 ${C.minWall} mm · 새는 빛 ${num(C.maxLeak * 100, 0)}%`, `<div class="m3-row"><label>최소 살두께</label><input type="number" min="0.1" step="0.1" value="${C.minWall}" data-lp-chk="minWall"> mm</div>
+      <div class="m3-row"><label>최소 도달률</label><input type="number" min="0" max="100" step="5" value="${num(C.minReach * 100, 0)}" data-lp-chk="minReach" data-lp-pct>%</div>
+      <div class="m3-row"><label>새는 빛 한도</label><input type="number" min="0" max="100" step="5" value="${num(C.maxLeak * 100, 0)}" data-lp-chk="maxLeak" data-lp-pct>%</div>`);
+  return `<div class="m3-card"><div class="m3-sub">보는 범위</div>
+      <div class="m3-row"><label title="균일도·2D 분포에 적용 · 기본 30 · 좁히면 정면 외관에 가깝지만 계산 노이즈 큼 · 휘도·필요 광속은 항상 ±10°">보는 각도 ±</label><input type="number" min="2" max="90" step="1" value="${O.cone}" data-lp-obs="cone">°</div>
+      <div class="m3-row"><label title="테두리 근처는 균일도 판정에서 뺌 · 폭 5 mm 미만인 좁은 면은 폭의 10% 까지만 뺌">가장자리 제외</label><input type="number" min="0" step="0.1" value="${O.edgeExcl}" data-lp-obs="edgeExcl">mm${narrow ? ` <span class="mut">${ed}</span>` : ''}</div></div>
+    <div class="m3-card"><div class="m3-sub" title="빈칸 = 화질에 맞춰 자동">해상도 · 오차</div>
+      <div class="m3-row"><label title="해상도 = 칸 크기 길이×폭(빈칸 = 자동) — 균일도 판정과 2D 광량 분포가 같은 해상도로 계산 · 작을수록 자세하지만 오래 걸림 · 2D 광량 제목줄에 지금 값">해상도</label>길이<input type="number" min="0.2" step="0.5" value="${O.cellS ?? ''}" placeholder="${autoPh(ui.auto?.cellS)}" data-lp-obs="cellS" data-lp-auto> × 폭<input type="number" min="0.1" step="0.1" value="${O.cellW ?? ''}" placeholder="${autoPh(ui.auto?.cellW)}" data-lp-obs="cellW" data-lp-auto>mm</div>
+      <div class="m3-row"><label title="폭 균일도를 볼 때 길이 방향으로 묶는 길이(빈칸 = 자동)">폭 판정 창</label><input type="number" min="1" step="1" value="${O.winS ?? ''}" placeholder="${autoPh(ui.auto?.winS)}" data-lp-obs="winS" data-lp-auto>mm</div>
+      <div class="m3-row"><label title="이 오차 이하가 되면 계산을 멈춤(작을수록 오래 걸림)">오차 목표</label><input type="number" min="0.2" max="20" step="0.5" value="${num((O.targetNoise ?? 0.01) * 100, 1)}" data-lp-tgt="targetNoise" data-lp-pct>%</div></div>
+    ${dir}${chk}`;
+}
 export function renderObserveProps(el, m, ui, h) {
   const O = m.observe, C = m.checks ?? {}, R = ui.result ?? null, tab = LP_TAB.obs;
   const vd = (v, tg, se) => uVerdict(v, tg, se, R?.relNoise);
@@ -336,23 +351,11 @@ export function renderObserveProps(el, m, ui, h) {
       
       <div class="m3-row"><label>밝기 목표</label><input type="number" min="0" step="10" value="${O.targetLum ?? ''}" placeholder="없음" data-lp-tgt="targetLum" data-lp-auto aria-label="평균 휘도 목표 cd/m²"> cd/m² <span class="mut" title="선택 · 합격 판정은 LED 밝기(lm) 입력 시">선택</span></div>
       <div class="m3-row" data-lp-now="need">${obsNeedHtml(O, ui.photometry ?? null)}</div></div>`;
-  // 상세 탭: 보는 방향 · 보는 범위 · 계산 · 설계 점검 기준(라인 상태·다시 인식은 기본 탭)
-  const detail = `${nF ? `<div class="m3-card"><div class="m3-sub">보는 방향 <span class="mut">${O.dir ? '(직접)' : '(자동)'}</span></div>
-      <div class="m3-row">x<input type="number" step="0.1" value="${numIn(ui.dir?.[0], 3)}" data-lp-dir="0"> y<input type="number" step="0.1" value="${numIn(ui.dir?.[1], 3)}" data-lp-dir="1"> z<input type="number" step="0.1" value="${numIn(ui.dir?.[2], 3)}" data-lp-dir="2"> ${O.dir ? '<button data-lp-dirauto>자동으로</button>' : ''}</div></div>` : ''}
-    <div class="m3-card"><div class="m3-sub">보는 범위</div>
-      <div class="m3-row"><label>보는 각도 ±</label><input type="number" min="2" max="90" step="1" value="${O.cone}" data-lp-obs="cone">° <span class="mut" title="균일도·2D 분포에 적용 · 기본 30 · 좁히면 정면 외관에 가깝지만 계산 노이즈 큼 · 휘도·필요 광속은 항상 ±10°">기본 30</span></div>
-      <div class="m3-row"><label>가장자리 제외</label><input type="number" min="0" step="0.1" value="${O.edgeExcl}" data-lp-obs="edgeExcl">mm <span class="mut" title="테두리 근처는 균일도 판정에서 뺌 · 폭 5 mm 미만인 좁은 면은 폭의 10% 까지만 뺌">${edgeNote(O, ui.auto)}</span></div></div>
-    <div class="m3-card"><div class="m3-sub">계산 <span class="mut">(빈칸 = 자동)</span></div>
-      <div class="m3-row"><label>길이 칸</label><input type="number" min="0.2" step="0.5" value="${O.cellS ?? ''}" placeholder="${autoPh(ui.auto?.cellS)}" data-lp-obs="cellS" data-lp-auto>mm <label>폭 칸</label><input type="number" min="0.1" step="0.1" value="${O.cellW ?? ''}" placeholder="${autoPh(ui.auto?.cellW)}" data-lp-obs="cellW" data-lp-auto>mm</div>
-      <div class="m3-row"><label>폭 판정 창</label><input type="number" min="1" step="1" value="${O.winS ?? ''}" placeholder="${autoPh(ui.auto?.winS)}" data-lp-obs="winS" data-lp-auto>mm <span class="mut" title="폭 균일도를 볼 때 길이 방향으로 묶는 길이">폭 균일도용</span></div>
-      <div class="m3-row"><label>오차 목표</label><input type="number" min="0.2" max="20" step="0.5" value="${num((O.targetNoise ?? 0.01) * 100, 1)}" data-lp-tgt="targetNoise" data-lp-pct>% <span class="mut" title="이 오차 이하가 되면 계산을 멈춤(작을수록 오래 걸림)">도달하면 멈춤</span></div></div>
-    <div class="m3-card"><div class="m3-sub">설계 점검 기준</div>
-      <div class="m3-row"><label>최소 살두께</label><input type="number" min="0.1" step="0.1" value="${C.minWall}" data-lp-chk="minWall"> mm</div>
-      <div class="m3-row"><label>최소 도달률</label><input type="number" min="0" max="100" step="5" value="${num(C.minReach * 100, 0)}" data-lp-chk="minReach" data-lp-pct>%</div>
-      <div class="m3-row"><label>새는 빛 한도</label><input type="number" min="0" max="100" step="5" value="${num(C.maxLeak * 100, 0)}" data-lp-chk="maxLeak" data-lp-pct>%</div></div>`;
+  const detail = obsDetailHtml(O, C, ui);
   const dSum = [O.dir ? '방향 지정' : '', O.cone !== 30 ? `원뿔 ±${O.cone}°` : ''].filter(Boolean).join(' · ');
   el.innerHTML = `<div class="m3-h">속성 · 관측면</div>${tabsHtml('obs', dSum)}<div class="m3-edit" role="tabpanel">${tab === 'basic' ? basic : detail}</div>`;
   wireTabs(el, 'obs', () => renderObserveProps(el, m, ui, h));
+  wireSections(el);   // 보는 방향·점검 기준 접기
   wirePick(el, ui, h);
   on(el, '[data-lp-obs]', 'change', (x) => { const v = readNum(x); if (v != null || 'lpAuto' in x.dataset) h.onObs(x.dataset.lpObs, v); });   // 자동 칸은 빈칸 = null
   const val = (x) => { const v = readNum(x); return v == null ? null : 'lpPct' in x.dataset ? v / 100 : v; };

@@ -1550,7 +1550,7 @@ done();
   const say = (c, t) => { console.log(`${c ? 'PASS' : 'FAIL'} ${t}`); if (!c) process.exitCode = 1; };
   const { modeBand } = await import('../src/ui/m3/results-panel.js');
   const pv = modeBand({ preview: true, state: 'running', progress: 40, stats: { relNoise: 0.03 }, photometry: { eff: 0.008 }, targetNoise: 0.02 }, 'auto', { quality: 'high' }, 30);
-  say(pv.cls === 'pv' && /Quick/.test(pv.label) && pv.text === '판정 안 함 · 칸 3 mm · 노이즈 2%' && /0\.8%/.test(pv.title) && pv.btn?.k === 'precise', `미리보기 띠: 판정 아님 · 이유(광효율) · 칸 · [정밀 계산] (${pv.label} ${pv.text})`);
+  say(pv.cls === 'pv' && /Quick/.test(pv.label) && pv.text === '판정 안 함 · 해상도 3 mm · 노이즈 2%' && /0\.8%/.test(pv.title) && pv.btn?.k === 'precise', `미리보기 띠: 판정 아님 · 이유(광효율) · 칸 · [정밀 계산] (${pv.label} ${pv.text})`);
   say(/계산 매우 느림/.test(pv.load?.text ?? ''), '미리보기 띠: 계산 부담·남은 시간도 띠에');
   const pr = modeBand({ preview: false, state: 'done', stats: { relNoise: 0.009 }, photometry: { eff: 0.2 }, targetNoise: 0.01 }, 'auto', { quality: 'high' }, 0);
   say(pr.cls === 'precise' && /Final/.test(pr.label) && pr.text === '고화질 0.5 mm · 노이즈 1%' && /판정/.test(pr.title) && !pr.btn, `정밀 띠: 판정 · 화질 · 노이즈 목표 (${pr.label} ${pr.text})`);
@@ -1929,3 +1929,31 @@ done();
   const col = (x) => x.items.find((i) => i.t === '열')?.v;
   say(col(f) === '2열 · 3열 겹침' && col(g) === '2열 겹침', `열 칸: ${col(f)} / ${col(g)}`);
 }
+
+// 2D 광량에 지금 해상도(길이×폭, 실제 쓰는 칸) 표시(2026-11-26 사용자)
+{ const { resText } = await import('../src/ui/m3/results-panel.js'), rp = (await import('node:fs')).readFileSync(new URL('../src/ui/m3/results-panel.js', import.meta.url), 'utf8');
+  const say = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
+  say(resText({ ds: 1.5, cell: 0.5 }) === '해상도 1.5×0.5 mm' && resText({ ds: 2, cell: 2 }) === '해상도 2 mm' && resText({ ds: 0.333333, cell: 0.25 }) === '해상도 0.33×0.25 mm' && resText(null) === '', `해상도 글: ${resText({ ds: 1.5, cell: 0.5 })}`);
+  say(/data-r="resS"/.test(rp) && /data-r="resW"/.test(rp) && /resInputs\(q\('resS'\), q\('resW'\), observe, G, !!st\.preview\)/.test(rp) && /onRes\?\.\('cellS'/.test(rp) && /onRes\?\.\('cellW'/.test(rp), '2D 광량 제목줄 = 해상도 직접 입력(관측면 상세와 같은 값)');
+  const { resInputs } = await import('../src/ui/m3/results-panel.js'), mk = () => ({ value: '', placeholder: '', title: '' }), a = mk(), b = mk();
+  resInputs(a, b, { cellS: 2, cellW: null }, { ds: 2, cell: 0.5 });
+  say(a.value === '2' && b.value === '' && b.placeholder === '0.5' && /해상도 2×0\.5 mm/.test(a.title), `입력 칸: 값 = 지정값 · 빈칸 = 지금 쓰는 값 흐리게 (${a.value}/${b.value}/${b.placeholder})`);
+  resInputs(a, b, { cellS: null, cellW: null }, null);
+  say(a.value === '' && a.placeholder === '자동', '계산 전 = 자동');
+  resInputs(a, b, { cellS: 2 }, { ds: 3, cell: 3 }, true);
+  say(/Quick/.test(a.title) && /Final/.test(a.title), `Quick 이면 3 mm 고정 · Final 에서 적용 안내: ${a.title}`); }
+
+// 해상도 = 화질 드롭다운 하나로(2026-11-26 사용자) — 저·중·고 + 직접 입력(고르면 길이×폭 칸이 보임). 프리셋을 고르면 직접 값은 지움
+{ const { qualityPick, qualityOptsHtml } = await import('../src/ui/m3/results-panel.js'), rp = (await import('node:fs')).readFileSync(new URL('../src/ui/m3/results-panel.js', import.meta.url), 'utf8'), app = (await import('node:fs')).readFileSync(new URL('../src/ui/m3/app.js', import.meta.url), 'utf8');
+  const say = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
+  const a = qualityPick({ quality: 'mid', cellS: null, cellW: null }), b = qualityPick({ quality: 'low', cellS: 2, cellW: 1 }), c = qualityPick({ quality: 'low', cellS: null, cellW: 0.5 });
+  say(a.value === 'mid' && !a.custom && /직접 입력/.test(a.label) && b.value === 'custom' && b.custom && b.label === '직접 2×1 mm' && c.custom && c.label === '직접 자동×0.5 mm', `드롭다운 값: ${a.value} / ${b.label} / ${c.label}`);
+  const h = qualityOptsHtml();
+  say(/value="low"/.test(h) && /value="high"/.test(h) && /value="custom"/.test(h), '드롭다운 = 저·중·고 + 직접 입력');
+  say(/data-r="resbox" hidden/.test(rp) && /data-big-resbox/.test(rp), '직접 입력 칸은 직접 입력을 고를 때만(작은 화면·큰 창 모두)');
+  say(/onQuality: \(v\) => A\.store\.update\('observe', \(m\) => \{ m\.observe\.quality = v; m\.observe\.cellS = null; m\.observe\.cellW = null; \}\)/.test(app), '프리셋 고르면 직접 해상도 지움'); }
+
+// 2D 단위(휘도 cd/m² · 100%) 고르기 = 큰 창(팝업)에만(2026-11-26 사용자) — 메인 2D 제목줄엔 없음, 기능은 그대로(기억값 공유)
+{ const rp = (await import('node:fs')).readFileSync(new URL('../src/ui/m3/results-panel.js', import.meta.url), 'utf8');
+  const say = (c, m) => console.log(c ? `PASS ${m}` : (process.exitCode = 1, `FAIL ${m}`));
+  say(!/data-r="unit"/.test(rp) && /PAL_SELECT\('data-big-pal'\)\}<select data-big-unit/.test(rp) && /\[data-big-unit\]'\)\.onchange/.test(rp), '단위 고르기 = 큰 창 2D 그림의 색상 고르기 바로 옆'); }

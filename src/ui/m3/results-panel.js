@@ -60,15 +60,30 @@ export function previewBtn(snap, mode) {
 }
 // 결과 위 모드 띠(순수, 2026-11-19 사용자: 미리보기·정밀 구분이 헷갈림) — { cls: 'pv'|'precise'|'idle', label, text, title, btn(previewBtn), load(effLoad) }
 // 띠는 늘 한 줄(높이 고정) — 바뀌는 글·단추가 광 효율 카드 줄 수를 바꿔 아래 그래프가 위아래로 움직이던 것을 여기로 모음
+// 2D 광량 제목줄의 해상도 글(순수, 2026-11-26) — 실제 쓰는 칸(길이 ds × 폭 cell), 같으면 하나만
+const fmtRes = (v) => String(+v.toFixed(2));
+export const resText = (G) => (!(G?.ds > 0 && G?.cell > 0) ? '' : fmtRes(G.ds) === fmtRes(G.cell) ? `해상도 ${fmtRes(G.ds)} mm` : `해상도 ${fmtRes(G.ds)}×${fmtRes(G.cell)} mm`);
+// 해상도 드롭다운(순수, 2026-11-26 사용자: 화질 드롭다운 하나로) — 직접 값(cellS·cellW)이 있으면 '직접 a×b mm'
+export function qualityPick(O) {
+  const custom = O?.cellS != null || O?.cellW != null, f = (v) => (v == null ? '자동' : fmtRes(+v));
+  return { value: custom ? 'custom' : O?.quality ?? 'low', custom, label: custom ? `직접 ${f(O.cellS)}×${f(O.cellW)} mm` : '직접 입력…' };
+}
+export const qualityOptsHtml = () => `${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}<option value="custom">직접 입력…</option>`;
+// 2D 광량 제목줄 해상도 입력 칸 채우기(순수 · 입력 중인 칸은 그대로) — 값 = 지정값, 빈칸이면 지금 쓰는 값을 흐리게(placeholder)
+export function resInputs(a, b, O, G, preview = false) {
+  const doc = globalThis.document, set = (x, v, ph) => { if (!x) return; if (doc?.activeElement !== x) x.value = v == null ? '' : String(v); x.placeholder = ph; };
+  set(a, O?.cellS, G?.ds > 0 ? fmtRes(G.ds) : '자동'); set(b, O?.cellW, G?.cell > 0 ? fmtRes(G.cell) : '자동');
+  const t = resText(G), q = preview ? ' · Quick(대략 계산)은 3 mm 고정 — 입력값은 Final 계산에 적용' : ''; for (const x of [a, b]) if (x) x.title = (t ? `지금 ${t} · 빈칸 = 자동` : '빈칸 = 자동') + q;
+}
 export function modeBand(snap, mode, observe, elapsedSec = 0) {
   const eff = snap?.photometry?.eff, btn = previewBtn(snap, mode), load = effLoad(eff, snap, elapsedSec);
   if (!snap?.stats) return { cls: 'idle', label: '계산 전', text: '', title: '', btn: null, load: null };
   const pc = (v) => `${+(v * 100).toFixed(2)}%`;
   if (snap.preview) {
     const why = Number.isFinite(eff) ? `광효율 ${(eff * 100).toFixed(1)}% < ${pc(PREVIEW.effOn)} 라 자동` : '광효율이 낮아 자동';
-    return { cls: 'pv', label: 'Quick', text: `판정 안 함 · 칸 ${PREVIEW.cell} mm · 노이즈 ${pc(PREVIEW.noise)}`, title: `${why} — Quick = 빠른 대략 계산(칸 ${PREVIEW.cell} mm · 노이즈 ${pc(PREVIEW.noise)}). 합격/불합격 판정은 [Final 계산]으로`, btn, load: load.text ? load : null };
+    return { cls: 'pv', label: 'Quick', text: `판정 안 함 · 해상도 ${PREVIEW.cell} mm · 노이즈 ${pc(PREVIEW.noise)}`, title: `${why} — Quick = 빠른 대략 계산(해상도 ${PREVIEW.cell} mm · 노이즈 ${pc(PREVIEW.noise)}). 합격/불합격 판정은 [Final 계산]으로`, btn, load: load.text ? load : null };
   }
-  const q = observe?.cellS ? `칸 ${observe.cellS}×${observe.cellW ?? observe.cellS} mm` : (QUALITY_OPTS.find(([v]) => v === (observe?.quality ?? 'low'))?.[1] ?? '');
+  const q = observe?.cellS ? `해상도 ${observe.cellS}×${observe.cellW ?? observe.cellS} mm` : (QUALITY_OPTS.find(([v]) => v === (observe?.quality ?? 'low'))?.[1] ?? '');
   const nz = Number.isFinite(snap.targetNoise) ? ` · 노이즈 ${pc(snap.targetNoise)}` : '';   // 글은 짧게(2026-11-23 사용자) — 판정 설명은 툴팁
   return { cls: 'precise', label: 'Final', text: `${q}${nz}`, title: `Final = 설정한 화질·노이즈 목표로 합격/불합격 판정 — ${q}${nz.replace('노이즈', '노이즈 목표')}`, btn, load: load.text ? load : null };
 }
@@ -705,7 +720,7 @@ export const mapMenuItems = (hasPin, onCell) => [
 // 1D 우클릭 메뉴 항목(순수)
 export const plotMenuItems = (title) => [{ k: 'csv', label: `${title} 데이터 CSV 저장` }, { k: 'png', label: '그래프 이미지 저장 (PNG)' }, { k: 'copy', label: '그래프 이미지 복사' }];
 // head = 판정·모드 띠·균일도 카드를 그릴 칸(2026-11-22 사용자 — 오른쪽 위 보드). 없으면 예전처럼 el 한 칸에 모두
-export function createResultsPanel(el, { onPalette = null, head = null, foot = null, anchor = () => null, onPreview = null, onOpt = null, onQuality = null, fileName = () => 'uds', onLeak = null, onBig = null, onCalc = null, calcBusy = () => false, onNote = null, kpi = null, onFlux = null } = {}) {   // kpi = 상단 띠의 균일도·광량·광효율 칸(2026-11-23 사용자 — 늘 보이게)
+export function createResultsPanel(el, { onPalette = null, head = null, foot = null, anchor = () => null, onPreview = null, onOpt = null, onQuality = null, fileName = () => 'uds', onLeak = null, onBig = null, onCalc = null, calcBusy = () => false, onNote = null, kpi = null, onFlux = null, onRes = null } = {}) {   // kpi = 상단 띠의 균일도·광량·광효율 칸(2026-11-23 사용자 — 늘 보이게)
   const sig = claimEl(el);   // 다시 열면 옛 패널은 멈춤 — 옛 결과를 새 캔버스에 그리지 않게(2026-11-25)
   let effT = { key: null, t0: null };
   let optFrac = null, vCls = '';   // 기구 최적화 진행률(null = 안 돎) · 지금 종합 판정
@@ -730,7 +745,7 @@ export function createResultsPanel(el, { onPalette = null, head = null, foot = n
     </div>`;
   // 그림: 2D(위) · 길이 1D | 폭 1D(아래 좌우 나란히, 2026-11-22 사용자)
   const blkHtml = `
-    <div class="m3-blk"><div class="m3-t"><b class="m3-tt">2D 광량 <i class="m3-info" data-r="mapsub" tabindex="0">ⓘ</i></b><span><label class="m3-map-eq" title="가로세로를 같은 축척으로 — 끄면 좁은 폭을 늘려 보여 줌"><input type="checkbox" data-r="mapEq"> 실제 비율</label>${PAL_SELECT('data-r="pal"')}<select data-r="unit" title="2D 눈금·마우스 값·상단 칸 단위 — 휘도 cd/m²(정면 ±10° · 광속을 안 넣으면 1 lm 가정 ≈) · 100% 기준(가장 밝은 칸 = 100%). 색·판정은 그대로" aria-label="광량 단위"><option value="lum">cd/m²</option><option value="pct">100%</option></select><span class="m3-orient" data-orient-box><button type="button" data-orient="rot" title="2D 를 시계 방향으로 90° 돌림 — 링·실제 비율 그림이 돌아감(펼친 그림·1D 는 길이·폭 방향만 따라감)" aria-label="2D 돌리기">⟳</button><button type="button" data-orient="h" title="2D 좌우 뒤집기 — 1D·CSV 도 화면 방향대로" aria-label="2D 좌우 뒤집기">⇋</button><button type="button" data-orient="v" title="2D 상하 뒤집기 — 1D·CSV 도 화면 방향대로" aria-label="2D 상하 뒤집기">⇅</button><button type="button" data-orient="reset" title="돌리기·뒤집기 원래대로" aria-label="2D 방향 원래대로" disabled>↺</button></span> <select data-r="quality" title="2D 분포·1D 프로파일 칸 크기(정사각) — 저 1.5 mm(빠름) · 중 1.0 mm(광선 ≈2배) · 고 0.5 mm(광선 ≈4배) · 짧거나 좁은 면은 그 방향만 더 잘게" aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>  <button type="button" class="m3-zoom" data-zoom="map" title="큰 창으로 보기" aria-label="2D 광량 분포 확대">⤢</button></span></div>
+    <div class="m3-blk"><div class="m3-t"><b class="m3-tt">2D 광량 <i class="m3-info" data-r="mapsub" tabindex="0">ⓘ</i></b><span><label class="m3-map-eq" title="가로세로를 같은 축척으로 — 끄면 좁은 폭을 늘려 보여 줌"><input type="checkbox" data-r="mapEq"> 실제 비율</label>${PAL_SELECT('data-r="pal"')}<span class="m3-orient" data-orient-box><button type="button" data-orient="rot" title="2D 를 시계 방향으로 90° 돌림 — 링·실제 비율 그림이 돌아감(펼친 그림·1D 는 길이·폭 방향만 따라감)" aria-label="2D 돌리기">⟳</button><button type="button" data-orient="h" title="2D 좌우 뒤집기 — 1D·CSV 도 화면 방향대로" aria-label="2D 좌우 뒤집기">⇋</button><button type="button" data-orient="v" title="2D 상하 뒤집기 — 1D·CSV 도 화면 방향대로" aria-label="2D 상하 뒤집기">⇅</button><button type="button" data-orient="reset" title="돌리기·뒤집기 원래대로" aria-label="2D 방향 원래대로" disabled>↺</button></span> <select data-r="quality" title="해상도(칸 크기) — 저 1.5 mm(빠름) · 중 1.0 mm(광선 ≈2배) · 고 0.5 mm(광선 ≈4배) · 직접 입력 = 길이×폭 · 2D·1D·균일도가 같은 해상도 · 관측면 상세 탭과 같은 값" aria-label="해상도">${qualityOptsHtml()}</select><span class="m3-resv" data-r="resbox" hidden> <input type="number" min="0.2" step="0.5" data-r="resS" aria-label="해상도 길이 mm">×<input type="number" min="0.1" step="0.1" data-r="resW" aria-label="해상도 폭 mm"> mm</span>  <button type="button" class="m3-zoom" data-zoom="map" title="큰 창으로 보기" aria-label="2D 광량 분포 확대">⤢</button></span></div>
       <div class="m3-gw"><canvas class="m3-g" data-r="map" width="600" height="200"></canvas></div></div>
     <div class="m3-blkrow"><div class="m3-blk"><div class="m3-t"><b class="m3-tt">길이 1D <i class="m3-info" data-r="psub" tabindex="0">ⓘ</i> <span data-r="uprof"></span></b><span><button type="button" class="m3-zoom" data-zoom="prof" title="큰 창으로 보기" aria-label="길이 프로파일 확대">⤢</button></span></div>
       <div class="m3-gw"><canvas class="m3-g" data-r="prof" width="600" height="150"></canvas></div></div>
@@ -766,7 +781,16 @@ ${uTip(c.dataset.u, tipWinS)}` : ''); if (c.title !== t) c.title = t; } };   // 
   // 지도 밖을 클릭하면 선택 선 해제 — 지도·우클릭 메뉴·창 제목 줄(옮기기·접기)·경계선 끌기는 빼고
   PIN_OUTSIDE = (e) => { const t = e.target; if (t === q('map') || t === big?.cvs.map || t.closest?.('.m3-ctx, .m3-big-hd, .m3-psplit')) return; pinOff(); };
   if (!pinOutsideOn && typeof document !== 'undefined') { pinOutsideOn = true; document.addEventListener('click', (e) => PIN_OUTSIDE?.(e)); }
-  q('quality').onchange = (e) => onQuality?.(e.target.value);
+  // 해상도 드롭다운(저·중·고·직접 입력) — 직접 입력을 고르면 길이×폭 칸을 보임(값을 넣어야 바뀜) · 프리셋 = 직접 값 지움(app onQuality)
+  let customOpen = false;
+  const onQSel = (v, box, focus) => { if (v === 'custom') { customOpen = true; for (const x of [q('resbox'), big?.el.querySelector('[data-big-resbox]')]) if (x) x.hidden = false; focus?.focus(); return; } customOpen = false; onQuality?.(v); };
+  q('quality').onchange = (e) => onQSel(e.target.value, q('resbox'), q('resS'));
+  const wireRes = (a, b) => { const rv = (e) => { const t = e.target.value.trim(), v = +t; return t === '' ? null : Number.isFinite(v) && v > 0 ? v : undefined; };   // 빈칸 = 자동
+    a.onchange = (e) => { const v = rv(e); if (v !== undefined) onRes?.('cellS', v); };
+    b.onchange = (e) => { const v = rv(e); if (v !== undefined) onRes?.('cellW', v); }; };
+  wireRes(q('resS'), q('resW'));
+  // 드롭다운·직접 칸 맞추기(작은 화면·큰 창 같은 규칙)
+  const syncQ = (sel, box, O) => { if (!sel) return; const P = qualityPick(O), co = sel.querySelector('option[value="custom"]'); if (co && co.textContent !== P.label) co.textContent = P.label; if (document.activeElement !== sel) sel.value = P.custom || customOpen ? 'custom' : P.value; if (box) box.hidden = !(P.custom || customOpen); };
   q('leak').onclick = () => onLeak?.();
   // 2D = 칸 중심 값 그대로, 칸 사이만 선형 보간 · 1D = smoothCurve 로 노이즈만 다듬어 그림(값은 원자료)
   const saveTxt = (txt, tag) => {   // 저장 형식 = Excel 용 CSV
@@ -830,8 +854,8 @@ ${uTip(c.dataset.u, tipWinS)}` : ''); if (c.title !== t) c.title = t; } };   // 
   // 색 표 바꾸기 — 메인·큰 창 선택 상자를 같이 맞추고 2D·3D 를 다시 칠함(값·판정은 그대로)
   const applyPal = (name) => { setPalette(name); try { localStorage.setItem('uds.m3.palette', paletteName()); } catch {} LUT = null; q('pal').value = paletteName(); const b = big?.el.querySelector('[data-big-pal]'); if (b) b.value = paletteName(); paint('map', q('map')); paintBig(); onPalette?.(); };
   q('pal').onchange = (e) => applyPal(e.target.value);
-  q('unit').value = LUM_UNIT;
-  q('unit').onchange = (e) => { LUM_UNIT = e.target.value === 'pct' ? 'pct' : 'lum'; try { localStorage.setItem('uds.m3.lumUnit', LUM_UNIT); } catch {} if (last) update(last); else { paint('map', q('map')); paintBig(); } };
+  // 2D 단위(휘도 · 100%) — 큰 창에서만 고름(2026-11-26 사용자), 메인 그림·평균 칸도 같은 단위
+  const setUnit = (v) => { LUM_UNIT = v === 'pct' ? 'pct' : 'lum'; try { localStorage.setItem('uds.m3.lumUnit', LUM_UNIT); } catch {} if (last) update(last); else { paint('map', q('map')); paintBig(); } };
   q('mapEq').onchange = (e) => { mapEq = e.target.checked; try { localStorage.setItem('uds.m3.mapEq', mapEq ? '1' : '0'); } catch {} paint('map', q('map')); };
   const paintBig = () => {
     if (!big) return;
@@ -930,8 +954,8 @@ ${uTip(c.dataset.u, tipWinS)}` : ''); if (c.title !== t) c.title = t; } };   // 
     // 떠 있는 창(2026-11-02) — 기구 최적화 창처럼 머리 끌어 옮기기 · 모서리로 크기 · 접기. 뒤 화면을 막지 않음(열어 둔 채 설계·최적화). 위치·크기 = 보는 사람별, 접힘은 열 때마다 펼침
     const rect = fitRect(bigRectLoad(), innerWidth, innerHeight, winTop());
     ov.className = 'm3-big-in'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', '광분포 시뮬레이션');
-    const cell = (k) => `<div class="m3-big-c" data-k="${k}"><div class="m3-big-ct"><b>${TITLE[k]}</b>${k === 'map' ? '' : `<span data-big-uni="${k}"></span>`}<span class="m3-big-sp"></span>${k === 'map' ? `<label class="m3-big-eq"><input type="checkbox" data-big-eq${eq0 ? ' checked' : ''}> 실제 비율</label>${PAL_SELECT('data-big-pal')}<span class="m3-orient" data-orient-box><button type="button" data-orient="rot" title="2D 를 시계 방향으로 90° 돌림 — 링·실제 비율 그림이 돌아감(펼친 그림·1D 는 길이·폭 방향만 따라감)" aria-label="2D 돌리기">⟳</button><button type="button" data-orient="h" title="2D 좌우 뒤집기 — 1D·CSV 도 화면 방향대로" aria-label="2D 좌우 뒤집기">⇋</button><button type="button" data-orient="v" title="2D 상하 뒤집기 — 1D·CSV 도 화면 방향대로" aria-label="2D 상하 뒤집기">⇅</button><button type="button" data-orient="reset" title="돌리기·뒤집기 원래대로" aria-label="2D 방향 원래대로" disabled>↺</button></span><button type="button" data-big-reg-on aria-pressed="false" title="켜 둔 동안 끌 때마다 새 영역 · 그 영역의 균일도를 아래 표로 비교 · 켠 채 클릭 = 영역 지움 · 끄면 영역 결과를 숨김(다시 켜면 보임) · 휠 = 확대 · 오른쪽 끌기 = 이동 · 더블클릭 = 전체 보기">▭ 영역 선택</button><button type="button" data-big-fit disabled title="확대하면 켜짐 — 휠 = 확대 · 오른쪽 끌기 = 이동">전체 보기</button>` : ''}<button type="button" data-big-one="${k}" title="이 그림만 화면 가득" aria-label="이 그림만 화면 가득">⤢</button></div><canvas class="m3-big-cv" data-big-cv="${k}"></canvas>${k === 'map' ? '<div class="m3-big-reg" data-big-reg hidden></div>' : ''}</div>`;
-    ov.innerHTML = `<div class="m3-big-hd" title="끌어서 옮기기"><b title="진행 현황 · 2D · 1D — 2D 클릭 = 그 점 기준 1D 곡선(주황) · 그림 우클릭 = 데이터·이미지 저장"><i class="m3-fl" data-big-step>4</i><span class="m3-tx">광분포 시뮬레이션</span><span class="m3-tx-s">광분포</span></b><span class="m3-mon-sum" data-big-sum></span><span class="m3-big-sp"></span><span class="m3-ctl" data-big-ctl></span><span class="m3-mode-chip" data-big-mode hidden></span><button type="button" class="m3-pvbtn" data-big-pv hidden></button><label class="m3-big-q">화질 <select data-big-q aria-label="분포 화질">${QUALITY_OPTS.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label><button type="button" data-big-max></button><button type="button" data-big-close title="Esc" aria-label="닫기">✕<span class="m3-tx"> 닫기</span></button></div>
+    const cell = (k) => `<div class="m3-big-c" data-k="${k}"><div class="m3-big-ct"><b>${TITLE[k]}</b>${k === 'map' ? '' : `<span data-big-uni="${k}"></span>`}<span class="m3-big-sp"></span>${k === 'map' ? `<label class="m3-big-eq"><input type="checkbox" data-big-eq${eq0 ? ' checked' : ''}> 실제 비율</label>${PAL_SELECT('data-big-pal')}<select data-big-unit title="2D 눈금·마우스 값·상단 칸 단위 — 휘도 cd/m²(정면 ±10° · 광속을 안 넣으면 1 lm 가정 ≈) · 100% 기준(가장 밝은 칸 = 100%). 색·판정은 그대로" aria-label="광량 단위"><option value="lum">cd/m²</option><option value="pct">100%</option></select><span class="m3-orient" data-orient-box><button type="button" data-orient="rot" title="2D 를 시계 방향으로 90° 돌림 — 링·실제 비율 그림이 돌아감(펼친 그림·1D 는 길이·폭 방향만 따라감)" aria-label="2D 돌리기">⟳</button><button type="button" data-orient="h" title="2D 좌우 뒤집기 — 1D·CSV 도 화면 방향대로" aria-label="2D 좌우 뒤집기">⇋</button><button type="button" data-orient="v" title="2D 상하 뒤집기 — 1D·CSV 도 화면 방향대로" aria-label="2D 상하 뒤집기">⇅</button><button type="button" data-orient="reset" title="돌리기·뒤집기 원래대로" aria-label="2D 방향 원래대로" disabled>↺</button></span><button type="button" data-big-reg-on aria-pressed="false" title="켜 둔 동안 끌 때마다 새 영역 · 그 영역의 균일도를 아래 표로 비교 · 켠 채 클릭 = 영역 지움 · 끄면 영역 결과를 숨김(다시 켜면 보임) · 휠 = 확대 · 오른쪽 끌기 = 이동 · 더블클릭 = 전체 보기">▭ 영역 선택</button><button type="button" data-big-fit disabled title="확대하면 켜짐 — 휠 = 확대 · 오른쪽 끌기 = 이동">전체 보기</button>` : ''}<button type="button" data-big-one="${k}" title="이 그림만 화면 가득" aria-label="이 그림만 화면 가득">⤢</button></div><canvas class="m3-big-cv" data-big-cv="${k}"></canvas>${k === 'map' ? '<div class="m3-big-reg" data-big-reg hidden></div>' : ''}</div>`;
+    ov.innerHTML = `<div class="m3-big-hd" title="끌어서 옮기기"><b title="진행 현황 · 2D · 1D — 2D 클릭 = 그 점 기준 1D 곡선(주황) · 그림 우클릭 = 데이터·이미지 저장"><i class="m3-fl" data-big-step>4</i><span class="m3-tx">광분포 시뮬레이션</span><span class="m3-tx-s">광분포</span></b><span class="m3-mon-sum" data-big-sum></span><span class="m3-big-sp"></span><span class="m3-ctl" data-big-ctl></span><span class="m3-mode-chip" data-big-mode hidden></span><button type="button" class="m3-pvbtn" data-big-pv hidden></button><label class="m3-big-q">해상도 <select data-big-q aria-label="해상도">${qualityOptsHtml()}</select></label><span class="m3-resv" data-big-resbox hidden> <input type="number" min="0.2" step="0.5" data-big-resS aria-label="해상도 길이 mm">×<input type="number" min="0.1" step="0.1" data-big-resW aria-label="해상도 폭 mm"> mm</span><button type="button" data-big-max></button><button type="button" data-big-close title="Esc" aria-label="닫기">✕<span class="m3-tx"> 닫기</span></button></div>
       <div class="m3-big-grid"><div class="m3-big-prog" data-big-prog></div>${cell('map')}<div class="m3-big-row">${cell('prof')}${cell('wprof')}</div></div>`;
     (el.closest('#mech3d-wrap') ?? document.body).appendChild(ov);   // 설계 화면에 붙임(화면을 바꾸면 함께 숨음)
     const cvs = Object.fromEntries(KINDS.map((k) => [k, ov.querySelector(`[data-big-cv="${k}"]`)]));
@@ -969,7 +993,9 @@ ${uTip(c.dataset.u, tipWinS)}` : ''); if (c.title !== t) c.title = t; } };   // 
       if (e.target.closest('[data-big-fit]')) { cvs.map._view = null; if (!big.regMode) cvs.map._flat = false; paint('map', cvs.map); return; }
     });
     ov.querySelector('[data-big-close]').onclick = () => closeBig(true);
-    ov.querySelector('[data-big-q]').onchange = (e) => onQuality?.(e.target.value);
+    ov.querySelector('[data-big-q]').onchange = (e) => onQSel(e.target.value, null, ov.querySelector('[data-big-resS]'));
+    wireRes(ov.querySelector('[data-big-resS]'), ov.querySelector('[data-big-resW]'));
+    { const u = ov.querySelector('[data-big-unit]'); u.value = LUM_UNIT; ov.querySelector('[data-big-unit]').onchange = (e) => setUnit(e.target.value); }
     const bp = ov.querySelector('[data-big-pal]'); bp.value = paletteName(); bp.onchange = () => applyPal(bp.value);
     const eq = ov.querySelector('[data-big-eq]'); eq.onchange = () => { big.equal = eq.checked; cvs.map._flat = false; paint('map', cvs.map); };
     wireMapHover(cvs.map); wireBigZoom(cvs.map); cvs.map._region = region; cvs.map._onPin = onPin; cvs.map._onPinOff = pinOff; cvs.map._onMenu = (e, c, cv) => mapMenu(e, c, cv); wireHover(cvs.prof); wireHover(cvs.wprof); cvs.prof._onMenu = plotMenu('prof'); cvs.wprof._onMenu = plotMenu('wprof');
@@ -1003,8 +1029,8 @@ ${uTip(c.dataset.u, tipWinS)}` : ''); if (c.title !== t) c.title = t; } };   // 
   };
   const syncBig = () => {
     if (!big) return;
-    const s = big.el.querySelector('[data-big-q]');
-    if (document.activeElement !== s) s.value = last?.observe?.quality ?? 'low';
+    syncQ(big.el.querySelector('[data-big-q]'), big.el.querySelector('[data-big-resbox]'), last?.observe ?? {});
+    resInputs(big.el.querySelector('[data-big-resS]'), big.el.querySelector('[data-big-resW]'), last?.observe, last?.snap?.G ?? null, !!last?.snap?.stats?.preview);
     const su = big.el.querySelector('[data-big-sum]'), st0 = last?.snap?.stats, O = last?.observe, u = (t, v, g) => `<b class="${!st0?.preview && Number.isFinite(v) && Number.isFinite(g) ? (v + 1e-9 >= g ? 'ok' : 'bad') : ''}">${t} ${fmtJudge(v)}</b>`;
     const pr = last?.snap?.state === 'done' ? 100 : last?.snap?.progress ?? simPct(st0?.relNoise, last?.snap?.targetNoise ?? 0.01);
     setStepMark(big.el.querySelector('[data-big-step]'), 4, last?.snap?.state === 'done');
@@ -1051,14 +1077,15 @@ ${uTip(c.dataset.u, tipWinS)}` : ''); if (c.title !== t) c.title = t; } };   // 
   function update(args) {
     last = args;
     const { snap, observe, message } = args, st = snap?.stats, G = snap?.G;
-    if (observe && document.activeElement !== q('quality')) q('quality').value = observe.quality ?? 'low';
+    if (observe) syncQ(q('quality'), q('resbox'), observe);
     el.querySelectorAll('.m3-blk').forEach((b) => b.classList.toggle('dim', !st || !!st.empty));
     { const ul = uniTagHtml('길이', st, observe?.targetLen), uw = uniTagHtml('폭', st, observe?.targetWid);   // 1D 제목 옆 균일도(2026-11-17)
       if (q('uprof').innerHTML !== ul) q('uprof').innerHTML = ul; if (q('uwprof').innerHTML !== uw) q('uwprof').innerHTML = uw; }
-    if (!st || st.empty || !G) { clear(message); syncBig(); return; }
+    if (!st || st.empty || !G) { resInputs(q('resS'), q('resW'), observe, null); clear(message); syncBig(); return; }
     q('msg').hidden = !message; q('msg').textContent = message || '';
     for (const k of Object.keys(RATIO)) sizeCanvas(q(k), RATIO[k]);
     const dpr = dprNow();
+    resInputs(q('resS'), q('resW'), observe, G, !!st.preview);   // 해상도 직접 입력(2026-11-26 사용자) — 관측면 상세 탭과 같은 값
     const VG = mapViewG(fullG(G)); q('mapsub').title = `관측면 펼침 · s 0–${G.L.toFixed(0)} mm × w ${VG.w0.toFixed(1)}–${(VG.w0 + VG.nw * VG.cell).toFixed(1)} mm · 칸 사이는 이어 칠함 · 클릭 = 그 점 기준 1D 곡선`;
     const pm = finiteMax(st.profile), leds = args.leds ?? [];
     // 지정 점 → 칸 (화질·관측면이 바뀌어 밖이면 해제)

@@ -54,9 +54,10 @@ const ui = (o = {}) => ({ line, ledList: list, ledGap: 6.25, ...o });
   ok(h.includes('data-lp-tab="basic"') && !h.includes('◀') && !h.includes('하나씩'), '탭 · ◀ ▶ 없음');
   ok(/data-lp-beam="120" aria-pressed="true"/.test(h) && /data-lp-beam="90" aria-pressed="false"/.test(h) && /data-lp-beam="60" aria-pressed="false"/.test(h), '120 = 넓게 눌림');
   ok(h.includes('넓게 120°') && !h.includes('램버시안') && !h.includes('가우시안'), '기본 탭: 쉬운 말 · 모델 이름 숨김');
-  ok(/data-lp-spec="sizeX"/.test(h) && !/data-lp-mauto/.test(h) && !/data-lp-spec="fluxLm"/.test(h) && !h.includes('m3-ledlist') && !/data-lp-dist/.test(h), '기본 탭 = 지향각·퍼짐 · 발광면 크기 · 자동 선택');
+  ok(/data-lp-spec="sizeX"/.test(h) && !/data-lp-mauto/.test(h) && !h.includes('m3-ledlist') && !/data-lp-dist/.test(h), '기본 탭 = 지향각·퍼짐 · 발광면 크기 · 자동 선택');
+  ok(/data-lp-spec="fluxLm"/.test(h) && h.includes('lm/개') && h.includes('0 = 1 lm 가정') && h.indexOf('data-lp-spec="fluxLm"') < h.indexOf('data-lp-beam='), '밝기 = 기본 탭(지향각 위, 2026-11-26 사용자)');
   setLpTab('leds', 'detail'); h = ledPanelHtml(man, ui());
-  ok(/data-lp-spec="fluxLm"/.test(h) && h.includes('lm/개') && h.includes('0 = 1 lm 가정'), '밝기');
+  ok(!/data-lp-spec="fluxLm"/.test(h), '상세 탭엔 밝기 없음(중복 없음)');
   ok(/value="6.3" data-lp-dist/.test(h) && !/data-lp-dist[^>]*disabled/.test(h), '커버까지 거리 — LED 를 안 골라도 보임');
   ok(/data-lp-man="count"/.test(h) && /data-lp-man="pitch"/.test(h) && /data-lp-man="rows"/.test(h), '직접 배치: 개수·피치·열');
   ok((h.match(/<tr class="[^"]*" data-lp-ledsel="\d"/g) ?? []).length === 3 && h.includes('35.0 mm'), 'LED 목록: 줄마다 번호·위치');
@@ -90,7 +91,7 @@ const ui = (o = {}) => ({ line, ledList: list, ledGap: 6.25, ...o });
   ok(ledPanelHtml(ms, ui({ ledChange: { changed: true, moved: 1, pitchOrig: { uniform: true, pitch: 10 }, pitchCur: { uniform: true, pitch: 12 } } })).includes('원설계에서 변경됨'), '기본 탭에도 LED 변경 표시');
   setLpTab('leds', 'detail');
   const d = ledPanelHtml(ms, ui());
-  ok(!d.includes('인식 고치기') && d.includes('램버시안') && !/data-lp-spec="sizeX"/.test(d) && !/data-lp-solder/.test(d) && d.includes('m3-ledlist') && /data-lp-spec="fluxLm"/.test(d), '상세 탭 = 배치 · 밝기 · 인식 고치기 · 배광 모델 · PCB 색');
+  ok(!d.includes('인식 고치기') && d.includes('램버시안') && !/data-lp-spec="sizeX"/.test(d) && !/data-lp-solder/.test(d) && d.includes('m3-ledlist') && !/data-lp-spec="fluxLm"/.test(d), '상세 탭 = 배치 · 인식 고치기 · 배광 모델 · PCB 색(밝기는 기본 탭, 2026-11-26)');
   setLpTab('leds', 'basic'); }
 { // 지정은 광원 노드에서만, LED 노드·LED 한 개는 사양만(2026-11-04)
   const mech = { light: { ...defaultLight(), kind: 'step', step: { fromMech: [0, 1], leds: [0, 1], excluded: [], emitters: [{ pos: [0, 0, 0] }], offset: [0, 0, 0], rot: [0, 0, 0], name: 'x' } } };
@@ -129,7 +130,7 @@ const ui = (o = {}) => ({ line, ledList: list, ledGap: 6.25, ...o });
   ok(Math.abs(sp.intensityCd * Math.PI - sp.fluxLm) < 1e-3, 'cd 로 바꾸면 지금 광속에 맞는 cd 로 채움');
   setLedBright(sp, 0);
   ok(sp.fluxLm === 0 && sp.intensityCd === 0, '빈칸·0 = 1 lm 가정(판정 안 함)');
-  setLpTab('leds', 'detail');
+  setLpTab('leds', 'basic');
   const m1 = { ...man, light: { ...man.light, spec: { ...man.light.spec, lumUnit: 'cd', intensityCd: 2, fluxLm: 2 * Math.PI } } }, h = ledPanelHtml(m1, ui());
   ok(/data-lp-unit/.test(h) && /<option value="cd" selected>/.test(h) && /value="2" data-lp-spec="fluxLm"/.test(h) && /≈ 6\.28 lm/.test(h), '상세 탭: 단위 고르기 · cd 값 · 환산 광속 표시');
   const h2 = ledPanelHtml(man, ui());
@@ -146,13 +147,22 @@ const ui = (o = {}) => ({ line, ledList: list, ledGap: 6.25, ...o });
   ok(sp.intensityCd === 2 && Math.abs(sp.fluxLm - 2 * Math.PI) < 1e-3, `2000 mcd = 2 cd → ${sp.fluxLm} lm`);
   setLedUnit(sp, 'cd'); ok(sp.lumUnit === 'cd' && sp.intensityCd === 2, 'mcd → cd: 광도 그대로');
   setLedUnit(sp, 'mcd'); ok(sp.lumUnit === 'mcd' && Math.abs(sp.fluxLm - 2 * Math.PI) < 1e-3, 'cd → mcd: 광속 그대로');
-  setLpTab('leds', 'detail');
+  setLpTab('leds', 'basic');
   const m1 = { ...man, light: { ...man.light, spec: { ...man.light.spec, lumUnit: 'mcd', intensityCd: 2, fluxLm: 2 * Math.PI } } }, h = ledPanelHtml(m1, ui());
   ok(/<option value="mcd" selected>/.test(h) && /value="2000" data-lp-spec="fluxLm"/.test(h) && /≈ 6\.28 lm/.test(h), '상세 탭: mcd 값 · 환산 광속');
   const { migrateMech3d } = await import('../src/engine/mech3d/defs.js');
   const c = migrateMech3d({ light: { ...defaultLight(), spec: { model: 'lambertian', beam: 120, fluxLm: 1, lumUnit: 'mcd', intensityCd: 1 } } });
   ok(c.light.spec.lumUnit === 'mcd' && Math.abs(c.light.spec.fluxLm - Math.PI) < 1e-3, 'mcd 저장 되살림');
 }
+// 관측면 상세 탭 짧게(2026-11-26 사용자, simple-ui 규칙) — 줄 짧게 · 설명은 툴팁 · 방향·점검 기준은 접기 · 칸 = 균일도와 2D 광량 분포 같은 격자
+{ const { obsDetailHtml } = await import('../src/ui/mech3d-light-panel.js');
+  const O = { ...(await import('../src/engine/mech3d/defs.js')).defaultObserve(), faces: [{ part: 0, face: 0 }] }, C = { minWall: 0.8, minReach: 0.5, maxLeak: 0.2 };
+  const h = obsDetailHtml(O, C, { auto: { cellS: 1.5, cellW: 0.5, winS: 10, edge: 0.5 }, dir: [0, 0, 1] }), vis = h.replace(/title="[^"]*"/g, '');
+  ok(/data-lp-obs="cellS"/.test(h) && /data-lp-obs="cellW"/.test(h) && /data-lp-obs="winS"/.test(h) && /data-lp-tgt="targetNoise"/.test(h) && /data-lp-obs="cone"/.test(h) && /data-lp-obs="edgeExcl"/.test(h) && /data-lp-chk="minWall"/.test(h) && /data-lp-chk="maxLeak"/.test(h) && /data-lp-dir="2"/.test(h), '기능 그대로(칸·창·오차·각도·가장자리·점검·방향)');
+  ok(!/기본 30|폭 균일도용|도달하면 멈춤|판정에서 뺌|빈칸 = 자동/.test(vis), `보이는 글 짧게: ${vis.match(/기본 30|폭 균일도용|도달하면 멈춤|판정에서 뺌|빈칸 = 자동/g)}`);
+  ok(/data-m3-sec="obsdir"/.test(h) && /data-m3-sec="obschk"/.test(h), '보는 방향·점검 기준 = 접기');
+  ok(/2D 광량/.test(h.match(/title="[^"]*해상도[^"]*"/g)?.join('') ?? '') && />해상도</.test(h) && !/>칸</.test(h) && /해상도 · 오차/.test(h), '칸 → 해상도(2026-11-26 사용자) · 툴팁: 균일도·2D 광량 분포 같은 해상도');
+  ok(/좁은 면/.test(obsDetailHtml(O, C, { auto: { edge: 0.2 } })), '좁은 면이면 실제 가장자리 값은 보임'); }
 done();
 { // 3D 빛 원뿔 크기(2026-11-08): 넓은 지향각도 보이게 — 반각 60° 넘으면 빗변 길이 고정, 최대 89.5°(179°)
   const { coneDims } = await import('../src/ui/m3/cone-dims.js');

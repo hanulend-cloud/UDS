@@ -1804,3 +1804,5 @@ main:has(#mech3d-wrap:not([hidden])) { padding: 4px; gap: 4px; }
 .od-xy .od-goal { fill: #16a34a; opacity: .08; } .od-xy .od-cand { opacity: .45; } .od-xy .od-path { stroke-width: 2.4; stroke-linecap: round; opacity: .9; } .od-xy .od-path.q { stroke-dasharray: 5 4; } .od-xy .od-path.v { stroke-width: 2.6; }
 .od-xy .od-start { fill: #8a96a8; stroke: #fff; stroke-width: 1.2; } .od-xy .od-vf { fill: #20262f; stroke: #20262f; } .od-xy .od-vf.est { fill: var(--m3-panel, #fff); } .od-xy .od-kvf { fill: #20262f; }
 .od-xy .od-axt { font-size: 9.5px; fill: #5a6475; font-weight: 600; } .od-xy .od-lg { font-size: 9px; }
+/* 2D 광량 제목줄 해상도 입력(2026-11-26) */
+.m3-resv { font-size: 11px; white-space: nowrap; } .m3-resv input { width: 4.2em; padding: 0 2px; font-size: 11px; text-align: right; }
