@@ -49,7 +49,7 @@ import { runAutoDesign, shapeTotal, shapeBudget, sameDesign } from '../../engine
 import { milkyRows, milkyTraceOpts, MILKY_STEADY_SE } from '../../engine/mech3d/milky-search.js';
 import { detectSym, ledsSW, symStats, symInfo } from '../../engine/mech3d/symmetry.js';
 import { candidateGrid } from '../../engine/mech3d/basis.js';
-import { ledAtS, clampRowGap, rowGapOptions, rowGapsFit, wrapS, rowsSpacing, maxLedsOnLine } from '../../engine/mech3d/placement.js';
+import { ledAtS, clampRowGap, rowGapOptions, rowGapsFit, rowGapNeeds, wrapS, rowsSpacing, maxLedsOnLine } from '../../engine/mech3d/placement.js';
 import { virtualEmittersAt, stepRefEmitter } from '../../engine/mech3d/virtual-leds.js';
 import { rw4, rowWs } from '../../engine/mech3d/layout-solver.js';
 const ROWS_MAX = 8;   // ① 위치/개수 N열 상한(2026-11-25 사용자 — 폭 미달이면 2열에서 멈추지 않고 계속, 실제 한도는 폭·LED 몸체)
@@ -948,17 +948,17 @@ async function lateralCandidates(M0, line, rt, ctx) {
     for (const k of lay?.leds ?? []) { await tick(); if (lay.parts[k] && C_interf(lay.parts[k], tp)) n++; }
     return { lay, n: Math.max(bx, n) }; };
   let base = 0; try { base = (await clashN(0)).n; } catch { return null; }
-  for (let c = -16; c <= 16; c++) {   // 1 mm 간격(2026-11-03) — 비교는 엔진이 2 mm 로 훑고 ±1 mm
-    if (!c) continue;
+  // c mm 옮긴 자리가 들어가는가(겹침이 늘지 않고 PCB 위) — 소수 자리(2열 ±1.5 등)도 같은 검사(2026-11-26)
+  const fitAt = async (c) => {
     await tick();
     try {
-      const { lay, n: nc } = await clashN(c); if (nc > base) continue;
+      const { lay, n: nc } = await clashN(c); if (nc > base) return false;
       const es = lay.emitters ?? [], pick = [es[0], es[Math.floor(es.length / 2)], es.at(-1)].filter(Boolean);
-      const okSup = pick.every((e) => { const lat = widthDirection(line, e.s, n); return [-1, 0, 1].every((sg) => Math.abs(down(e.pos.map((v, k) => v + sg * half * lat[k])) - t0) < 0.3); });
-      if (okSup) cs.push(c);
-    } catch { /* 배치 실패 = 후보 아님 */ }
-  }
-  return cs.length > 1 ? { cs, ss } : null;
+      return pick.every((e) => { const lat = widthDirection(line, e.s, n); return [-1, 0, 1].every((sg) => Math.abs(down(e.pos.map((v, k) => v + sg * half * lat[k])) - t0) < 0.3); });
+    } catch { return false; }   // 배치 실패 = 후보 아님
+  };
+  for (let c = -16; c <= 16; c++) if (c && await fitAt(c)) cs.push(c);   // 1 mm 간격(2026-11-03) — 비교는 엔진이 2 mm 로 훑고 ±1 mm
+  return cs.length > 1 ? { cs, ss, fitAt } : null;
 }
 const C_interf = (m, mech) => newInterference(m, mech, [], new Map()) != null;   // 겹침이 있는가만 — 찾는 즉시 멈춤(깊이를 끝까지 재지 않음)
 // 결과 프로파일 아래에 찍을 LED 위치(라인 좌표 s, w) — 배치·라인이 같으면 캐시
@@ -1231,8 +1231,9 @@ async function adRun(opt = {}) {
   const cur = { milky: ctx.mp != null ? M0.parts[ctx.mp].material.milky : null, count: stp ? (sv ? sv.count : nOrig) : M0.light.manual?.count ?? 0, pitch: stp ? sv?.pitch ?? 0 : M0.light.manual?.pitch ?? 0, rows, rowGap: rows === 2 ? rsrc.rowGap ?? 0 : 0, shape: null, finish: null, dz: 0, ...(stp ? { stepOrig: !sv, stepVirt: !!sv } : {}) };
   ctx.cur = cur;
   // ② LED 폭 위치 이동 후보(PCB 위·간섭 없음) — 위치 단계를 켰고 LED STEP 일 때만
-  let latS = null, lateral = null;
-  if (stages.leds) { progress0('LED 폭 위치 후보 찾는 중'); try { const lc = await lateralCandidates(M0, line, rt, ctx); if (lc) { lateral = lc.cs; latS = lc.ss; } } catch { lateral = null; } if (A !== a) return null; }
+  let latS = null, lateral = null, latFit = null;
+  const fracOk = new Map();   // 소수 폭 자리 검사 결과(2열 간격) — basis 가 여러 번 불려도 한 번만
+  if (stages.leds) { progress0('LED 폭 위치 후보 찾는 중'); try { const lc = await lateralCandidates(M0, line, rt, ctx); if (lc) { lateral = lc.cs; latS = lc.ss; latFit = lc.fitAt; } } catch { lateral = null; } if (A !== a) return null; }
   // ④ 후보 = 반사 소재 상한 안(+ 특수 허용 시 특수 처리) — 소재 미지정 = 전체 등급(spec P4 §2.3d)
   const finCands = (k) => finishCandidatesFor({ catalog: reflCat(), materialId: M0.parts[k].reflMaterial, current: M0.parts[k].finish, allowSpecial: !!st.sel.housingSpecial });
   const finishCands = stages.housing ? finCands(hp) : null;
@@ -1289,7 +1290,12 @@ async function adRun(opt = {}) {
       // 열 자리가 실제로 들어가는지(2026-11-25 사용자) — 폭 위치 후보(lateral = 겹치지 않고 PCB 위인 자리)에 모든 열이 들어야 함. 2열은 들어가는 간격으로 거름(좁게 붙이는 간격 포함)
       const inLat = (w) => !Array.isArray(lateral) || (lateral.includes(Math.floor(w + 1e-9)) && lateral.includes(Math.ceil(w - 1e-9)));
       if (bo.rows >= 3 && (!nk || !rowWs(bo.rows, nk, wc).every(inLat))) return { cand: [], maps: [], emitted: 1, gaps: [] };
-      const gaps = nk ? [nk] : st.sel.oneRow ? [] : rowGapsFit(lateral, wc, rowGapOptions(line), Math.max(2, 2 * ledHalf + 0.2));   // 1열만 = 2열 후보 계산 생략
+      const minGap = Math.max(2, 2 * ledHalf + 0.2), okFrac = new Set();
+      if (!nk && !st.sel.oneRow && latFit) for (const w of rowGapNeeds(lateral, wc, rowGapOptions(line), minGap)) {   // 1 mm 어림으로 안 되는 소수 자리(±1.5 등)는 직접 검사(2026-11-26)
+        if (!fracOk.has(w)) fracOk.set(w, await latFit(w)); if (A !== a) return { cand: [], maps: [], emitted: 1, gaps: [] };
+        if (fracOk.get(w)) okFrac.add(w);
+      }
+      const gaps = nk ? [nk] : st.sel.oneRow ? [] : rowGapsFit(lateral, wc, rowGapOptions(line), minGap, okFrac);   // 1열만 = 2열 후보 계산 생략
       const cand = candidateGrid(line, { sStep: 2, wOffsets: nk ? rowWs(bo.rows, nk, wc) : [wc, ...gaps.flatMap((g) => [rw4(wc - g), rw4(wc + g)])] });   // 폭 위치(wc) 중심
       let sets;
       if (Md.light.kind === 'step') {   // 기준 LED 발광점을 후보 위치로 · 장면은 LED 몸체 없이(PCB·기타만 = 가상 0개)

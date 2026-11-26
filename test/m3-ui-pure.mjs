@@ -13,7 +13,7 @@ import { setPartTab, meshInfo, partHeaderText, reflAddFormHtml, renderPartProps,
 import { DEFAULT_FINISH_CATALOG, finishCandidatesFor, catalogOf } from '../src/engine/mech3d/housing-led.js';
 import { reflDbHtml } from '../src/ui/mech3d-light-panel.js';
 import { stepLayoutRowHtml, clampVirtual, virtCountMax, ledRowsHtml, defaultRowGap } from '../src/ui/mech3d-light-panel.js';
-import { rowGapOptions, rowGapsFit } from '../src/engine/mech3d/placement.js';
+import { rowGapOptions, rowGapsFit, rowGapNeeds } from '../src/engine/mech3d/placement.js';
 import { ok, done } from './mech3d-util.mjs';
 import { stageAvailability, autoCardHtml, tileConfigHtml, compareHtml, clampCap, overallFrac, etaText, profileSvg, shapeText, screenSummary, reusableCurrent, defaultHousingPart, finishText, applyDz, applyFinish, capDefault, nextFinish } from '../src/ui/m3/autodesign-panel.js';
 
@@ -279,6 +279,15 @@ ok(clampCap(12) === 10 && clampCap(0.1) === 0.5 && clampCap(3) === 3 && clampCap
     ok(JSON.stringify(rowGapsFit([-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5], 0, [3.2, 4.3, 5.2], 3)) === '[2,3.2,4.3,5]', '비율 간격 중 들어가는 것은 남기고 가장 넓은·좁은 정수 간격 더함');
     ok(JSON.stringify(rowGapsFit([-1, 0, 1, 2, 3], 1, [], 3)) === '[2]' && rowGapsFit([0, 1], 0, [], 3).length === 0, '폭 위치(wc) 기준 대칭 · 들어갈 곳 없으면 빈 목록');
     ok(rowGapsFit(null, 0, [3.2], 3)[0] === 3.2, '폭 위치 후보를 모르면(직접 배치) 그대로'); }
+  // 2026-11-26 사용자: 링 PCB(폭 6 mm · LED 2.8 mm)에서 ±1.5 mm 2열이 실제로 들어가는데 1 mm 단위 어림(±2 가 안 들어감)으로 빠짐 — 소수 자리는 직접 검사한 결과로 판정
+  { const cs = [-1, 0, 1];
+    ok(rowGapsFit(cs, 0, [1.5, 2.1, 2.6], 3).length === 0, '소수 자리 검사 결과가 없으면 예전처럼 정수 자리로 어림(±1.5 → ±2 필요 → 없음)');
+    ok(JSON.stringify(rowGapsFit(cs, 0, [1.5, 2.1, 2.6], 3, new Set([-1.5, 1.5]))) === '[1.5]', `직접 검사해 들어간 소수 자리(±1.5)는 통과 (${JSON.stringify(rowGapsFit(cs, 0, [1.5, 2.1, 2.6], 3, new Set([-1.5, 1.5])))})`);
+    ok(rowGapsFit(cs, 0, [1.5], 3, new Set([-1.5])).length === 0, '한쪽 열만 들어가면 탈락');
+    ok(JSON.stringify(rowGapsFit(cs, 0, [2.1], 3, new Set([-1.5, 1.5]))) === '[1.5]', '비율 간격이 다 안 들어가도 몸체가 안 겹치는 가장 좁은 간격(minGap/2 = 1.5)이 들어가면 그것');
+    ok(JSON.stringify(rowGapNeeds(cs, 0, [1.5, 2.1, 2.6], 3)) === '[-1.5,1.5]', `검사할 소수 자리 = 정수 어림으로 안 되고 들어간 마지막 정수 자리와 안 들어간 정수 자리 사이(±2 밖인 ±2.1·±2.6 은 뺌) (${JSON.stringify(rowGapNeeds(cs, 0, [1.5, 2.1, 2.6], 3))})`);
+    ok(rowGapNeeds([-3, -2, -1, 0, 1, 2, 3], 0, [1.5, 2.5], 3).length === 0 && rowGapNeeds(null, 0, [1.5], 3).length === 0, '정수 어림으로 이미 들어가거나 후보를 모르면 검사 없음');
+    ok(JSON.stringify(rowGapsFit([-3, -2, -1, 0, 1, 2, 3], 0, [3.2, 4.3, 5.2], 3, new Set())) === '[2,3]', '정수 자리 결과는 예전과 같음'); }
   const man = treeNodes({ ...M, light: { ...defaultLight(), kind: 'manual', manual: { ...defaultLight().manual, count: 10, rows: 2, rowGap: 5 } } }, { node: null, line: null }).find((n) => n.id === 'leds');
   const vt = treeNodes({ ...M, light: { ...defaultLight(), kind: 'step', step: st } }, { node: null, line: null }).find((n) => n.id === 'leds');
   ok(man.label === 'LED ×20' && man.badge === '2열 × 10개 균등' && vt.label === 'LED ×20' && vt.badge === '자동 2열 × 10개 균등', `배지: ${man.label} ${man.badge} / ${vt.label} ${vt.badge}`);

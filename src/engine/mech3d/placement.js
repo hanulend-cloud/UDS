@@ -38,12 +38,30 @@ export const ROW_GAP_KS = [0.2, 0.27, 0.33];
 export const rowGapOptions = (line, ks = ROW_GAP_KS) => [...new Set(ks.map((k) => Math.floor(clampRowGap(line, k * (line.width ?? 0)) * 10 + 1e-9) / 10))].filter((g) => g > 0);
 // 2열 간격을 실제로 들어가는 자리로 거름(2026-11-25 사용자: 폭 방향 간섭을 따져도 2열이 들어갈 것 같음) — cs = 폭 위치 후보(겹치지 않고 PCB 위, 기준 LED 대비 정수 mm),
 // wc = 폭 중심. 양쪽 열(wc ± g)이 모두 cs 안 · LED 몸체끼리 안 겹침(2g ≥ minGap). 주어진 비율 간격 중 들어가는 것 + 들어가는 가장 좁은·넓은 정수 간격. cs 모름(직접 배치) = 그대로
-export function rowGapsFit(cs, wc, gaps, minGap = 0) {
+// okFrac(2026-11-26 사용자) = 소수 자리(예 ±1.5)를 직접 검사해 들어간 자리 Set — 없으면 예전처럼 정수 자리 둘(내림·올림)로 어림.
+// 비율 간격·정수 간격이 하나도 안 들어가면 몸체가 안 겹치는 가장 좁은 간격(minGap/2, 0.1 mm 올림)이 들어가는지 봄
+const r4 = (x) => Math.round(x * 1e4) / 1e4;
+const gapMin = (minGap) => Math.ceil((minGap / 2) * 10 - 1e-9) / 10;
+const inInts = (set, w) => set.has(Math.floor(w + 1e-9)) && set.has(Math.ceil(w - 1e-9));
+export function rowGapsFit(cs, wc, gaps, minGap = 0, okFrac = null) {
   if (!Array.isArray(cs)) return gaps;
-  const set = new Set(cs), inC = (w) => set.has(Math.floor(w + 1e-9)) && set.has(Math.ceil(w - 1e-9)), r4 = (x) => Math.round(x * 1e4) / 1e4;
+  const set = new Set(cs), inC = (w) => inInts(set, w) || (!!okFrac && okFrac.has(r4(w)));
   const fits = (g) => g > 0 && 2 * g + 1e-9 >= minGap && inC(wc - g) && inC(wc + g);
   const ints = [...new Set(cs.filter((c) => c > wc).map((c) => r4(c - wc)))].filter(fits).sort((a, b) => a - b);
-  return [...new Set([...gaps.filter(fits), ...(ints.length ? [ints[0], ints[ints.length - 1]] : [])])].sort((a, b) => a - b);
+  const out = [...new Set([...gaps.filter(fits), ...(ints.length ? [ints[0], ints[ints.length - 1]] : [])])].sort((a, b) => a - b);
+  const g0 = gapMin(minGap);
+  return !out.length && okFrac && fits(g0) ? [g0] : out;
+}
+// 직접 검사할 소수 자리(2026-11-26) — 간격 후보(비율 간격 + 가장 좁은 간격)의 양쪽 열 자리 중 정수 어림으로는 안 되지만
+// 들어간 정수 자리 범위 바로 밖 1 mm 안(min−1 < w < max+1)이라 실제로는 들어갈 수 있는 자리. 후보를 모르면 없음
+export function rowGapNeeds(cs, wc, gaps, minGap = 0) {
+  if (!Array.isArray(cs) || !cs.length) return [];
+  const set = new Set(cs), lo = Math.min(...cs) - 1, hi = Math.max(...cs) + 1, out = new Set();
+  for (const g of [...gaps, gapMin(minGap)]) {
+    if (!(g > 0) || 2 * g + 1e-9 < minGap) continue;
+    for (const w of [r4(wc - g), r4(wc + g)]) if (!Number.isInteger(w) && !inInts(set, w) && w > lo + 1e-9 && w < hi - 1e-9) out.add(w);
+  }
+  return [...out].sort((a, b) => a - b);
 }
 
 // 라인 위 (s, w) 한 곳의 LED — manualLeds 와 P4 ② 후보 위치가 같이 씀. w = 중심선 오프셋. 반환 { s, pos, axis, xAxis }
