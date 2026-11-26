@@ -8,7 +8,7 @@ export const LED_BODY_FINISH = { kind: 'whiteDiffuse', R: 0.8 };   // 백색 실
 export function defaultLight() {
   return {
     kind: 'none', pcbR: 0.3,   // PCB 면 반사율(0~1) — LED STEP·직접 배치 PCB. 기본 30%(도면 PCB 와 같게), 숫자로 입력(2026-11-05)
-    spec: { model: 'lambertian', beam: 120, sizeX: 2, sizeY: 2, fluxLm: 0, lumUnit: 'lm', intensityCd: 0 },   // fluxLm: LED 1개 광속(lm), 0 = 미입력(화면은 1 lm 가정 휘도, 판정 안 함)
+    spec: { model: 'lambertian', beam: 120, sizeX: 2, sizeY: 2, fluxLm: 0, lumUnit: 'mcd', intensityCd: 0 },   // 밝기 단위 새 프로젝트 = mcd(2026-11-26 사용자) · 예전 저장 = lm   // fluxLm: LED 1개 광속(lm), 0 = 미입력(화면은 1 lm 가정 휘도, 판정 안 함)
     step: null,
     manual: { pcb: { kind: 'depth', depth: 10 }, count: 10, pitch: 0, side: 'direct', rows: 1, rowGap: 0 },   // rows 1|2, rowGap = 열 간격 ±δ mm
   };

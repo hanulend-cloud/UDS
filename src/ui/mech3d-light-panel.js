@@ -9,7 +9,7 @@ import { catalogOf } from '../engine/mech3d/housing-led.js';
 import { fmtJudge, uVerdict } from '../engine/mech3d/tally.js';
 import { MEAS_CONDS, reflStatusText } from '../model/reflect-db.js';
 import { secHtml, wireSections } from './mech3d-panel.js';
-import { BEAM_PRESETS, beamPreset } from './m3/led-select.js';
+import { BEAM_PRESETS, beamPreset, ledBrightValue, isIntensity } from './m3/led-select.js';
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 const num = (v, d = 1) => (Number.isFinite(v) ? v.toFixed(d) : '-');
 const numIn = (v, d) => (Number.isFinite(v) ? v.toFixed(d) : '');   // number input 값(빈칸 허용)
@@ -275,13 +275,14 @@ export function renderLedProps(el, m, ui, h) {
   }
 }
 
-// LED 밝기 줄(2026-11-26): 단위 lm/개 | cd(사양서 광도). cd 면 지향각에 맞춘 광속을 옆에(지향각을 바꾸면 cd 그대로 · 광속 다시 계산). 빈칸 = 1 lm 가정
+// LED 밝기 줄(2026-11-26): 단위 mcd(새 프로젝트 기본) | cd | lm/개. 광도면 지향각에 맞춘 광속을 옆에(지향각을 바꾸면 광도 그대로 · 광속 다시 계산). 빈칸 = 1 lm 가정
 const fmtLm = (v) => (v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v.toFixed(2));
 function ledBrightRow(spec, ui, m, label) {
-  const cd = spec.lumUnit === 'cd', v = cd ? spec.intensityCd ?? 0 : spec.fluxLm ?? 0;
-  const unit = `<select data-lp-unit aria-label="밝기 단위" title="LED 사양서 단위로 — 광도(cd)면 지향각에 맞춰 광속(lm)으로 바꿔 계산"><option value="lm"${cd ? '' : ' selected'}>lm/개</option><option value="cd"${cd ? ' selected' : ''}>cd</option></select>`;
+  const u = spec.lumUnit ?? 'lm', cd = isIntensity(u), v = ledBrightValue(spec);
+  const opt = (k, t) => `<option value="${k}"${u === k ? ' selected' : ''}>${t}</option>`;
+  const unit = `<select data-lp-unit aria-label="밝기 단위" title="LED 사양서 단위로 — 광도(mcd·cd)면 지향각에 맞춰 광속(lm)으로 바꿔 계산">${opt('mcd', 'mcd')}${opt('cd', 'cd')}${opt('lm', 'lm/개')}</select>`;
   const conv = cd && spec.fluxLm > 0 ? ` <span class="mut" title="광속 = 광도 × 배광 입체각(지향각 ${spec.beam}°) — 지향각을 바꾸면 다시 계산">≈ ${fmtLm(spec.fluxLm)} lm</span>` : '';
-  return `<div class="m3-row"><label>${label}</label><input type="number" min="0" step="${cd ? 0.1 : 1}" value="${v}" data-lp-spec="fluxLm" aria-label="LED 1개 ${cd ? '광도 cd' : '광속 lm'}"> ${unit}${conv} <span data-lp-lum>${ledLumHtml(spec, ui.photometry ?? null, m.observe?.targetLum)}</span></div>`;
+  return `<div class="m3-row"><label>${label}</label><input type="number" min="0" step="${u === 'cd' ? 0.1 : 1}" value="${v}" data-lp-spec="fluxLm" aria-label="LED 1개 ${cd ? `광도 ${u}` : '광속 lm'}"> ${unit}${conv} <span data-lp-lum>${ledLumHtml(spec, ui.photometry ?? null, m.observe?.targetLum)}</span></div>`;
 }
 // LED 광속 옆 예상 휘도(2026-11-11) — 입력한 lm 과 지금 설계의 광 효율로(계산 다시 안 함). 목표가 있으면 비교
 export function ledLumHtml(spec, ph, targetLum) {

@@ -133,10 +133,25 @@ const ui = (o = {}) => ({ line, ledList: list, ledGap: 6.25, ...o });
   const m1 = { ...man, light: { ...man.light, spec: { ...man.light.spec, lumUnit: 'cd', intensityCd: 2, fluxLm: 2 * Math.PI } } }, h = ledPanelHtml(m1, ui());
   ok(/data-lp-unit/.test(h) && /<option value="cd" selected>/.test(h) && /value="2" data-lp-spec="fluxLm"/.test(h) && /≈ 6\.28 lm/.test(h), '상세 탭: 단위 고르기 · cd 값 · 환산 광속 표시');
   const h2 = ledPanelHtml(man, ui());
-  ok(/<option value="lm" selected>/.test(h2) && h2.includes('0 = 1 lm 가정'), '기본 = lm/개 · 빈칸 1 lm 가정');
+  ok(/<option value="mcd" selected>/.test(h2) && h2.includes('0 = 1 lm 가정'), '기본 = mcd · 빈칸 1 lm 가정');
   const { migrateMech3d } = await import('../src/engine/mech3d/defs.js');
   const a = migrateMech3d({ light: { ...defaultLight(), spec: { model: 'lambertian', beam: 120, fluxLm: 5 } } }), b = migrateMech3d({ light: { ...defaultLight(), spec: { model: 'lambertian', beam: 120, fluxLm: 1, lumUnit: 'cd', intensityCd: 3 } } });
   ok(a.light.spec.lumUnit === 'lm' && a.light.spec.fluxLm === 5 && Math.abs(b.light.spec.fluxLm - 3 * Math.PI) < 1e-3, '예전 저장 = lm 그대로 · cd 저장은 cd 로 광속 맞춤');
+}
+// 기본 단위 mcd(2026-11-26 사용자) — 새 프로젝트 = mcd, 예전 저장(단위 없음) = lm 그대로
+{ const { setLedBright, setLedUnit } = await import('../src/ui/m3/led-select.js');
+  ok(defaultLight().spec.lumUnit === 'mcd', '새 프로젝트 기본 단위 = mcd');
+  const sp = { model: 'lambertian', beam: 120, fluxLm: 0, lumUnit: 'mcd', intensityCd: 0 };
+  setLedBright(sp, 2000);
+  ok(sp.intensityCd === 2 && Math.abs(sp.fluxLm - 2 * Math.PI) < 1e-3, `2000 mcd = 2 cd → ${sp.fluxLm} lm`);
+  setLedUnit(sp, 'cd'); ok(sp.lumUnit === 'cd' && sp.intensityCd === 2, 'mcd → cd: 광도 그대로');
+  setLedUnit(sp, 'mcd'); ok(sp.lumUnit === 'mcd' && Math.abs(sp.fluxLm - 2 * Math.PI) < 1e-3, 'cd → mcd: 광속 그대로');
+  setLpTab('leds', 'detail');
+  const m1 = { ...man, light: { ...man.light, spec: { ...man.light.spec, lumUnit: 'mcd', intensityCd: 2, fluxLm: 2 * Math.PI } } }, h = ledPanelHtml(m1, ui());
+  ok(/<option value="mcd" selected>/.test(h) && /value="2000" data-lp-spec="fluxLm"/.test(h) && /≈ 6\.28 lm/.test(h), '상세 탭: mcd 값 · 환산 광속');
+  const { migrateMech3d } = await import('../src/engine/mech3d/defs.js');
+  const c = migrateMech3d({ light: { ...defaultLight(), spec: { model: 'lambertian', beam: 120, fluxLm: 1, lumUnit: 'mcd', intensityCd: 1 } } });
+  ok(c.light.spec.lumUnit === 'mcd' && Math.abs(c.light.spec.fluxLm - Math.PI) < 1e-3, 'mcd 저장 되살림');
 }
 done();
 { // 3D 빛 원뿔 크기(2026-11-08): 넓은 지향각도 보이게 — 반각 60° 넘으면 빗변 길이 고정, 최대 89.5°(179°)

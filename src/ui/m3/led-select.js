@@ -1,7 +1,7 @@
 // LED 선택·속성(spec 2026-10-15 m3-cad-ui §4a) 순수 도우미 — 배광 프리셋, 3D 클릭 → LED 번호, 간섭 항목, 개별 조정 쓰기·무효 정리.
 // LED 번호: 직접 배치 = 발광점 순서, LED STEP(원래·가상) = lay.leds 안 위치(= 발광점 e.led, 제외해도 번호 유지).
 import { layoutKeyOf, staleAdjust, validAdjust } from '../../engine/mech3d/led-adjust.js';
-export { ledSolid, syncFlux, setLedBright, setLedUnit } from '../../engine/mech3d/led-flux.js';
+export { ledSolid, syncFlux, setLedBright, setLedUnit, ledBrightValue, isIntensity } from '../../engine/mech3d/led-flux.js';
 
 export const BEAM_PRESETS = [[120, '넓게'], [90, '보통'], [60, '좁게']];
 // 배광 → 프리셋 120 | 90 | 60 | 'custom'. 램버시안 = 늘 120(반치폭 120°)
